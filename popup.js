@@ -1,7 +1,13 @@
 // Popup UI Logic
-//AIzaSyB5yBrU7BuuoelExXn7VV9rsrUmqztDSR4
-const DEFAULT_API_KEY = "";
-const DEFAULT_MODEL = "gemini-2.5-flash-lite";
+// Load defaults from environment configuration (env.js / .env)
+const DEFAULT_API_KEY =
+  (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.GEMINI_API_KEY) ||
+  (typeof window !== "undefined" && window.ENV && window.ENV.GEMINI_API_KEY) ||
+  "";
+const DEFAULT_MODEL =
+  (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
+  (typeof window !== "undefined" && window.ENV && window.ENV.DEFAULT_MODEL) ||
+  "gemini-2.5-flash";
 
 document.addEventListener("DOMContentLoaded", () => {
   const apiKeyInput = document.getElementById("api-key-input");
