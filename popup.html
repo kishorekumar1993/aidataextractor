@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Data Entry Settings</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div class="popup-container">
+    <div class="popup-header">
+      <div class="header-branding">
+        <span class="header-icon">✨</span>
+        <span class="header-title">AI Auto-Crawl & Fill</span>
+      </div>
+      <span class="badge-version">v1.0.0</span>
+    </div>
+
+    <div class="popup-content">
+      <!-- API Key Section -->
+      <div class="section-card">
+        <div class="card-title">🤖 AI Intelligence (Google Gemini API)</div>
+        <div class="card-desc">Your Google Gemini API key is pre-configured and active! You can test or change it below.
+        </div>
+
+        <div class="form-group">
+          <label for="api-key-input">Gemini API Key</label>
+          <div class="input-with-action">
+            <input type="password" id="api-key-input" placeholder="AIzaSy...">
+            <button type="button" id="btn-toggle-key-visibility" class="btn-icon">👁️</button>
+          </div>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="helper-link">Google AI Studio ↗</a>
+        </div>
+
+        <!-- <div class="form-group">
+          <label for="model-select">AI Model</label>
+          <select id="model-select">
+            <option value="gemini-2.5-flash-lite" selected>Gemini 2.5 Flash Lite (Recommended & Active)</option>
+            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+            <option value="gemini-flash-lite-latest">Gemini Flash Lite Latest</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+          </select>
+        </div> -->
+        <div class="form-group">
+          <label for="model-select">AI Model</label>
+          <select id="model-select">
+            <option value="gemini-3.5-flash-lite">
+              Gemini 3.5 Flash Lite (Recommended)
+            </option>
+            <option value="gemini-3.1-flash-lite">
+              Gemini 3.1 Flash Lite
+            </option>
+            <option value="gemini-3.8-flash">
+              Gemini 3.8 Flash
+            </option>
+            <option value="gemini-3.6-flash">
+              Gemini 3.6 Flash
+            </option>
+            <option value="gemini-flash-lite-latest">
+              Gemini Flash Lite Latest
+            </option>
+            <option value="gemini-2.5-flash-lite" selected>
+              Gemini 2.5 Flash Lite (Current Active)
+            </option>
+            <option value="gemini-2.5-flash">
+              Gemini 2.5 Flash
+            </option>
+            <option value="gemini-2.5-pro">
+              Gemini 2.5 Pro
+            </option>
+          </select>
+        </div>
+        <div class="button-row">
+          <button id="btn-test-key" class="btn btn-secondary">Test Connection</button>
+          <button id="btn-save-key" class="btn btn-primary">Save Settings</button>
+        </div>
+        <div id="api-test-status" class="status-msg"></div>
+      </div>
+
+      <!-- Automation Options -->
+      <div class="section-card">
+        <div class="card-title">⚡ Automation Rules</div>
+        <label class="switch-row">
+          <span class="switch-label">Auto-crawl when Website URL is detected</span>
+          <input type="checkbox" id="toggle-auto-crawl" checked>
+        </label>
+        <label class="switch-row">
+          <span class="switch-label">Strict Restricted Site filter</span>
+          <input type="checkbox" id="toggle-strict-filter" checked>
+        </label>
+      </div>
+
+      <!-- Test Portal Launcher -->
+      <div class="section-card action-card">
+        <div class="card-title">🧪 Test Portal</div>
+        <div class="card-desc">Launch the replica Data Entry portal offline to test crawling & prefilling.</div>
+        <button id="btn-open-test-portal" class="btn btn-success">Open Test Portal</button>
+      </div>
+
+      <!-- Instructions Summary Accordion -->
+      <details class="instructions-accordion">
+        <summary>📋 14 Strict Rules Reference</summary>
+        <div class="rules-list">
+          <ol>
+            <li><strong>Website Status:</strong> Working / Not Working (Do not work on redirect/subdomain).</li>
+            <li><strong>Business Type:</strong> Manufacturer to Wholesaler. (Shopping with manufacturing =
+              Manufacturer).</li>
+            <li><strong>Company Profile:</strong> Available / Not Available.</li>
+            <li><strong>Company Name:</strong> Full form, remove brackets, Title Case, strip special chars.</li>
+            <li><strong>Country Name:</strong> Full form, Title Case (England/Scotland/Wales for UK).</li>
+            <li><strong>Company Address:</strong> Full form, remove postal code, country, company name, special chars.
+            </li>
+            <li><strong>State:</strong> Available / Not Available (Explicit State/Province/County or Capital only).</li>
+            <li><strong>City (Critical QC Rule):</strong> Available ONLY if explicit recognized Town, District, or
+              Municipality. STRICTLY Not Available for Suburb, Industrial Area, Business Park, Locality, or Street only.
+            </li>
+            <li><strong>Email ID:</strong> First corporate email.</li>
+            <li><strong>Secondary Email ID:</strong> Mandatory field (fill if present, skip if not).</li>
+            <li><strong>Phone Number:</strong> Remove country code, spaces, special chars. No toll-free, no leading
+              zero.</li>
+            <li><strong>Number of Products:</strong> "One" if 1, "Three" if &gt;3.</li>
+            <li><strong>Product Images:</strong> "One" if 1, "Three" if &gt;3.</li>
+            <li><strong>Product Descriptions:</strong> "One" if 1, "Three" if &gt;3.</li>
+          </ol>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>

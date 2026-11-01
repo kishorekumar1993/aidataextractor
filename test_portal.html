@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Entry Portal (AI Test Replica)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: #f0f4f8;
+      padding: 40px 20px;
+      color: #333;
+    }
+
+    .container {
+      max-width: 1240px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      padding: 30px 40px;
+    }
+
+    .portal-header {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 28px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #edf2f7;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      column-gap: 24px;
+      row-gap: 20px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 8px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    input[type="text"], input[type="url"], select, textarea {
+      width: 100%;
+      height: 42px;
+      padding: 8px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #334155;
+      background-color: #ffffff;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    textarea {
+      height: 80px;
+      resize: vertical;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    .btn-click-here {
+      background-color: #0ea5e9;
+      color: #ffffff;
+      border: none;
+      padding: 0 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 0.2s;
+    }
+
+    .btn-click-here:hover {
+      background-color: #0284c7;
+    }
+
+    .actions-row {
+      margin-top: 30px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 14px;
+    }
+
+    .btn-submit {
+      background-color: #22c55e;
+      color: #ffffff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background-color 0.2s;
+    }
+
+    .btn-submit:hover {
+      background-color: #16a34a;
+    }
+
+    .btn-reset {
+      background-color: #ef4444;
+      color: #ffffff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background-color 0.2s;
+    }
+
+    .btn-reset:hover {
+      background-color: #dc2626;
+    }
+
+    /* Quick demo test picker */
+    .sample-bar {
+      margin-bottom: 24px;
+      padding: 12px 16px;
+      background: #f8fafc;
+      border-radius: 6px;
+      border: 1px dashed #cbd5e1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+    }
+
+    .sample-pill {
+      background: #e2e8f0;
+      color: #334155;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+
+    .sample-pill:hover {
+      background: #cbd5e1;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="portal-header">Data Entry</div>
+
+    <div class="sample-bar">
+      <span>💡 Try Quick Sample URLs:</span>
+      <span class="sample-pill" onclick="loadSample('http://www.teflexplastics.co.za')">Teflex Plastics</span>
+      <span class="sample-pill" onclick="loadSample('https://www.apple.com')">Apple Inc.</span>
+      <span class="sample-pill" onclick="loadSample('https://www.rolls-royce.com')">Rolls-Royce (Restricted Aircraft/Marine)</span>
+    </div>
+
+    <form id="data-entry-form">
+      <div class="form-grid">
+        <!-- Row 1 -->
+        <div class="form-group">
+          <label for="website-name">Website Name:</label>
+          <div class="input-row">
+            <input type="text" id="website-name" name="website_name" value="http://www.teflexplastics.co.za">
+            <button type="button" class="btn-click-here" onclick="window.open(document.getElementById('website-name').value, '_blank')">click here</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="website-status">Website Status:</label>
+          <select id="website-status" name="website_status">
+            <option value="">Website Status</option>
+            <option value="Working">Working</option>
+            <option value="Not Working">Not Working</option>
+            <option value="Domain Expired">Domain Expired</option>
+            <option value="Non English">Non English</option>
+            <option value="Under Construction">Under Construction</option>
+            <option value="Flash Site">Flash Site</option>
+            <option value="Redirect Site">Redirect Site</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="business-type">Business Type:</label>
+          <select id="business-type" name="business_type">
+            <option value="">Kind of Business</option>
+            <option value="Manufacturer">Manufacturer</option>
+            <option value="Industrial Services">Industrial Services</option>
+            <option value="Exporter">Exporter</option>
+            <option value="Trader">Trader</option>
+            <option value="Distributer">Distributer</option>
+            <option value="Supplier">Supplier</option>
+            <option value="Wholesaler">Wholesaler</option>
+            <option value="Service Provider">Service Provider</option>
+            <option value="Online Shopping">Online Shopping</option>
+            <option value="Restricted Site">Restricted Site</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <!-- Row 2 -->
+        <div class="form-group">
+          <label for="company-profile">Company Profile:</label>
+          <select id="company-profile" name="company_profile">
+            <option value="">Company Profile</option>
+            <option value="Available">Available</option>
+            <option value="Not Available">Not Available</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="company-name">Company Name:</label>
+          <input type="text" id="company-name" name="company_name" placeholder="Company name">
+        </div>
+
+        <div class="form-group" style="grid-row: span 2;">
+          <label for="company-address">Company Address:</label>
+          <textarea id="company-address" name="company_address" placeholder="Company Address" style="height: 124px;"></textarea>
+        </div>
+
+        <!-- Row 3 -->
+        <div class="form-group">
+          <label for="country-name">Country Name:</label>
+          <input type="text" id="country-name" name="country_name" placeholder="Country">
+        </div>
+
+        <div class="form-group">
+          <label for="state">State:</label>
+          <select id="state" name="state">
+            <option value="">State</option>
+            <option value="Available">Available</option>
+            <option value="Not Available">Not Available</option>
+          </select>
+        </div>
+
+        <!-- Row 4 -->
+        <div class="form-group">
+          <label for="city">City:</label>
+          <select id="city" name="city">
+            <option value="">City</option>
+            <option value="Available">Available</option>
+            <option value="Not Available">Not Available</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="email-id">Email Id:</label>
+          <input type="text" id="email-id" name="email_id" placeholder="Email Id">
+        </div>
+
+        <div class="form-group">
+          <label for="secondary-email-id">Secondary Email Id:</label>
+          <input type="text" id="secondary-email-id" name="secondary_email_id" placeholder="Secondary email">
+        </div>
+
+        <!-- Row 5 -->
+        <div class="form-group">
+          <label for="phone-number">Phone Number:</label>
+          <input type="text" id="phone-number" name="phone_number" placeholder="Phone Number">
+        </div>
+
+        <div class="form-group">
+          <label for="number-of-product">Number of Product:</label>
+          <select id="number-of-product" name="number_of_product">
+            <option value="">Number of Product</option>
+            <option value="One">One</option>
+            <option value="Three">Three</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="image-product">Image Product:</label>
+          <select id="image-product" name="image_product">
+            <option value="">Image of Product</option>
+            <option value="One">One</option>
+            <option value="Three">Three</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="desc-of-product">No. of Product Description:</label>
+          <select id="desc-of-product" name="desc_of_product">
+            <option value="">Desc of Product</option>
+            <option value="One">One</option>
+            <option value="Three">Three</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions-row">
+        <button type="submit" class="btn-submit">💾 Submit</button>
+        <button type="reset" class="btn-reset">🔄 Reset</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function loadSample(url) {
+      const input = document.getElementById('website-name');
+      input.value = url;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    document.getElementById('data-entry-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      alert('Form submitted successfully!');
+    });
+  </script>
+</body>
+</html>
+
