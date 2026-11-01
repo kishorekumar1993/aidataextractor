@@ -1,6 +1,6 @@
 // Popup UI Logic
-
-const DEFAULT_API_KEY = "AIzaSyB5yBrU7BuuoelExXn7VV9rsrUmqztDSR4";
+//AIzaSyB5yBrU7BuuoelExXn7VV9rsrUmqztDSR4
+const DEFAULT_API_KEY = "";
 const DEFAULT_MODEL = "gemini-2.5-flash-lite";
 
 document.addEventListener("DOMContentLoaded", () => {

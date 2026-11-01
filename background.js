@@ -1,6 +1,6 @@
 // Background Service Worker for AI Web Crawler & Auto Pre-Fill Assistant
 // Production-Grade Implementation strictly conforming to 14 QC Rules
-
+//AIzaSyB5yBrU7BuuoelExXn7VV9rsrUmqztDSR4
 const DEFAULT_API_KEY = "";
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 
