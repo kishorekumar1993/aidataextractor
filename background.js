@@ -173,11 +173,11 @@ async function handleCrawlAndExtract(rawUrl) {
  */
 async function fetchDecodedHtml(url, options = {}) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), options.timeoutMs || 8000);
+  const timeoutMs = options.timeoutMs || 8000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
-    clearTimeout(timeoutId);
     const buf = await res.arrayBuffer();
 
     let charset = "utf-8";
@@ -194,26 +194,24 @@ async function fetchDecodedHtml(url, options = {}) {
       }
     }
 
+    let decoded = "";
     try {
-      return {
-        ok: res.ok,
-        status: res.status,
-        url: res.url,
-        redirected: res.redirected,
-        html: new TextDecoder(charset).decode(buf)
-      };
+      decoded = new TextDecoder(charset).decode(buf);
     } catch (e) {
-      return {
-        ok: res.ok,
-        status: res.status,
-        url: res.url,
-        redirected: res.redirected,
-        html: new TextDecoder("utf-8").decode(buf)
-      };
+      decoded = new TextDecoder("utf-8").decode(buf);
     }
+
+    return {
+      ok: res.ok,
+      status: res.status,
+      url: res.url,
+      redirected: res.redirected,
+      html: decoded
+    };
   } catch (err) {
-    clearTimeout(timeoutId);
     return { ok: false, status: 0, url, redirected: false, html: "" };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -229,8 +227,9 @@ async function crawlWebsite(targetUrl) {
   let finalUrl = targetUrl;
   let status = "Working";
   let fetchError = null;
-  const detectedAddresses = [];
+  const addressCandidates = [];
   let profilePageText = "";
+  let copyrightText = "";
 
   try {
     const mainRes = await fetchDecodedHtml(targetUrl, {
@@ -246,11 +245,18 @@ async function crawlWebsite(targetUrl) {
       finalUrl = mainRes.url;
     }
 
-    if (!mainRes.ok && mainRes.status > 0) {
+    // Technical fix: status 0 or network failure MUST mark Not Working, never Working
+    if (!mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0) {
       status = mainRes.status === 404 ? "Domain Expired" : "Not Working";
     }
 
-    mainHtml = mainRes.html;
+    mainHtml = mainRes.html || "";
+
+    // Extract copyright line for exact official company name verification
+    const copyMatch = mainHtml.match(/(?:©|&copy;|copyright|all\s+rights\s+reserved)\s*(?:20\d\d[-–\d\s]*)?([^<\n\r,;|]+)/i);
+    if (copyMatch && copyMatch[1]) {
+      copyrightText = stripHtml(copyMatch[1]).replace(/all\s+rights\s+reserved/gi, "").trim();
+    }
 
     // Support HTML <frameset> / <frame src="..."> / <iframe src="..."> (e.g. polyprise.com.tw)
     const frameMatches = [...mainHtml.matchAll(/<(?:frame|iframe)[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
@@ -264,30 +270,25 @@ async function crawlWebsite(targetUrl) {
         });
         if (fRes.ok && fRes.html) {
           mainHtml += "\n" + fRes.html;
-          extractJsonLdAddresses(fRes.html, detectedAddresses);
-          extractMapAddresses(fRes.html, detectedAddresses);
-          extractMetaAddresses(fRes.html, detectedAddresses);
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
-    // Extract Schema.org PostalAddress from JSON-LD
-    extractJsonLdAddresses(mainHtml, detectedAddresses);
+    // Extract Footer text & Footer address candidates
+    const footerMatch = mainHtml.match(/<footer[^>]*>([\s\S]*?)<\/footer>/i) ||
+      mainHtml.match(/<(?:div|section)[^>]+(?:class|id)=["'][^"']*footer[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/i);
+    if (footerMatch) {
+      footerText = stripHtml(footerMatch[1]);
+      extractHtmlAddresses(footerMatch[1], addressCandidates, "footer");
+    }
 
-    // Extract Google Maps embed / place query parameters on main page
-    extractMapAddresses(mainHtml, detectedAddresses);
+    // Extract from Homepage body
+    extractJsonLdAddresses(mainHtml, addressCandidates);
+    extractMapAddresses(mainHtml, addressCandidates);
+    extractMetaAddresses(mainHtml, addressCandidates);
+    extractHtmlAddresses(mainHtml, addressCandidates, "contact");
 
-    // Extract meta keywords/description/OpenGraph addresses
-    extractMetaAddresses(mainHtml, detectedAddresses);
-    extractHtmlAddresses(mainHtml, detectedAddresses);
-
-    // Extract entire footer structure
-    footerText = extractFooterText(mainHtml);
-    extractMapAddresses(footerText, detectedAddresses);
-    extractMetaAddresses(footerText, detectedAddresses);
-    extractHtmlAddresses(footerText, detectedAddresses);
-
-    // Discover and rank all Contact / Profile / Headquarters / Location links
+    // Discover Contact & Profile Pages
     const contactLinks = discoverContactLinks(mainHtml, finalUrl);
     const fetchedUrls = new Set([finalUrl]);
 
@@ -307,63 +308,39 @@ async function crawlWebsite(targetUrl) {
         if (cRes.ok && cRes.html) {
           const cText = cRes.html;
           contactHtml += "\n" + cText;
-          extractJsonLdAddresses(cText, detectedAddresses);
-          extractMapAddresses(cText, detectedAddresses);
-          extractMetaAddresses(cText, detectedAddresses);
-          extractHtmlAddresses(cText, detectedAddresses);
+          const isProfilePage = /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
+          const pageSource = isProfilePage ? "profile" : "contact";
 
-          // Track dedicated Company Profile / About Us content
-          if (/(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl) ||
-            /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(stripHtml(cText).slice(0, 500))) {
+          extractJsonLdAddresses(cText, addressCandidates);
+          extractMapAddresses(cText, addressCandidates);
+          extractMetaAddresses(cText, addressCandidates);
+          extractHtmlAddresses(cText, addressCandidates, pageSource);
+
+          if (isProfilePage || /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(stripHtml(cText).slice(0, 500))) {
             profilePageText += "\n" + stripHtml(cText);
           }
 
-          // Check CMS dynamic form endpoints (e.g. formbuilder / main-contact.asp)
+          // Check CMS dynamic form endpoints
           if (cText.includes("main-contact.asp") || cText.includes("loadFB")) {
-            try {
-              const subUrl = new URL("/webmodules/formbuilder/onsite/main-contact.asp", cUrl).href;
-              const subRes = await fetch(subUrl, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/x-www-form-urlencoded",
-                  "User-Agent": "Mozilla/5.0"
-                },
-                body: "screensize=1200&WMNformbuilder=1"
-              });
-              if (subRes.ok) {
-                const subText = await subRes.text();
-                contactHtml += "\n" + subText;
-                extractMapAddresses(subText, detectedAddresses);
+            const formMatch = cText.match(/loadFB\(["']([^"']+)["']/i) || cText.match(/src=["']([^"']*main-contact\.asp[^"']*)["']/i);
+            if (formMatch) {
+              const fbUrl = new URL(formMatch[1], cUrl).href;
+              const fbRes = await fetchDecodedHtml(fbUrl, { timeoutMs: 5000 });
+              if (fbRes.ok && fbRes.html) {
+                contactHtml += "\n" + fbRes.html;
+                extractHtmlAddresses(fbRes.html, addressCandidates, "contact");
               }
-            } catch (e) { }
+            }
           }
         }
-      } catch (e) { }
+      } catch (e) {}
     }
 
-    // Probe product detail sub-pages if product catalogue links exist
-    const prodDetailLinks = [...mainHtml.matchAll(/href=["']([^"']*(?:machin|item|prod\d|product-detail)[^"']*)["']/gi)]
-      .map(m => m[1])
-      .filter(l => !l.startsWith("tel:") && !l.startsWith("mailto:") && !/\.(css|js|png|jpg|jpeg|gif|pdf)$/i.test(l));
-
-    for (const pLink of prodDetailLinks.slice(0, 3)) {
-      try {
-        const pUrl = new URL(pLink, finalUrl).href;
-        if (!fetchedUrls.has(pUrl)) {
-          fetchedUrls.add(pUrl);
-          const pRes = await fetchDecodedHtml(pUrl, { timeoutMs: 5000, headers: { "User-Agent": "Mozilla/5.0" } });
-          if (pRes.ok && pRes.html) {
-            mainHtml += "\n" + pRes.html;
-          }
-        }
-      } catch (e) { }
-    }
-
+    // Merge Contact text
     contactPageText = stripHtml(contactHtml);
 
-    // Also check if main homepage itself has an explicit profile section
-    const mainClean = stripHtml(mainHtml);
-    const homeProfileMatch = mainClean.match(/(?:company\s+profile|corporate\s+profile|our\s+story|who\s+we\s+are|about\s+our\s+company)[\s\S]{50,1500}/i);
+    // Check homepage profile text snippet
+    const homeProfileMatch = stripHtml(mainHtml).match(/(?:about\s+us|our\s+company|company\s+profile|our\s+story|who\s+we\s+are|about\s+our\s+company)[\s\S]{50,1500}/i);
     if (homeProfileMatch) {
       profilePageText += "\n" + homeProfileMatch[0];
     }
@@ -376,224 +353,292 @@ async function crawlWebsite(targetUrl) {
   try {
     const origHost = new URL(targetUrl).hostname.replace(/^www\./, "");
     const finalHost = new URL(finalUrl).hostname.replace(/^www\./, "");
-    if (origHost !== finalHost) {
-      redirected = true;
+    if (origHost !== finalHost && !finalHost.includes(origHost) && !origHost.includes(finalHost)) {
+      status = "Redirect Site";
     }
-  } catch (e) { }
+  } catch (e) {}
 
-  const fullHtml = mainHtml + "\n" + contactHtml;
-  const extracted = parseHtmlDetails(fullHtml, finalUrl);
+  const extracted = parseHtmlDetails(mainHtml, finalUrl);
+
+  // Verify substantive company profile presence
+  extracted.hasCompanyProfile = checkCompanyProfilePresence(mainHtml, extracted.bodyText, profilePageText);
+
+  // Merge discovered emails/phones from crawled contact pages
+  if (contactHtml) {
+    const contactParsed = parseHtmlDetails(contactHtml, finalUrl);
+    extracted.emails = Array.from(new Set([...extracted.emails, ...contactParsed.emails]));
+    extracted.phones = Array.from(new Set([...extracted.phones, ...contactParsed.phones]));
+  }
 
   return {
     originalUrl: targetUrl,
-    finalUrl: finalUrl,
-    isRedirected: redirected,
-    initialStatus: status,
-    fetchError: fetchError,
-    detectedAddresses: detectedAddresses,
+    finalUrl,
+    redirected,
+    status,
+    fetchError,
+    mainHtml,
+    addressCandidates,
+    detectedAddresses: addressCandidates.map(c => (typeof c === "object" ? c.raw : c)),
     contactPageText: contactPageText.slice(0, 12000),
     footerText: footerText.slice(0, 4000),
     profilePageText: profilePageText.slice(0, 8000),
+    copyrightText: copyrightText.slice(0, 500),
     ...extracted
   };
 }
 
 /**
- * Extracts schema.org JSON-LD PostalAddress blocks.
+ * Adds an address candidate with provenance tracking and priority ranking.
+ */
+function addAddressCandidate(targetList, rawText, source, isHq = false) {
+  if (!rawText || typeof rawText !== "string") return;
+  const cleaned = rawText
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (cleaned.length < 8) return;
+  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|number|no|#|\d{3,6})\b/i.test(cleaned)) {
+    return;
+  }
+
+  // Priority ranking: headquarters (1) > contact (2) > profile (3) > jsonld (4) > map (5) > footer (6)
+  let priority = 6;
+  if (isHq || source === "headquarters") priority = 1;
+  else if (source === "contact") priority = 2;
+  else if (source === "profile") priority = 3;
+  else if (source === "jsonld") priority = 4;
+  else if (source === "map") priority = 5;
+
+  const exists = targetList.some(c => (typeof c === "string" ? c : c.raw).toLowerCase() === cleaned.toLowerCase());
+  if (!exists) {
+    targetList.push({
+      raw: cleaned,
+      source: source || "general",
+      priority: priority,
+      isHeadquarters: isHq || source === "headquarters"
+    });
+  }
+}
+
+/**
+ * Extracts schema.org JSON-LD PostalAddress blocks with source provenance.
  */
 function extractJsonLdAddresses(html, targetList) {
   if (!html) return;
-  const jsonLdRegex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const scriptRegex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match;
-  while ((match = jsonLdRegex.exec(html)) !== null) {
+  while ((match = scriptRegex.exec(html)) !== null) {
     try {
       const data = JSON.parse(match[1]);
-      const items = Array.isArray(data) ? data : (data["@graph"] ? data["@graph"] : [data]);
-      for (const item of items) {
-        const addr = item.address || (item["@type"] === "PostalAddress" ? item : null);
-        if (addr) {
-          const parts = [
-            addr.streetAddress,
-            addr.addressLocality,
-            addr.addressRegion,
-            addr.postalCode,
-            addr.addressCountry
-          ].filter(Boolean);
-          if (parts.length > 0) {
-            const full = parts.join(", ");
-            if (!targetList.includes(full)) targetList.push(full);
+      const processItem = item => {
+        if (!item || typeof item !== "object") return;
+        if (item.address && typeof item.address === "object") {
+          const a = item.address;
+          const parts = [a.streetAddress, a.addressLocality, a.addressRegion, a.postalCode, a.addressCountry].filter(Boolean);
+          if (parts.length >= 2) {
+            addAddressCandidate(targetList, parts.join(", "), "jsonld", false);
           }
         }
-      }
-    } catch (e) { }
+      };
+      if (Array.isArray(data)) data.forEach(processItem);
+      else if (data["@graph"] && Array.isArray(data["@graph"])) data["@graph"].forEach(processItem);
+      else processItem(data);
+    } catch (e) {}
   }
 }
 
 /**
- * Discovers and prioritizes Contact, Profile, Headquarters, and Location links.
- * Inspects both href URLs and human-visible anchor text / titles.
+ * Discovers contact and about page URLs by scoring anchor text and href.
  */
 function discoverContactLinks(html, baseUrl) {
   if (!html) return [];
-  const linkMatches = [...html.matchAll(/<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)];
-  const scoredLinks = [];
+  const candidates = [];
+  const linkRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
 
-  for (const m of linkMatches) {
-    const raw = m[1];
-    const text = m[2].replace(/<[^>]+>/g, "").trim().toLowerCase();
-
-    if (/^(tel:|mailto:|javascript:|#)/i.test(raw)) continue;
-    if (/\.(css|js|png|jpg|jpeg|gif|svg|webp|pdf|zip|cgi|dat|exe)$/i.test(raw)) continue;
-    if (/\/cgi-bin\//i.test(raw)) continue;
+  while ((match = linkRegex.exec(html)) !== null) {
+    const raw = match[1].trim();
+    const innerText = match[2].replace(/<[^>]+>/g, "").trim().toLowerCase();
+    const rawLower = raw.toLowerCase();
+    if (!raw || /^(javascript:|mailto:|tel:|#)/i.test(raw)) continue;
 
     let score = 0;
-    const lower = raw.toLowerCase();
-    const combined = lower + " " + text;
-
-    if (/head-?office|headquarters?|corporate-?office/i.test(combined)) score += 100;
-    else if (/company-?profile|corporate-?profile|profile\.htm|profile/i.test(combined)) score += 95;
-    else if (/contact-?us|contactus|get-in-touch|reach-us/i.test(combined)) score += 90;
-    else if (/about-?us|aboutus|who-we-are|our-company|our-story|our-history/i.test(combined)) score += 85;
-    else if (/\bcontact\b|\babout\b/i.test(text) || /\bcontact\b|\babout\b/i.test(lower)) score += 80;
-    else if (/sales|support|service|enquir|inquir|quote|request-quote/i.test(combined)) score += 70;
-    else if (/team|staff|management|leadership|our-people|directors/i.test(combined)) score += 65;
-    else if (/location|locations|branches|our-offices|find-us|dealers|distributors/i.test(combined)) score += 55;
-    else if (/product|products|catalog|store/i.test(combined)) score += 45;
-    else if (/feedback|customer-care/i.test(combined)) score += 40;
-    else if (/imprint|impressum|legal|privacy/i.test(combined)) score += 35;
+    if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us)\b/i.test(rawLower)) score += 10;
+    if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile)\b/i.test(rawLower)) score += 6;
+    if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us)\b/i.test(innerText)) score += 12;
+    if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile)\b/i.test(innerText)) score += 8;
 
     if (score > 0) {
       try {
-        const fullUrl = new URL(raw, baseUrl).href;
-        scoredLinks.push({ url: fullUrl, score });
-      } catch (e) { }
+        const resolved = new URL(raw, baseUrl).href;
+        candidates.push({ url: resolved, score });
+      } catch (e) {}
     }
   }
 
-  scoredLinks.sort((a, b) => b.score - a.score);
-  return [...new Set(scoredLinks.map(s => s.url))];
+  candidates.sort((a, b) => b.score - a.score);
+  return Array.from(new Set(candidates.map(c => c.url)));
 }
 
-/**
- * Extracts complete footer structures including nested containers.
- */
 function extractFooterText(html) {
   if (!html) return "";
-  const footerRegex = /<footer[\s\S]*?<\/footer>|<div[^>]*class=["'][^"']*(?:footer|botnav|site-info|bottom-bar)[^"']*["'][\s\S]*?<\/div>|<div[^>]*id=["'][^"']*(?:footer|botnav|site-info)[^"']*["'][\s\S]*?<\/div>/gi;
-  let match;
-  const chunks = [];
-  while ((match = footerRegex.exec(html)) !== null) {
-    chunks.push(match[0]);
-  }
-
-  if (chunks.length > 0) {
-    return stripHtml(chunks.join(" "));
-  }
-
-  const cleanBody = stripHtml(html);
-  return cleanBody.slice(Math.max(0, cleanBody.length - 2000));
+  const footerMatch = html.match(/<footer[^>]*>([\s\S]*?)<\/footer>/i) ||
+    html.match(/<(?:div|section)[^>]+(?:class|id)=["'][^"']*footer[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/i);
+  if (!footerMatch) return "";
+  return stripHtml(footerMatch[1]);
 }
 
-/**
- * Extracts decoded addresses from Google Maps embeds, place queries, or map links.
- */
 function extractMapAddresses(html, targetList) {
   if (!html) return;
-  const mapRegexes = [
-    /(?:maps\/embed\/v1\/place\?q=|google\.com\/maps\/place\/|maps\.google\.com\/[^\?]*\?q=)([^&"'>]+)/gi,
-    /javascript:mapmodal\(["'][^"']*[\?&]q=([^&"']+)["']/gi
-  ];
-
-  for (const reg of mapRegexes) {
-    let match;
-    while ((match = reg.exec(html)) !== null) {
-      try {
-        const decoded = decodeURIComponent(match[1].replace(/\+/g, " ")).trim();
-        const isLikelyAddress = /\b(?:road|street|avenue|lane|drive|way|boulevard|blvd|highway|rd|st|ave|hsien|town|city|box)\b/i.test(decoded) || /\d{1,5}\s+[a-zA-Z]/.test(decoded);
-        if (decoded && decoded !== "#" && decoded.length > 5 && isLikelyAddress && !targetList.includes(decoded)) {
-          targetList.push(decoded);
-        }
-      } catch (e) { }
-    }
-  }
-}
-
-/**
- * Extracts addresses embedded in meta keywords, descriptions, and OpenGraph/schema attributes.
- */
-function extractMetaAddresses(html, targetList) {
-  if (!html) return;
-
-  // 1. Meta keywords: e.g. <meta name="keywords" content="Teflex Plastics,30 Kelly Road Jet Park Boksburg,011 397 2959"/>
-  const kwMatches = [
-    ...html.matchAll(/<meta\s+[^>]*name=["'](?:keywords|description)["'][^>]*content=["']([^"']+)["']/gi),
-    ...html.matchAll(/<meta\s+[^>]*content=["']([^"']+)["'][^>]*name=["'](?:keywords|description)["']/gi)
-  ];
-
-  for (const m of kwMatches) {
-    const content = m[1];
-    const parts = content.split(/[,;|]/);
-    for (const p of parts) {
-      const clean = p.trim();
-      if (clean.length >= 10 && clean.length <= 150 &&
-        /\b(?:Road|Street|Avenue|Lane|Drive|Way|Boulevard|Blvd|Highway|Rd|St|Ave|Town|Hsien|Park)\b/i.test(clean) &&
-        /\d/.test(clean)) {
-        // Format: e.g. "30 Kelly Road Jet Park Boksburg" -> "30 Kelly Road, Jet Park, Boksburg"
-        const formatted = clean
-          .replace(/\b(Road|Street|Avenue|Lane|Drive|Way|Boulevard|Blvd|Highway|Rd|St|Ave)\s+(?![\s,])/i, "$1, ")
-          .replace(/\b(Jet Park|Industrial Area|Business Park)\s+(?![\s,])/i, "$1, ")
-          .replace(/\s*,\s*/g, ", ")
-          .trim();
-        if (!targetList.includes(formatted)) {
-          targetList.push(formatted);
+  const mapRegex = /(?:google\.com\/maps|maps\.google|baidu\.com|openstreetmap)[^"'>\s]*/gi;
+  let match;
+  while ((match = mapRegex.exec(html)) !== null) {
+    const rawUrl = match[0];
+    try {
+      const decoded = decodeURIComponent(rawUrl);
+      const qMatch = decoded.match(/[?&](?:q|query|place|destination|daddr)=([^&"'>]+)/i);
+      if (qMatch) {
+        const query = qMatch[1].replace(/\+/g, " ").trim();
+        if (query.length > 8 && !/^[-\d.,\s]+$/.test(query)) {
+          addAddressCandidate(targetList, query, "map", false);
         }
       }
-    }
-  }
-
-  // 2. OpenGraph & Geo meta tags
-  const ogStreet = html.match(/<meta\s+[^>]*property=["'](?:og:street-address|business:contact_data:street_address)["'][^>]*content=["']([^"']+)["']/i)?.[1];
-  const ogCity = html.match(/<meta\s+[^>]*property=["'](?:og:locality|business:contact_data:locality)["'][^>]*content=["']([^"']+)["']/i)?.[1];
-  const ogRegion = html.match(/<meta\s+[^>]*property=["'](?:og:region|business:contact_data:region)["'][^>]*content=["']([^"']+)["']/i)?.[1];
-  const ogCountry = html.match(/<meta\s+[^>]*property=["'](?:og:country-name|business:contact_data:country_name)["'][^>]*content=["']([^"']+)["']/i)?.[1];
-
-  if (ogStreet) {
-    const full = [ogStreet, ogCity, ogRegion, ogCountry].filter(Boolean).join(", ");
-    if (!targetList.includes(full)) targetList.push(full);
+    } catch (e) {}
   }
 }
 
-/**
- * Extracts address text from dedicated HTML address elements or headings.
- */
-function extractHtmlAddresses(html, targetList) {
+function extractMetaAddresses(html, targetList) {
+  if (!html) return;
+  const metaRegex = /<meta[^>]+(?:name|property)=["'](?:og:street-address|geo\.placename|business:contact_data:street_address)["'][^>]+content=["']([^"']+)["']/gi;
+  let m;
+  while ((m = metaRegex.exec(html)) !== null) {
+    if (m[1] && m[1].trim().length > 6) {
+      addAddressCandidate(targetList, m[1].trim(), "contact", false);
+    }
+  }
+}
+
+function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   if (!html) return;
 
-  // 1. <h1-6> with "address" followed by <p>, <div>, or <span>
+  // 1. Explicit Headquarters / Head Office blocks (Priority 1)
+  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq)\s*[:\-–]?\s*<(?:p|div|span|address)[^>]*>([\s\S]*?)<\/(?:p|div|span|address)>/gi;
+  let hqm;
+  while ((hqm = hqRegex.exec(html)) !== null) {
+    const raw = stripHtml(hqm[1]);
+    if (raw.length > 8) {
+      addAddressCandidate(targetList, raw, "headquarters", true);
+    }
+  }
+
+  // 2. <h1-6> with "address" followed by <p>, <div>, or <span>
   const headingRegex = /<h[1-6][^>]*>[^<]*address[^<]*<\/h[1-6]>\s*<(?:p|div|span)[^>]*>([\s\S]*?)<\/(?:p|div|span)>/gi;
   let hm;
   while ((hm = headingRegex.exec(html)) !== null) {
-    const raw = hm[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    if (raw.length > 10 && /\b(road|street|avenue|lane|drive|way|boulevard|town|city|province|district|village|county|building|floor)\b/i.test(raw)) {
-      if (!targetList.includes(raw)) targetList.push(raw);
+    const raw = stripHtml(hm[1]);
+    if (raw.length > 10) {
+      addAddressCandidate(targetList, raw, defaultSource, false);
     }
   }
 
-  // 2. <address> tag
+  // 3. <address> tag
   const addrTagRegex = /<address[^>]*>([\s\S]*?)<\/address>/gi;
   let am;
   while ((am = addrTagRegex.exec(html)) !== null) {
-    const raw = am[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    if (raw.length > 10 && !targetList.includes(raw)) targetList.push(raw);
+    const raw = stripHtml(am[1]);
+    if (raw.length > 10) {
+      addAddressCandidate(targetList, raw, defaultSource, false);
+    }
   }
 
-  // 3. Class or id with "address"
-  const classAddrRegex = /<(?:p|div|span)[^>]*(?:class|id)=["'][^"']*\b(?:company-address|contact-address|office-address|footer-address)\b[^"']*["'][^>]*>([\s\S]*?)<\/(?:p|div|span)>/gi;
+  // 4. Class or id containing "address"
+  const classAddrRegex = /<(?:div|p|span|section)[^>]+(?:class|id)=["'][^"']*address[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section)>/gi;
   let cm;
   while ((cm = classAddrRegex.exec(html)) !== null) {
-    const raw = cm[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    if (raw.length > 10 && !targetList.includes(raw)) targetList.push(raw);
+    const raw = stripHtml(cm[1]);
+    if (raw.length > 10) {
+      addAddressCandidate(targetList, raw, defaultSource, false);
+    }
   }
+}
+
+/**
+ * Compares Gemini's suggested address against verified website candidates.
+ * Prioritizes explicitly identified headquarters addresses and rejects unsupported addresses.
+ */
+function verifyAndSelectAddress(geminiAddr, candidates) {
+  if (!candidates || candidates.length === 0) {
+    if (!geminiAddr || geminiAddr.length < 8 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim())) {
+      return "Not Available";
+    }
+    return geminiAddr;
+  }
+
+  // Sort candidates by priority (1 = headquarters, 2 = contact, 3 = profile, 4 = jsonld, 5 = map, 6 = footer)
+  const sorted = [...candidates].sort((a, b) => {
+    const pA = typeof a === "object" ? a.priority : 6;
+    const pB = typeof b === "object" ? b.priority : 6;
+    return pA - pB;
+  });
+
+  const getRaw = c => (typeof c === "object" ? c.raw : c);
+  const hqCandidate = sorted.find(c => typeof c === "object" && (c.isHeadquarters || c.source === "headquarters"));
+
+  if (!geminiAddr || geminiAddr.length < 5 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim())) {
+    return getRaw(sorted[0]);
+  }
+
+  // Extract key tokens from Gemini's address to test support against website evidence
+  const geminiTokens = geminiAddr
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length > 2);
+
+  let bestCandidate = null;
+  let maxOverlap = 0;
+
+  for (const cand of sorted) {
+    const candRaw = getRaw(cand);
+    const candLower = candRaw.toLowerCase();
+    let overlapCount = 0;
+    for (const token of geminiTokens) {
+      if (candLower.includes(token)) overlapCount++;
+    }
+    const ratio = geminiTokens.length > 0 ? overlapCount / geminiTokens.length : 0;
+    if (ratio > maxOverlap) {
+      maxOverlap = ratio;
+      bestCandidate = cand;
+    }
+  }
+
+  // If Gemini address matches verified website evidence
+  if (maxOverlap >= 0.35 && bestCandidate) {
+    // If an explicit headquarters address was identified and Gemini picked another, ALWAYS prefer headquarters
+    if (hqCandidate && bestCandidate !== hqCandidate) {
+      return getRaw(hqCandidate);
+    }
+    // If website candidate preserves a street number that Gemini dropped, prefer candidate
+    const candRaw = getRaw(bestCandidate);
+    const candNumMatch = candRaw.match(/(?:^|[\s,#])(\d+)\b/);
+    const geminiNumMatch = geminiAddr.match(/(?:^|[\s,#])(\d+)\b/);
+    if (candNumMatch && !geminiNumMatch) {
+      return candRaw;
+    }
+    if (candRaw.length > geminiAddr.length && /(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza|village)/i.test(candRaw) && !/(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza)/i.test(geminiAddr)) {
+      return candRaw;
+    }
+    return geminiAddr;
+  }
+
+  // Unsupported Gemini address -> reject and fall back to top verified website candidate
+  if (sorted.length > 0) {
+    return getRaw(sorted[0]);
+  }
+
+  return "Not Available";
 }
 
 function stripHtml(html) {
@@ -601,14 +646,15 @@ function stripHtml(html) {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+    .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/address|\/h[1-6])[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/[^\S\r\n]+/g, " ")
+    .replace(/\n\s+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-/**
- * Extracts metadata, ranked emails, validated phones, products, images, descriptions dynamically from HTML.
- */
 function parseHtmlDetails(html, baseUrl) {
   if (!html) {
     return {
@@ -786,60 +832,29 @@ function rankEmails(emails, targetDomain) {
  * Verifies presence of a dedicated Company Profile or substantive corporate overview.
  * Balanced structural verifier ensuring high sensitivity without keyword false positives.
  */
-function checkCompanyProfilePresence(html, text) {
-  if (!html && !text) return false;
+function checkCompanyProfilePresence(html, text, profilePageText = "") {
+  if (!html && !text && !profilePageText) return false;
   const rawHtml = html || "";
-  const clean = (text || stripHtml(rawHtml)).toLowerCase();
+  const combined = ((profilePageText || "") + " " + (text || stripHtml(rawHtml))).toLowerCase();
 
   // 1. Downloadable Company Profile PDF link (e.g. company-profile.pdf)
   if (/href=["'][^"']*(?:company[-_]?profile|corporate[-_]?profile)[^"']*\.pdf["']/i.test(rawHtml)) {
     return true;
   }
 
-  // 2. Navigation / Anchor Links to Company Profile or About Us
-  const profileHrefRegex = /href=["'][^"']*\b(?:about|about-us|aboutus|who-we-are|our-company|our-story|our-history|company-profile|corporate-profile|company-overview|company-info|profile\.htm|profile\.html)\b[^"']*["']/i;
-  if (profileHrefRegex.test(rawHtml)) {
-    return true;
-  }
+  // 2. Substantive corporate background evidence:
+  // Must verify genuine meaningful content (founding year, history narrative, mission/vision, or corporate profile table)
+  const hasHistory = /\b(?:established\s+(?:in\s+)?\d{4}|founded\s+(?:in\s+)?\d{4}|since\s+\d{4}|started\s+(?:in\s+)?\d{4}|history\s+of\s+our\s+company|our\s+history|company\s+history|corporate\s+milestones?)\b/i.test(combined);
+  const hasMissionScope = /\b(?:our\s+mission|our\s+vision|core\s+values|business\s+scope|company\s+background|corporate\s+overview|company\s+overview|about\s+our\s+company|who\s+we\s+are)\b/i.test(combined);
+  const hasProfileTable = /\b(?:capital|registered\s+capital|turnover|annual\s+sales|factory\s+size|plant\s+area|number\s+of\s+employees|business\s+type|year\s+established)\b[\s\S]{0,100}\b(?:\d+|ltd|co)/i.test(combined);
 
-  // Also check anchor tag text or img alt
-  const linkMatches = rawHtml.matchAll(/<a\s+[^>]*>([\s\S]*?)<\/a>/gi);
-  for (const m of linkMatches) {
-    const inner = m[1];
-    const textOnly = inner.replace(/<[^>]+>/g, "").trim().toLowerCase();
-    const altMatch = inner.match(/alt=["']([^"']+)["']/i);
-    const altText = altMatch ? altMatch[1].trim().toLowerCase() : "";
-
-    if (/^(?:about|about\s+us|about\s+our\s+company|about\s+the\s+company|who\s+we\s+are|our\s+company|our\s+story|our\s+history|company\s+profile|corporate\s+profile|company\s+overview|company\s+info)$/i.test(textOnly) ||
-      /\b(?:company\s+profile|corporate\s+profile)\b/i.test(textOnly) ||
-      /\b(?:about\s+us|who\s+we\s+are|our\s+story)\b/i.test(altText)) {
-      return true;
-    }
-  }
-
-  // 3. Headings (h1, h2, h3, h4) on the page
-  const headingMatches = rawHtml.matchAll(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/gi);
-  for (const hm of headingMatches) {
-    const hText = hm[1].replace(/<[^>]+>/g, "").trim().toLowerCase();
-    if (/\b(?:about\s+us|about\s+our\s+company|about\s+the\s+company|who\s+we\s+are|our\s+company|our\s+story|our\s+history|company\s+profile|corporate\s+profile|company\s+overview)\b/i.test(hText)) {
-      return true;
-    }
-  }
-
-  // 4. In page text: dedicated profile header or narrative
-  if (/\b(?:company\s+profile|corporate\s+profile|who\s+we\s+are|our\s+story)\b/i.test(clean)) {
-    return true;
-  }
-  if (/\babout\s+us\b/i.test(clean) && /(?:founded|established|since\s+\d{4}|manufacturer|industry|business|leader|mission|vision)/i.test(clean)) {
+  if (hasHistory || (hasMissionScope && combined.length >= 250) || hasProfileTable) {
     return true;
   }
 
   return false;
 }
 
-/**
- * Identifies if the company operates primarily in a prohibited core sector.
- */
 function detectRestrictedKeywords(text) {
   for (const regex of RESTRICTED_PATTERNS) {
     if (regex.test(text)) {
@@ -895,21 +910,21 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
      * New Taipei City in address → State: NOT Available (New Taipei City is NOT the capital)
    - Do not guess or infer. Only evaluate what is explicitly written in the address.
 
-2. CITY VALIDATION RULES – CRITICAL QC RULE:
-   The city field must be marked "Available" ONLY when the address explicitly contains a recognized:
-   - City (e.g. Taipei City, Taichung City, Changhua City, Kuala Lumpur, Mumbai, Seoul, Jakarta, Bangkok, Dubai, Sydney, Melbourne, Frankfurt, Manchester, Toronto, etc.)
-   - Town or Township (e.g. Xiushui Township, Yangmei Town, or any named town/township)
-   - District (e.g. Banqiao District, Xinzhuang District, Petaling Jaya)
-   - Municipality (e.g. Ekurhuleni Municipality)
-   - OR if the country's official capital city is in the address
-   STRICTLY DO NOT CONSIDER THE FOLLOWING AS CITY:
-   - Suburb, Locality, Neighborhood, Industrial Area, Business Park, Street Name, State/Province name.
-
-   CRITICAL QC EVALUATION FOR CITY:
-   - If the address contains New Taipei City: The capital exception is DISQUALIFIED. City is Available ONLY if an explicitly recognized Town or District (e.g. Banqiao District, Sanchong District) is written in the address; otherwise Not Available.
-   - If the address contains a suburb (like Jet Park) AND an explicitly identified town, district or municipality (like Boksburg), mark "Available" based on the qualifying administrative area.
-   - If the address contains only a suburb (e.g. "10 Fredman Drive, Sandton, Gauteng"), mark city as "Not Available".
-   - If classification is uncertain or city is not explicitly present in the address, mark "Not Available". Never guess or infer a city.
+2. CITY VALIDATION RULES – STRICT QC RULE:
+   The city field MUST be marked "Available" ONLY if the official website's address explicitly identifies a qualifying Town, Township, District, or Municipality (e.g. contains the explicit designation "Town", "Township", "District", "Municipality", "Metropolitan Municipality", "Borough").
+   - Explicit Town: Available (e.g. "Longshan Town", "Yangmei Town")
+   - Explicit Township: Available (e.g. "Xiushui Township")
+   - Explicit District: Available (e.g. "Banqiao District", "Xinzhuang District")
+   - Explicit Municipality: Available (e.g. "Ekurhuleni Municipality")
+   - Explicit Borough: Available
+   STRICTLY MARK "Not Available" FOR:
+   - Standalone city name: Not Available (e.g. standalone "Chicago", "Melbourne", "Rome", "Milan", "Cape Town", "London", "Taipei", "Centralia", "Wheeling" without an explicit qualifying Town/District/Municipality designation word are NOT Available).
+   - Capital cities: Not Available (the capital-city exception does NOT apply to city validation; capital cities only apply to state validation).
+   - Suburb: Not Available
+   - Locality: Not Available
+   - Neighborhood: Not Available
+   - Industrial Area / Business Park: Not Available
+   - New Taipei City: Must remain "Not Available" unless a qualifying administrative area (e.g. Banqiao District) is separately identified in the address.
 
 PRODUCT, IMAGE & DESCRIPTION QC RULES (ACCURATELY BASED ON SITE):
 Count the distinct items, product images, and descriptions actually present on this specific website:
@@ -953,8 +968,8 @@ COMPANY NAME RULES (Rule 4):
 1. COMPLETE COMPANY NAME IN FULL FORM (CRITICAL QC RULE):
    - You must take the COMPLETE registered company name in FULL FORM, Title Case.
    - NEVER drop, truncate, or omit corporate/legal entity designations (e.g. [Pty]Ltd, (Pty) Ltd, Pty Ltd, Sdn Bhd, Pte Ltd, Pvt Ltd, Ltd, Inc, LLC, LLP, Corp, Co).
-   - Look at the FOOTER, COPYRIGHT LINE (e.g. "© 2026 AKS Linings Systems"), LEGAL NOTICES, and CONTACT BLOCK for the full official registered corporate name.
-   - If the company name is "AKS Lining Systems [Pty]Ltd", you MUST output "Aks Lining Systems Proprietary Limited" (DO NOT drop "[Pty]Ltd" to become just "Aks Lining Systems").
+   - Look at the FOOTER, COPYRIGHT LINE (e.g. "© 2026 Company Name"), LEGAL NOTICES, and CONTACT BLOCK for the full official registered corporate name.
+   - Restore legal entity designations (e.g. [Pty]Ltd -> Proprietary Limited, Sdn Bhd -> Sendirian Berhad, Inc -> Incorporated) ONLY when supported by official website text evidence (footer, copyright, Contact page, or Company Profile).
 2. REMOVE BRACKETS FROM THE COMPANY NAME:
    - Remove square brackets [ ] and parentheses ( ) from the company name:
      * "[Pty]Ltd" or "(Pty) Ltd" -> "Proprietary Limited"
@@ -1203,34 +1218,20 @@ function heuristicExtraction(crawlData, restrictedCheck) {
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const result = { ...data };
 
-  // 1. Website Status
-  const validStatuses = ["Working", "Not Working", "Domain Expired", "Non English", "Under Construction", "Flash Site", "Redirect Site"];
-  if (!validStatuses.includes(result.websiteStatus)) {
+  // 1. Website Status: Failed fetch (status 0, network error, empty HTML) MUST be Not Working
+  if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working" || crawlData.status === "Domain Expired") {
+    result.websiteStatus = crawlData.status || "Not Working";
+  } else if (restrictedCheck && restrictedCheck.isRestricted) {
     result.websiteStatus = "Working";
   }
 
   // 2. Business Type
-  const validBusinessTypes = [
-    "Manufacturer", "Industrial Services", "Exporter", "Trader", "Distributer",
-    "Supplier", "Wholesaler", "Service Provider", "Online Shopping", "Restricted Site", "Other"
-  ];
-  if (restrictedCheck.isRestricted || result.isRestricted) {
+  if (restrictedCheck && restrictedCheck.isRestricted) {
     result.businessType = "Restricted Site";
-    result.isRestricted = true;
-  } else if (!validBusinessTypes.includes(result.businessType)) {
-    result.businessType = "Manufacturer";
   }
 
-  // 3. Company Profile (Rule 3): Verified drop-down option (Available | Not Available)
-  // Balanced hybrid logic: Available if crawler verified structural evidence (About/Profile link, heading, or PDF)
-  // OR if AI confirms Company Profile is Available based on deep content analysis.
-  // Set to "Not Available" only if neither crawler nor AI found any profile evidence.
-  const aiSaysProfile = (result.companyProfile === "Available" || result.companyProfile === true);
-  const crawlerFoundProfile = Boolean(crawlData.hasCompanyProfile);
-  const hasProfileText = Boolean(crawlData.profilePageText && crawlData.profilePageText.trim().length >= 30);
-  const textHasProfile = /\b(about\s+us|who\s+we\s+are|company\s+profile|corporate\s+profile|our\s+story|our\s+history|company\s+background|established\s+in\s+\d{4}|founded\s+in\s+\d{4})\b/i.test(crawlData.combinedText || "");
-
-  if (crawlerFoundProfile || hasProfileText || aiSaysProfile || textHasProfile) {
+  // 3. Company Profile: Verify substantive corporate background content
+  if (crawlData.hasCompanyProfile) {
     result.companyProfile = "Available";
   } else {
     result.companyProfile = "Not Available";
@@ -1240,43 +1241,23 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   let country = (result.countryName || "").trim();
   country = country.replace(/[\(\)\[\]\{\}]/g, " ");
 
-  // Expand standard country abbreviations
-  if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(country.trim())) {
-    country = "United States of America";
-  } else if (/^u\.?k\.?$/i.test(country)) {
-    country = "United Kingdom";
-  } else if (/^u\.?a\.?e\.?$/i.test(country)) {
-    country = "United Arab Emirates";
-  } else if (/^n\.?z\.?$/i.test(country)) {
-    country = "New Zealand";
-  } else if (/^za$/i.test(country)) {
-    country = "South Africa";
-  } else if (/^taiwan(\s*,\s*r\.?o\.?c\.?)?$/i.test(country) || /^r\.?o\.?c\.?$/i.test(country)) {
-    country = "Taiwan";
+  if (country && country.length > 2) {
+    if (/taiwan/i.test(country) || /r\.?o\.?c\.?/i.test(country)) country = "Taiwan";
+    else if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(country.trim())) country = "United States of America";
+    else if (/england/i.test(country)) country = "England";
+    else if (/scotland/i.test(country)) country = "Scotland";
+    else if (/wales/i.test(country)) country = "Wales";
+    else if (/northern\s*ireland/i.test(country)) country = "Northern Ireland";
+    else if (/italy|italia/i.test(country)) country = "Italy";
   }
 
-  // Special UK Rule: If England, Scotland, Wales, or Northern Ireland is mentioned, take that sub-country
-  if (/england/i.test(country)) {
-    country = "England";
-  } else if (/scotland/i.test(country)) {
-    country = "Scotland";
-  } else if (/wales/i.test(country)) {
-    country = "Wales";
-  } else if (/northern\s*ireland/i.test(country)) {
-    country = "Northern Ireland";
-  }
-
-  // 5. Company Name: Expand abbreviations, remove brackets, Title Case
+  // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
   let compName = (result.companyName || "").trim();
 
-  // Special catch for aks.co.za / AKS Lining Systems per user requirement & screenshot
-  if (/aks\s*linings?\s*systems?/i.test(compName) || (crawlData && crawlData.originalUrl && /aks\.co\.za/i.test(crawlData.originalUrl))) {
-    compName = "Aks Lining Systems Proprietary Limited";
-  }
-
-  // Check if raw website text / footer / contact text has [Pty]Ltd / Sdn Bhd following the company name
+  // Restore legal suffixes ONLY when the complete company name matches official website evidence
   compName = restoreLegalSuffixIfOmitted(compName, crawlData);
 
+  // Expand abbreviations to full form and clean brackets
   compName = expandCompanyAbbreviations(compName, country);
   compName = compName.replace(/[\(\)\[\]\{\}]/g, " ");
   compName = compName.replace(/^[^\w]+|[^\w]+$/g, "");
@@ -1284,17 +1265,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = toTitleCase(compName);
   result.companyName = compName;
 
-  // 6. Company Address: Cleaned dynamically from website
-  let addr = (result.companyAddress || "").trim();
-  const hasDirectVerifiedAddr = crawlData.detectedAddresses && crawlData.detectedAddresses.length > 0;
-  const verifiedCandidate = hasDirectVerifiedAddr ? crawlData.detectedAddresses.find(a => a && a.length >= 8) : null;
+  // 6. Company Address: Compare Gemini's answer against website candidates, prioritizing Headquarters
+  let addr = verifyAndSelectAddress(result.companyAddress, crawlData.addressCandidates);
 
-  // Fallback to verified candidate or page text ONLY when AI gave empty, too short, or explicit 'Not Available'
-  if (!addr || addr.length < 5 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(addr.trim())) {
-    addr = verifiedCandidate || extractLikelyAddress(crawlData.contactPageText || crawlData.footerText || crawlData.combinedText);
-  }
-
-  if (addr) {
+  if (addr && addr !== "Not Available") {
     addr = addr.replace(/[\(\)\[\]\{\}]/g, " ");
 
     if (compName && addr.toLowerCase().startsWith(compName.toLowerCase())) {
@@ -1305,7 +1279,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     addr = expandAddressAndStateAbbreviations(addr, country);
 
     // If raw website address had a state that got dropped by AI, restore it!
-    const rawSource = (crawlData.detectedAddresses && crawlData.detectedAddresses.slice(0, 3).join(" ")) || "";
+    const rawSource = (crawlData.detectedAddresses && crawlData.detectedAddresses.slice(0, 5).join(" ")) || "";
     if (rawSource) {
       addr = restoreStateIfOmitted(addr, rawSource, country);
     }
@@ -1317,10 +1291,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.)\b/gi, " ");
       }
     }
-    // Also remove "R.O.C." or "Republic of China" if present
     addr = addr.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china)\b/gi, " ");
 
-    // Remove international postal codes carefully without stripping street numbers at the beginning
+    // Remove international postal codes carefully without stripping street numbers
     addr = removePostalCodesCarefully(addr);
 
     // Ensure comma separates city/suburb from state/province
@@ -1335,8 +1308,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     addr = addr.replace(/\s+/g, " ");
     addr = toTitleCase(addr);
 
-    // CRITICAL QC RULE: Address ending MUST NOT have a comma or point/period. It should be empty of trailing punctuation.
+    // Address ending MUST NOT have trailing comma or point/period
     addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+  } else {
+    addr = "Not Available";
   }
   result.companyAddress = addr;
 
@@ -1349,52 +1324,18 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
   result.countryName = country.trim() === "United States of America" ? "United States of America" : toTitleCase(country.trim());
 
-  // Ensure company name abbreviations are updated with finalized country
-  result.companyName = toTitleCase(expandCompanyAbbreviations(result.companyName, country));
-
-  // 7. State: Hybrid approach — trust AI when address is meaningful, use independent verification as additional signal.
-  //    Hard override to "Not Available" only when address is empty/too short or is itself "Not Available".
+  // 7. State: Validated based on presence of State / Province / County / Hsien / Region or Capital
   if (!addr || addr.length < 8 || addr.toLowerCase() === "not available") {
     result.state = "Not Available";
   } else {
-    const aiSaysStateAvail = result.state === "Available";
-    const hasKnownState = hasStateInAddress(addr, country);
-    // NEW TAIPEI CITY: Always force Not Available (hard rule)
-    if (isNewTaipeiCity(addr.toLowerCase())) {
-      result.state = "Not Available";
-    } else {
-      // Trust AI if it says Available AND address has meaningful content (> 15 chars after street)
-      // OR independently detected a known state/region marker
-      result.state = (aiSaysStateAvail || hasKnownState) ? "Available" : "Not Available";
-    }
+    result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
   }
 
-  // 8. City: Hybrid approach with strict veto for suburbs & New Taipei City
-  if (!addr || addr.length < 8 || addr.toLowerCase() === "not available") {
+  // 8. City: Evaluated STRICTLY per City QC Rule (Only explicit Town, Township, District, Municipality)
+  if (!addr || addr.length < 8 || addr.toLowerCase() === "not available" || addr === "Not Available") {
     result.city = "Not Available";
   } else {
-    const addrLower = addr.toLowerCase();
-    const isNTC = isNewTaipeiCity(addrLower);
-    const addrWithoutNTC = addrLower.replace(/\bnew\s*taipei(\s*city)?\b/gi, "");
-    const hasExplicitTownOrDist = /\b(town|township|district|municipality|borough)\b/i.test(addrWithoutNTC) ||
-      RECOGNIZED_TOWNS.some(t => new RegExp(`\\b${t}\\b`, "i").test(addrWithoutNTC));
-
-    if (isNTC && !hasExplicitTownOrDist) {
-      result.city = "Not Available";
-    } else {
-      const isDisqualifiedSuburb = NON_CITY_SUBURBS.some(sub => new RegExp(`\\b${sub}\\b`, "i").test(addrLower));
-      const hasCityMarker = /\b(city|town|township|district|municipality|borough)\b/i.test(addrLower) ||
-        hasCapitalInAddress(addrLower, country) ||
-        evaluateCityQC(addr, country) === "Available";
-
-      if (isDisqualifiedSuburb && !hasCityMarker) {
-        result.city = "Not Available";
-      } else {
-        const aiSaysCityAvail = result.city === "Available";
-        const hasKnownCity = evaluateCityQC(addr, country) === "Available";
-        result.city = (aiSaysCityAvail || hasKnownCity) ? "Available" : "Not Available";
-      }
-    }
+    result.city = evaluateCityQC(addr, country);
   }
 
   // 9. Email ID
@@ -1412,10 +1353,15 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 11. Phone Number: Country-specific cleaning & validation
   let phone = cleanPhoneNumber(result.phoneNumber, country);
+  if (!phone && crawlData.phones && crawlData.phones.length > 0) {
+    for (const cand of crawlData.phones) {
+      phone = cleanPhoneNumber(cand, country);
+      if (phone) break;
+    }
+  }
   result.phoneNumber = phone;
 
   // 12. Number of Products, 13. Product Images, 14. Number of Product Descriptions
-  // Strictly conform to instruction: "count not match if which one coming highest that should take"
   const parseCount = (val) => {
     if (val === undefined || val === null || val === "") return 0;
     const s = String(val).trim().toLowerCase();
@@ -1435,7 +1381,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const iCount = Math.max(parseCount(result.productImages), parseCount(crawlData.detectedImageCount));
   const dCount = Math.max(parseCount(result.numberOfProductDescriptions), parseCount(crawlData.detectedDescCount));
 
-  // Take the highest count across all three categories to eliminate count mismatches
+  // Highest count across all three categories to eliminate synchronization mismatch
   const highestCount = Math.max(pCount, iCount, dCount);
   const highestVal = String(highestCount);
 
@@ -1446,9 +1392,6 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   return result;
 }
 
-/**
- * Normalizes product/image/description count into standard options without overriding genuine zeros.
- */
 function normalizeCountValue(raw) {
   if (raw === undefined || raw === null || raw === "") return "0";
   const str = String(raw).trim().toLowerCase();
@@ -1516,105 +1459,76 @@ function hasCityInAddress(addr, country) {
  * Strict City QC Evaluator conforming to CITY VALIDATION RULES – CRITICAL QC RULE.
  * Evaluates whether the address string itself contains an official Town, District, or Municipality.
  */
+/**
+ * Strict City QC Evaluator conforming to CITY VALIDATION RULES – STRICT QC RULE.
+ * City = Available ONLY if the official website's address explicitly identifies a qualifying Town, Township, District or Municipality.
+ * Standalone city names, capital cities, suburbs, localities, and industrial areas are NOT Available.
+ */
 function evaluateCityQC(address, country) {
   if (!address || typeof address !== "string" || address.trim().length < 3) {
     return "Not Available";
   }
   const cleanAddr = address.trim().toLowerCase();
-  const cLower = (country || "").toLowerCase();
 
-  // If New Taipei City: Capital exception is DISQUALIFIED
+  // New Taipei City rule: Must remain Not Available unless a qualifying administrative area is separately identified
   if (isNewTaipeiCity(cleanAddr)) {
-    // Only Available if an explicit recognized District, Town, or Township is present (e.g. Banqiao District, Xiushui Township)
-    if (/\b(district|town|township|municipality|borough)\b/i.test(cleanAddr)) {
+    const addrWithoutNTC = cleanAddr.replace(/\bnew\s*taipei(\s*city)?\b/gi, " ");
+    if (/\b(district|town|township|municipality|metropolitan\s*municipality|borough)\b/i.test(addrWithoutNTC)) {
       return "Available";
     }
-    const hasDist = RECOGNIZED_TOWNS.some(t => new RegExp(`\\b${t}\\b`, "i").test(cleanAddr));
-    return hasDist ? "Available" : "Not Available";
+    return "Not Available";
   }
 
-  // Capital city exception (Taipei City, London, Pretoria, Washington, etc.)
-  if (hasCapitalInAddress(cleanAddr, country)) {
+  // Strict City QC Rule per user instruction:
+  // City = Available ONLY if the official website's address explicitly identifies a qualifying Town, Township, District or Municipality.
+  // - Suburb: Not Available
+  // - Locality: Not Available
+  // - Neighborhood: Not Available
+  // - Industrial Area: Not Available
+  // - Standalone city name: Not Available (no automatic capital-city or recognized-place exceptions)
+  // - Explicit Town: Available
+  // - Explicit Township: Available
+  // - Explicit District: Available
+  // - Explicit Municipality: Available
+  // - Explicit Borough: Available
+  // Remove standalone city names that literally contain town as part of their proper name (e.g. Cape Town, George Town)
+  const addrWithoutTownNamedCities = cleanAddr.replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
+
+  if (/\b(town|township|district|municipality|metropolitan\s*municipality|borough)\b/i.test(addrWithoutTownNamedCities)) {
     return "Available";
-  }
-
-  // Explicit administrative designation marker (e.g. "Town of", "... Town", "... Township", "District of", "... District", "... Municipality", "... Borough", "... City")
-  if (/\b(city|town|township|district|municipality|metropolitan municipality|borough)\b/i.test(cleanAddr)) {
-    return "Available";
-  }
-
-  // Known States and Provinces that must NEVER be counted as a City
-  const stateProvs = [
-    "victoria", "new south wales", "queensland", "western australia", "south australia", "tasmania",
-    "ontario", "quebec", "british columbia", "alberta", "manitoba", "saskatchewan",
-    "california", "texas", "florida", "new york", "pennsylvania", "illinois", "ohio", "georgia",
-    "gauteng", "western cape", "eastern cape", "kwazulu", "natal", "mpumalanga", "free state", "limpopo",
-    "north west", "northern cape"
-  ];
-
-  // Check address parts
-  const parts = cleanAddr.split(/[,;\n]/).map(p => p.trim());
-
-  for (const part of parts) {
-    // Disqualify if this part is an Australian/Canadian/US/SA state or province
-    if (stateProvs.some(st => new RegExp(`^${st}$`, "i").test(part) || new RegExp(`\\b${st}\\b`, "i").test(part))) {
-      continue;
-    }
-
-    const isDisqualifiedSuburb = NON_CITY_SUBURBS.some(sub => new RegExp(`\\b${sub}\\b`, "i").test(part));
-    const isStreetOrIndustrial = /\b(street|st|road|rd|ave|avenue|dr|drive|lane|ln|close|blvd|way|park|industrial|business|estate|suite|unit)\b/i.test(part);
-
-    if (isDisqualifiedSuburb && !isStreetOrIndustrial) {
-      continue;
-    }
-
-    const matchedTown = RECOGNIZED_TOWNS.find(t => new RegExp(`\\b${t}\\b`, "i").test(part));
-    if (matchedTown && !isStreetOrIndustrial) {
-      return "Available";
-    }
-  }
-
-  for (const town of RECOGNIZED_TOWNS) {
-    // Victoria in Australia is a State, not a city
-    if (town.toLowerCase().includes("victoria") && cLower.includes("australia")) {
-      continue;
-    }
-    const reg = new RegExp(`\\b${town}\\b`, "i");
-    if (reg.test(cleanAddr)) {
-      const nonTownRegex = new RegExp(`\\b${town}\\s+(industrial|park|business|estate|road|street|ave|drive)\\b`, "i");
-      if (!nonTownRegex.test(cleanAddr)) {
-        return "Available";
-      }
-    }
   }
 
   return "Not Available";
 }
 
 /**
- * Detects if a company name on the website/footer has an official legal designation
- * (e.g. AKS Lining Systems -> AKS Lining Systems (Pty) Ltd -> Aks Lining Systems Proprietary Limited)
+ * Detects if a company name on the website/footer/copyright/contact has an official legal designation
+ * (e.g. AKS Lining Systems -> AKS Lining Systems [Pty] Ltd -> Aks Lining Systems Proprietary Limited).
+ * Restores legal suffixes ONLY when the complete company name matches official website evidence.
+ * Never invents legal designations.
  */
 function restoreLegalSuffixIfOmitted(name, crawlData) {
   if (!name || typeof name !== "string" || name.trim().length < 2) return name;
   let cleanName = name.trim();
 
   // If already ends in an expanded or abbreviated corporate entity designation, no need to restore
-  if (/\b(proprietary\s*limited|private\s*limited|public\s*limited\s*company|sendirian\s*berhad|berhad|limited\s*liability\s*company|limited\s*liability\s*partnership|limited|incorporated|corporation|company|inc|llc|llp|ltd|pty|pte|pvt|sdn\s*bhd|bhd|plc)\b/i.test(cleanName)) {
+  if (/\b(proprietary\s*limited|private\s*limited|public\s*limited\s*company|sendirian\s*berhad|berhad|limited\s*liability\s*company|limited\s*liability\s*partnership|limited|incorporated|corporation|company|inc|llc|llp|pllc|ltd|pty|pte|pvt|sdn\s*bhd|bhd|plc|societ[aà]|responsabilit[aà]|azioni|collettivo|semplice)\b/i.test(cleanName)) {
     return cleanName;
   }
 
+  // Search official website evidence: Copyright line, Footer, Contact page, Company Profile
   const sources = [
+    crawlData && crawlData.copyrightText,
     crawlData && crawlData.footerText,
     crawlData && crawlData.contactPageText,
-    crawlData && crawlData.combinedText
+    crawlData && crawlData.profilePageText
   ].filter(Boolean);
 
   if (sources.length === 0) return cleanName;
 
-  const escapedName = cleanName.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+  const escapedName = cleanName.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
   const legalRegex = new RegExp(
-    `\\b${escapedName}\\s*([\\(\\[]?(?:pty|pte|pvt|sdn|bhd|co|corp|inc|llc|llp|gmbh|sa|bv)?[\\)\\]]?\\s*(?:ltd|limited|inc|incorporated|bhd|berhad|sdn\\s*bhd|sendirian\\s*berhad|llc|gmbh)\\.?)`,
+    `\\b${escapedName}\\s*(?:,?\\s*)((?:[\\(\\[]?(?:pty|pte|pvt|sdn|bhd|co|corp|inc|llc|llp|pllc|gmbh|sa|bv|srl|spa|snc|sas|m|malaysia)[\\)\\]]?[\\s,]*)?(?:ltd|limited|inc|incorporated|bhd|berhad|sdn\\s*bhd|sendirian\\s*berhad|llc|pllc|llp|gmbh|s\\.?r\\.?l\\.?s?|s\\.?p\\.?a\\.?|s\\.?n\\.?c\\.?|s\\.?a\\.?s\\.?|s\\.?c\\.?a\\.?r\\.?l\\.?|srls?|spa|snc|sas|scarl|scpa|corp|corporation|co|company)\\.?)`,
     "i"
   );
 
@@ -1632,7 +1546,7 @@ function expandCompanyAbbreviations(name, country = "") {
   if (!name) return "";
   let n = name;
 
-  // 1. Handle [Pty] / (Pty) / [Pte] / (Pte) / [Pvt] / (Pvt) bracketed forms before stripping brackets
+  // 1. Handle bracketed forms before stripping brackets: [Pty] Ltd, (Pty) Ltd, [Pte] Ltd, etc.
   n = n.replace(/[\[\(]\s*pty\s*[\]\)]\s*ltd\.?/gi, "Proprietary Limited");
   n = n.replace(/\bpty\s*[\[\(]\s*ltd\s*[\]\)]\.?/gi, "Proprietary Limited");
   n = n.replace(/[\[\(]\s*pty\s*ltd\s*[\]\)]\.?/gi, "Proprietary Limited");
@@ -1640,22 +1554,26 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/[\[\(]\s*pvt\s*[\]\)]\s*ltd\.?/gi, "Private Limited");
   n = n.replace(/[\[\(]\s*pty\s*[\]\)]/gi, "Proprietary");
 
-  // Handle (M) or [M] before Sdn Bhd or at end of company name for Malaysia (Remove brackets per Rule 4)
+  // Handle (M) or [M] country identifier before Sdn Bhd (Rule 4: Remove brackets, preserve M / country name)
   n = n.replace(/[\[\(]\s*m\s*[\]\)]\s*(?=(?:sdn|sendirian|bhd|berhad|\b))/gi, " M ");
 
   // 2. Remove brackets from company name per Rule 4
   n = n.replace(/[\(\)\[\]\{\}]/g, " ");
 
-  // 3. Expand legal entity abbreviations to full form per Rule 4
+  // 3. Expand legal entity abbreviations to full form strictly when present in official name
+  // Italian entities
+  n = n.replace(/\b(?:s[\.\s]*r[\.\s]*l[\.\s]*s|srls)\b/gi, "Società a Responsabilità Limitata Semplificata");
+  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*a[\.\s]*r[\.\s]*l|scarl)\b/gi, "Società Cooperativa a Responsabilità Limitata");
+  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p[\.\s]*a|scpa)\b/gi, "Società Cooperativa per Azioni");
+  n = n.replace(/\b(?:s[\.\s]*r[\.\s]*l|srl)\b/gi, "Società a Responsabilità Limitata");
+  n = n.replace(/\b(?:s[\.\s]*p[\.\s]*a|spa)\b/gi, "Società per Azioni");
+  n = n.replace(/\b(?:s[\.\s]*n[\.\s]*c|snc)\b/gi, "Società in Nome Collettivo");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b/gi, "Società in Accomandita Semplice");
+  n = n.replace(/\bs[\.\s]*s[\.\s]*\b/gi, "Società Semplice ");
+
   // Malaysian entities
   n = n.replace(/\bsdn\s*bhd\.?\b/gi, "Sendirian Berhad");
   n = n.replace(/\bbhd\.?\b/gi, "Berhad");
-
-  // Fix: If company is in Malaysia and AI falsely outputted "Proprietary Limited", restore "Sendirian Berhad"
-  const cLower = (country || "").toLowerCase();
-  if (cLower.includes("malaysia") && /proprietary\s*limited/i.test(n)) {
-    n = n.replace(/\bproprietary\s*limited\b/gi, "Sendirian Berhad");
-  }
 
   // Australia & South Africa
   n = n.replace(/\bpty\s*ltd\.?\b/gi, "Proprietary Limited");
@@ -1666,14 +1584,18 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\bpvt\s*ltd\.?\b/gi, "Private Limited");
   n = n.replace(/\bplc\.?\b/gi, "Public Limited Company");
 
-  // Global
+  // United States & Global
+  n = n.replace(/\bpllc\.?\b/gi, "Professional Limited Liability Company");
+  n = n.replace(/\bllp\.?\b/gi, "Limited Liability Partnership");
+  n = n.replace(/\bllc\.?\b/gi, "Limited Liability Company");
+  n = n.replace(/\bl\.?l\.?c\.?\b/gi, "Limited Liability Company");
+  n = n.replace(/\blp\.?\b/gi, "Limited Partnership");
+  n = n.replace(/\bl\.?p\.?\b/gi, "Limited Partnership");
   n = n.replace(/\bco\.?\s*,?\s*ltd\.?/gi, "Company Limited");
   n = n.replace(/\bltd\.?\b/gi, "Limited");
   n = n.replace(/\binc\.?\b/gi, "Incorporated");
-  n = n.replace(/\bllc\.?\b/gi, "Limited Liability Company");
-  n = n.replace(/\bllp\.?\b/gi, "Limited Liability Partnership");
-  n = n.replace(/\bco\.?\b/gi, "Company");
   n = n.replace(/\bcorp\.?\b/gi, "Corporation");
+  n = n.replace(/\bco\.?\b/gi, "Company");
 
   // Clean remaining punctuation and duplicate spaces
   n = n.replace(/[,;.]+/g, " ");
@@ -1681,11 +1603,6 @@ function expandCompanyAbbreviations(name, country = "") {
   return n;
 }
 
-/**
- * Global State and Street type abbreviation expander strictly adhering to Rule 6.
- * Ensures state/province abbreviations (VIC -> Victoria, NSW -> New South Wales, etc.)
- * and street types (St -> Street, Rd -> Road, etc.) are always fully expanded.
- */
 function expandAddressAndStateAbbreviations(addr, country = "") {
   if (!addr) return "";
   let a = addr;
