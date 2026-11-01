@@ -1,7 +1,7 @@
 // Background Service Worker for AI Web Crawler & Auto Pre-Fill Assistant
 // Production-Grade Implementation strictly conforming to 14 QC Rules
 
-const DEFAULT_API_KEY = "AIzaSyB5yBrU7BuuoelExXn7VV9rsrUmqztDSR4";
+const DEFAULT_API_KEY = "";
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 
 // Primary prohibited core industries per Instruction Sheet
@@ -271,7 +271,7 @@ async function crawlWebsite(targetUrl) {
         if (fRes.ok && fRes.html) {
           mainHtml += "\n" + fRes.html;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Extract Footer text & Footer address candidates
@@ -333,7 +333,7 @@ async function crawlWebsite(targetUrl) {
             }
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Merge Contact text
@@ -356,7 +356,7 @@ async function crawlWebsite(targetUrl) {
     if (origHost !== finalHost && !finalHost.includes(origHost) && !origHost.includes(finalHost)) {
       status = "Redirect Site";
     }
-  } catch (e) {}
+  } catch (e) { }
 
   const extracted = parseHtmlDetails(mainHtml, finalUrl);
 
@@ -445,7 +445,7 @@ function extractJsonLdAddresses(html, targetList) {
       if (Array.isArray(data)) data.forEach(processItem);
       else if (data["@graph"] && Array.isArray(data["@graph"])) data["@graph"].forEach(processItem);
       else processItem(data);
-    } catch (e) {}
+    } catch (e) { }
   }
 }
 
@@ -474,7 +474,7 @@ function discoverContactLinks(html, baseUrl) {
       try {
         const resolved = new URL(raw, baseUrl).href;
         candidates.push({ url: resolved, score });
-      } catch (e) {}
+      } catch (e) { }
     }
   }
 
@@ -505,7 +505,7 @@ function extractMapAddresses(html, targetList) {
           addAddressCandidate(targetList, query, "map", false);
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 }
 
