@@ -230,8 +230,21 @@ const RECOGNIZED_TOWNS = [
   "gothenburg", "malmo", "uppsala", "vasteras", "orebro", "linkoping",
   "aarhus", "odense", "aalborg", "bergen", "trondheim", "stavanger", "tampere", "turku", "oulu",
   "cork", "galway", "limerick", "waterford",
-  "valencia", "seville", "zaragoza", "malaga", "murcia", "palma", "bilbao", "alicante",
-  "cordoba", "valladolid", "vigo", "gijon", "l'hospitalet", "granada",
+  // Spain
+  "valencia", "seville", "sevilla", "zaragoza", "malaga", "málaga", "murcia", "palma", "palma de mallorca",
+  "bilbao", "alicante", "alacant", "cordoba", "córdoba", "valladolid", "vigo", "gijon", "gijón",
+  "hospitalet", "l'hospitalet", "l'hospitalet de llobregat", "granada", "vitoria", "gasteiz", "vitoria-gasteiz",
+  "coruna", "coruña", "a coruña", "la coruña", "elche", "elx", "oviedo", "badalona", "cartagena",
+  "terrassa", "jerez", "jerez de la frontera", "sabadell", "mostoles", "móstoles", "santa cruz de tenerife",
+  "pamplona", "iruna", "iruña", "almeria", "almería", "alcala de henares", "alcalá de henares",
+  "fuenlabrada", "leganes", "leganés", "san sebastian", "san sebastián", "donostia", "getafe", "burgos",
+  "albacete", "santander", "castellon", "castellón", "castellon de la plana", "alcorcon", "alcorcón",
+  "logrono", "logroño", "badajoz", "salamanca", "huelva", "marbella", "lleida", "lerida", "lérida",
+  "tarragona", "dos hermanas", "torrejon de ardoz", "torrejón de ardoz", "parla", "mataro", "mataró",
+  "leon", "león", "algeciras", "santa coloma", "alcobendas", "cadiz", "cádiz", "jaen", "jaén", "reus",
+  "ourense", "orense", "telde", "barakaldo", "lugo", "girona", "gerona", "santiago de compostela",
+  "caceres", "cáceres", "lorca", "coslada", "orihuela", "toledo", "pontevedra", "palencia", "guadalajara",
+  "aviles", "avilés", "gandia", "ciudad real", "segovia", "soria", "teruel", "cuenca", "huesca", "zamora", "avila", "ávila",
   "florence", "bologna", "genoa", "bari", "catania", "venice", "verona", "messina",
   "padua", "trieste", "brescia", "parma", "taranto", "prato", "modena", "reggio calabria",
   "reggio emilia", "perugia", "livorno", "ravenna", "cagliari", "foggia", "rimini", "salerno",
@@ -454,27 +467,27 @@ function extractLegalCandidatesFromHtml(html) {
 
   const candidates = new Set();
 
-  // Pattern 1: ABN / ACN preceded or followed by company name (e.g. "Custom Flatpack Pty Ltd ... ABN : 37 139 481 575")
-  const abnNearRegex = /([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC))[^\.\n\r<]{0,60}?(?:ABN|ACN|Registration\s*No|Reg\s*No)[\s:]*\d[\d\s]{5,15}\d/gi;
+  // Pattern 1: ABN / ACN / CIF / NIF preceded or followed by company name (e.g. "Custom Flatpack Pty Ltd ... ABN : 37 139 481 575" or "Empresa S.L. ... CIF: B-12345678")
+  const abnNearRegex = /([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))[^\.\n\r<]{0,60}?(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?/gi;
   let m;
   while ((m = abnNearRegex.exec(text)) !== null) {
     if (m[1]) candidates.add(m[1].trim());
   }
 
-  // Reverse: ABN followed by name
-  const abnBeforeRegex = /(?:ABN|ACN|Registration\s*No|Reg\s*No)[\s:]*\d[\d\s]{5,15}\d[^\.\n\r<]{0,60}?([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC))/gi;
+  // Reverse: ABN / CIF followed by name
+  const abnBeforeRegex = /(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?[^\.\n\r<]{0,60}?([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))/gi;
   while ((m = abnBeforeRegex.exec(text)) !== null) {
     if (m[1]) candidates.add(m[1].trim());
   }
 
   // Pattern 2: "means [Name] Pty Ltd", "operated by [Name] Pty Ltd", "authority of [Name] Pty Ltd", "trading as [Name] Pty Ltd"
-  const legalContextRegex = /(?:means|operated\s+by|registered\s+as|trading\s+as|property\s+of|authority\s+of)\s+([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC))/gi;
+  const legalContextRegex = /(?:means|operated\s+by|registered\s+as|trading\s+as|property\s+of|authority\s+of)\s+([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))/gi;
   while ((m = legalContextRegex.exec(text)) !== null) {
     if (m[1]) candidates.add(m[1].trim());
   }
 
   // Pattern 3: Explicit legal suffix preceded by capitalized words
-  const generalLegalRegex = /\b([A-Z][A-Za-z0-9&.'\- ]{1,45}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Incorporated|LLC|LLP|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC))\b/g;
+  const generalLegalRegex = /\b([A-Z][A-Za-z0-9&.'\- ]{1,45}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Incorporated|LLC|LLP|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))\b/g;
   while ((m = generalLegalRegex.exec(text)) !== null) {
     const cand = m[1].trim();
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
@@ -995,17 +1008,17 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
 
   // Helper to determine context from surrounding text / headers
   const getContext = (beforeText, fallbackSource) => {
-    if (/\b(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|principal\s*office|hq|總公司|總部|本公司|總廠|本廠)\b/i.test(beforeText)) {
+    if (/\b(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|principal\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal|總公司|總部|本公司|總廠|本廠)\b/i.test(beforeText)) {
       return { isHq: true, source: "headquarters", locType: "headquarters" };
     }
-    if (/\b(?:branch(?:\s*office)?|factory|plant|warehouse|distribution\s*center|showroom|depot|facility|subsidiary|分公司|工廠|廠房|分處|辦事處|營業所|經銷商)\b/i.test(beforeText)) {
+    if (/\b(?:branch(?:\s*office)?|factory|plant|warehouse|distribution\s*center|showroom|depot|facility|subsidiary|sucursal|delegaci[oó]n|f[aá]brica|almac[eé]n|nave(?:\s*industrial)?|分公司|工廠|廠房|分處|辦事處|營業所|經銷商)\b/i.test(beforeText)) {
       return { isHq: false, source: "branch", locType: "branch" };
     }
     return { isHq: false, source: fallbackSource, locType: fallbackSource };
   };
 
   // 1. Explicit Headquarters / Head Office blocks (Priority 1)
-  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq|總公司|總部|本公司)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|dd)>/gi;
+  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|總公司|總部|本公司)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|dd)>/gi;
   let hqm;
   while ((hqm = hqRegex.exec(html)) !== null) {
     const raw = stripHtml(hqm[1]);
@@ -1019,7 +1032,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   let hm;
   while ((hm = headingRegex.exec(html)) !== null) {
     const hText = stripHtml(hm[1]);
-    if (!/address|location|head\s*office|headquarters|contact\s*us|contact|辦事處|地址|總部/i.test(hText)) continue;
+    if (!/address|location|head\s*office|headquarters|contact\s*us|contact|direcci[oó]n|domicilio|sede|ubicaci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|encu[eé]ntranos|辦事處|地址|總部/i.test(hText)) continue;
     if (/email|e-mail|newsletter|subscribe/i.test(hText)) continue;
 
     const ctx = getContext(hText, defaultSource);
@@ -1045,7 +1058,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   }
 
   // 4. Class or id containing "address" or "addr" (including li, td, dd, article, section)
-  const classAddrRegex = /([\s\S]{0,120})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
+  const classAddrRegex = /([\s\S]{0,120})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
   let cm;
   while ((cm = classAddrRegex.exec(html)) !== null) {
     const contextStr = cm[1] + " " + cm[2];
@@ -1056,8 +1069,8 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     }
   }
 
-  // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / 地址:
-  const labelAddrRegex = /([\s\S]{0,120})\b(?:address|add|addr|地址|廠址)\s*[:：]\s*(?:<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / Dirección: / 地址:
+  const labelAddrRegex = /([\s\S]{0,120})\b(?:address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址)\s*[:：]\s*(?:<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let lm;
   while ((lm = labelAddrRegex.exec(html)) !== null) {
     const ctx = getContext(lm[1], defaultSource);
@@ -1085,9 +1098,9 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   while ((pm = pAddrRegex.exec(html)) !== null) {
     const raw = stripHtml(pm[2]);
     if (raw.length >= 15 && raw.length <= 250 &&
-      (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse)\b/i.test(raw) ||
-       /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act)\b/i.test(raw)) &&
-      /\b(?:\d{1,5}|no\.?\s*\d+|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|gpo\s*box)\b/i.test(raw)) {
+      (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
+       /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja)\b/i.test(raw)) &&
+      /\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|gpo\s*box)\b/i.test(raw)) {
       const ctx = getContext(pm[1], defaultSource);
       addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
     }
@@ -1136,6 +1149,17 @@ function extractAddressComponents(addr) {
     // Malaysia
     "kuala lumpur", "selangor", "penang", "johor", "perak", "kedah", "pahang", "kelantan", "sabah", "sarawak",
     "klang", "petaling jaya", "subang jaya", "shah alam", "george town", "johor bahru", "ipoh", "meru",
+    // Spain
+    "madrid", "barcelona", "valencia", "sevilla", "zaragoza", "malaga", "murcia", "palma", "bilbao",
+    "alicante", "cordoba", "valladolid", "vigo", "gijon", "hospitalet", "vitoria", "coruna", "elche",
+    "granada", "terrassa", "badalona", "oviedo", "sabadell", "cartagena", "jerez", "mostoles",
+    "santa cruz de tenerife", "pamplona", "almeria", "alcala de henares", "fuenlabrada", "leganes",
+    "san sebastian", "getafe", "burgos", "albacete", "santander", "castellon", "alcorcon", "logrono",
+    "badajoz", "salamanca", "huelva", "marbella", "lleida", "tarragona", "dos hermanas", "torrejon de ardoz",
+    "parla", "mataro", "leon", "algeciras", "santa coloma", "alcobendas", "cadiz", "jaen", "reus",
+    "ourense", "telde", "barakaldo", "lugo", "girona", "caceres", "toledo", "pontevedra", "palencia",
+    "guadalajara", "ciudad real", "segovia", "soria", "teruel", "cuenca", "huesca", "zamora", "avila",
+    "andalucia", "cataluna", "galicia", "pais vasco", "asturias", "cantabria", "castilla", "extremadura",
     // Italy
     "roma", "milano", "napoli", "torino", "palermo", "genova", "bologna", "firenze", "bari", "catania",
     "venezia", "verona", "messina", "padova", "trieste", "brescia", "taranto", "prato", "parma", "modena",
@@ -1551,6 +1575,10 @@ ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
      * Compass / Directional prefixes & suffixes: E. / E -> East (e.g. "301 E. Marquardt Drive" -> "301 East Marquardt Drive"), W. / W -> West, N. / N -> North, S. / S -> South, NE / N.E. -> Northeast, NW / N.W. -> Northwest, SE / S.E. -> Southeast, SW / S.W. -> Southwest.
      * Street types: St -> Street, Rd -> Road, Ave -> Avenue, Cnr -> Corner, Dr -> Drive, Blvd -> Boulevard, Ln -> Lane, Ct -> Court, Pl -> Place, Hwy -> Highway, Cres -> Crescent, Pde -> Parade, Tce/Ter -> Terrace, Cl -> Close, Sq -> Square, Pkwy -> Parkway, Cir -> Circle, Gr/Gv -> Grove, Mews -> Mews, Way -> Way, Wlk -> Walk, Gdns -> Gardens, Esp -> Esplanade, Crst -> Crest, Prom -> Promenade, Rte -> Route, Tpke -> Turnpike, Ctr -> Centre, Aly -> Alley, Arc -> Arcade, Bnd -> Bend, Brg -> Bridge, Byp -> Bypass, Cswy -> Causeway, Cmn -> Common, Xing -> Crossing, Ext -> Extension, Fwy -> Freeway, Grn -> Green, Holw -> Hollow, Jct -> Junction, Knl -> Knoll, Lndg -> Landing, Mdw/Mdws -> Meadow/Meadows, Ml/Mls -> Mill/Mills, Mt -> Mount, Oval -> Oval, Pass -> Pass, Path -> Path, Pike -> Pike, Plz -> Plaza, Pt -> Point, Rdg -> Ridge, Rnch -> Ranch, Row -> Row, Run -> Run, Shr -> Shore, Spg/Spgs -> Spring/Springs, Sta -> Station, Strm -> Stream, Sumit/Smt -> Summit, Trce -> Trace, Trl -> Trail, Tunl -> Tunnel, Via -> Via, Vis -> Vista, Whf -> Wharf, No. -> Number, Nr -> Near.
      * Units / Buildings / Floors: Ste -> Suite, Apt -> Apartment, Bldg -> Building, Flr -> Floor, Dept -> Department, Rm -> Room, POB / PO Box -> Post Office Box.
+     * Spain (España) Abbreviations:
+       - Street Prefixes: C/ -> Calle (e.g. C/ Alcalá 42 -> Calle Alcalá 42), C. -> Calle, Av. / Avda. / Avd. -> Avenida, P.º / Pº / Pso. -> Paseo, Pl. / Pza. / Plza. -> Plaza, Rbla. -> Rambla, Ctra. -> Carretera, Cam. / Cno. -> Camino, Trav. -> Travesia, Pje. -> Pasaje, Rda. -> Ronda, Urb. -> Urbanizacion, Edif. -> Edificio.
+       - Industrial Zones: Pol. Ind. / Pol.Ind. / P.I. -> Poligono Industrial.
+       - Building Details: Nº / N.º / Núm. / Num. / N. -> Numero, S/N -> Sin Numero, Km. -> Kilometro, Pta. -> Puerta, Plta. -> Planta, Apdo. -> Apartado de Correos.
      * Italy (Italia) Abbreviations:
        - Street Prefixes: V.le / Vle -> Viale, C.so / Cso -> Corso, P.zza / Pzza / P.za / Pza -> Piazza, P.le / Ple -> Piazzale, L.go / Lgo -> Largo, Str. -> Strada, S.P. -> Strada Provinciale, S.S. -> Strada Statale, S.R. -> Strada Regionale, V.colo / Vclo -> Vicolo, Circonv. -> Circonvallazione.
        - Compass: Est -> East, Ovest -> West, Nord -> North, Sud -> South.
@@ -1582,7 +1610,8 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    - Mark "Available" if ANY of the following administrative divisions is written in the extracted address:
      * State, Province, County (or Co.), Prefecture, Hsien (Taiwan County), Bundesland / Land (Germany), Regione / Provincia (Italy), Provinsi / Propinsi (Indonesia), Negeri / Wilayah (Malaysia), Changwat (Thailand), Sheng / Xian / Zhou (China), Territory, Emirate, Canton, Region, Regional Council, Oblast, Voivodeship, Department, Governorate
      * Named examples across priority countries: Victoria, New South Wales, Queensland, Texas, California, Ontario, Quebec, Gauteng, Maharashtra, Karnataka, Tamil Nadu, Selangor, Penang, Johor, Guangdong, Jiangsu, Gyeonggi, Abu Dhabi, Dubai, Île-de-France, Bavaria, Yorkshire, Lancashire, Dublin, Cork, Kildare, Galway, Lombardia, Brescia, München, etc.
-   - ALSO Mark "Available" if a country's official capital city is in the address (e.g. Taipei City = capital of Taiwan, London = capital of England, Washington D.C. = capital of USA, Berlin = Germany, Rome = Italy, Dublin = Ireland, Bangkok = Thailand, Jakarta = Indonesia, Beijing = China, Kuala Lumpur = Malaysia).
+   - ALSO Mark "Available" if a country's official capital city is in the address (e.g. Taipei City = capital of Taiwan, London = capital of England, Washington D.C. = capital of USA, Berlin = Germany, Rome = Italy, Madrid = Spain, Dublin = Ireland, Bangkok = Thailand, Jakarta = Indonesia, Beijing = China, Kuala Lumpur = Malaysia).
+   - Spain State Rule: Any of the 50 provinces (e.g. Madrid, Barcelona, Valencia, Sevilla, Zaragoza, Málaga, Murcia, Alicante, Córdoba, Valladolid, A Coruña, Asturias, Vizcaya, Guipúzcoa, Las Palmas, Santa Cruz de Tenerife, etc.) or 17 Autonomous Communities (e.g. Andalucía, Cataluña, Galicia, País Vasco, Castilla y León, Castilla-La Mancha, etc.) in address → State: Available.
    - If the address only contains a street, suburb, locality, or industrial area — mark "Not Available".
    - Taiwan – State Validation Rule:
      * Taipei City (capital) in address → State: Available
@@ -1599,6 +1628,7 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    b) The address contains local administrative city designations across priority countries:
       - Germany: Stadt, Gemeinde, Marktgemeinde, Markt, Bezirk, Ortsteil
       - Italy: Comune, Municipio, Città, Distretto
+      - Spain: Municipio, Ayuntamiento, Localidad, Población, Villa, Ciudad, Distrito, Término Municipal, Concejo
       - Indonesia: Kota, Kabupaten, Kecamatan
       - Thailand: Thesaban, Amphoe, Amphur, Khet, Mueang, Muang
       - Malaysia: Bandar, Daerah, Mukim, Pekan, Majlis Perbandaran
@@ -2053,6 +2083,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     else if (/wales/i.test(country)) country = "Wales";
     else if (/northern\s*ireland/i.test(country)) country = "Northern Ireland";
     else if (/italy|italia/i.test(country)) country = "Italy";
+    else if (/spain|espa[nñ]a/i.test(country)) country = "Spain";
   }
 
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
@@ -2102,6 +2133,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         country = detectCountryFromAddress(addr);
         if (!country && crawlData && (/\.au(?:\/|$)/i.test(crawlData.originalUrl || "") || /\.au(?:\/|$)/i.test(crawlData.finalUrl || ""))) {
           country = "Australia";
+        } else if (!country && crawlData && (/\.es(?:\/|$)/i.test(crawlData.originalUrl || "") || /\.es(?:\/|$)/i.test(crawlData.finalUrl || ""))) {
+          country = "Spain";
         }
       }
 
@@ -2121,6 +2154,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
           addr = addr.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
         } else if (/united\s*states/i.test(country)) {
           addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.)\b/gi, " ");
+        } else if (/spain/i.test(country)) {
+          addr = addr.replace(/\b(?:Spain|Espa[nñ]a)\b/gi, " ");
         } else {
           const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
           addr = addr.replace(countryRegex, " ");
@@ -2258,10 +2293,16 @@ function hasCapitalInAddress(addr, country) {
   // If New Taipei City is present, it does NOT qualify for the Taipei capital exception
   if (isNewTaipeiCity(lower)) {
     return ALL_CAPITALS.filter(c => c !== "taipei" && c !== "taipei city")
-      .some(cap => new RegExp(`\\b${cap}\\b`, "i").test(lower));
+      .some(cap => {
+        if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, cap)) return false;
+        return new RegExp(`\\b${cap}\\b`, "i").test(lower);
+      });
   }
 
-  return ALL_CAPITALS.some(cap => new RegExp(`\\b${cap}\\b`, "i").test(lower));
+  return ALL_CAPITALS.some(cap => {
+    if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, cap)) return false;
+    return new RegExp(`\\b${cap}\\b`, "i").test(lower);
+  });
 }
 
 /**
@@ -2339,11 +2380,20 @@ const STATE_AND_PROVINCE_NAMES = [
   "occitanie", "nouvelle aquitaine", "pays de la loire", "auvergne", "hauts de france",
   "grand est", "bourgogne", "centre val", "corsica", "corse", "rhone alpes", "alsace",
   "lorraine", "picardy", "champagne",
-  // Spain
-  "andalucia", "andalusia", "catalonia", "catalunya", "madrid community", "comunidad de madrid",
-  "valencia", "comunitat valenciana", "galicia", "basque", "pais vasco", "castilla",
-  "castile", "aragon", "extremadura", "murcia", "asturias", "cantabria", "navarre", "navarra",
-  "la rioja", "canary islands", "balearic",
+  // Spain (50 Provinces, 17 Autonomous Communities & Autonomous Cities)
+  "alava", "álava", "araba", "albacete", "alicante", "alacant", "almeria", "almería", "asturias", "principado de asturias",
+  "avila", "ávila", "badajoz", "illes balears", "islas baleares", "baleares", "balearic islands", "barcelona", "burgos",
+  "caceres", "cáceres", "cadiz", "cádiz", "cantabria", "castellon", "castellón", "castello", "castelló", "ciudad real",
+  "cordoba", "córdoba", "cuenca", "girona", "gerona", "granada", "guadalajara", "guipuzcoa", "guipúzcoa", "gipuzkoa",
+  "huelva", "huesca", "jaen", "jaén", "a coruna", "a coruña", "la coruna", "la coruña", "coruna", "coruña", "la rioja", "rioja",
+  "las palmas", "gran canaria", "leon", "león", "lleida", "lerida", "lérida", "lugo", "madrid", "comunidad de madrid",
+  "malaga", "málaga", "murcia", "region de murcia", "región de murcia", "navarra", "nafarroa", "navarre", "comunidad foral de navarra",
+  "ourense", "orense", "palencia", "pontevedra", "salamanca", "santa cruz de tenerife", "tenerife", "segovia", "sevilla", "seville",
+  "soria", "tarragona", "teruel", "toledo", "valencia", "valència", "comunitat valenciana", "comunidad valenciana", "valladolid",
+  "vizcaya", "bizkaia", "biscay", "zamora", "zaragoza",
+  "andalucia", "andalucía", "andalusia", "aragon", "aragón", "canarias", "canary islands", "castilla la mancha", "castilla-la mancha",
+  "castilla y leon", "castilla y león", "castile and leon", "catalonia", "catalunya", "cataluña", "cataluna", "extremadura",
+  "galicia", "pais vasco", "país vasco", "euskadi", "basque country", "ceuta", "melilla",
   // Italy regions
   "abruzzo", "basilicata", "calabria", "campania", "emilia romagna", "friuli venezia giulia",
   "lazio", "liguria", "lombardia", "lombardy", "marche", "molise", "piemonte", "piedmont",
@@ -2451,6 +2501,9 @@ function hasStateInAddress(addr, country) {
 
   // Italy: Regione, Provincia, Prov.
   if (/\b(regione|provincia)\b/i.test(lower) || /\bprov\.?\s*(?:di\s+)?[a-z]+/i.test(lower)) return true;
+
+  // Spain: Provincia, Prov., Comunidad Autónoma
+  if (/\b(provincia|comunidad\s+aut[oó]noma)\b/i.test(lower) || /\bprov\.?\s*(?:de\s+)?[a-z]+/i.test(lower)) return true;
 
   // Indonesia: Provinsi, Propinsi
   if (/\b(provinsi|propinsi)\b/i.test(lower)) return true;
@@ -2613,10 +2666,92 @@ function hasUkCityOrTown(cleanAddr) {
   return false;
 }
 
+function isSpanishLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:spain|espa[nñ]a|es)\b/i.test(c)) return true;
+  const a = (address || "").toLowerCase();
+  if (/\b(?:spain|espa[nñ]a)\b/i.test(a)) return true;
+  if (/\b(?:madrid|barcelona|valencia|sevilla|seville|zaragoza|málaga|malaga|murcia|palma|bilbao|alicante|alacant|córdoba|cordoba|valladolid|vigo|gijón|gijon|hospitalet|granada|vitoria|gasteiz|coruña|coruna|elche|elx|oviedo|badalona|cartagena|terrassa|jerez|sabadell|santa\s*cruz\s*de\s*tenerife|móstoles|mostoles|alcalá\s*de\s*henares|alcala\s*de\s*henares|fuenlabrada|pamplona|iruña|almería|almeria|leganés|leganes|donostia|san\s*sebastián|san\s*sebastian|burgos|santander|castellón|castellon|albacete|alcorcón|alcorcon|getafe|salamanca|logroño|logrono|badajoz|huelva|marbella|lleida|lérida|lerida|tarragona|león|leon|dos\s*hermanas|parla|torrejón|torrejon|mataró|mataro|algeciras|ourense|orense|lugo|girona|gerona|cáceres|caceres|toledo|pontevedra|palencia|ciudad\s*real|zamora|ávila|avila|cuenca|huesca|segovia|soria|teruel)\b/i.test(a)) return true;
+  if (/\b(?:andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|navarra|rioja)\b/i.test(a)) return true;
+  if (/\b(?:ES[-\s]?\d{5}|E[-\s]?\d{5})\b/i.test(a)) return true;
+  if (/\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b/.test(a) && (/\b(?:calle|c\/|avenida|avda|paseo|plaza|pol[ií]gono|ctra|carretera)\b/i.test(a))) return true;
+  return false;
+}
+
+// Major Spanish Cities & Municipal Centres (>20,000 population and all provincial capitals)
+const SPANISH_CITIES_AND_TOWNS = [
+  "madrid", "barcelona", "valencia", "sevilla", "seville", "zaragoza", "malaga", "málaga", "murcia",
+  "palma", "palma de mallorca", "las palmas", "las palmas de gran canaria", "bilbao", "alicante", "alacant",
+  "cordoba", "córdoba", "valladolid", "vigo", "gijon", "gijón", "hospitalet", "l'hospitalet",
+  "l'hospitalet de llobregat", "vitoria", "gasteiz", "vitoria-gasteiz", "coruna", "a coruna", "la coruna",
+  "coruña", "a coruña", "la coruña", "elche", "elx", "granada", "terrassa", "badalona", "oviedo",
+  "sabadell", "cartagena", "jerez", "jerez de la frontera", "mostoles", "móstoles", "santa cruz de tenerife",
+  "pamplona", "iruna", "iruña", "almeria", "almería", "alcala de henares", "alcalá de henares", "fuenlabrada",
+  "leganes", "leganés", "donostia", "san sebastian", "san sebastián", "getafe", "burgos", "albacete",
+  "santander", "castellon", "castellón", "castellon de la plana", "alcorcon", "alcorcón", "la laguna",
+  "san cristobal de la laguna", "logrono", "logroño", "badajoz", "salamanca", "huelva", "marbella",
+  "lleida", "lerida", "lérida", "tarragona", "dos hermanas", "torrejon de ardoz", "torrejón de ardoz",
+  "parla", "mataro", "mataró", "leon", "león", "algeciras", "santa coloma", "santa coloma de gramenet",
+  "alcobendas", "cadiz", "cádiz", "jaen", "jaén", "reus", "ourense", "orense", "telde", "barakaldo",
+  "baracaldo", "lugo", "girona", "gerona", "santiago de compostela", "san fernando", "caceres", "cáceres",
+  "lorca", "coslada", "roquetas de mar", "orihuela", "el puerto de santa maria", "el puerto de santa maría",
+  "talavera de la reina", "cornella", "cornellà", "cornellà de llobregat", "melilla", "ceuta",
+  "pozuelo de alarcon", "rivas-vaciamadrid", "pontevedra", "toledo", "palencia", "guadalajara", "aviles",
+  "avilés", "gandia", "ciudad real", "manresa", "ferrol", "benidorm", "valdemoro", "majadahonda",
+  "torremolinos", "sanlucar de barrameda", "benalmadena", "benalmádena", "paterna", "santa lucia de tirajana",
+  "vilanova i la geltru", "motril", "zamora", "segovia", "soria", "teruel", "huesca", "cuenca",
+  "avila", "ávila", "arona", "granollers", "sagunto", "pinto", "alcoy", "merida", "mérida", "elda",
+  "mollet del valles", "torrevieja", "rubi", "rubí", "fuengirola", "alcala de guadaira", "sant cugat",
+  "viladecans", "el prat de llobregat", "collado villalba", "boadilla del monte", "aranjuez", "arganda del rey",
+  "colmenar viejo", "san sebastian de los reyes", "tres cantos", "gava", "gavà", "esplugues de llobregat",
+  "figueres", "blanes", "lloret de mar", "vic", "igualada", "vilafranca del penedes", "ripollet",
+  "sant boi de llobregat", "cambrils", "salou", "tortosa", "manacor", "ibiza", "eivissa", "ciutadella",
+  "mahon", "maó", "puerto del rosario", "arrecife", "adeje", "la orotava", "los realejos", "puerto de la cruz",
+  "miranda de ebro", "ponferrada", "aranda de duero", "linares", "ubeda", "úbeda", "andujar", "andújar",
+  "lucena", "puente genil", "antequera", "ronda", "velez-malaga", "vélez-málaga", "mijas", "estepona",
+  "rincon de la victoria", "alhaurin de la torre", "baza", "guadix", "ecija", "écija", "utrera",
+  "mairena del aljarafe", "camas", "tomares", "san juan de aznalfarache", "coria del rio", "la rinconada",
+  "lebrija", "carmona", "moron de la frontera", "chiclana de la frontera", "san roque", "la linea de la concepcion",
+  "puerto real", "arcos de la frontera", "rota", "ayamonte", "lepe", "isla cristina", "almonte", "moguer",
+  "adra", "el ejido", "vicar", "vícar", "nijar", "níjar", "huercal-overa", "alcantarilla", "molina de segura",
+  "cieza", "aguilas", "águilas", "torre-pacheco", "san javier", "san pedro del pinatar", "mazarron", "jumilla",
+  "yecla", "caravaca de la cruz", "villena", "petrer", "novelda", "crevillent", "santa pola", "ibi",
+  "denia", "dénia", "javea", "jávea", "calp", "calpe", "altea", "villajoyosa", "vila-real", "burriana",
+  "la vall d'uixo", "vinaros", "benicarlo", "onda", "alzira", "sueca", "cullera", "ontinyent", "xativa",
+  "torrent", "mislata", "burjassot", "manises", "aldaia", "alaquas", "xirivella", "catarroja", "paiporta",
+  "algemesi", "betera", "riba-roja de turia", "la pobla de vallbona", "lliria", "moncada", "quart de poblet",
+  "picassent", "silla", "puertollano", "tomelloso", "alcazar de san juan", "valdepenas", "manzanares",
+  "hellin", "villarrobledo", "almansa", "illescas", "sesena", "azuqueca de henares", "plasencia",
+  "don benito", "almendralejo", "villanueva de la serena", "zafra", "calatayud", "utebo", "monzon",
+  "barbastro", "fraga", "ejea de los caballeros", "tudela", "baranain", "burlada", "estella", "tafalla",
+  "irun", "errenteria", "eibar", "zarautz", "arrasate", "mondragon", "hernani", "tolosa", "getxo",
+  "portugalete", "santurtzi", "basauri", "leioa", "galdakao", "durango", "sestao", "amorebieta",
+  "bermeo", "mungia", "llodio", "amurrio", "torrelavega", "castro-urdiales", "camargo", "pielagos",
+  "el astillero", "santona", "laredo", "siero", "langreo", "mieres", "castrillon", "san martin del rey aurelio",
+  "corvera", "villaviciosa", "llanes", "llanera", "carballo", "arteixo", "culleredo", "ames", "ribeira",
+  "cambre", "boiro", "teo", "noia", "sada", "betanzos", "vilagarcia de arousa", "redondela", "cangas",
+  "marin", "moana", "ponteareas", "lalin", "o porrino", "a estrada", "poio", "monforte de lemos",
+  "viveiro", "vilalba", "sarria", "ribadeo", "verin"
+];
+
+function hasSpanishCityOrTown(cleanAddr) {
+  const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
+  const streetPrefixPattern = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|calle|c\\/|avenida|avda?|paseo|p\\.[ºo]|pso|plaza|pza|plza|rambla|rbla|carretera|ctra|camino|cno|pasaje|p(?:t)?je|ronda|rda|traves[ií]a|trav)\\s+";
+
+  for (const name of SPANISH_CITIES_AND_TOWNS) {
+    const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+    const regex = new RegExp(`(?<!${streetPrefixPattern})\\b${escaped}\\b(?!${streetSuffixPattern})`, "i");
+    if (regex.test(cleanAddr)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isPlaceUsedAsStreetName(cleanAddr, name) {
   const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
   const streetSuffix = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
-  const streetPrefix = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard)\\s+";
+  const streetPrefix = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|calle|c\\/|avenida|avda?|paseo|p\\.[ºo]|pso|plaza|pza|plza|rambla|rbla|carretera|ctra|camino|cno|pasaje|p(?:t)?je|ronda|rda|traves[ií]a|trav)\\s+";
   return new RegExp(`(?:${streetPrefix})\\b${escaped}\\b|\\b${escaped}\\b(?:${streetSuffix})`, "i").test(cleanAddr);
 }
 
@@ -2649,7 +2784,7 @@ const CITY_QUALIFIERS = [
   // France / Quebec / Belgium
   "ville", "municipalit[eé]", "arrondissement",
   // Spain / Mexico
-  "ciudad", "distrito",
+  "ciudad", "distrito", "municipio", "ayuntamiento", "localidad", "poblaci[oó]n", "villa", "pedan[ií]a", "t[eé]rmino\\s*municipal", "concejo",
   // Indonesia
   "kota", "kabupaten", "kecamatan",
   // Thailand
@@ -2823,6 +2958,13 @@ function evaluateCityQC(address, country) {
     }
     // Suburbs in Australia (e.g. Minto, Campbellfield, Seven Hills) MUST NOT be classified as cities!
     return "Not Available";
+  }
+
+  // 5. Spanish City evaluation: Recognized Spanish cities & municipal centres evaluate as Available
+  if (isSpanishLocation(cleanAddr, country)) {
+    if (hasSpanishCityOrTown(cleanAddr) || hasRecognizedPlaceName(cleanAddr, SPANISH_CITIES_AND_TOWNS)) {
+      return "Available";
+    }
   }
 
   // 5. South Africa & New Zealand: Suburbs preceding state/province MUST NOT be classified as cities!
@@ -3085,6 +3227,14 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b/gi, "Società in Accomandita Semplice");
   n = n.replace(/\bs[\.\s]*s[\.\s]*\b/gi, "Società Semplice ");
 
+  // Spanish entities
+  n = n.replace(/\b(?:s[\.\s]*l[\.\s]*u\.?|slu)\b/gi, "Sociedad Limitada Unipersonal");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*u\.?|sau)\b/gi, "Sociedad Anónima Unipersonal");
+  n = n.replace(/\b(?:s[\.\s]+l|s\.l\.?|sl)\b\.?/gi, "Sociedad Limitada");
+  n = n.replace(/\b(?:s[\.\s]+a|s\.a\.?|sa)\b\.?/gi, "Sociedad Anónima");
+  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p\.?|scp)\b/gi, "Sociedad Civil Privada");
+  n = n.replace(/\b(?:s[\.\s]*coop\.?|scoop)\b/gi, "Sociedad Cooperativa");
+
   // Malaysian entities
   n = n.replace(/\bsdn\s*bhd\.?\b/gi, "Sendirian Berhad");
   n = n.replace(/\bbhd\.?\b/gi, "Berhad");
@@ -3286,7 +3436,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   const isUsAddress = cLower.includes("united states") || cLower.includes("usa") || cLower.includes("america") ||
     /\b\d{5}(?:-\d{4})?\b/.test(a) || (!country && /,\s*[A-Z]{2}\b/.test(a));
 
-  if (isUsAddress && !["australia", "canada", "united kingdom", "india", "south africa", "malaysia"].includes(cLower)) {
+  if (isUsAddress && !["australia", "canada", "united kingdom", "india", "south africa", "malaysia", "spain", "espana", "italy", "italia", "germany", "deutschland", "france"].includes(cLower)) {
     const usAbbreviations = [
       ["ca", "California"], ["tx", "Texas"], ["ny", "New York"], ["fl", "Florida"],
       ["il", "Illinois"], ["pa", "Pennsylvania"], ["oh", "Ohio"], ["ga", "Georgia"],
@@ -3312,7 +3462,40 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   }
 
   // ==========================================
-  // 7. Italy (Italia) Abbreviations
+  // 7. Spain (España) Abbreviations
+  // ==========================================
+  // Industrial zones FIRST: Pol. Ind. / P.I. -> Poligono Industrial
+  a = a.replace(/(^|[,\s])(?:pol\.?\s*ind(?:ustrial)?\.?|p\.?i\.?)\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Poligono Industrial ');
+  a = a.replace(/\bpoligono\s+ind\b\.?/gi, 'Poligono Industrial');
+
+  // Street prefixes: C/ -> Calle, Avda. -> Avenida, P.º -> Paseo, Pl. / Pza. -> Plaza, Ctra. -> Carretera, Rbla. -> Rambla
+  a = a.replace(/(^|[,\s])C\/\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Calle ');
+  a = a.replace(/(^|[,\s])C\.\s+(?=[A-ZÁÉÍÓÚ][a-záéíóúñ])/g, '$1Calle ');
+  a = a.replace(/(^|[,\s])avda?\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Avenida ');
+  a = a.replace(/(^|[,\s])(?:p\.?[º°]|pso\.?|p\.\s*o\b|p\.º)\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Paseo ');
+  a = a.replace(/(^|[,\s])(?:plza?\.?|pza\.?|pl\.)\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Plaza ');
+  if (cLower.includes("spain") || cLower.includes("espana") || isSpanishLocation(a, country)) {
+    a = a.replace(/(^|[,\s])Place\s+(?=(?:Mayor|de\s+|del\s+|Real|de\s*la|[A-ZÁÉÍÓÚ][a-z]))/g, '$1Plaza ');
+  }
+  a = a.replace(/(^|[,\s])rbla\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Rambla ');
+  a = a.replace(/(^|[,\s])ctra\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Carretera ');
+  a = a.replace(/(^|[,\s])(?:cno|cam)\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Camino ');
+  a = a.replace(/(^|[,\s])trav(?:es)?\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Travesia ');
+  a = a.replace(/(^|[,\s])p(?:t)?je\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Pasaje ');
+  a = a.replace(/(^|[,\s])rda\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Ronda ');
+  a = a.replace(/(^|[,\s])urb\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Urbanizacion ');
+  a = a.replace(/(^|[,\s])ed(?:if)?\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Edificio ');
+
+  // House / premise numbers / without number
+  a = a.replace(/(^|[,\s])(?:n[ºo]\.?|n\.º|n[uú]m\.?)\s*(?=\d)/gi, '$1Numero ');
+  a = a.replace(/\b(?:s\/n|sin\s*n[uú]mero)\b/gi, 'Sin Numero');
+  a = a.replace(/\bkm\.?\s*(?=\d)/gi, 'Kilometro ');
+  a = a.replace(/\bpta\.?\s*(?=\d|[A-Za-z])/gi, 'Puerta ');
+  a = a.replace(/\bplta\.?\s*(?=\d|[A-Za-z])/gi, 'Planta ');
+  a = a.replace(/\bapdo\.?\s*(?:de\s*correos)?\b/gi, 'Apartado de Correos');
+
+  // ==========================================
+  // 8. Italy (Italia) Abbreviations
   // ==========================================
   // Street prefixes
   a = a.replace(/(^|[,\s])v\.?le\b\.?/gi, '$1Viale');
@@ -3525,7 +3708,18 @@ function ensureCommaBeforeState(addr) {
     "Marche", "Abruzzo", "Friuli Venezia Giulia", "Trentino-Alto Adige", "Umbria", "Sardegna", "Calabria", "Basilicata", "Molise", "Valle d'Aosta",
     "Baden-Württemberg", "Bayern", "Brandenburg", "Hessen", "Mecklenburg-Vorpommern", "Niedersachsen", "Nordrhein-Westfalen", "Rheinland-Pfalz", "Saarland", "Sachsen", "Sachsen-Anhalt", "Schleswig-Holstein", "Thüringen",
     "Selangor", "Johor", "Penang", "Perak", "Kedah", "Pahang", "Negeri Sembilan", "Melaka", "Terengganu", "Kelantan", "Sarawak", "Sabah", "Perlis", "Kuala Lumpur",
-    "Dublin", "Cork", "Galway", "Kildare", "Meath", "Limerick", "Kerry", "Wicklow", "Clare", "Tipperary", "Wexford", "Donegal"
+    "Dublin", "Cork", "Galway", "Kildare", "Meath", "Limerick", "Kerry", "Wicklow", "Clare", "Tipperary", "Wexford", "Donegal",
+    // Spain (Provinces & Autonomous Communities)
+    "Álava", "Alava", "Albacete", "Alicante", "Alacant", "Almería", "Almeria", "Asturias", "Ávila", "Avila", "Badajoz",
+    "Islas Baleares", "Baleares", "Barcelona", "Burgos", "Cáceres", "Caceres", "Cádiz", "Cadiz", "Cantabria",
+    "Castellón", "Castellon", "Ciudad Real", "Córdoba", "Cordoba", "Cuenca", "Girona", "Gerona", "Granada",
+    "Guadalajara", "Guipúzcoa", "Guipuzcoa", "Gipuzkoa", "Huelva", "Huesca", "Jaén", "Jaen", "A Coruña", "La Coruña",
+    "La Coruna", "La Rioja", "Las Palmas", "León", "Leon", "Lleida", "Lérida", "Lerida", "Lugo", "Madrid",
+    "Málaga", "Malaga", "Murcia", "Navarra", "Ourense", "Orense", "Palencia", "Pontevedra", "Salamanca",
+    "Santa Cruz de Tenerife", "Segovia", "Sevilla", "Soria", "Tarragona", "Teruel", "Toledo", "Valencia",
+    "Valladolid", "Vizcaya", "Bizkaia", "Zamora", "Zaragoza", "Andalucía", "Andalucia", "Aragón", "Aragon",
+    "Canarias", "Castilla-La Mancha", "Castilla y León", "Castilla y Leon", "Cataluña", "Cataluna", "Extremadura",
+    "Galicia", "País Vasco", "Pais Vasco", "Comunidad de Madrid", "Comunitat Valenciana"
   ];
 
   let res = addr;
@@ -3608,6 +3802,47 @@ function restoreStateIfOmitted(cleanAddr, rawAddr, country = "") {
     }
   }
 
+  // Spain check - ONLY if country is Spain or address has Spanish markers
+  if (cLower.includes("spain") || cLower.includes("espana") || /\b(?:ES[-\s]?\d{5}|E[-\s]?\d{5})\b/i.test(rawAddr) || isSpanishLocation(rawAddr, country)) {
+    // 1. Direct province mention in raw address that was omitted in cleanAddr
+    const spainProvs = [
+      "Álava", "Albacete", "Alicante", "Almería", "Asturias", "Ávila", "Badajoz", "Islas Baleares", "Barcelona",
+      "Burgos", "Cáceres", "Cádiz", "Cantabria", "Castellón", "Ciudad Real", "Córdoba", "Cuenca", "Girona",
+      "Granada", "Guadalajara", "Guipúzcoa", "Huelva", "Huesca", "Jaén", "A Coruña", "La Rioja", "Las Palmas",
+      "León", "Lleida", "Lugo", "Madrid", "Málaga", "Murcia", "Navarra", "Ourense", "Palencia", "Pontevedra",
+      "Salamanca", "Santa Cruz de Tenerife", "Segovia", "Sevilla", "Soria", "Tarragona", "Teruel", "Toledo",
+      "Valencia", "Valladolid", "Vizcaya", "Zamora", "Zaragoza"
+    ];
+    for (const prov of spainProvs) {
+      const regRaw = new RegExp(`\\b${prov.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}\\b`, "i");
+      if (regRaw.test(rawAddr)) {
+        return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${prov}`;
+      }
+    }
+
+    // 2. Map 5-digit Spanish postal code prefix (01-52) to official Province
+    const esPostcodeMatch = rawAddr.match(/\b(?:ES[-\s]?)?(0[1-9]|[1-4]\d|5[0-2])\d{3}\b/i);
+    if (esPostcodeMatch) {
+      const prefix = esPostcodeMatch[1];
+      const codeToProv = {
+        "01": "Álava", "02": "Albacete", "03": "Alicante", "04": "Almería", "05": "Ávila",
+        "06": "Badajoz", "07": "Islas Baleares", "08": "Barcelona", "09": "Burgos", "10": "Cáceres",
+        "11": "Cádiz", "12": "Castellón", "13": "Ciudad Real", "14": "Córdoba", "15": "A Coruña",
+        "16": "Cuenca", "17": "Girona", "18": "Granada", "19": "Guadalajara", "20": "Guipúzcoa",
+        "21": "Huelva", "22": "Huesca", "23": "Jaén", "24": "León", "25": "Lleida",
+        "26": "La Rioja", "27": "Lugo", "28": "Madrid", "29": "Málaga", "30": "Murcia",
+        "31": "Navarra", "32": "Ourense", "33": "Asturias", "34": "Palencia", "35": "Las Palmas",
+        "36": "Pontevedra", "37": "Salamanca", "38": "Santa Cruz de Tenerife", "39": "Cantabria", "40": "Segovia",
+        "41": "Sevilla", "42": "Soria", "43": "Tarragona", "44": "Teruel", "45": "Toledo",
+        "46": "Valencia", "47": "Valladolid", "48": "Vizcaya", "49": "Zamora", "50": "Zaragoza",
+        "51": "Ceuta", "52": "Melilla"
+      };
+      if (codeToProv[prefix]) {
+        return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${codeToProv[prefix]}`;
+      }
+    }
+  }
+
   return cleanAddr;
 }
 
@@ -3625,17 +3860,21 @@ function removePostalCodesCarefully(addr) {
   // 1. UK Postcodes (e.g. SW1A 1AA, EC1A 1BB, W1A 0AX, M1 1AE)
   a = a.replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/gi, " ");
 
+  // Spanish & European prefixed postal codes (e.g. ES-28014, E-28014, ES 28014)
+  a = a.replace(/\b(?:ES|E|IT|FR|DE|NL|BE|AT|CH)[-\s]?\d{4,5}\b/gi, " ");
+
   // 2. Canadian Postcodes (e.g. M5V 2T6, K1A 0B1)
   a = a.replace(/\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/gi, " ");
 
   // 3. US ZIP+4 (e.g. 90210-1234)
   a = a.replace(/\b\d{5}-\d{4}\b/g, " ");
 
-  // 4. Postal code directly following State name / abbreviation (e.g. "VIC 3061", "Victoria 3061", "TX 78701", "Texas 78701")
-  a = a.replace(/(\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|California|Texas|New York|Florida|Illinois|Pennsylvania|Ohio|Ontario|Quebec|British Columbia|Alberta|Gauteng|CA|TX|NY|FL|IL|PA|OH|ON|QC|BC)\b[\s,]*)\b\d{4,6}\b/gi, "$1");
+  // 4. Postal code directly following State name / abbreviation (e.g. "VIC 3061", "Victoria 3061", "TX 78701", "Madrid 28001")
+  a = a.replace(/(\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|California|Texas|New York|Florida|Illinois|Pennsylvania|Ohio|Ontario|Quebec|British Columbia|Alberta|Gauteng|CA|TX|NY|FL|IL|PA|OH|ON|QC|BC|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo)\b[\s,]*)\b\d{4,6}\b/gi, "$1");
 
   // 5. Postal code before a city/town or after a comma (e.g. "... Taman Perindustrian Sri Plentong, 81750 Masai, Johor")
-  a = a.replace(/(,\s*)\b\d{4,6}\b\s*(?=,?\s+[A-Za-z])/g, "$1");
+  a = a.replace(/(,\s*)\b\d{4,6}\b\s*(?=,?\s+[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, "$1");
+  a = a.replace(/(\b\d+\s+)\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b\s+(?=[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, "$1");
 
   // 6. Postal code at the very end of the address string (e.g. "... Campbellfield 3061" or "... Taoyuan Hsien 326")
   a = a.replace(/[\s,]+\b\d{3,6}\b(?:\s*[.,]?\s*)$/g, "");
@@ -3721,7 +3960,7 @@ function cleanPhoneNumber(rawPhone, country) {
   digits = digits.replace(/^0+/, "");
 
   // Rule 11: Do not take toll-free numbers
-  if (/^(800|888|877|866|855|844|833|860|861|808|1800|1300)/.test(digits)) {
+  if (/^(800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902)/.test(digits)) {
     return "";
   }
 
@@ -3743,6 +3982,8 @@ function cleanPhoneNumber(rawPhone, country) {
     if (len < 8 || len > 10) return "";
   } else if (cLower.includes("singapore")) {
     if (len !== 8) return "";
+  } else if (cLower.includes("spain") || cLower.includes("espana")) {
+    if (len !== 9) return "";
   } else {
     if (len < 7 || len > 12) return "";
   }
@@ -3835,6 +4076,7 @@ function detectCountryFromAddress(address) {
       /\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(lower) ||
       /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower)) return "Australia";
   if (/\b(bavaria|bayern|baden-wurttemberg|nordrhein-westfalen|hessen|sachsen)\b/i.test(lower)) return "Germany";
+  if (/\b(andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|navarra|rioja|barcelona|valencia|sevilla|zaragoza|málaga|malaga|murcia|alicante|córdoba|cordoba|valladolid|vigo|gijón|gijon|coruña|coruna|toledo|vizcaya|bizkaia)\b/i.test(lower)) return "Spain";
   if (/\b(maharashtra|karnataka|tamil\s*nadu|gujarat|uttar\s*pradesh|telangana|delhi)\b/i.test(lower)) return "India";
   if (/\b(taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung)\s*(hsien|county)\b/i.test(lower)) return "Taiwan";
 
@@ -3851,6 +4093,8 @@ function detectCountryFromAddress(address) {
   if (/\b(canberra)\b/i.test(lower)) return "Australia";
   if (/\b(berlin)\b/i.test(lower)) return "Germany";
   if (/\b(paris)\b/i.test(lower)) return "France";
+  if (/\b(madrid)\b/i.test(lower)) return "Spain";
+  if (/\b(roma|rome)\b/i.test(lower)) return "Italy";
   if (/\b(tokyo)\b/i.test(lower)) return "Japan";
   if (/\b(beijing)\b/i.test(lower)) return "China";
   if (/\b(new\s*delhi)\b/i.test(lower)) return "India";
