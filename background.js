@@ -49,7 +49,7 @@ const NON_CITY_SUBURBS = [
   // United States
   "brooklyn", "queens", "manhattan", "bronx", "staten island", "hollywood", "beverly hills",
   // Australia Suburbs & Localities (MUST NOT be considered as City)
-  "campbellfield", "dandenong", "dandenong south", "braeside", "bayswater", "bayswater north",
+  "minto", "campbellfield", "dandenong", "dandenong south", "braeside", "bayswater", "bayswater north",
   "clayton", "clayton south", "tullamarine", "thomastown", "somerton", "laverton", "laverton north",
   "truganina", "altona", "altona north", "derrimut", "ravenhall", "heidelberg", "heidelberg west",
   "preston", "coburg", "reservoir", "epping", "broadmeadows", "keon park", "richmond",
@@ -2309,6 +2309,24 @@ function isAustralianLocation(address, country) {
   return false;
 }
 
+function isSouthAfricanLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:south\s*africa|za|rsa)\b/i.test(c)) return true;
+  const a = (address || "").toLowerCase();
+  if (/\b(?:south\s*africa)\b/i.test(a)) return true;
+  if (/\b(?:gauteng|western\s*cape|eastern\s*cape|kwazulu|natal|mpumalanga|free\s*state|limpopo|north\s*west|northern\s*cape)\b/i.test(a)) return true;
+  return false;
+}
+
+function isNewZealandLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:new\s*zealand|nz)\b/i.test(c)) return true;
+  const a = (address || "").toLowerCase();
+  if (/\b(?:new\s*zealand)\b/i.test(a)) return true;
+  if (/\b(?:auckland|wellington|canterbury|waikato|bay\s*of\s*plenty|otago|manawatu|hawke's\s*bay|taranaki|southland|northland|marlborough|tasman|gisborne|nelson)\b/i.test(a)) return true;
+  return false;
+}
+
 function hasUkCityOrTown(cleanAddr) {
   const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
   const streetPrefixPattern = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park)\\s+";
@@ -2335,7 +2353,11 @@ function hasRecognizedPlaceName(cleanAddr, names) {
     if (!name || name.length < 3) continue;
     if (isPlaceUsedAsStreetName(cleanAddr, name)) continue;
     const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-    if (new RegExp(`\\b${escaped}\\b`, "i").test(cleanAddr)) {
+    const isDirectionalCity = /^(?:north|south|east|west|port)\s+/i.test(name);
+    const regStr = isDirectionalCity
+      ? `\\b${escaped}\\b`
+      : `(?<!\\b(?:north|south|east|west|lower|upper|outer)\\s+)\\b${escaped}\\b`;
+    if (new RegExp(regStr, "i").test(cleanAddr)) {
       return true;
     }
   }
@@ -2523,16 +2545,34 @@ function evaluateCityQC(address, country) {
   }
 
   // 4. Australian City evaluation: Only genuine official Australian cities (suburbs excluded)
-  if (isAustralianLocation(cleanAddr, country) && hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES)) {
-    return "Available";
+  if (isAustralianLocation(cleanAddr, country)) {
+    if (hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES)) {
+      return "Available";
+    }
+    // Suburbs in Australia (e.g. Minto, Campbellfield, Seven Hills) MUST NOT be classified as cities!
+    return "Not Available";
   }
 
-  // 5. Recognized International Towns/Cities
+  // 5. South Africa & New Zealand: Suburbs preceding state/province MUST NOT be classified as cities!
+  if (isSouthAfricanLocation(cleanAddr, country)) {
+    if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+      return "Available";
+    }
+    return "Not Available";
+  }
+  if (isNewZealandLocation(cleanAddr, country)) {
+    if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+      return "Available";
+    }
+    return "Not Available";
+  }
+
+  // 6. Recognized International Towns/Cities
   if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
     return "Available";
   }
 
-  // 6. Structural address detection (e.g. "..., Moor Street, Heywood, Lancashire" -> "Heywood" precedes verified state)
+  // 7. Structural address detection (for countries where city always precedes state/province without suburbs, e.g. USA, Canada)
   const structCity = detectCityFromStructure(cleanAddr, country);
   if (structCity && !isNotCitySegment(structCity)) {
     return "Available";
