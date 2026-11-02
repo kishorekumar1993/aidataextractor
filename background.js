@@ -543,6 +543,7 @@ async function crawlWebsite(targetUrl) {
   const addressCandidates = [];
   let profilePageText = "";
   let copyrightText = "";
+  const allLegalCandidates = new Set();
 
   try {
     const mainRes = await fetchDecodedHtml(targetUrl, {
@@ -600,7 +601,6 @@ async function crawlWebsite(targetUrl) {
     extractHtmlAddresses(mainHtml, addressCandidates, "contact");
 
     // Extract official registered legal company candidates across homepage
-    const allLegalCandidates = new Set();
     for (const cand of extractLegalCandidatesFromHtml(mainHtml)) {
       allLegalCandidates.add(cand);
     }
