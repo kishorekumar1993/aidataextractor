@@ -659,7 +659,10 @@
       }
 
       if (!response || !response.success) {
-        updateStatus(`Extraction error: ${response?.error || "Unknown error"}`, "error");
+        const errorMsg = response?.error || "Unable to fetch or crawl website";
+        updateStatus(`❌ Crawl Error: ${errorMsg}`, "error");
+        const previewSection = document.getElementById("ai-preview-section");
+        if (previewSection) previewSection.style.display = "none";
         return;
       }
 
@@ -669,7 +672,7 @@
       // STRICT QC: If restricted site, show proper error message and DO NOT fill anything!
       if (data && (data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site")) {
         const reason = data.restrictedReason || "Prohibited Category Detected";
-        updateStatus(`⛔ Restricted Site: ${reason}. This website is restricted and cannot be filled.`, "error");
+        updateStatus(`⛔ Restricted Site: ${reason}. Form was not modified.`, "error");
         const previewSection = document.getElementById("ai-preview-section");
         if (previewSection) previewSection.style.display = "none";
         return;
@@ -695,7 +698,7 @@
         showReloadBanner();
         updateStatus("Please refresh page (F5)", "warning");
       } else {
-        updateStatus(`Error: ${err.message}`, "error");
+        updateStatus(`❌ Crawl Error: ${err.message}. Form was not modified.`, "error");
       }
     }
   }

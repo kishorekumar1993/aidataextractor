@@ -360,6 +360,30 @@ async function handleCrawlAndExtract(rawUrl) {
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
   const crawlResult = await crawlWebsite(targetUrl);
 
+  // If website fetch failed (network timeout, connection error, DNS failure, empty response):
+  if (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0) {
+    if (crawlResult.status === "Domain Expired" || crawlResult.httpStatus === 404) {
+      return {
+        websiteStatus: "Domain Expired",
+        businessType: "",
+        companyProfile: "",
+        companyName: "",
+        countryName: "",
+        companyAddress: "",
+        state: "",
+        city: "",
+        emailId: "",
+        secondaryEmailId: "",
+        phoneNumber: "",
+        numberOfProducts: "",
+        productImages: "",
+        numberOfProductDescriptions: ""
+      };
+    }
+    const reason = crawlResult.fetchError || "Site unreachable or returned empty HTML";
+    throw new Error(`Unable to crawl ${targetUrl}: ${reason}. Form was not modified.`);
+  }
+
   // Step 2: Check for prohibited categories
   const restrictedCheck = detectRestrictedKeywords(crawlResult.combinedText + " " + targetUrl);
 
@@ -379,15 +403,30 @@ async function handleCrawlAndExtract(rawUrl) {
 }
 
 /**
+ * Detects bot blockers, WAF challenge pages, and restricted access responses.
+ */
+function isAntiBotChallenge(html, status) {
+  if (status === 403 || status === 401 || status === 429) return true;
+  if (!html || typeof html !== "string") return false;
+  const lower = html.slice(0, 15000).toLowerCase();
+  if (lower.includes("cf-browser-verification") || lower.includes("cf-spinner") || lower.includes("challenge-platform")) return true;
+  if (lower.includes("attention required! | cloudflare") || lower.includes("<title>just a moment...</title>")) return true;
+  if (lower.includes("incapsula_resource") || lower.includes("_incubator_challenge_")) return true;
+  if (lower.includes("sucuri website firewall - access denied")) return true;
+  if (lower.includes("<title>access denied</title>") || lower.includes("<title>403 forbidden</title>")) return true;
+  return false;
+}
+
+/**
  * Resilient, charset-aware HTTP fetcher with timeout and fallback decoders.
  */
 async function fetchDecodedHtml(url, options = {}) {
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 8000;
+  const timeoutMs = options.timeoutMs || 15000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
+    const res = await fetch(url, { redirect: "follow", ...options, signal: controller.signal });
     const buf = await res.arrayBuffer();
 
     let charset = "utf-8";
@@ -416,10 +455,13 @@ async function fetchDecodedHtml(url, options = {}) {
       status: res.status,
       url: res.url,
       redirected: res.redirected,
-      html: decoded
+      html: decoded,
+      error: res.ok ? null : `HTTP ${res.status} ${res.statusText || ""}`.trim()
     };
   } catch (err) {
-    return { ok: false, status: 0, url, redirected: false, html: "" };
+    const isTimeout = err.name === "AbortError" || String(err.message).toLowerCase().includes("aborted");
+    const errMsg = isTimeout ? `Connection timed out after ${Math.round(timeoutMs / 1000)}s` : (err.message || "Network request failed");
+    return { ok: false, status: 0, url, redirected: false, html: "", error: errMsg };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -599,6 +641,7 @@ async function crawlWebsite(targetUrl) {
   let finalUrl = targetUrl;
   let status = "Working";
   let fetchError = null;
+  let httpStatus = 0;
   const addressCandidates = [];
   let profilePageText = "";
   let copyrightText = "";
@@ -607,22 +650,48 @@ async function crawlWebsite(targetUrl) {
   const allDiscoveredPhones = new Set();
 
   try {
-    const mainRes = await fetchDecodedHtml(targetUrl, {
-      timeoutMs: 12000,
+    let mainRes = await fetchDecodedHtml(targetUrl, {
+      timeoutMs: 15000,
       headers: {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       }
     });
 
+    // If HTTP failed, returned 403, 400, 0, empty HTML, or anti-bot challenge, and targetUrl started with http://:
+    // Automatically try https://!
+    const isMainFailed = !mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status);
+    if (isMainFailed && /^http:\/\//i.test(targetUrl)) {
+      const httpsUrl = targetUrl.replace(/^http:\/\//i, "https://");
+      try {
+        const httpsRes = await fetchDecodedHtml(httpsUrl, {
+          timeoutMs: 15000,
+          headers: {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          }
+        });
+        if (httpsRes.ok && httpsRes.html && httpsRes.html.trim().length > 0 && !isAntiBotChallenge(httpsRes.html, httpsRes.status)) {
+          mainRes = httpsRes;
+        }
+      } catch (e) { }
+    }
+
+    httpStatus = mainRes.status || 0;
     if (mainRes.redirected) {
       redirected = true;
       finalUrl = mainRes.url;
     }
 
-    // Technical fix: status 0 or network failure MUST mark Not Working, never Working
-    if (!mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0) {
-      status = mainRes.status === 404 ? "Domain Expired" : "Not Working";
+    if (!mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status)) {
+      if (mainRes.status === 404) {
+        status = "Domain Expired";
+        fetchError = "Site returned HTTP 404 Not Found";
+      } else if (mainRes.status === 403 || mainRes.status === 401 || isAntiBotChallenge(mainRes.html, mainRes.status)) {
+        fetchError = `Site access restricted / blocked (HTTP ${mainRes.status || 403} Security Check / Forbidden)`;
+      } else {
+        fetchError = mainRes.error || `Connection failed or empty response (HTTP ${mainRes.status || 0})`;
+      }
     }
 
     mainHtml = mainRes.html || "";
@@ -745,8 +814,7 @@ async function crawlWebsite(targetUrl) {
       profilePageText += "\n" + homeProfileMatch[0];
     }
   } catch (err) {
-    fetchError = err.message;
-    status = "Not Working";
+    fetchError = err.message || "Failed to fetch website";
   }
 
   // Detect dynamic Single Page Application (SPA) shells
@@ -813,6 +881,7 @@ async function crawlWebsite(targetUrl) {
     redirected,
     status,
     fetchError,
+    httpStatus,
     mainHtml,
     contactHtml: contactHtml.slice(0, 50000),
     shopCartCheck,
