@@ -428,6 +428,75 @@
    * Pre-fills the page form fields following the exact instruction rules.
    */
   /**
+   * Automatically confirms custom confirmation popups/modals and submits the form
+   * specifically for "Not Working" status (per instruction: "for notworking autosubmit").
+   * For "Working" sites, submission is NEVER automatic so the user can manually review.
+   */
+  function autoSubmitNotWorking() {
+    console.log("[AI Assistant] Auto-submitting 'Not Working' record...");
+
+    // 1. Confirm any confirmation dialog/modal (e.g. "Are You Sure? You are about to mark this website as 'Not Working'.")
+    const checkIntervals = [80, 200, 450, 800, 1400, 2200];
+    checkIntervals.forEach(delay => {
+      setTimeout(() => {
+        // Find visible modal or dialog elements
+        const modals = Array.from(document.querySelectorAll('.modal, .swal2-container, .swal-overlay, div[role="dialog"], .confirmation-modal, .popup, div[class*="modal"], div[class*="dialog"], div[class*="confirm"], div[class*="alert"]'));
+        for (const modal of modals) {
+          const text = (modal.textContent || "").toLowerCase();
+          if (text.includes("confirmation required") || text.includes("are you sure") || text.includes("not working") || text.includes("confirm")) {
+            const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+            const okBtn = buttons.find(b => {
+              const bText = (b.textContent || b.value || "").trim().toLowerCase();
+              return bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText.includes("ok");
+            });
+            if (okBtn) {
+              console.log("[AI Assistant] Auto-confirmed 'Not Working' confirmation modal");
+              okBtn.click();
+              return;
+            }
+          }
+        }
+
+        // Direct button search if modal wrapper wasn't matched
+        const allBtns = Array.from(document.querySelectorAll('button, input[type="button"]'));
+        const okBtn = allBtns.find(b => {
+          const bText = (b.textContent || b.value || "").trim().toLowerCase();
+          const pText = (b.closest("div")?.parentElement?.textContent || "").toLowerCase();
+          return (bText === "ok" || bText === "✓ ok") && (pText.includes("are you sure") || pText.includes("not working") || pText.includes("confirmation required"));
+        });
+        if (okBtn) {
+          console.log("[AI Assistant] Auto-confirmed 'Not Working' OK button");
+          okBtn.click();
+        }
+      }, delay);
+    });
+
+    // 2. Click the form's Submit button if the modal did not already submit the record
+    const submitDelays = [400, 900, 1600];
+    submitDelays.forEach(delay => {
+      setTimeout(() => {
+        // If confirmation modal is still open, let modal confirmation handle it first
+        const openModal = document.querySelector('.modal.show, .swal2-container, div[role="dialog"]');
+        if (openModal && openModal.offsetParent !== null) return;
+
+        const submitBtn = document.getElementById("btnSubmitForm") || 
+          document.getElementById("btnSubmit") || 
+          document.getElementById("submitForm") || 
+          document.querySelector('button[type="submit"], input[type="submit"]') ||
+          Array.from(document.querySelectorAll('button, input[type="button"]')).find(b => {
+            const t = (b.textContent || b.value || "").trim().toLowerCase();
+            return t === "submit" || (t.includes("submit") && !t.includes("reset") && !t.includes("cancel"));
+          });
+
+        if (submitBtn) {
+          console.log("[AI Assistant] Auto-clicked Submit button for 'Not Working' status");
+          submitBtn.click();
+        }
+      }, delay);
+    });
+  }
+
+  /**
    * Capitalizes the first letter of every word (Title Case) per instruction: "All words come start with Captial make it"
    * Preserves standard corporate acronyms (USA, UK, PT, CV, SDN BHD, etc.).
    */
@@ -466,7 +535,8 @@
         }
       }
 
-      // DO NOT auto-submit or auto-confirm confirmation modals: user must confirm and submit manually!
+      // Per instruction: "for notworking autosubmit": automatically confirm modal & submit record for Not Working!
+      autoSubmitNotWorking();
 
       // Clear all other fields (leave empty string / default placeholder)
       for (const [key, el] of Object.entries(elements)) {
@@ -775,8 +845,8 @@
       const fillReport = fillFormFields(data);
       if (data.websiteStatus === "Not Working") {
         const msg = data.isShopCartSite
-          ? `⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Website Status set to Not Working (all other fields cleared).`
-          : `⚠️ Website Status set to Not Working (all other fields left empty).`;
+          ? `⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Status set to Not Working (auto-submitting...).`
+          : `⚠️ Website Status set to Not Working (all other fields cleared; auto-submitting...).`;
         updateStatus(msg, "warning");
       } else if (data.websiteStatus === "Redirect Site") {
         updateStatus(`🔄 Redirect Site detected! Website Status set to Redirect Site. Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
