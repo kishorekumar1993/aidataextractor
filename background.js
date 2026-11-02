@@ -2200,8 +2200,12 @@ EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE):
 3. Secondary Email (secondaryEmailId) - CRITICAL QC RULE:
    - YOU MUST ANALYZE THE COMPLETE WEBSITE TO IDENTIFY ANY SECONDARY OR ALTERNATE CORPORATE EMAIL.
    - Look for department emails (e.g. sales@..., support@..., service@..., export@..., accounts@..., marketing@..., admin@...), branch emails, or alternate personnel/contact emails found anywhere on the site.
-   - If two or more distinct valid corporate emails exist on the website, secondaryEmailId MUST be populated with the second distinct email. NEVER leave it empty when an alternate email is present!
+   - If two or more distinct valid corporate emails exist on the website, secondaryEmailId MUST be populated with the second distinct email.
    - secondaryEmailId MUST be different and distinct from emailId (never output identical emails in both fields).
+   - CRITICAL ANTI-HALLUCINATION RULE:
+     * ONLY extract emails that are explicitly written on the crawled website.
+     * NEVER invent, guess, hallucinate, or output personal email addresses (such as @gmail.com, @yahoo.com, @hotmail.com, @outlook.com, @icloud.com) that do not appear anywhere in the website content!
+     * If the website only has ONE email address (or All Corporate Emails Discovered list has only 1 email), return "" for secondaryEmailId. NEVER invent or populate a second email!
    - Return "" ONLY if the entire website contains just one single email address.
 4. STRICT EMAIL ANTI-ARTIFACT QC RULE:
    - NEVER extract scraping, legal, or privacy policy artifacts like "collected@www...", "posted@...", "sent@...", "accessed@...", or any email containing "www." in the domain.
@@ -2328,13 +2332,47 @@ Return ONLY valid JSON matching this schema:
     throw lastError || new Error("All Gemini models failed to return structured data");
   }
 
-  if (!isValidCorporateEmail(parsed.emailId)) {
-    parsed.emailId = (crawlData.emails || []).find(e => isValidCorporateEmail(e)) || "";
+  const crawlEmails = (crawlData.emails || []).map(e => String(e).trim().toLowerCase());
+  const isGenericWebmail = (e) => /@(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|aol|mail|zoho|proton|protonmail)\.com$/i.test(e);
+  let geminiHostDomain = "";
+  try {
+    const rawUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    if (rawUrl) geminiHostDomain = new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch (e) { }
+
+  // 1. Validate primary email from Gemini
+  let primaryEm = (parsed.emailId || "").trim().toLowerCase();
+  if (primaryEm && isGenericWebmail(primaryEm) && !crawlEmails.includes(primaryEm)) {
+    primaryEm = "";
   }
-  if (!isValidCorporateEmail(parsed.secondaryEmailId) || (parsed.secondaryEmailId && parsed.secondaryEmailId.toLowerCase() === (parsed.emailId || "").toLowerCase())) {
-    const second = (crawlData.emails || []).find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
-    parsed.secondaryEmailId = second || "";
+  if (primaryEm && !crawlEmails.includes(primaryEm)) {
+    const emHost = (primaryEm.split("@")[1] || "").toLowerCase();
+    if (!geminiHostDomain || (emHost !== geminiHostDomain && !emHost.endsWith("." + geminiHostDomain))) {
+      primaryEm = "";
+    }
   }
+  if (!primaryEm || !isValidCorporateEmail(primaryEm)) {
+    primaryEm = crawlEmails.find(e => isValidCorporateEmail(e)) || "";
+  }
+  parsed.emailId = primaryEm;
+
+  // 2. Validate secondary email from Gemini
+  let secEm = (parsed.secondaryEmailId || "").trim().toLowerCase();
+  if (secEm && isGenericWebmail(secEm) && !crawlEmails.includes(secEm)) {
+    secEm = "";
+  }
+  if (secEm && !crawlEmails.includes(secEm)) {
+    const secHost = (secEm.split("@")[1] || "").toLowerCase();
+    if (!geminiHostDomain || (secHost !== geminiHostDomain && !secHost.endsWith("." + geminiHostDomain))) {
+      secEm = "";
+    }
+  }
+  if (!secEm || secEm === primaryEm || !isValidCorporateEmail(secEm)) {
+    const second = crawlEmails.find(e => isValidCorporateEmail(e) && e !== primaryEm);
+    secEm = second || "";
+  }
+  if (secEm === primaryEm || !isValidCorporateEmail(secEm)) secEm = "";
+  parsed.secondaryEmailId = secEm;
   if (!parsed.phoneNumber && crawlData.phones && crawlData.phones.length > 0) {
     parsed.phoneNumber = crawlData.phones[0];
   }
@@ -2798,18 +2836,50 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.city = evaluateCityQC(addr, country);
   }
 
-  // 9. Email ID
+  // 9. Email ID & 10. Secondary Email ID (Strict Grounding & Anti-Hallucination)
+  const crawlEmails = (crawlData.emails || []).map(e => String(e).trim().toLowerCase());
+  const isGenericWebmail = (e) => /@(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|aol|mail|zoho|proton|protonmail)\.com$/i.test(e);
+  let targetHostDomain = "";
+  try {
+    const rawUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    if (rawUrl) targetHostDomain = new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch (e) { }
+
+  // 9. Primary Email ID
   let email = (result.emailId || "").trim().toLowerCase();
-  if (!isValidCorporateEmail(email)) {
-    const validFromCrawl = (crawlData.emails || []).find(e => isValidCorporateEmail(e));
+  // Reject email if generic webmail and was NOT discovered during the website HTML crawl
+  if (email && isGenericWebmail(email) && !crawlEmails.includes(email)) {
+    email = "";
+  }
+  // Reject email if not in crawlEmails and does not match target host domain
+  if (email && !crawlEmails.includes(email)) {
+    const emHost = (email.split("@")[1] || "").toLowerCase();
+    if (!targetHostDomain || (emHost !== targetHostDomain && !emHost.endsWith("." + targetHostDomain))) {
+      email = "";
+    }
+  }
+  if (!email || !isValidCorporateEmail(email)) {
+    const validFromCrawl = crawlEmails.find(e => isValidCorporateEmail(e));
     email = validFromCrawl || "";
   }
   result.emailId = email;
 
-  // 10. Secondary Email ID (Must analyze complete website for distinct alternate corporate email)
+  // 10. Secondary Email ID
   let secEmail = (result.secondaryEmailId || "").trim().toLowerCase();
-  if (!isValidCorporateEmail(secEmail) || secEmail === email) {
-    const alternate = (crawlData.emails || []).find(e => isValidCorporateEmail(e) && e.toLowerCase() !== email.toLowerCase());
+  // Reject secondary email if generic webmail and was NOT discovered during the website HTML crawl
+  if (secEmail && isGenericWebmail(secEmail) && !crawlEmails.includes(secEmail)) {
+    secEmail = "";
+  }
+  // Reject secondary email if not in crawlEmails and does not match target host domain
+  if (secEmail && !crawlEmails.includes(secEmail)) {
+    const secHost = (secEmail.split("@")[1] || "").toLowerCase();
+    if (!targetHostDomain || (secHost !== targetHostDomain && !secHost.endsWith("." + targetHostDomain))) {
+      secEmail = "";
+    }
+  }
+  // Fallback ONLY to a verified distinct alternate corporate email found during crawl
+  if (!secEmail || secEmail === email || !isValidCorporateEmail(secEmail)) {
+    const alternate = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== email.toLowerCase());
     secEmail = alternate ? alternate.toLowerCase() : "";
   }
   if (secEmail === email || !isValidCorporateEmail(secEmail)) secEmail = "";

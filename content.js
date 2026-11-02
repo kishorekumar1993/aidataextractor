@@ -610,6 +610,7 @@
 
     // 10. Secondary Email ID
     if (elements.secondaryEmailId) {
+      try { elements.secondaryEmailId.setAttribute("autocomplete", "off"); } catch (e) { }
       setInputValue(elements.secondaryEmailId, data.secondaryEmailId || "");
       if (data.secondaryEmailId) highlightField(elements.secondaryEmailId);
       filledCount++;
