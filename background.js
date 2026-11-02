@@ -19,15 +19,54 @@ const DEFAULT_MODEL =
 
 // Primary prohibited core industries per Instruction Sheet
 const RESTRICTED_PATTERNS = [
-  { pattern: /\b(porn|pornography|xxx|erotic|sex\s*shop|escort\s*service|adult\s*content|cam\s*girl|strip\s*club)\b/i, label: "Adult Content" },
-  { pattern: /\b(weapons?|firearms?|ammunition|rifles?|guns?|military\s*weapons?|explosives?)\b/i, label: "Weapons & Firearms" },
-  { pattern: /\b(gambling|casino|betting|sports\s*betting|slot\s*machine|poker|lottery|bookmaker)\b/i, label: "Gambling & Betting" },
-  { pattern: /\b(tobacco|cigarettes?|cigars?|vape|vaping|e-?cigarette|cannabis|marijuana|cbd\s*oil)\b/i, label: "Tobacco & Cannabis" },
-  { pattern: /\b(prescription\s*drugs|hospital\s*care|medical\s*clinic|illicit\s*drugs)\b/i, label: "Medical & Prescription Drugs" },
-  { pattern: /\b(military\s*defence\s*contractor|armed\s*forces\s*equipment|tactical\s*armaments)\b/i, label: "Military & Tactical Armaments" },
-  { pattern: /\b(commercial\s*aviation\s*fleet|aircraft\s*manufacturer|naval\s*shipyard)\b/i, label: "Commercial Aviation / Naval Shipyard" },
-  { pattern: /\b(brewery|distillery|liquor\s*store|wine\s*producer)\b/i, label: "Alcohol & Liquor" },
-  { pattern: /\b(livestock\s*farming|pet\s*shop|animal\s*breeding|veterinary\s*hospital)\b/i, label: "Livestock & Animal Breeding" }
+  { 
+    pattern: /\b(?:porn|pornography|xxx|erotic|sex\s*shop|escort\s*service|adult\s*content|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|sex\s*worker|sensual\s*massage|nude|nudity|onlyfans)\b/i, 
+    label: "Adult Content & Entertainment" 
+  },
+  { 
+    pattern: /(?<!(?:glue|heat|spray|grease|air|nail|stud|rivet|staple|caulk|massage)\s+)\b(?:firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor)\b/i, 
+    label: "Weapons & Firearms" 
+  },
+  { 
+    pattern: /\b(?:gambling|online\s*casino|casinos?|sports\s*betting|betting\s*site|slot\s*machines?|video\s*slots|poker\s*room|roulette|blackjack|baccarat|bookmaker|sportsbook|lottery|lotto|sports\s*wagering|jackpot\s*betting)\b/i, 
+    label: "Gambling & Betting" 
+  },
+  { 
+    pattern: /\b(?:tobacco|cigarettes?|cigars?|cigarillos|chewing\s*tobacco|hookah|shisha|snus|nicotine\s*pouches?|vape|vaping|e-?cigarette|vape\s*shop|e-?liquid|vape\s*juice|disposable\s*vape)\b/i, 
+    label: "Tobacco & Vaping" 
+  },
+  { 
+    pattern: /\b(?:cannabis|marijuana|weed|thc|cbd\s*oil|cbd\s*gummies|dispensary|recreational\s*weed|medical\s*cannabis|delta-?8|delta-?9|kratom|illicit\s*drugs|narcotics)\b/i, 
+    label: "Cannabis & Controlled Substances" 
+  },
+  { 
+    pattern: /\b(?:prescription\s*drugs?|online\s*pharmacy|buy\s*viagra|buy\s*cialis|anabolic\s*steroids?|illicit\s*drugs?)\b/i, 
+    label: "Prescription Drugs & Pharmacy" 
+  },
+  { 
+    pattern: /\b(?:military\s*defence\s*contractor|armed\s*forces\s*equipment|tactical\s*armaments)\b/i, 
+    label: "Military & Tactical Armaments" 
+  },
+  { 
+    pattern: /\b(?:commercial\s*aviation\s*fleet|aircraft\s*manufacturer|naval\s*shipyard)\b/i, 
+    label: "Commercial Aviation / Naval Shipyard" 
+  },
+  { 
+    pattern: /\b(?:brewery|microbrewery|distillery|distilleries|liquor\s*store|liquor\s*shop|spirits\s*manufacturer|wine\s*producer|winery|wineries|vineyards?|craft\s*beer|whiskey|whisky|vodka|tequila|rum|gin|alcoholic\s*beverages?)\b/i, 
+    label: "Alcohol, Liquor & Breweries" 
+  },
+  { 
+    pattern: /\b(?:hospital\s*care|patient\s*care|dental\s*clinic|outpatient\s*clinic|surgery\s*center|veterinary\s*hospital|psychiatric\s*hospital)\b/i, 
+    label: "Hospitals & Patient Clinics" 
+  },
+  { 
+    pattern: /\b(?:pet\s*shop|puppy\s*mill|dog\s*breeding|cat\s*breeding|animal\s*breeding|livestock\s*farming|slaughterhouse|cattle\s*ranching)\b/i, 
+    label: "Livestock & Animal Breeding" 
+  },
+  { 
+    pattern: /\b(?:counterfeit\s*goods|replica\s*watches?|fake\s*id|fake\s*passports?|hacking\s*services?|dark\s*web\s*market|payday\s*loans?|loan\s*shark)\b/i, 
+    label: "Counterfeits & Prohibited Financial Services" 
+  }
 ];
 
 // National Capital Cities for Rule 8 capital city exception
@@ -384,8 +423,59 @@ async function handleCrawlAndExtract(rawUrl) {
     throw new Error(`Unable to crawl ${targetUrl}: ${reason}. Form was not modified.`);
   }
 
-  // Step 2: Check for prohibited categories
-  const restrictedCheck = detectRestrictedKeywords(crawlResult.combinedText + " " + targetUrl);
+  // Step 2: PRE-AI STRICT CHECKS (Restricted Category & Online Shopping Cart)
+  // Check across target URL, final URL, page HTML, metadata, and crawled text
+  const siteContent = (crawlResult.combinedText || "") + " " + (crawlResult.mainHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
+  const restrictedCheck = detectRestrictedKeywords(siteContent);
+
+  // PRE-AI CHECK 1: If Restricted Site, immediately abort AI crawl and return restricted status!
+  // Rule: "if restricted site means show me proper error message and dont fill any think show the error message"
+  if (restrictedCheck.isRestricted) {
+    return {
+      websiteStatus: "Working",
+      businessType: "Restricted Site",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      isRestricted: true,
+      restrictedReason: restrictedCheck.reason,
+      _note: `Restricted Site Identified Pre-AI (${restrictedCheck.reason})`
+    };
+  }
+
+  // PRE-AI CHECK 2: If Online Shopping / Shopping Cart ("Shopchart") detected:
+  // Rule: "purchase / Shopchart in website found means mark it as not working site" & "Notworking means all empty"
+  const shopCartCheck = crawlResult.shopCartCheck || detectPurchaseOrShoppingCart((crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.bodyText || "");
+  if (shopCartCheck && shopCartCheck.detected) {
+    return {
+      websiteStatus: "Not Working",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      isShopCartSite: true,
+      shopCartReason: shopCartCheck.reason,
+      _note: `Online Purchase / Shopping Cart (${shopCartCheck.reason})`
+    };
+  }
 
   let extractedData;
   try {
@@ -744,70 +834,79 @@ async function crawlWebsite(targetUrl) {
     const contactLinks = discoverContactLinks(mainHtml, finalUrl);
     const fetchedUrls = new Set([finalUrl]);
 
-    for (const cUrl of contactLinks.slice(0, 15)) {
-      if (fetchedUrls.has(cUrl)) continue;
-      fetchedUrls.add(cUrl);
+    // PRE-AI CRAWL SHORT-CIRCUIT:
+    // If homepage already shows this is an online shopping cart or restricted site,
+    // skip crawling 15 subpages to respond instantly and preserve resources!
+    const earlyCart = detectPurchaseOrShoppingCart(mainHtml);
+    const earlyRestricted = detectRestrictedKeywords(mainHtml + " " + targetUrl);
+    const shouldSkipSubpages = (earlyCart && earlyCart.detected) || earlyRestricted.isRestricted;
 
-      try {
-        const cRes = await fetchDecodedHtml(cUrl, {
-          timeoutMs: 6000,
-          headers: {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          }
-        });
+    if (!shouldSkipSubpages) {
+      for (const cUrl of contactLinks.slice(0, 15)) {
+        if (fetchedUrls.has(cUrl)) continue;
+        fetchedUrls.add(cUrl);
 
-        if (cRes.ok && cRes.html) {
-          const cText = cRes.html;
-          contactHtml += "\n" + cText;
-          const isProfilePage = /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
-          const pageSource = isProfilePage ? "profile" : "contact";
+        try {
+          const cRes = await fetchDecodedHtml(cUrl, {
+            timeoutMs: 6000,
+            headers: {
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+          });
 
-          extractEmbeddedScriptAddresses(cText, addressCandidates);
-          extractMapAddresses(cText, addressCandidates);
-          extractMetaAddresses(cText, addressCandidates);
-          extractHtmlAddresses(cText, addressCandidates, pageSource);
+          if (cRes.ok && cRes.html) {
+            const cText = cRes.html;
+            contactHtml += "\n" + cText;
+            const isProfilePage = /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
+            const pageSource = isProfilePage ? "profile" : "contact";
 
-          if (isProfilePage || /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(stripHtml(cText).slice(0, 5000))) {
-            profilePageText += "\n" + stripHtml(cText);
-          }
+            extractEmbeddedScriptAddresses(cText, addressCandidates);
+            extractMapAddresses(cText, addressCandidates);
+            extractMetaAddresses(cText, addressCandidates);
+            extractHtmlAddresses(cText, addressCandidates, pageSource);
 
-          // Extract legal corporate names across this page
-          for (const cand of extractLegalCandidatesFromHtml(cText)) {
-            allLegalCandidates.add(cand);
-          }
+            if (isProfilePage || /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(stripHtml(cText).slice(0, 5000))) {
+              profilePageText += "\n" + stripHtml(cText);
+            }
 
-          // Extract all corporate emails and phones across this page
-          for (const em of extractEmailsFromHtml(cText, finalUrl)) {
-            allDiscoveredEmails.add(em);
-          }
-          const pagePhoneLinks = [...cText.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
-          for (const p of pagePhoneLinks) allDiscoveredPhones.add(p);
+            // Extract legal corporate names across this page
+            for (const cand of extractLegalCandidatesFromHtml(cText)) {
+              allLegalCandidates.add(cand);
+            }
 
-          // Extract copyright on this page if homepage lacked complete legal suffix
-          const pageCopyright = extractCopyrightCompanyName(cText);
-          if (pageCopyright && hasCompleteLegalSuffix(pageCopyright) && (!copyrightText || !hasCompleteLegalSuffix(copyrightText))) {
-            copyrightText = pageCopyright;
-          }
+            // Extract all corporate emails and phones across this page
+            for (const em of extractEmailsFromHtml(cText, finalUrl)) {
+              allDiscoveredEmails.add(em);
+            }
+            const pagePhoneLinks = [...cText.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
+            for (const p of pagePhoneLinks) allDiscoveredPhones.add(p);
 
-          // Check CMS dynamic form endpoints
-          if (cText.includes("main-contact.asp") || cText.includes("loadFB")) {
-            const formMatch = cText.match(/loadFB\(["']([^"']+)["']/i) || cText.match(/src=["']([^"']*main-contact\.asp[^"']*)["']/i);
-            if (formMatch) {
-              const fbUrl = new URL(formMatch[1], cUrl).href;
-              const fbRes = await fetchDecodedHtml(fbUrl, { timeoutMs: 5000 });
-              if (fbRes.ok && fbRes.html) {
-                contactHtml += "\n" + fbRes.html;
-                extractEmbeddedScriptAddresses(fbRes.html, addressCandidates);
-                extractHtmlAddresses(fbRes.html, addressCandidates, "contact");
-                for (const em of extractEmailsFromHtml(fbRes.html, finalUrl)) {
-                  allDiscoveredEmails.add(em);
+            // Extract copyright on this page if homepage lacked complete legal suffix
+            const pageCopyright = extractCopyrightCompanyName(cText);
+            if (pageCopyright && hasCompleteLegalSuffix(pageCopyright) && (!copyrightText || !hasCompleteLegalSuffix(copyrightText))) {
+              copyrightText = pageCopyright;
+            }
+
+            // Check CMS dynamic form endpoints
+            if (cText.includes("main-contact.asp") || cText.includes("loadFB")) {
+              const formMatch = cText.match(/loadFB\(["']([^"']+)["']/i) || cText.match(/src=["']([^"']*main-contact\.asp[^"']*)["']/i);
+              if (formMatch) {
+                const fbUrl = new URL(formMatch[1], cUrl).href;
+                const fbRes = await fetchDecodedHtml(fbUrl, { timeoutMs: 5000 });
+                if (fbRes.ok && fbRes.html) {
+                  contactHtml += "\n" + fbRes.html;
+                  extractEmbeddedScriptAddresses(fbRes.html, addressCandidates);
+                  extractHtmlAddresses(fbRes.html, addressCandidates, "contact");
+                  for (const em of extractEmailsFromHtml(fbRes.html, finalUrl)) {
+                    allDiscoveredEmails.add(em);
+                  }
                 }
               }
             }
           }
-        }
-      } catch (e) { }
+        } catch (e) { }
+      }
     }
 
     // Merge Contact text
@@ -1704,36 +1803,43 @@ function detectPurchaseOrShoppingCart(html = "", text = "") {
   const rawHtml = String(html || "");
   const rawText = String(text || "");
 
-  // 1. E-commerce platforms & checkout classes/IDs (e.g. WooCommerce, Shopify, Magento, Snipcart)
-  const platformRegex = /\b(?:woocommerce-cart|woocommerce-checkout|wc-block-cart|add_to_cart_button|single_add_to_cart_button|shopify-section-cart|cart-drawer|shopify-payment-button|minicart-wrapper|block-minicart|action\s+showcart|snipcart-checkout|snipcart-add-item|ec-cart)\b/i;
+  // 1. E-commerce platforms, SDKs, and scripts (Shopify, WooCommerce, Magento, BigCommerce, etc.)
+  const platformRegex = /\b(?:woocommerce[-_]?cart|woocommerce[-_]?checkout|wc-block-cart|wc-cart-fragments|add_to_cart_button|single_add_to_cart_button|shopify[-_]?section[-_]?cart|cart[-_]?drawer|shopify[-_]?payment[-_]?button|cdn\.shopify\.com|window\.Shopify|Shopify\.routes|minicart[-_]?wrapper|block[-_]?minicart|action\s+showcart|snipcart[-_]?checkout|snipcart[-_]?add[-_]?item|ec[-_]?cart|bigcommerce|ps[-_]?shoppingcart|prestashop|opencart|wix[-_]?dropdown[-_]?cart|sqs[-_]?cart[-_]?dropzone)\b/i;
   const platMatch = rawHtml.match(platformRegex);
   if (platMatch) {
     return { detected: true, reason: `E-commerce platform indicator: ${platMatch[0]}` };
   }
 
-  // 2. Cart / Checkout HTML element attributes (class, id, data-widget, aria-label)
-  const cartAttrRegex = /(?:class|id|data-widget|data-target|aria-label)=["'][^"']*\b(?:shopping[-_]?cart|shop[-_]?cart|shop[-_]?chart|shopping[-_]?bag|shopping[-_]?basket|mini[-_]?cart|cart[-_]?contents|cart[-_]?icon|cart[-_]?drawer|cart[-_]?button|header[-_]?cart|btn[-_]?cart|view[-_]?cart)\b[^"']*["']/i;
+  // 2. Cart / Checkout HTML element attributes (class, id, data-widget, aria-label, etc.)
+  const cartAttrRegex = /(?:class|id|data-widget|data-target|aria-label|name)=["'][^"']*\b(?:shopping[-_]?cart|shop[-_]?cart|shop[-_]?chart|shopping[-_]?chart|shopping[-_]?bag|shopping[-_]?basket|mini[-_]?cart|cart[-_]?contents|cart[-_]?icon|cart[-_]?drawer|cart[-_]?button|header[-_]?cart|btn[-_]?cart|view[-_]?cart|cart[-_]?count|cart[-_]?quantity|cart[-_]?summary|site-header__cart)\b[^"']*["']/i;
   const attrMatch = rawHtml.match(cartAttrRegex);
   if (attrMatch) {
     return { detected: true, reason: `Shopping cart element attribute: ${attrMatch[0]}` };
   }
 
   // 3. Cart / Checkout links (href)
-  const cartLinkRegex = /<a[^>]+href=["'][^"']*(?:\/(?:cart|shopping[-_]?cart|shop[-_]?cart|checkout|basket|my[-_]?cart|shopping[-_]?bag)\b)(?:\/|["'?#])/i;
+  const cartLinkRegex = /<a[^>]+href=["'][^"']*(?:\/(?:cart|shopping[-_]?cart|shop[-_]?cart|shop[-_]?chart|checkout|basket|my[-_]?cart|shopping[-_]?bag)\b)(?:\/|["'?#])/i;
   const linkMatch = rawHtml.match(cartLinkRegex);
   if (linkMatch) {
     return { detected: true, reason: `Shopping cart / checkout link: ${linkMatch[0].slice(0, 80)}` };
   }
 
-  // 4. E-commerce CTA buttons or forms: "Add to Cart", "Add to Bag", "Buy Now", "Proceed to Checkout", "Purchase" button
-  const ctaButtonRegex = /<(?:button|a|input)[^>]*>[\s\S]{0,100}?\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now|buy\s+online|purchase\s+online|purchase\s+now|proceed\s+to\s+checkout|checkout\s+now|view\s+cart|my\s+cart|order\s+online)\b[\s\S]{0,100}?<\/(?:button|a)>/i;
+  // 4. E-commerce CTA buttons or forms: "Add to Cart", "Add to Bag", "Buy Now", "Shop Now", "Proceed to Checkout", etc.
+  const ctaButtonRegex = /<(?:button|a|input)[^>]*>[\s\S]{0,100}?\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now|buy\s+online|shop\s+now|order\s+now|purchase\s+online|purchase\s+now|proceed\s+to\s+checkout|checkout\s+now|view\s+cart|my\s+cart|order\s+online)\b[\s\S]{0,100}?<\/(?:button|a)>/i;
   const btnMatch = rawHtml.match(ctaButtonRegex);
   if (btnMatch) {
     return { detected: true, reason: `E-commerce CTA button: ${btnMatch[0].slice(0, 80)}` };
   }
 
-  // 4b. Direct Purchase button (avoiding "Purchase Order", "Terms of Purchase")
-  const purchaseBtnRegex = /<(?:button|a)[^>]*>\s*(?:Purchase|Buy Online|Shop Online|Cart|Checkout)\s*<\/(?:button|a)>/i;
+  // 4b. Form action adding to cart / checkout
+  const cartFormRegex = /<form[^>]+action=["'][^"']*(?:\/cart\/add|\/cart|\/checkout|\/basket)[^"']*["']/i;
+  const formMatch = rawHtml.match(cartFormRegex);
+  if (formMatch) {
+    return { detected: true, reason: `Shopping cart form: ${formMatch[0].slice(0, 80)}` };
+  }
+
+  // 4c. Direct Purchase / Buy / Cart buttons
+  const purchaseBtnRegex = /<(?:button|a)[^>]*>\s*(?:Purchase|Buy Online|Shop Online|Shop Now|Cart|Checkout)\s*<\/(?:button|a)>/i;
   const pBtnMatch = rawHtml.match(purchaseBtnRegex);
   if (pBtnMatch) {
     return { detected: true, reason: `Purchase button/link: ${pBtnMatch[0]}` };
@@ -1741,13 +1847,19 @@ function detectPurchaseOrShoppingCart(html = "", text = "") {
 
   // 5. Explicit visible phrases in text or HTML
   // User specifically noted: "purchase / Shopchart in website found"
-  // Handled: shopping cart, shop cart, shopchart, shopping chart, add to cart, buy online, purchase online, items in cart
-  const textPhrasesRegex = /(?:\b(?:shopping\s*cart|shop\s*cart|shop\s*chart|shopchart|shopping\s*chart|view\s*cart|my\s*cart|your\s*cart|items?\s+in\s+(?:your\s+)?cart|add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+online|buy\s+now|purchase\s+online|purchase\s+now|proceed\s+to\s+checkout|online\s+purchase|make\s+a\s+purchase|direct\s+purchase)\b|\b(?:cart|bag|basket)\s*[\(\[]\s*\d+\s*[\)\]]|\bcart\s*:\s*\d+)/i;
+  const textPhrasesRegex = /(?:\b(?:shopping\s*cart|shop\s*cart|shop\s*chart|shopchart|shopping\s*chart|view\s*cart|my\s*cart|your\s*cart|items?\s+in\s+(?:your\s+)?cart|add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+online|buy\s+now|purchase\s+online|purchase\s+now|proceed\s+to\s+checkout|online\s+purchase|make\s+a\s+purchase|direct\s+purchase|free\s+shipping\s+on\s+orders\s+over|calculated\s+at\s+checkout)\b|\b(?:cart|bag|basket)\s*[\(\[]\s*\d+\s*[\)\]]|\bcart\s*:\s*\d+)/i;
 
   const cleanBody = rawText || rawHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ").replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
   const textMatch = cleanBody.match(textPhrasesRegex);
   if (textMatch) {
     return { detected: true, reason: `Purchase / Shopcart phrase in page: "${textMatch[0]}"` };
+  }
+
+  // 6. Price alongside Add to Cart / Buy Now
+  const priceWithBuyRegex = /(?:[\$£€¥₹]|AU\$|CA\$|USD|EUR|GBP)\s*\d+[\d.,]*[\s\S]{0,100}?\b(?:add\s+to\s+cart|buy\s+now|add\s+to\s+basket|add\s+to\s+bag)\b/i;
+  const priceMatch = rawHtml.match(priceWithBuyRegex);
+  if (priceMatch) {
+    return { detected: true, reason: `Price with purchase button: "${priceMatch[0].slice(0, 60)}"` };
   }
 
   return { detected: false, reason: "" };
