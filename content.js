@@ -429,11 +429,39 @@
    */
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
-    if (data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site") {
-      return { filledCount: 0 };
-    }
     const elements = detectFormElements();
     let filledCount = 0;
+
+    // CRITICAL QC RULE: "if restricted site means show me proper error message and dont fill any think show the error message"
+    // Select Business Type as "Restricted Site", set Website Status, and clear/leave empty ALL other fields!
+    if (data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site") {
+      if (elements.businessType) {
+        if (setSelectValue(elements.businessType, "Restricted Site")) {
+          highlightField(elements.businessType);
+          filledCount++;
+        }
+      }
+      if (elements.websiteStatus && data.websiteStatus) {
+        if (setSelectValue(elements.websiteStatus, data.websiteStatus || "Working")) {
+          highlightField(elements.websiteStatus);
+          filledCount++;
+        }
+      }
+
+      // Clear all other fields (company name, address, country, state, city, phone, email, products, etc.)
+      for (const [key, el] of Object.entries(elements)) {
+        if (!el || key === "websiteUrl" || key === "websiteStatus" || key === "businessType") continue;
+        if (el.tagName && el.tagName.toLowerCase() === "select") {
+          el.selectedIndex = 0;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        } else {
+          setInputValue(el, "");
+        }
+        el.classList.remove("ai-prefilled-field");
+      }
+
+      return { filledCount, isRestricted: true };
+    }
 
     // CRITICAL QC RULE: "Notworking means all empty"
     // When Website Status is "Not Working", select "Not Working" and clear/leave empty ALL other fields!
@@ -625,6 +653,53 @@
     }
   }
 
+  function showRestrictedBanner(reason) {
+    let banner = document.getElementById("ai-restricted-banner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "ai-restricted-banner";
+      document.body.appendChild(banner);
+    }
+    banner.style.cssText = `
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #7f1d1d;
+      color: #fef2f2;
+      padding: 16px 28px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 9999999;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border: 2px solid #ef4444;
+      max-width: 650px;
+    `;
+    const cleanReason = String(reason || "Prohibited Category Detected").replace(/[<>"]/g, "");
+    banner.innerHTML = `
+      <span style="font-size: 26px; line-height: 1;">⛔</span>
+      <div style="flex: 1;">
+        <div style="font-weight: 700; font-size: 15px; color: #ffffff; letter-spacing: 0.3px;">RESTRICTED SITE DETECTED</div>
+        <div style="font-size: 13px; color: #fecaca; margin-top: 3px; line-height: 1.4;">
+          <strong>Category:</strong> ${cleanReason}. Per instructions, Business Type is marked as Restricted Site and all company/contact fields are left empty.
+        </div>
+      </div>
+      <button id="ai-dismiss-restricted-btn" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; white-space: nowrap;">Dismiss</button>
+    `;
+    document.getElementById("ai-dismiss-restricted-btn")?.addEventListener("click", () => {
+      banner.remove();
+    });
+    setTimeout(() => {
+      if (document.getElementById("ai-restricted-banner")) {
+        banner.remove();
+      }
+    }, 12000);
+  }
+
   async function triggerCrawlAndFill() {
     if (!isExtensionAlive()) {
       showReloadBanner();
@@ -669,12 +744,24 @@
       const data = response.data;
       cachedExtractedData = data;
 
-      // STRICT QC: If restricted site, show proper error message and DO NOT fill anything!
+      // STRICT QC: If restricted site, show proper error message, clear all company fields, and select Restricted Site
       if (data && (data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site")) {
         const reason = data.restrictedReason || "Prohibited Category Detected";
-        updateStatus(`⛔ Restricted Site: ${reason}. Form was not modified.`, "error");
-        const previewSection = document.getElementById("ai-preview-section");
-        if (previewSection) previewSection.style.display = "none";
+        fillFormFields(data);
+        renderPreview(data);
+        updateStatus(`⛔ RESTRICTED SITE: ${reason}. Business Type set to Restricted Site (all other fields cleared).`, "error");
+        showRestrictedBanner(reason);
+        if (quickBtn) {
+          quickBtn.disabled = false;
+          quickBtn.style.backgroundColor = "#dc2626";
+          quickBtn.style.borderColor = "#991b1b";
+          quickBtn.innerHTML = `⛔ Restricted Site`;
+          setTimeout(() => {
+            quickBtn.style.backgroundColor = "#059669";
+            quickBtn.style.borderColor = "#047857";
+            quickBtn.innerHTML = "🤖 AI Crawl & Fill";
+          }, 7000);
+        }
         return;
       }
 
@@ -776,7 +863,10 @@
         if (cachedExtractedData) {
           if (cachedExtractedData.isRestricted || String(cachedExtractedData.businessType || "").toLowerCase() === "restricted site") {
             const reason = cachedExtractedData.restrictedReason || "Prohibited Category Detected";
-            updateStatus(`⛔ Restricted Site: ${reason}. This website is restricted and cannot be filled.`, "error");
+            fillFormFields(cachedExtractedData);
+            renderPreview(cachedExtractedData);
+            showRestrictedBanner(reason);
+            updateStatus(`⛔ RESTRICTED SITE: ${reason}. Business Type set to Restricted Site (all other fields cleared).`, "error");
             return;
           }
           fillFormFields(cachedExtractedData);
@@ -911,9 +1001,14 @@
     previewSection.style.display = "block";
     previewList.innerHTML = "";
 
+    const isRestr = !!(data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site");
+    const businessTypeVal = isRestr
+      ? `⛔ Restricted Site (${data.restrictedReason || "Prohibited Category"})`
+      : (data.businessType || "-");
+
     const items = [
       { key: "Status", val: data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus },
-      { key: "Business Type", val: data.businessType },
+      { key: "Business Type", val: businessTypeVal, isAlert: isRestr },
       { key: "Company Profile", val: data.companyProfile },
       { key: "Company Name", val: data.companyName },
       { key: "Country", val: data.countryName },
@@ -931,9 +1026,10 @@
     items.forEach(item => {
       const row = document.createElement("div");
       row.className = "ai-preview-row";
+      const valStyle = item.isAlert ? 'style="color: #dc2626; font-weight: 700;"' : '';
       row.innerHTML = `
         <span class="ai-preview-key">${item.key}:</span>
-        <span class="ai-preview-val" title="${item.val || ''}">${item.val || '-'}</span>
+        <span class="ai-preview-val" ${valStyle} title="${item.val || ''}">${item.val || '-'}</span>
       `;
       previewList.appendChild(row);
     });

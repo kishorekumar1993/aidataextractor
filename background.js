@@ -24,8 +24,40 @@ const RESTRICTED_PATTERNS = [
     label: "Adult Content & Entertainment" 
   },
   { 
-    pattern: /(?<!(?:glue|heat|spray|grease|air|nail|stud|rivet|staple|caulk|massage)\s+)\b(?:firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor)\b/i, 
-    label: "Weapons & Firearms" 
+    pattern: /(?<!(?:glue|heat|spray|grease|air|nail|stud|rivet|staple|caulk|massage|palette|putty)\s+)\b(?:firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor|combat\s*knives|tactical\s*knives|hunting\s*knives|daggers?|swords?|machetes?|bayonets?|custom\s*knives|knife\s*maker|knives\s*manufacturer)\b/i, 
+    label: "Weapons, Firearms & Knives" 
+  },
+  { 
+    pattern: /\b(?:military\s*(?:defence|defense)\s*contractor|armed\s*forces\s*equipment|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?)\b/i, 
+    label: "Military & Defence Armaments" 
+  },
+  { 
+    pattern: /(?<!(?:model|toy|rc)\s+)\b(?:aircraft\s*manufactur(?:er|ing)|airplane\s*manufactur(?:er|ing)|commercial\s*aviation|airlines?|air\s*charter|avionics\s*systems?|aerospace\s*manufactur(?:er|ing)|aerospace\s*engineering|helicopters?\s*manufactur(?:er|ing)|jet\s*aircraft)\b/i, 
+    label: "Aircraft, Aviation & Aerospace" 
+  },
+  { 
+    pattern: /\b(?:shipyard|shipbuilding|naval\s*shipyard|ship\s*builder|boat\s*builder|yacht\s*manufactur(?:er|ing)|commercial\s*vessels?\s*manufactur(?:er|ing)|maritime\s*shipping|naval\s*vessels?)\b/i, 
+    label: "Marine, Ships & Shipbuilding" 
+  },
+  { 
+    pattern: /(?<!(?:resistance\s+to|resistant\s+to|proof\s+against)\s+)\b(?:chemicals?\s*manufactur(?:er|ing)|specialty\s*chemicals?|industrial\s*chemicals?|petrochemicals?\s*manufactur(?:er|ing)|agrochemicals?|pesticides?\s*manufactur(?:er|ing)|hazardous\s*chemicals?|chemical\s*synthesis|solvents?\s*manufactur(?:er|ing)|bulk\s*chemicals?)\b/i, 
+    label: "Chemicals & Petrochemicals" 
+  },
+  { 
+    pattern: /\b(?:pharmaceuticals?\s*manufactur(?:er|ing)?|prescription\s*drugs?|online\s*pharmacy|medicine\s*manufactur(?:er|ing)?|medical\s*devices?\s*manufactur(?:er|ing)?|hospital\s*care|patient\s*care|dental\s*clinic|outpatient\s*clinic|surgery\s*center|veterinary\s*hospital|psychiatric\s*hospital|healthcare\s*clinic|health\s*clinic|diagnostic\s*center)\b/i, 
+    label: "Medicine, Pharmaceuticals & Hospitals" 
+  },
+  { 
+    pattern: /(?<!(?:machinery|machine|equipment|packaging|moulding|molding|automation|processing\s+machine)\s+(?:for\s+)?)\b(?:food\s*manufactur(?:er|ing)|food\s*processing\s*plant|food\s*products?\s*manufactur(?:er|ing)?|bakery\s*products?|catering\s*services?|restaurants?|bistros?|cafes?|eateries|snack\s*manufactur(?:er|ing)|dairy\s*products?\s*manufactur(?:er|ing)|meat\s*processing|poultry\s*processing|seafood\s*processing|edible\s*oils?\s*manufactur(?:er|ing)|confectionery\s*manufactur(?:er|ing))\b/i, 
+    label: "Food, Beverages & Restaurants" 
+  },
+  { 
+    pattern: /\b(?:brewery|microbrewery|distillery|distilleries|liquor\s*store|liquor\s*shop|spirits\s*manufacturer|wine\s*producer|winery|wineries|vineyards?|craft\s*beer|whiskey|whisky|vodka|tequila|rum|gin|alcoholic\s*beverages?)\b/i, 
+    label: "Alcohol, Breweries & Wineries" 
+  },
+  { 
+    pattern: /\b(?:pet\s*shop|pet\s*store|puppy\s*mill|dog\s*breeding|cat\s*breeding|animal\s*breeding|livestock\s*farming|cattle\s*ranching|poultry\s*farming|pig\s*farming|animal\s*feed\s*manufactur(?:er|ing)|slaughterhouse|veterinary\s*clinic)\b/i, 
+    label: "Animals, Pets & Livestock" 
   },
   { 
     pattern: /\b(?:gambling|online\s*casino|casinos?|sports\s*betting|betting\s*site|slot\s*machines?|video\s*slots|poker\s*room|roulette|blackjack|baccarat|bookmaker|sportsbook|lottery|lotto|sports\s*wagering|jackpot\s*betting)\b/i, 
@@ -38,30 +70,6 @@ const RESTRICTED_PATTERNS = [
   { 
     pattern: /\b(?:cannabis|marijuana|weed|thc|cbd\s*oil|cbd\s*gummies|dispensary|recreational\s*weed|medical\s*cannabis|delta-?8|delta-?9|kratom|illicit\s*drugs|narcotics)\b/i, 
     label: "Cannabis & Controlled Substances" 
-  },
-  { 
-    pattern: /\b(?:prescription\s*drugs?|online\s*pharmacy|buy\s*viagra|buy\s*cialis|anabolic\s*steroids?|illicit\s*drugs?)\b/i, 
-    label: "Prescription Drugs & Pharmacy" 
-  },
-  { 
-    pattern: /\b(?:military\s*defence\s*contractor|armed\s*forces\s*equipment|tactical\s*armaments)\b/i, 
-    label: "Military & Tactical Armaments" 
-  },
-  { 
-    pattern: /\b(?:commercial\s*aviation\s*fleet|aircraft\s*manufacturer|naval\s*shipyard)\b/i, 
-    label: "Commercial Aviation / Naval Shipyard" 
-  },
-  { 
-    pattern: /\b(?:brewery|microbrewery|distillery|distilleries|liquor\s*store|liquor\s*shop|spirits\s*manufacturer|wine\s*producer|winery|wineries|vineyards?|craft\s*beer|whiskey|whisky|vodka|tequila|rum|gin|alcoholic\s*beverages?)\b/i, 
-    label: "Alcohol, Liquor & Breweries" 
-  },
-  { 
-    pattern: /\b(?:hospital\s*care|patient\s*care|dental\s*clinic|outpatient\s*clinic|surgery\s*center|veterinary\s*hospital|psychiatric\s*hospital)\b/i, 
-    label: "Hospitals & Patient Clinics" 
-  },
-  { 
-    pattern: /\b(?:pet\s*shop|puppy\s*mill|dog\s*breeding|cat\s*breeding|animal\s*breeding|livestock\s*farming|slaughterhouse|cattle\s*ranching)\b/i, 
-    label: "Livestock & Animal Breeding" 
   },
   { 
     pattern: /\b(?:counterfeit\s*goods|replica\s*watches?|fake\s*id|fake\s*passports?|hacking\s*services?|dark\s*web\s*market|payday\s*loans?|loan\s*shark)\b/i, 
@@ -1899,6 +1907,27 @@ WEBSITE STATUS QC RULES (Rule 1):
 - If the domain is expired / parked, mark "Domain Expired".
 - If the website failed to load or has no content, mark "Not Working".
 
+BUSINESS TYPE & RESTRICTED SITE QC RULES (Rule 2):
+- Select one from: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
+- RESTRICTED SITE CRITICAL QC RULE ("if restricted site means show me proper error message and dont fill any think"):
+  If the website's core business belongs to ANY prohibited/restricted category:
+  1. Adult Content, Pornography, Sex Shops, Erotica, Escort services
+  2. Weapons, Firearms, Ammunition, Knives (combat/tactical/hunting/swords), Explosives
+  3. Military & Defence Armaments, Defense contractors, Artillery, Combat gear
+  4. Aircraft, Commercial Aviation, Airlines, Aerospace manufacturing
+  5. Marine, Ships, Shipbuilding, Boat builders, Yachts, Naval vessels
+  6. Chemicals, Petrochemicals, Industrial chemicals, Agrochemicals, Toxic/hazardous chemicals
+  7. Medicine, Pharmaceuticals, Prescription drugs, Medical devices, Hospitals, Healthcare clinics, Surgery, Dental
+  8. Food products, Food manufacturing/processing, Bakeries, Catering, Restaurants, Cafes, Groceries, Meat/Dairy
+  9. Alcohol, Liquor, Breweries, Wineries, Distilleries, Wine, Beer, Spirits
+  10. Animals, Pets, Pet shops, Animal breeding, Livestock farming, Cattle, Poultry, Veterinary clinics
+  11. Gambling, Online casinos, Sports betting, Poker, Lotteries
+  12. Tobacco, Cigarettes, Cigars, Vaping, E-cigarettes, Nicotine
+  13. Cannabis, Marijuana, THC, CBD, Narcotics, Illicit drugs
+  THEN:
+  - Mark "businessType": "Restricted Site"
+  - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": companyProfile: "", companyName: "", countryName: "", companyAddress: "", state: "", city: "", emailId: "", secondaryEmailId: "", phoneNumber: "", numberOfProducts: "", productImages: "", numberOfProductDescriptions: ""!
+
 CRITICAL GLOBAL LANGUAGE REQUIREMENT (ALWAYS TARGET ENGLISH):
 - ALWAYS target and extract English language text for Company Name and Company Address.
 - NEVER return Chinese, Japanese, Korean, Arabic, Thai, Cyrillic, or other non-Latin characters for "companyName" or "companyAddress" when English or Romanized/Latin text is available anywhere on the website or in the physical address candidates.
@@ -2533,6 +2562,25 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   } else if (String(result.businessType || "").toLowerCase() === "restricted site") {
     result.isRestricted = true;
     result.restrictedReason = result.restrictedReason || "Restricted Site (AI Identified Prohibited Industry)";
+  }
+
+  // STRICT QC: "if restricted site means show me proper error message and dont fill any think show the error message"
+  // When a site is Restricted, clear ALL other fields so no data is filled or left over!
+  if (result.isRestricted) {
+    result.businessType = "Restricted Site";
+    result.companyProfile = "";
+    result.companyName = "";
+    result.countryName = "";
+    result.companyAddress = "";
+    result.state = "";
+    result.city = "";
+    result.emailId = "";
+    result.secondaryEmailId = "";
+    result.phoneNumber = "";
+    result.numberOfProducts = "";
+    result.productImages = "";
+    result.numberOfProductDescriptions = "";
+    return result;
   }
 
   // 3. Company Profile: if a real business About / Profile page exists, mark Available
