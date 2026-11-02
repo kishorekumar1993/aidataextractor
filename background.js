@@ -1199,6 +1199,10 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    - Taiwan – State Validation Rule:
      * Taipei City (capital) in address → State: Available
      * New Taipei City in address → State: NOT Available (New Taipei City is NOT the capital)
+     * Taichung City, Tainan City, Kaohsiung City, Taoyuan City, Keelung City, Hsinchu City, Chiayi City in address → State: NOT Available (these are cities, NOT states or capital)
+     * Districts (e.g. Nantun District, Banqiao District, Xitun District) in address → State: NOT Available (districts are city subdivisions, NOT states)
+     * Explicit County / Hsien (e.g. Changhua County, Miaoli County) or Capital (Taipei City) in address → State: Available
+     * Otherwise → State: NOT Available
    - Do not guess or infer. Only evaluate what is explicitly written in the address.
 
 2. CITY VALIDATION RULES – STRICT QC RULE:
@@ -1785,14 +1789,11 @@ const STATE_AND_PROVINCE_NAMES = [
   "selangor", "kuala lumpur", "penang", "pulau pinang", "johor", "perak", "sabah", "sarawak",
   "pahang", "terengganu", "kelantan", "kedah", "perlis", "negeri sembilan", "melaka", "malacca",
   "putrajaya", "labuan",
-  // China / Taiwan
+  // China (Provinces, Autonomous Regions, Direct-administered Municipalities)
   "guangdong", "zhejiang", "jiangsu", "shandong", "sichuan", "fujian", "hubei", "henan",
   "yunnan", "liaoning", "hebei", "shaanxi", "shanxi", "gansu", "qinghai", "xinjiang", "tibet",
   "inner mongolia", "jilin", "heilongjiang", "anhui", "jiangxi", "guizhou", "hainan", "ningxia",
   "guangxi", "chongqing", "shanghai", "beijing", "tianjin",
-  "changhua", "taoyuan", "hsinchu", "miaoli", "nantou", "yunlin", "chiayi", "pingtung",
-  "taitung", "hualien", "yilan", "penghu", "kinmen", "lienchiang", "keelung", "taichung",
-  "tainan", "kaohsiung",
   // Indonesia
   "jakarta", "bali", "java", "jawa", "jawa barat", "jawa tengah", "jawa timur", "banten",
   "sumatra", "sumatera", "sumatera utara", "sumatera barat", "sumatera selatan",
@@ -1893,20 +1894,31 @@ function hasStateInAddress(addr, country) {
   if (!addr) return false;
   const lower = addr.toLowerCase();
 
-  // Taiwan rule: New Taipei City is NOT the capital -> State: Not Available
-  if (isNewTaipeiCity(lower)) {
+  // Taiwan strict rule:
+  // - Capital: Taipei City / Taipei -> State: Available
+  // - Explicit County / Hsien / Province / 縣 / 省 (e.g. Changhua County) -> State: Available
+  // - Other cities (Taichung City, New Taipei City, Tainan City, Kaohsiung City, Taoyuan City, Keelung City, Hsinchu City, Chiayi City)
+  //   and Districts (Nantun District, Banqiao District, etc.) without County -> State: Not Available!
+  const isTaiwan = (country && /taiwan/i.test(country)) || /\b(taiwan|r\.?o\.?c\.?)\b/i.test(lower);
+  if (isTaiwan) {
+    if (isNewTaipeiCity(lower)) {
+      return /\b(county|hsien|province)\b/i.test(lower) || /[\u7701\u7e23\u53bf]/.test(addr);
+    }
+    if (isTaipeiCityCapital(lower)) {
+      return true;
+    }
+    if (/\b(county|hsien|province)\b/i.test(lower) || /[\u7701\u7e23\u53bf]/.test(addr)) {
+      return true;
+    }
     return false;
-  }
-  // Taipei City is the official capital -> State: Available
-  if (isTaipeiCityCapital(lower)) {
-    return true;
   }
 
   // Country official capital city exception
   if (hasCapitalInAddress(lower, country)) return true;
 
   // Generic and international administrative markers that confirm State, County, Province, or Prefecture is present
-  if (/\b(province|state|county|prefecture|hsien|district|region|territory|emirate|canton|department|governorate|oblast|voivodeship)\b/i.test(lower)) return true;
+  if (/\b(province|state|county|prefecture|hsien|region|territory|emirate|canton|department|governorate|oblast|voivodeship)\b/i.test(lower)) return true;
+  if (/\b(federal\s+district|district\s+of\s+columbia)\b/i.test(lower)) return true;
   if (/\bregional\s*council\b/i.test(lower)) return true;
 
   // County abbreviations (e.g. Co. Dublin, Co. Cork, Co. Kildare, Orange Co., Cook Co.)
