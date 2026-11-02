@@ -554,6 +554,16 @@ async function crawlWebsite(targetUrl) {
     extracted.phones = Array.from(new Set([...extracted.phones, ...contactParsed.phones]));
   }
 
+  // Prioritize English language candidates globally, followed by source priority ranking
+  addressCandidates.sort((a, b) => {
+    const aIsEng = (typeof a === "object" && a.isEnglish !== undefined) ? a.isEnglish : (/[a-zA-Z]{4,}/.test(typeof a === "object" ? a.raw : a));
+    const bIsEng = (typeof b === "object" && b.isEnglish !== undefined) ? b.isEnglish : (/[a-zA-Z]{4,}/.test(typeof b === "object" ? b.raw : b));
+    if (aIsEng !== bIsEng) return aIsEng ? -1 : 1;
+    const pA = typeof a === "object" ? a.priority : 6;
+    const pB = typeof b === "object" ? b.priority : 6;
+    return pA - pB;
+  });
+
   return {
     originalUrl: targetUrl,
     finalUrl,
@@ -579,13 +589,19 @@ function addAddressCandidate(targetList, rawText, source, isHq = false) {
   const cleaned = rawText
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
+    .replace(/^(?:address|add|addr|location|headquarters|head\s*office|registered\s*office|corporate\s*office|廠址|地址)\s*[:：\-–]?\s*/i, "")
     .replace(/\s+/g, " ")
     .trim();
 
   if (cleaned.length < 8) return;
-  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|number|no|#|\d{3,6})\b/i.test(cleaned)) {
+  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|number|no|#|\d{3,6})\b/i.test(cleaned) &&
+      !/[\u4e00-\u9fa5]{3,}/.test(cleaned)) {
     return;
   }
+
+  const latinLetters = (cleaned.match(/[a-zA-Z]/g) || []).length;
+  const nonLatinLetters = (cleaned.match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length;
+  const isEnglish = latinLetters >= 4 && latinLetters >= nonLatinLetters;
 
   // Priority ranking: headquarters (1) > contact (2) > profile (3) > jsonld (4) > map (5) > footer (6)
   let priority = 6;
@@ -595,13 +611,19 @@ function addAddressCandidate(targetList, rawText, source, isHq = false) {
   else if (source === "jsonld") priority = 4;
   else if (source === "map") priority = 5;
 
+  // Global English Priority: Deprioritize non-English candidates so English candidates rank first
+  if (!isEnglish) {
+    priority += 10;
+  }
+
   const exists = targetList.some(c => (typeof c === "string" ? c : c.raw).toLowerCase() === cleaned.toLowerCase());
   if (!exists) {
     targetList.push({
       raw: cleaned,
       source: source || "general",
       priority: priority,
-      isHeadquarters: isHq || source === "headquarters"
+      isHeadquarters: isHq || source === "headquarters",
+      isEnglish: isEnglish
     });
   }
 }
@@ -653,6 +675,7 @@ function discoverContactLinks(html, baseUrl) {
     if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile)\b/i.test(rawLower)) score += 6;
     if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us)\b/i.test(innerText)) score += 12;
     if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile)\b/i.test(innerText)) score += 8;
+    if (/\b(en|english)\b/i.test(innerText) || /[\/_](?:en|eng)\b/i.test(rawLower) || /[?&]lang=en/i.test(rawLower)) score += 7;
 
     if (score > 0) {
       try {
@@ -708,7 +731,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   if (!html) return;
 
   // 1. Explicit Headquarters / Head Office blocks (Priority 1)
-  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq)\s*[:\-–]?\s*<(?:p|div|span|address)[^>]*>([\s\S]*?)<\/(?:p|div|span|address)>/gi;
+  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|dd)>/gi;
   let hqm;
   while ((hqm = hqRegex.exec(html)) !== null) {
     const raw = stripHtml(hqm[1]);
@@ -717,8 +740,8 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     }
   }
 
-  // 2. <h1-6> with "address" followed by <p>, <div>, or <span>
-  const headingRegex = /<h[1-6][^>]*>[^<]*address[^<]*<\/h[1-6]>\s*<(?:p|div|span)[^>]*>([\s\S]*?)<\/(?:p|div|span)>/gi;
+  // 2. <h1-6> with "address" followed by <p>, <div>, <span>, <li>, <td>
+  const headingRegex = /<h[1-6][^>]*>[^<]*address[^<]*<\/h[1-6]>\s*<(?:p|div|span|li|td)[^>]*>([\s\S]*?)<\/(?:p|div|span|li|td)>/gi;
   let hm;
   while ((hm = headingRegex.exec(html)) !== null) {
     const raw = stripHtml(hm[1]);
@@ -737,11 +760,21 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     }
   }
 
-  // 4. Class or id containing "address"
-  const classAddrRegex = /<(?:div|p|span|section)[^>]+(?:class|id)=["'][^"']*address[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section)>/gi;
+  // 4. Class or id containing "address" or "addr" (including li, td, dd, article, section)
+  const classAddrRegex = /<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["'][^"']*(?:address|addr\b)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
   let cm;
   while ((cm = classAddrRegex.exec(html)) !== null) {
     const raw = stripHtml(cm[1]);
+    if (raw.length > 10) {
+      addAddressCandidate(targetList, raw, defaultSource, false);
+    }
+  }
+
+  // 5. Explicit label prefixes Add: / Address: / Addr: / Location:
+  const labelAddrRegex = /(?:(?:<li[^>]*>)|(?:<(?:div|p|span|td)[^>]*>)|(?:\b))\s*(?:address|add|addr)\s*[:：]\s*(?:<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  let lm;
+  while ((lm = labelAddrRegex.exec(html)) !== null) {
+    const raw = stripHtml(lm[1]);
     if (raw.length > 10) {
       addAddressCandidate(targetList, raw, defaultSource, false);
     }
@@ -760,15 +793,42 @@ function verifyAndSelectAddress(geminiAddr, candidates) {
     return geminiAddr;
   }
 
-  // Sort candidates by priority (1 = headquarters, 2 = contact, 3 = profile, 4 = jsonld, 5 = map, 6 = footer)
+  const getRaw = c => (typeof c === "object" ? c.raw : c);
+
+  // Sort candidates by English language first, then priority ranking
   const sorted = [...candidates].sort((a, b) => {
+    const aIsEng = (typeof a === "object" && a.isEnglish !== undefined)
+      ? a.isEnglish
+      : (/[a-zA-Z]{4,}/.test(getRaw(a)) && (getRaw(a).match(/[a-zA-Z]/g) || []).length >= (getRaw(a).match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length);
+    const bIsEng = (typeof b === "object" && b.isEnglish !== undefined)
+      ? b.isEnglish
+      : (/[a-zA-Z]{4,}/.test(getRaw(b)) && (getRaw(b).match(/[a-zA-Z]/g) || []).length >= (getRaw(b).match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length);
+
+    if (aIsEng !== bIsEng) return aIsEng ? -1 : 1;
+
     const pA = typeof a === "object" ? a.priority : 6;
     const pB = typeof b === "object" ? b.priority : 6;
     return pA - pB;
   });
 
-  const getRaw = c => (typeof c === "object" ? c.raw : c);
   const hqCandidate = sorted.find(c => typeof c === "object" && (c.isHeadquarters || c.source === "headquarters"));
+
+  // Check if Gemini returned non-English text while an English candidate is available on the website
+  const hasEnglishCand = sorted.some(c => {
+    const raw = getRaw(c);
+    return (raw.match(/[a-zA-Z]/g) || []).length >= 6;
+  });
+  const geminiIsNonEnglish = geminiAddr && ((geminiAddr.match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length > (geminiAddr.match(/[a-zA-Z]/g) || []).length);
+
+  if (hasEnglishCand && geminiIsNonEnglish) {
+    const topEng = sorted.find(c => {
+      const raw = getRaw(c);
+      return (raw.match(/[a-zA-Z]/g) || []).length >= 6;
+    });
+    if (topEng) {
+      return getRaw(topEng);
+    }
+  }
 
   if (!geminiAddr || geminiAddr.length < 5 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim())) {
     return getRaw(sorted[0]);
@@ -1078,6 +1138,13 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck) 
 
   const prompt = `
 You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
+
+CRITICAL GLOBAL LANGUAGE REQUIREMENT (ALWAYS TARGET ENGLISH):
+- ALWAYS target and extract English language text for Company Name and Company Address.
+- NEVER return Chinese, Japanese, Korean, Arabic, Thai, Cyrillic, or other non-Latin characters for "companyName" or "companyAddress" when English or Romanized/Latin text is available anywhere on the website or in the physical address candidates.
+- If the website displays information in both a local script (e.g. Traditional Chinese "馬興村彰馬街56-106號, 秀水鄉, 彰化縣") and English (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County, Taiwan"), you MUST ALWAYS CHOOSE THE ENGLISH VERSION.
+- Always output the English physical address with street abbreviations expanded (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County" -> "Number 56-106, Zhangma Street, Xiushui Township, Changhua County").
+- If the website title or logo contains both English and Chinese/local script (e.g. "FURCO Taiwan 宙辰"), take the English corporate name (e.g. "Furco Industrial Company Limited" or "Furco Taiwan Limited"). Do NOT include non-Latin characters in companyName.
 
 ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
 1. First Priority: Extract the Head Office / Headquarters physical address from the Contact Page, Company Profile, Get In Touch page, or Google Map place embed.
@@ -1861,8 +1928,9 @@ function hasStateInAddress(addr, country) {
   // Thailand: Changwat
   if (/\b(changwat)\b/i.test(lower)) return true;
 
-  // China / East Asia: Sheng, Xian, Zhou
+  // China / East Asia: Sheng, Xian, Zhou, 縣/县 (County), 省 (Province)
   if (/\b(sheng|xian|zhou)\b/i.test(lower)) return true;
+  if (/[\u7701\u7e23\u53bf]/.test(addr)) return true;
 
   return hasNamedStateOrProvince(lower);
 }
