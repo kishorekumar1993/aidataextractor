@@ -1124,10 +1124,10 @@ STATE & CITY RULES (CRITICAL QC - BASED STRICTLY ON EXTRACTED ADDRESS ONLY):
 Important: State and City MUST be evaluated STRICTLY based on the extracted address.
 
 1. State:
-   - Mark "Available" ONLY if any of the following administrative divisions is EXPLICITLY written in the extracted address:
-     * State, Province, County, Prefecture, Hsien (Taiwan County), Territory, Emirate, Canton, Region, Oblast, Voivodeship, Department, Governorate
-     * Named examples: Victoria, New South Wales, Queensland, Texas, California, Ontario, Quebec, Gauteng, Maharashtra, Karnataka, Tamil Nadu, Selangor, Penang, Johor, Guangdong, Jiangsu, Gyeonggi, Abu Dhabi, Dubai, Île-de-France, Bavaria, Yorkshire, Lancashire, etc.
-   - ALSO Mark "Available" if a country's official capital city is in the address (e.g. Taipei City = capital of Taiwan, London = capital of England, Washington D.C. = capital of USA).
+   - Mark "Available" if ANY of the following administrative divisions is written in the extracted address:
+     * State, Province, County (or Co.), Prefecture, Hsien (Taiwan County), Bundesland / Land (Germany), Regione / Provincia (Italy), Provinsi / Propinsi (Indonesia), Negeri / Wilayah (Malaysia), Changwat (Thailand), Sheng / Xian / Zhou (China), Territory, Emirate, Canton, Region, Regional Council, Oblast, Voivodeship, Department, Governorate
+     * Named examples across priority countries: Victoria, New South Wales, Queensland, Texas, California, Ontario, Quebec, Gauteng, Maharashtra, Karnataka, Tamil Nadu, Selangor, Penang, Johor, Guangdong, Jiangsu, Gyeonggi, Abu Dhabi, Dubai, Île-de-France, Bavaria, Yorkshire, Lancashire, Dublin, Cork, Kildare, Galway, Lombardia, Brescia, München, etc.
+   - ALSO Mark "Available" if a country's official capital city is in the address (e.g. Taipei City = capital of Taiwan, London = capital of England, Washington D.C. = capital of USA, Berlin = Germany, Rome = Italy, Dublin = Ireland, Bangkok = Thailand, Jakarta = Indonesia, Beijing = China, Kuala Lumpur = Malaysia).
    - If the address only contains a street, suburb, locality, or industrial area — mark "Not Available".
    - Taiwan – State Validation Rule:
      * Taipei City (capital) in address → State: Available
@@ -1136,12 +1136,20 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
 
 2. CITY VALIDATION RULES – STRICT QC RULE:
    The city field MUST be marked "Available" if ANY of the following is true:
-   a) The official website's address explicitly identifies a qualifying Town, Township, District, Municipality, Borough, or City (e.g. "Longshan Town", "Xiushui Township", "Banqiao District", "Ekurhuleni Municipality", "Cixi City").
-   b) The address contains a recognized city / town / municipal name (e.g. Chicago, Melbourne, Boston, San Francisco, Cape Town, Manchester, Johor Bahru, Shenzhen).
-   c) UNITED KINGDOM: recognized UK cities, towns, and London boroughs evaluate as "Available".
+   a) The official website's address explicitly identifies a qualifying City (e.g. "Cixi City", "Kansas City", "City of London"), Town (e.g. "Longshan Town"), Township (e.g. "Xiushui Township"), District (e.g. "Banqiao District"), Municipality / Metropolitan Municipality (e.g. "Ekurhuleni Municipality"), Borough, Shire, or Village.
+   b) The address contains local administrative city designations across priority countries:
+      - Germany: Stadt, Gemeinde, Marktgemeinde, Markt, Bezirk, Ortsteil
+      - Italy: Comune, Municipio, Città, Distretto
+      - Indonesia: Kota, Kabupaten, Kecamatan
+      - Thailand: Thesaban, Amphoe, Amphur, Khet, Mueang, Muang
+      - Malaysia: Bandar, Daerah, Mukim, Pekan, Majlis Perbandaran
+      - India: Taluk, Taluka, Tehsil, Tahsil, Mandal, Nagar Palika, Nagar Nigam
+   c) The address contains a recognized city / town / municipal name (e.g. Chicago, Melbourne, Boston, San Francisco, Cape Town, Manchester, Johor Bahru, Shenzhen).
+   d) UNITED KINGDOM: recognized UK cities, towns, and London boroughs evaluate as "Available".
    STRICTLY MARK "Not Available" FOR:
    - Suburb / locality / neighborhood only (e.g. Sandton, Rosebank) with no city/town/district.
    - Industrial Area / Business Park only, with no city/town/district.
+   - Street names containing the word "City" (e.g. "City Road", "City Street", "City Avenue") do NOT qualify as a city.
    - New Taipei City: Must remain "Not Available" unless a qualifying administrative area (e.g. Banqiao District) is separately identified in the address.
 
 PRODUCT, IMAGE & DESCRIPTION QC RULES (ACCURATELY BASED ON SITE):
@@ -1786,7 +1794,23 @@ const STATE_AND_PROVINCE_NAMES = [
   "veracruz", "chihuahua", "sonora", "coahuila", "tamaulipas", "michoacan", "oaxaca",
   "sao paulo", "rio de janeiro", "minas gerais", "bahia", "parana", "rio grande do sul",
   "pernambuco", "ceara", "para", "santa catarina", "goias", "maranhao", "amazonas",
-  "ontario", "gauteng"
+  "ontario", "gauteng",
+  // Ireland (26 counties of the Republic of Ireland)
+  "dublin", "cork", "galway", "kildare", "meath", "limerick", "kerry", "wicklow",
+  "clare", "tipperary", "wexford", "donegal", "louth", "mayo", "kilkenny", "waterford",
+  "westmeath", "laois", "offaly", "cavan", "sligo", "roscommon", "monaghan", "carlow",
+  "longford", "leitrim",
+  // Italy major provinces
+  "milano", "roma", "torino", "brescia", "bergamo", "firenze", "bologna", "verona",
+  "vicenza", "treviso", "padova", "modena", "reggio emilia", "monza", "varese", "como",
+  "salerno", "bari", "palermo", "catania",
+  // Thailand additional provinces
+  "ayutthaya", "krabi", "samut sakhon", "nakhon pathom", "chachoengsao", "surat thani",
+  "chiang rai", "lampang", "ratchaburi", "kanchanaburi", "phitsanulok",
+  // Indonesia additional provinces
+  "kalimantan timur", "kalimantan barat", "kalimantan selatan", "kalimantan tengah",
+  "kalimantan utara", "sulawesi selatan", "sulawesi utara", "sulawesi tengah",
+  "sulawesi tenggara", "sulawesi barat", "kepulauan riau", "bangka belitung"
 ];
 
 function hasNamedStateOrProvince(lower) {
@@ -1814,8 +1838,31 @@ function hasStateInAddress(addr, country) {
   // Country official capital city exception
   if (hasCapitalInAddress(lower, country)) return true;
 
-  // Generic administrative markers that confirm a state/region is present
-  if (/\b(province|state|county|prefecture|hsien|district|region|territory|emirate|canton|department|governorate|oblast|voivodeship|bundesland|regione|regi[oó]n|regi[aã]o|wilayah|negeri)\b/i.test(lower)) return true;
+  // Generic and international administrative markers that confirm State, County, Province, or Prefecture is present
+  if (/\b(province|state|county|prefecture|hsien|district|region|territory|emirate|canton|department|governorate|oblast|voivodeship)\b/i.test(lower)) return true;
+  if (/\bregional\s*council\b/i.test(lower)) return true;
+
+  // County abbreviations (e.g. Co. Dublin, Co. Cork, Co. Kildare, Orange Co., Cook Co.)
+  if (/\bco\.?\s+[a-z]{3,}\b/i.test(lower) || /\b[a-z]{3,}\s+co\.?\b(?=[,\s]|$)/i.test(lower)) return true;
+
+  // Non-English state/province/prefecture/county markers across the 16 priority countries
+  // Germany: Bundesland, Land, Landkreis, Kreis, Regierungsbezirk
+  if (/\b(bundesland|landkreis|kreis|regierungsbezirk)\b/i.test(lower)) return true;
+
+  // Italy: Regione, Provincia, Prov.
+  if (/\b(regione|provincia)\b/i.test(lower) || /\bprov\.?\s*(?:di\s+)?[a-z]+/i.test(lower)) return true;
+
+  // Indonesia: Provinsi, Propinsi
+  if (/\b(provinsi|propinsi)\b/i.test(lower)) return true;
+
+  // Malaysia: Negeri, Wilayah
+  if (/\b(negeri|wilayah)\b/i.test(lower)) return true;
+
+  // Thailand: Changwat
+  if (/\b(changwat)\b/i.test(lower)) return true;
+
+  // China / East Asia: Sheng, Xian, Zhou
+  if (/\b(sheng|xian|zhou)\b/i.test(lower)) return true;
 
   return hasNamedStateOrProvince(lower);
 }
@@ -1940,9 +1987,44 @@ function hasRecognizedPlaceName(cleanAddr, names) {
   return false;
 }
 
+// City qualifying administrative designations across all 16 priority countries
+const CITY_QUALIFIERS = [
+  // English administrative designations
+  "town", "township", "district", "municipality", "metropolitan\\s*municipality",
+  "local\\s*municipality", "district\\s*municipality", "borough", "shire", "village",
+  // Non-English administrative designations across the 16 priority countries
+  // Germany / Austria / Switzerland
+  "stadt", "gemeinde", "marktgemeinde", "markt", "bezirk", "ortsteil",
+  // Italy
+  "comune", "municipio", "citt[aà]", "distretto",
+  // France / Quebec / Belgium
+  "ville", "municipalit[eé]", "arrondissement",
+  // Spain / Mexico
+  "ciudad", "distrito",
+  // Indonesia
+  "kota", "kabupaten", "kecamatan",
+  // Thailand
+  "thesaban", "amphoe", "amphur", "khet", "mueang", "muang",
+  // Malaysia
+  "bandar", "daerah", "mukim", "pekan", "majlis\\s*perbandaran",
+  // India
+  "taluk", "taluka", "tehsil", "tahsil", "mandal", "nagar\\s*palika", "nagar\\s*nigam"
+];
+
+function hasExplicitCityWord(cleanAddr) {
+  // Matches "X City" or "City of X" or standalone "City", excluding street names like "City Road"
+  const streetSuffix = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|highway|center|centre|hall|rd|st|ave|dr|ln|blvd|hwy|plz|plaza)\\b";
+  const streetPrefix = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|highway)\\s+";
+  const cityPattern = new RegExp(`(?<!${streetPrefix})\\bcity\\b(?!${streetSuffix})`, "i");
+  return cityPattern.test(cleanAddr);
+}
+
 function hasCityDesignation(addr) {
-  const stripped = (addr || "").replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
-  return /\b(township|town|district|municipality|metropolitan\s*municipality|borough|city|kabupaten|kota|amphoe|amphur|comune|gemeinde|municipio)\b/i.test(stripped);
+  if (!addr) return false;
+  const stripped = addr.replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
+  if (hasExplicitCityWord(stripped)) return true;
+  const qualRegex = new RegExp(`\\b(?:${CITY_QUALIFIERS.join("|")})\\b`, "i");
+  return qualRegex.test(stripped);
 }
 
 function addressLooksLikeSuburbOnly(cleanAddr) {
@@ -1974,25 +2056,19 @@ function evaluateCityQC(address, country) {
   // New Taipei City rule: Must remain Not Available unless a qualifying administrative area is separately identified
   if (isNewTaipeiCity(cleanAddr)) {
     const addrWithoutNTC = cleanAddr.replace(/\bnew\s*taipei(\s*city)?\b/gi, " ");
-    if (hasCityDesignation(addrWithoutNTC) || hasRecognizedPlaceName(addrWithoutNTC, RECOGNIZED_TOWNS)) {
+    if (hasCityDesignation(addrWithoutNTC)) {
       return "Available";
     }
     return "Not Available";
   }
 
+  // 1. Explicit qualifying City, Town, Township, District, Municipality, or local language designation
   if (hasCityDesignation(cleanAddr)) {
     return "Available";
   }
 
+  // 2. UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
   if (isUkLocation(cleanAddr, country) && hasUkCityOrTown(cleanAddr)) {
-    return "Available";
-  }
-
-  if (addressLooksLikeSuburbOnly(cleanAddr)) {
-    return "Not Available";
-  }
-
-  if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
     return "Available";
   }
 
@@ -2572,7 +2648,8 @@ function ensureCommaBeforeState(addr) {
     "Lombardia", "Lazio", "Veneto", "Piemonte", "Emilia-Romagna", "Toscana", "Campania", "Sicilia", "Puglia", "Liguria",
     "Marche", "Abruzzo", "Friuli Venezia Giulia", "Trentino-Alto Adige", "Umbria", "Sardegna", "Calabria", "Basilicata", "Molise", "Valle d'Aosta",
     "Baden-Württemberg", "Bayern", "Brandenburg", "Hessen", "Mecklenburg-Vorpommern", "Niedersachsen", "Nordrhein-Westfalen", "Rheinland-Pfalz", "Saarland", "Sachsen", "Sachsen-Anhalt", "Schleswig-Holstein", "Thüringen",
-    "Selangor", "Johor", "Penang", "Perak", "Kedah", "Pahang", "Negeri Sembilan", "Melaka", "Terengganu", "Kelantan", "Sarawak", "Sabah", "Perlis", "Kuala Lumpur"
+    "Selangor", "Johor", "Penang", "Perak", "Kedah", "Pahang", "Negeri Sembilan", "Melaka", "Terengganu", "Kelantan", "Sarawak", "Sabah", "Perlis", "Kuala Lumpur",
+    "Dublin", "Cork", "Galway", "Kildare", "Meath", "Limerick", "Kerry", "Wicklow", "Clare", "Tipperary", "Wexford", "Donegal"
   ];
 
   let res = addr;
