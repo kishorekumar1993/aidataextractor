@@ -1959,12 +1959,15 @@ BUSINESS TYPE & RESTRICTED SITE QC RULES (Rule 2):
 CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALWAYS TARGET ENGLISH & TITLE CASE):
 - CRITICAL CAPITALIZATION QC RULE ("All words come start with Captial make it"):
   Every word in "companyName", "companyAddress", and "countryName" MUST start with a Capital letter (Title Case).
-  E.g. "United States Of America" (with capital 'Of'), "Number 46 Market Hill, Maldon, Essex", "Empire West Incorporated", "Danzer UK Limited", "City Of Industry, California".
+  E.g. "United States Of America" (with capital 'Of'), "46 Market Hill, Maldon, Essex", "Empire West Incorporated", "Danzer UK Limited", "City Of Industry, California".
   Do NOT leave small words like "of", "and", "in" in lowercase. Capitalize every single word!
+- CRITICAL "NUMBER" EXPANSION RULE ("if No come only expand and do with out coming dont put blankly number"):
+  * ONLY expand to "Number" if the original address explicitly contains "No.", "No", "NO.", "Nos.", "Nº", or "#" (e.g. "No. 56-106, Zhangma St." -> "Number 56-106, Zhangma Street", "NO. 12" -> "Number 12").
+  * If the original address does NOT contain "No" or "No." (e.g. it is just "18 Kuang Fu North Road", "40 Sarah Street", "12 Stephen Road", "46 Market Hill"), DO NOT put "Number"! Output "18 Kuang Fu North Road" (NEVER put "Number" if "No" was not in the original text!).
 - ALWAYS target and extract English language text for Company Name and Company Address.
 - NEVER return Chinese, Japanese, Korean, Arabic, Thai, Cyrillic, or other non-Latin characters for "companyName" or "companyAddress" when English or Romanized/Latin text is available anywhere on the website or in the physical address candidates.
 - If the website displays information in both a local script (e.g. Traditional Chinese "馬興村彰馬街56-106號, 秀水鄉, 彰化縣") and English (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County, Taiwan"), you MUST ALWAYS CHOOSE THE ENGLISH VERSION.
-- Always output the English physical address with street abbreviations expanded (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County" -> "Number 56-106, Zhangma Street, Xiushui Township, Changhua County").
+- Always output the English physical address with street abbreviations expanded (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County" -> "Number 56-106, Zhangma Street, Xiushui Township, Changhua County", BUT "18 Kuang Fu North Road" -> "18 Kuang Fu North Road" WITHOUT adding "Number").
 - If the website title or logo contains both English and Chinese/local script (e.g. "FURCO Taiwan 宙辰"), take the English corporate name (e.g. "Furco Industrial Company Limited" or "Furco Taiwan Limited"). Do NOT include non-Latin characters in companyName.
 - STRICT HEADQUARTERS PRIORITY: Candidate #1 is the highest-ranked location. If candidate #1 is marked HEADQUARTERS / HEAD OFFICE, you MUST select that headquarters address. DO NOT choose a branch, factory, warehouse, or showroom address if a headquarters address exists.
 - If the website is a Single Page Application (isDynamicSpa: ${crawlData.isDynamicSpa ? "YES" : "No"}) and no address candidate was found in static HTML, inspect the site metadata, title, and body text. If no physical address exists anywhere on the site, return "Not Available" (NEVER invent or hallucinate addresses!).
@@ -2749,6 +2752,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
       // Ensure comma separates city/suburb from state/province
       addr = ensureCommaBeforeState(addr);
+
+      // Ensure "Number" is ONLY present if "No." / "No" / "#" / "Nº" was in the original raw address evidence
+      // Rule: "if No come only expand and do with out coming dont put blankly number"
+      const allAddressEvidence = (rawSource || "") + " " + (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ") + " " + (crawlData.bodyText || "");
+      addr = stripBlindlyAddedNumber(addr, allAddressEvidence);
 
       // Clean up spaces, commas, and ensure clean formatting
       addr = addr.replace(/\s+,/g, ",");
@@ -3921,6 +3929,21 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/[,;.]+/g, " ");
   n = n.replace(/\s+/g, " ").trim();
   return n;
+}
+
+/**
+ * Ensures "Number" is ONLY present if "No.", "No", "NO.", "Nos.", "Nº", or "#" was in the original raw address evidence.
+ * Rule: "if No come only expand and do with out coming dont put blankly number"
+ */
+function stripBlindlyAddedNumber(addr, rawEvidence = "") {
+  if (!addr || !/\bNumber\s+\d+/i.test(addr)) return addr;
+  return addr.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
+    const rawRegex = new RegExp('(?:\\b(?:no|nos|nº|numero|num|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b', 'i');
+    if (rawEvidence && rawRegex.test(rawEvidence)) {
+      return match;
+    }
+    return digits;
+  });
 }
 
 function expandAddressAndStateAbbreviations(addr, country = "") {
