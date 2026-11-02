@@ -730,22 +730,6 @@ function extractEmbeddedScriptAddresses(html, targetList) {
     }
   }
 }
-      const processItem = item => {
-        if (!item || typeof item !== "object") return;
-        if (item.address && typeof item.address === "object") {
-          const a = item.address;
-          const parts = [a.streetAddress, a.addressLocality, a.addressRegion, a.postalCode, a.addressCountry].filter(Boolean);
-          if (parts.length >= 2) {
-            addAddressCandidate(targetList, parts.join(", "), "jsonld", false);
-          }
-        }
-      };
-      if (Array.isArray(data)) data.forEach(processItem);
-      else if (data["@graph"] && Array.isArray(data["@graph"])) data["@graph"].forEach(processItem);
-      else processItem(data);
-    } catch (e) { }
-  }
-}
 
 /**
  * Discovers contact and about page URLs by scoring anchor text and href.
@@ -1309,6 +1293,14 @@ function detectRestrictedKeywords(text) {
 async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
+  const formattedAddressEvidence = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
+    ? crawlData.addressCandidates.map((c, idx) => {
+        const typeLabel = c.isHeadquarters ? "HEADQUARTERS / HEAD OFFICE" : (c.locationType ? c.locationType.toUpperCase() : "LOCATION");
+        const langLabel = c.isEnglish ? "English" : "Local Language";
+        return `${idx + 1}. [${typeLabel} (${langLabel}, Source: ${c.source})]: ${c.raw}`;
+      }).join("\n")
+    : ((crawlData.detectedAddresses || []).join("\n") || "(No physical address candidates extracted from static HTML)");
+
   const prompt = `
 You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
 
@@ -1318,6 +1310,8 @@ CRITICAL GLOBAL LANGUAGE REQUIREMENT (ALWAYS TARGET ENGLISH):
 - If the website displays information in both a local script (e.g. Traditional Chinese "馬興村彰馬街56-106號, 秀水鄉, 彰化縣") and English (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County, Taiwan"), you MUST ALWAYS CHOOSE THE ENGLISH VERSION.
 - Always output the English physical address with street abbreviations expanded (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County" -> "Number 56-106, Zhangma Street, Xiushui Township, Changhua County").
 - If the website title or logo contains both English and Chinese/local script (e.g. "FURCO Taiwan 宙辰"), take the English corporate name (e.g. "Furco Industrial Company Limited" or "Furco Taiwan Limited"). Do NOT include non-Latin characters in companyName.
+- STRICT HEADQUARTERS PRIORITY: Candidate #1 is the highest-ranked location. If candidate #1 is marked HEADQUARTERS / HEAD OFFICE, you MUST select that headquarters address. DO NOT choose a branch, factory, warehouse, or showroom address if a headquarters address exists.
+- If the website is a Single Page Application (isDynamicSpa: ${crawlData.isDynamicSpa ? "YES" : "No"}) and no address candidate was found in static HTML, inspect the site metadata, title, and body text. If no physical address exists anywhere on the site, return "Not Available" (NEVER invent or hallucinate addresses!).
 
 ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
 1. First Priority: Extract the Head Office / Headquarters physical address from the Contact Page, Company Profile, Get In Touch page, or Google Map place embed.
@@ -1518,8 +1512,8 @@ Product Descriptions Detected: ${crawlData.detectedDescCount}
 DEDICATED COMPANY PROFILE / ABOUT US CONTENT:
 ${crawlData.profilePageText || "(No dedicated company profile page text found)"}
 
-PHYSICAL ADDRESS CANDIDATES FOUND ON WEBSITE (PRIMARY EVIDENCE):
-${(crawlData.detectedAddresses || []).join("\n") || "(None extracted via map links)"}
+PHYSICAL ADDRESS CANDIDATES FOUND ON WEBSITE (PRIMARY EVIDENCE IN PRIORITY ORDER):
+${formattedAddressEvidence}
 
 CONTACT PAGE / PROFILE CONTENT:
 ${crawlData.contactPageText || "(No separate contact page text found)"}
@@ -1650,8 +1644,11 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     }
   }
 
-  const address = (crawlData.detectedAddresses && crawlData.detectedAddresses.length > 0)
-    ? crawlData.detectedAddresses[0]
+  const topCandidate = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
+    ? crawlData.addressCandidates[0]
+    : null;
+  const address = topCandidate
+    ? (typeof topCandidate === "object" ? topCandidate.raw : topCandidate)
     : extractLikelyAddress(crawlData.contactPageText || crawlData.footerText || text);
 
   const country = detectCountryFromAddress(address);
@@ -1741,14 +1738,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
   let compName = decodeHtmlEntities((result.companyName || "").trim());
+  compName = compName.replace(/['’`]\s*s\b/gi, "'s");
 
   // Prefer the fuller official name (copyright / JSON-LD) when it carries the legal suffix
   compName = preferOfficialCompanyName(compName, crawlData);
   compName = decodeHtmlEntities(compName);
+  compName = compName.replace(/['’`]\s*s\b/gi, "'s");
 
   // Restore legal suffixes (Ltd, Inc, Sdn Bhd, etc.) from footer/copyright evidence
   compName = restoreLegalSuffixIfOmitted(compName, crawlData);
   compName = decodeHtmlEntities(compName);
+  compName = compName.replace(/['’`]\s*s\b/gi, "'s");
 
   // Expand abbreviations to full form and clean brackets
   compName = expandCompanyAbbreviations(compName, country);
@@ -1759,50 +1759,62 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.companyName = compName;
 
   // 6. Company Address: Compare Gemini's answer against website candidates, prioritizing Headquarters
-  let addr = verifyAndSelectAddress(result.companyAddress, crawlData.addressCandidates, crawlData);
+  const verifiedResult = verifyAndSelectAddress(result.companyAddress, crawlData.addressCandidates, crawlData);
+  let addr = (typeof verifiedResult === "object" && verifiedResult !== null && verifiedResult.address !== undefined)
+    ? verifiedResult.address
+    : verifiedResult;
+  const selectedCandidate = (typeof verifiedResult === "object" && verifiedResult !== null)
+    ? verifiedResult.selectedCandidate
+    : null;
 
   if (addr && addr !== "Not Available") {
-    addr = addr.replace(/[\(\)\[\]\{\}]/g, " ");
+    // Immediate rejection of Cloudflare email protection strings
+    if (/\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(addr)) {
+      addr = "Not Available";
+    } else {
+      addr = addr.replace(/[\(\)\[\]\{\}]/g, " ");
 
-    if (compName && addr.toLowerCase().startsWith(compName.toLowerCase())) {
-      addr = addr.slice(compName.length).trim();
-    }
-
-    // Expand street and state/province abbreviations (e.g. St -> Street, VIC -> Victoria, NSW -> New South Wales)
-    addr = expandAddressAndStateAbbreviations(addr, country);
-
-    // If raw website address had a state that got dropped by AI, restore it!
-    const rawSource = (crawlData.detectedAddresses && crawlData.detectedAddresses.slice(0, 5).join(" ")) || "";
-    if (rawSource) {
-      addr = restoreStateIfOmitted(addr, rawSource, country);
-    }
-
-    if (country && country.length > 2) {
-      const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
-      addr = addr.replace(countryRegex, " ");
-      if (/united\s*states/i.test(country)) {
-        addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.)\b/gi, " ");
+      if (compName && addr.toLowerCase().startsWith(compName.toLowerCase())) {
+        addr = addr.slice(compName.length).trim();
       }
+
+      // Expand street and state/province abbreviations (e.g. St -> Street, VIC -> Victoria, NSW -> New South Wales)
+      addr = expandAddressAndStateAbbreviations(addr, country);
+
+      // If raw website address had a state that got dropped by AI, restore it!
+      // CRITICAL FIX: Restore missing state ONLY from the selected candidate's raw text (NEVER mix multiple addresses)
+      const rawSource = selectedCandidate ? (typeof selectedCandidate === "object" ? selectedCandidate.raw : selectedCandidate) : "";
+      if (rawSource) {
+        addr = restoreStateIfOmitted(addr, rawSource, country);
+      }
+
+      if (country && country.length > 2) {
+        const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
+        addr = addr.replace(countryRegex, " ");
+        if (/united\s*states/i.test(country)) {
+          addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.)\b/gi, " ");
+        }
+      }
+      addr = addr.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china)\b/gi, " ");
+
+      // Remove international postal codes carefully without stripping street numbers
+      addr = removePostalCodesCarefully(addr);
+
+      // Ensure comma separates city/suburb from state/province
+      addr = ensureCommaBeforeState(addr);
+
+      // Clean up spaces, commas, and ensure clean formatting
+      addr = addr.replace(/\s+,/g, ",");
+      addr = addr.replace(/,\s*,/g, ", ");
+      addr = addr.replace(/,\s*/g, ", ");
+      addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+      addr = addr.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
+      addr = addr.replace(/\s+/g, " ");
+      addr = toTitleCase(addr);
+
+      // Address ending MUST NOT have trailing comma or point/period
+      addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
     }
-    addr = addr.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china)\b/gi, " ");
-
-    // Remove international postal codes carefully without stripping street numbers
-    addr = removePostalCodesCarefully(addr);
-
-    // Ensure comma separates city/suburb from state/province
-    addr = ensureCommaBeforeState(addr);
-
-    // Clean up spaces, commas, and ensure clean formatting
-    addr = addr.replace(/\s+,/g, ",");
-    addr = addr.replace(/,\s*,/g, ", ");
-    addr = addr.replace(/,\s*/g, ", ");
-    addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
-    addr = addr.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
-    addr = addr.replace(/\s+/g, " ");
-    addr = toTitleCase(addr);
-
-    // Address ending MUST NOT have trailing comma or point/period
-    addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
   } else {
     addr = "Not Available";
   }
@@ -3076,6 +3088,10 @@ function removePostalCodesCarefully(addr) {
   if (!addr) return "";
   let a = addr;
 
+  // Leading postal code (e.g. "30543新竹縣..." or "504 Changhua...")
+  a = a.replace(/^\s*\b\d{4,6}\b[\s,]+/g, "");
+  a = a.replace(/^\s*(\d{3,6})(?=[\u4e00-\u9fa5])/g, "");
+
   // 1. UK Postcodes (e.g. SW1A 1AA, EC1A 1BB, W1A 0AX, M1 1AE)
   a = a.replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/gi, " ");
 
@@ -3207,29 +3223,34 @@ function cleanPhoneNumber(rawPhone, country) {
 function toTitleCase(str) {
   if (!str) return "";
   const upperAcronyms = new Set(["USA", "UK", "UAE", "M", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS"]);
-  return str.replace(/\b\w+/g, function (word, offset, fullStr) {
+  let s = str.replace(/['’`]\s*s\b/gi, "'s");
+  return s.replace(/\b\w+/g, function (word, offset, fullStr) {
     if (offset > 0 && fullStr[offset - 1] === "'" && word.toLowerCase() === "s") {
       return "s";
     }
     const upper = word.toUpperCase();
     if (upperAcronyms.has(upper)) return upper;
-    if (word.toLowerCase() === "of" && /united\s+states/i.test(str)) return "of";
+    if (word.toLowerCase() === "of" && /united\s+states/i.test(s)) return "of";
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });
 }
 
 function decodeHtmlEntities(str) {
   if (!str || typeof str !== "string") return "";
-  return str
-    .replace(/&#(\d+);?/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
-    .replace(/&#x([0-9a-fA-F]+);?/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/&apos;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/\u00A0/g, " ");
+  let res = str;
+  for (let i = 0; i < 2; i++) {
+    res = res
+      .replace(/&#(\d+);?/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+      .replace(/&#x([0-9a-fA-F]+);?/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/&apos;/gi, "'")
+      .replace(/&quot;/gi, '"')
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\u00A0/g, " ");
+  }
+  return res;
 }
 
 /**
