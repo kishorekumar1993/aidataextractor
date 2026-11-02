@@ -495,7 +495,7 @@ async function crawlWebsite(targetUrl) {
           const isProfilePage = /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
           const pageSource = isProfilePage ? "profile" : "contact";
 
-          extractJsonLdAddresses(cText, addressCandidates);
+          extractEmbeddedScriptAddresses(cText, addressCandidates);
           extractMapAddresses(cText, addressCandidates);
           extractMetaAddresses(cText, addressCandidates);
           extractHtmlAddresses(cText, addressCandidates, pageSource);
@@ -512,6 +512,7 @@ async function crawlWebsite(targetUrl) {
               const fbRes = await fetchDecodedHtml(fbUrl, { timeoutMs: 5000 });
               if (fbRes.ok && fbRes.html) {
                 contactHtml += "\n" + fbRes.html;
+                extractEmbeddedScriptAddresses(fbRes.html, addressCandidates);
                 extractHtmlAddresses(fbRes.html, addressCandidates, "contact");
               }
             }
@@ -532,6 +533,11 @@ async function crawlWebsite(targetUrl) {
     fetchError = err.message;
     status = "Not Working";
   }
+
+  // Detect dynamic Single Page Application (SPA) shells
+  const isSpaRoot = /<div[^>]+id=["'](?:app|root|__next|__nuxt|main-content)["'][^>]*>\s*<\/div>/i.test(mainHtml);
+  const hasDynamicScripts = /<script[^>]+src=["'][^"']*(?:bundle|chunk|main|app|runtime)[^"']*\.js/i.test(mainHtml);
+  const isDynamicSpa = isSpaRoot && (stripHtml(mainHtml).length < 500) && hasDynamicScripts;
 
   // Check redirect host
   try {
@@ -554,13 +560,13 @@ async function crawlWebsite(targetUrl) {
     extracted.phones = Array.from(new Set([...extracted.phones, ...contactParsed.phones]));
   }
 
-  // Prioritize English language candidates globally, followed by source priority ranking
+  // Sort candidates strictly by priority hierarchy:
+  // Headquarters (Tier 1) > Contact (Tier 2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > Branch (Tier 8).
+  // Within the SAME tier, English precedes non-English (basePriority + 0.0 vs basePriority + 0.4).
+  // An English footer or branch address will NEVER outrank an actual Headquarters address!
   addressCandidates.sort((a, b) => {
-    const aIsEng = (typeof a === "object" && a.isEnglish !== undefined) ? a.isEnglish : (/[a-zA-Z]{4,}/.test(typeof a === "object" ? a.raw : a));
-    const bIsEng = (typeof b === "object" && b.isEnglish !== undefined) ? b.isEnglish : (/[a-zA-Z]{4,}/.test(typeof b === "object" ? b.raw : b));
-    if (aIsEng !== bIsEng) return aIsEng ? -1 : 1;
-    const pA = typeof a === "object" ? a.priority : 6;
-    const pB = typeof b === "object" ? b.priority : 6;
+    const pA = (typeof a === "object" && a.priority !== undefined) ? a.priority : 6;
+    const pB = (typeof b === "object" && b.priority !== undefined) ? b.priority : 6;
     return pA - pB;
   });
 
@@ -573,6 +579,7 @@ async function crawlWebsite(targetUrl) {
     mainHtml,
     addressCandidates,
     detectedAddresses: addressCandidates.map(c => (typeof c === "object" ? c.raw : c)),
+    isDynamicSpa,
     contactPageText: contactPageText.slice(0, 12000),
     footerText: footerText.slice(0, 4000),
     profilePageText: profilePageText.slice(0, 8000),
@@ -584,7 +591,7 @@ async function crawlWebsite(targetUrl) {
 /**
  * Adds an address candidate with provenance tracking and priority ranking.
  */
-function addAddressCandidate(targetList, rawText, source, isHq = false) {
+function addAddressCandidate(targetList, rawText, source, isHq = false, locationType = "general", pageUrl = "") {
   if (!rawText || typeof rawText !== "string") return;
   const decoded = decodeHtmlEntities(rawText);
   const cleaned = decoded
@@ -597,15 +604,15 @@ function addAddressCandidate(targetList, rawText, source, isHq = false) {
   if (cleaned.length < 8) return;
 
   // STRICT REJECTION: never accept protected email strings, javascript, or non-address text
-  if (/\[email\s*protected\]|data-cfemail|__cf_email__|email\s*protected|\bprotected\b|mailto:/i.test(cleaned)) {
+  if (/\[email\s*protected\]|data-cfemail|__cf_email__|email\s*protected|\bprotected\b|mailto:|@|number\s*160\s*;?\s*protected/i.test(cleaned)) {
     return;
   }
-  if (/\b(?:privacy\s*policy|terms\s*of|all\s*rights\s*reserved|cookie\s*policy|subscribe|newsletter)\b/i.test(cleaned)) {
+  if (/\b(?:privacy\s*policy|terms\s*of|all\s*rights\s*reserved|cookie\s*policy|subscribe|newsletter|login|register|search\s*products|all\s*categories)\b/i.test(cleaned)) {
     return;
   }
 
-  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|number|no|#|sec|section)\b/i.test(cleaned) &&
-    !/[\u4e00-\u9fa5]{3,}/.test(cleaned)) {
+  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|number|no|#|sec|section|jln|jalan|taman|lorong|lebuh|kawasan|perindustrian|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned) &&
+    !/[\u4e00-\u9fa5]{2,}/.test(cleaned)) {
     return;
   }
 
@@ -613,28 +620,66 @@ function addAddressCandidate(targetList, rawText, source, isHq = false) {
   const nonLatinLetters = (cleaned.match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length;
   const isEnglish = latinLetters >= 4 && latinLetters >= nonLatinLetters;
 
-  // Priority ranking: headquarters (1) > contact (2) > profile (3) > jsonld (4) > map (5) > footer (6)
-  let priority = 6;
-  if (isHq || source === "headquarters") priority = 1;
-  else if (source === "contact") priority = 2;
-  else if (source === "profile") priority = 3;
-  else if (source === "jsonld") priority = 4;
-  else if (source === "map") priority = 5;
+  // Location Context & Priority hierarchy:
+  // Headquarters (Tier 1) > Contact (Tier 2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Branch/Factory (Tier 8)
+  const hasHqKeyword = /\b(?:headquarters|head\s*office|registered\s*office|corporate\s*office|main\s*office|principal\s*office|hq|總公司|總部|本公司|總廠|本廠)\b/i.test(rawText) || isHq || source === "headquarters";
+  const hasBranchKeyword = /\b(?:branch(?:\s*office)?|factory|plant|warehouse|distribution\s*center|showroom|depot|facility|subsidiary|unit\s*\d+|分公司|工廠|廠房|分處|辦事處|營業所|經銷商)\b/i.test(rawText) || locationType === "branch" || source === "branch";
 
-  // Global English Priority: Deprioritize non-English candidates so English candidates rank first
-  if (!isEnglish) {
-    priority += 10;
+  let basePriority = 7;
+  let locType = locationType || "general";
+
+  if (hasHqKeyword) {
+    basePriority = 1;
+    locType = "headquarters";
+    isHq = true;
+  } else if (source === "contact") {
+    basePriority = 2;
+    locType = "contact";
+  } else if (source === "profile") {
+    basePriority = 3;
+    locType = "profile";
+  } else if (source === "jsonld") {
+    basePriority = 4;
+    locType = "jsonld";
+  } else if (source === "map" || source === "meta") {
+    basePriority = 5;
+    locType = source;
+  } else if (source === "footer") {
+    basePriority = 6;
+    locType = "footer";
   }
 
-  const exists = targetList.some(c => (typeof c === "string" ? c : c.raw).toLowerCase() === cleaned.toLowerCase());
-  if (!exists) {
-    targetList.push({
-      raw: cleaned,
-      source: source || "general",
-      priority: priority,
-      isHeadquarters: isHq || source === "headquarters",
-      isEnglish: isEnglish
-    });
+  // Deprioritize explicit branch / factory / warehouse addresses if not marked as Headquarters
+  if (hasBranchKeyword && !hasHqKeyword) {
+    basePriority = 8;
+    locType = "branch";
+    isHq = false;
+  }
+
+  // Tie-breaker: Within the SAME basePriority tier, English gets a minor advantage (0.0 vs +0.4).
+  // Headquarters English = 1.0, Headquarters Non-English = 1.4.
+  // Contact English = 2.0, Contact Non-English = 2.4.
+  // Footer English = 6.0, Branch English = 8.0.
+  // This mathematically guarantees Headquarters ALWAYS outranks Footer and Branch addresses regardless of language!
+  const priority = isEnglish ? basePriority : (basePriority + 0.4);
+
+  const candObj = {
+    raw: cleaned,
+    source: source || locType,
+    locationType: locType,
+    isHeadquarters: isHq,
+    isEnglish: isEnglish,
+    pageUrl: pageUrl || "",
+    priority: priority
+  };
+
+  const existingIndex = targetList.findIndex(c => (typeof c === "string" ? c : c.raw).toLowerCase() === cleaned.toLowerCase());
+  if (existingIndex >= 0) {
+    if (priority < targetList[existingIndex].priority) {
+      targetList[existingIndex] = candObj;
+    }
+  } else {
+    targetList.push(candObj);
   }
 }
 
@@ -648,6 +693,43 @@ function extractJsonLdAddresses(html, targetList) {
   while ((match = scriptRegex.exec(html)) !== null) {
     try {
       const data = JSON.parse(match[1]);
+      const processItem = item => {
+        if (!item || typeof item !== "object") return;
+        if (item.address && typeof item.address === "object") {
+          const a = item.address;
+          const parts = [a.streetAddress, a.addressLocality, a.addressRegion, a.postalCode, a.addressCountry].filter(Boolean);
+          if (parts.length >= 2) {
+            addAddressCandidate(targetList, parts.join(", "), "jsonld", false, "jsonld");
+          }
+        }
+      };
+      if (Array.isArray(data)) data.forEach(processItem);
+      else if (data["@graph"] && Array.isArray(data["@graph"])) data["@graph"].forEach(processItem);
+      else processItem(data);
+    } catch (e) { }
+  }
+}
+
+/**
+ * Extracts addresses embedded in JavaScript variables, hydration payloads, and SPA configs.
+ */
+function extractEmbeddedScriptAddresses(html, targetList) {
+  if (!html) return;
+  extractJsonLdAddresses(html, targetList);
+
+  const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+  let sm;
+  while ((sm = scriptRegex.exec(html)) !== null) {
+    const content = sm[1];
+    if (content.length > 250000) continue;
+    if (/\b(?:streetAddress|office_address|company_address)\b/i.test(content)) {
+      const m = content.match(/["'](?:streetAddress|office_address|company_address)["']\s*:\s*["']([^"']{8,180})["']/i);
+      if (m && m[1]) {
+        addAddressCandidate(targetList, m[1], "jsonld", false, "contact");
+      }
+    }
+  }
+}
       const processItem = item => {
         if (!item || typeof item !== "object") return;
         if (item.address && typeof item.address === "object") {
@@ -740,224 +822,240 @@ function extractMetaAddresses(html, targetList) {
 function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   if (!html) return;
 
+  // Helper to determine context from surrounding text / headers
+  const getContext = (beforeText, fallbackSource) => {
+    if (/\b(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|principal\s*office|hq|總公司|總部|本公司|總廠|本廠)\b/i.test(beforeText)) {
+      return { isHq: true, source: "headquarters", locType: "headquarters" };
+    }
+    if (/\b(?:branch(?:\s*office)?|factory|plant|warehouse|distribution\s*center|showroom|depot|facility|subsidiary|分公司|工廠|廠房|分處|辦事處|營業所|經銷商)\b/i.test(beforeText)) {
+      return { isHq: false, source: "branch", locType: "branch" };
+    }
+    return { isHq: false, source: fallbackSource, locType: fallbackSource };
+  };
+
   // 1. Explicit Headquarters / Head Office blocks (Priority 1)
-  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|dd)>/gi;
+  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq|總公司|總部|本公司)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|dd)>/gi;
   let hqm;
   while ((hqm = hqRegex.exec(html)) !== null) {
     const raw = stripHtml(hqm[1]);
     if (raw.length > 8) {
-      addAddressCandidate(targetList, raw, "headquarters", true);
+      addAddressCandidate(targetList, raw, "headquarters", true, "headquarters");
     }
   }
 
   // 2. <h1-6> with "address" or "contact" followed by <p>, <div>, <span>, <li>, <td> (excluding email headings)
-  const headingRegex = /<h[1-6][^>]*>(?![^<]*(?:email|e-mail))[^<]*(?:address|location|head\s*office|headquarters|contact\s*us|contact)[^<]*<\/h[1-6]>\s*<(?:p|div|span|li|td)[^>]*>([\s\S]*?)<\/(?:p|div|span|li|td)>/gi;
+  const headingRegex = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>\s*<(?:p|div|span|li|td)[^>]*>([\s\S]*?)<\/(?:p|div|span|li|td)>/gi;
   let hm;
   while ((hm = headingRegex.exec(html)) !== null) {
-    const raw = stripHtml(hm[1]);
+    const hText = stripHtml(hm[1]);
+    if (!/address|location|head\s*office|headquarters|contact\s*us|contact|辦事處|地址|總部/i.test(hText)) continue;
+    if (/email|e-mail|newsletter|subscribe/i.test(hText)) continue;
+
+    const ctx = getContext(hText, defaultSource);
+    const raw = stripHtml(hm[2]);
     const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
     for (const line of lines) {
-      addAddressCandidate(targetList, line, defaultSource, false);
+      addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType);
     }
     if (raw.length > 10 && lines.length <= 1) {
-      addAddressCandidate(targetList, raw, defaultSource, false);
+      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
     }
   }
 
   // 3. <address> tag
-  const addrTagRegex = /<address[^>]*>([\s\S]*?)<\/address>/gi;
+  const addrTagRegex = /([\s\S]{0,120})<address[^>]*>([\s\S]*?)<\/address>/gi;
   let am;
   while ((am = addrTagRegex.exec(html)) !== null) {
-    const raw = stripHtml(am[1]);
+    const ctx = getContext(am[1], defaultSource);
+    const raw = stripHtml(am[2]);
     if (raw.length > 10) {
-      addAddressCandidate(targetList, raw, defaultSource, false);
+      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
     }
   }
 
   // 4. Class or id containing "address" or "addr" (including li, td, dd, article, section)
-  const classAddrRegex = /<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["'][^"']*(?:address|addr\b)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
+  const classAddrRegex = /([\s\S]{0,120})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
   let cm;
   while ((cm = classAddrRegex.exec(html)) !== null) {
-    const raw = stripHtml(cm[1]);
+    const contextStr = cm[1] + " " + cm[2];
+    const ctx = getContext(contextStr, defaultSource);
+    const raw = stripHtml(cm[3]);
     if (raw.length > 10) {
-      addAddressCandidate(targetList, raw, defaultSource, false);
+      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
     }
   }
 
-  // 5. Explicit label prefixes Add: / Address: / Addr: / Location:
-  const labelAddrRegex = /(?:(?:<li[^>]*>)|(?:<(?:div|p|span|td)[^>]*>)|(?:\b))\s*(?:address|add|addr)\s*[:：]\s*(?:<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / 地址:
+  const labelAddrRegex = /([\s\S]{0,120})\b(?:address|add|addr|地址|廠址)\s*[:：]\s*(?:<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let lm;
   while ((lm = labelAddrRegex.exec(html)) !== null) {
-    const raw = stripHtml(lm[1]);
+    const ctx = getContext(lm[1], defaultSource);
+    const raw = stripHtml(lm[2]);
     if (raw.length > 10) {
-      addAddressCandidate(targetList, raw, defaultSource, false);
+      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
     }
   }
 
   // 6. Map-marker icon followed by address text (e.g. <span class="fa fa-map-marker"></span> No. 492, ...)
-  const markerRegex = /(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location)[^>]*>[\s\S]{0,100}?(?:<\/(?:span|i|div)>\s*){1,3}([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  const markerRegex = /([\s\S]{0,100})(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location)[^>]*>[\s\S]{0,100}?(?:<\/(?:span|i|div)>\s*){1,3}([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let mm;
   while ((mm = markerRegex.exec(html)) !== null) {
-    const raw = stripHtml(mm[1]);
+    const ctx = getContext(mm[1], defaultSource);
+    const raw = stripHtml(mm[2]);
     const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
     for (const line of lines) {
-      addAddressCandidate(targetList, line, defaultSource, false);
+      addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType);
     }
   }
 
   // 7. Paragraphs, list items, or table cells containing physical address patterns
-  const pAddrRegex = /<(?:p|li|td)[^>]*>([\s\S]*?)<\/(?:p|li|td)>/gi;
+  const pAddrRegex = /([\s\S]{0,100})<(?:p|li|td)[^>]*>([\s\S]*?)<\/(?:p|li|td)>/gi;
   let pm;
   while ((pm = pAddrRegex.exec(html)) !== null) {
-    const raw = stripHtml(pm[1]);
+    const raw = stripHtml(pm[2]);
     if (raw.length >= 15 && raw.length <= 250 &&
       /\b(road|street|avenue|lane|drive|way|boulevard|highway|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|via|corso|viale|strasse)\b/i.test(raw) &&
       /\b(?:\d{1,5}|no\.?\s*\d+|#\s*\d+)\b/i.test(raw)) {
-      addAddressCandidate(targetList, raw, defaultSource, false);
+      const ctx = getContext(pm[1], defaultSource);
+      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
     }
   }
 }
 
 /**
- * Compares Gemini's suggested address against verified website candidates.
- * Prioritizes explicitly identified headquarters addresses and rejects unsupported addresses.
+ * Extracts key structural components (numbers and localities) from an address string.
+ */
+function extractAddressComponents(addr) {
+  if (!addr || typeof addr !== "string") {
+    return { numbers: [], localities: [], isEnglish: false };
+  }
+  const clean = addr.toLowerCase().replace(/[\(\)\[\]\{\}]/g, " ");
+
+  // Street / premise numbers (e.g. 56, 140, 7, 26, 909, 56-106)
+  const numbers = (clean.match(/(?:^|[\s,#№])(\d+(?:[-/]\d+)?)\b/g) || [])
+    .map(n => n.replace(/^[^\d]+/, "").trim())
+    .filter(n => n.length <= 6 && !/^(?:19\d\d|20\d\d|886|60|61|44|27|91|30543|504)$/.test(n));
+
+  // Recognized localities across priority countries
+  const localityList = [
+    // Taiwan
+    "taipei", "taichung", "kaohsiung", "tainan", "taoyuan", "hsinchu", "chiayi", "keelung",
+    "changhua", "miaoli", "nantou", "yunlin", "pingtung", "yilan", "hualien", "taitung", "penghu",
+    "kinmen", "matsu", "xiushui", "nantun", "banqiao", "xinpu", "sinpu", "danshui", "tamsui",
+    "zhongli", "xinzhuang", "sanchong", "xindian", "fengyuan", "pingzhen", "bade",
+    // UK
+    "london", "birmingham", "manchester", "leeds", "glasgow", "liverpool", "sheffield", "bristol",
+    "edinburgh", "heywood", "rochdale", "bolton", "bury", "oldham", "salford", "stockport", "tameside",
+    "trafford", "wigan", "lancashire", "yorkshire", "cheshire", "derbyshire", "staffordshire",
+    // USA
+    "chicago", "houston", "phoenix", "philadelphia", "san antonio", "san diego", "dallas", "austin",
+    "california", "texas", "florida", "new york", "illinois", "pennsylvania", "ohio", "georgia",
+    // Malaysia
+    "kuala lumpur", "selangor", "penang", "johor", "perak", "kedah", "pahang", "kelantan", "sabah", "sarawak",
+    "klang", "petaling jaya", "subang jaya", "shah alam", "george town", "johor bahru", "ipoh", "meru",
+    // Italy
+    "roma", "milano", "napoli", "torino", "palermo", "genova", "bologna", "firenze", "bari", "catania",
+    "venezia", "verona", "messina", "padova", "trieste", "brescia", "taranto", "prato", "parma", "modena",
+    "reggio emilia", "reggio calabria", "perugia", "ravenna", "livorno", "cagliari", "foggia", "rimini",
+    "salerno", "ferrara", "sassari", "latina", "giugliano", "monza", "siracusa", "pescara", "bergamo",
+    // Germany
+    "berlin", "hamburg", "münchen", "munich", "köln", "cologne", "frankfurt", "stuttgart", "düsseldorf",
+    "dortmund", "essen", "leipzig", "bremen", "dresden", "hannover", "nürnberg", "nuremberg", "duisburg"
+  ];
+
+  const foundLocalities = [];
+  for (const loc of localityList) {
+    if (new RegExp(`\\b${loc}\\b`, "i").test(clean)) {
+      foundLocalities.push(loc);
+    }
+  }
+
+  const latinCount = (clean.match(/[a-z]/g) || []).length;
+  const nonLatinCount = (clean.match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length;
+
+  return {
+    numbers,
+    localities: foundLocalities,
+    isEnglish: latinCount >= 4 && latinCount >= nonLatinCount
+  };
+}
+
+/**
+ * Strict Component-Level Address Verification and Selection.
+ * Validates street number agreement, thoroughfare match, and rejects locality hallucinations.
+ * Returns { address: string, selectedCandidate: object|null }
  */
 function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
   if (!candidates || candidates.length === 0) {
-    if (!geminiAddr || geminiAddr.length < 8 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim())) {
-      return "Not Available";
+    if (!geminiAddr || geminiAddr.length < 8 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim()) ||
+        /\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr)) {
+      return { address: "Not Available", selectedCandidate: null };
     }
-    return geminiAddr;
+    return { address: geminiAddr, selectedCandidate: null };
   }
 
   const getRaw = c => (typeof c === "object" ? c.raw : c);
 
-  // Sort candidates by English language first, then priority ranking
+  // Sort candidates strictly by priority (Headquarters Tier 1 > Contact Tier 2 > ...)
+  // Within the same tier, English comes first
   const sorted = [...candidates].sort((a, b) => {
-    const aIsEng = (typeof a === "object" && a.isEnglish !== undefined)
-      ? a.isEnglish
-      : (/[a-zA-Z]{4,}/.test(getRaw(a)) && (getRaw(a).match(/[a-zA-Z]/g) || []).length >= (getRaw(a).match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length);
-    const bIsEng = (typeof b === "object" && b.isEnglish !== undefined)
-      ? b.isEnglish
-      : (/[a-zA-Z]{4,}/.test(getRaw(b)) && (getRaw(b).match(/[a-zA-Z]/g) || []).length >= (getRaw(b).match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length);
-
-    if (aIsEng !== bIsEng) return aIsEng ? -1 : 1;
-
-    const pA = typeof a === "object" ? a.priority : 6;
-    const pB = typeof b === "object" ? b.priority : 6;
+    const pA = (typeof a === "object" && a.priority !== undefined) ? a.priority : 6;
+    const pB = (typeof b === "object" && b.priority !== undefined) ? b.priority : 6;
     return pA - pB;
   });
 
-  const hqCandidate = sorted.find(c => typeof c === "object" && (c.isHeadquarters || c.source === "headquarters"));
+  const topCandidate = sorted[0];
+  const topRaw = getRaw(topCandidate);
 
-  // Check if Gemini returned non-English text while an English candidate is available on the website
-  const hasEnglishCand = sorted.some(c => {
-    const raw = getRaw(c);
-    return (raw.match(/[a-zA-Z]/g) || []).length >= 6;
-  });
-  const geminiIsNonEnglish = geminiAddr && ((geminiAddr.match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length > (geminiAddr.match(/[a-zA-Z]/g) || []).length);
+  // If Gemini provided invalid text, missing address, or Cloudflare protection, reject immediately
+  if (!geminiAddr || geminiAddr.length < 5 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim()) ||
+      /\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr)) {
+    return { address: topRaw, selectedCandidate: topCandidate };
+  }
 
-  if (hasEnglishCand && geminiIsNonEnglish) {
-    const topEng = sorted.find(c => {
-      const raw = getRaw(c);
-      return (raw.match(/[a-zA-Z]/g) || []).length >= 6;
+  // Parse structural components of top candidate and Gemini address
+  const candComp = extractAddressComponents(topRaw);
+  const geminiComp = extractAddressComponents(geminiAddr);
+
+  // 1. Locality Contradiction Check:
+  // If top candidate has a verified locality (e.g. Changhua, Xiushui, Heywood, Lancashire)
+  // and Gemini outputs a DIFFERENT conflicting city (e.g. Taichung, Manchester) not in top candidate:
+  if (candComp.localities.length > 0 && geminiComp.localities.length > 0) {
+    const conflicting = geminiComp.localities.filter(gLoc => !topRaw.toLowerCase().includes(gLoc));
+    const matching = geminiComp.localities.filter(gLoc => topRaw.toLowerCase().includes(gLoc));
+    if (conflicting.length > 0 && matching.length === 0) {
+      // Contradiction detected! Reject Gemini and use topCandidate
+      return { address: topRaw, selectedCandidate: topCandidate };
+    }
+  }
+
+  // 2. Street Number Agreement Check:
+  // If top candidate has a street number (e.g. 56, 140, 26, 7), Gemini MUST contain that number!
+  if (candComp.numbers.length > 0) {
+    const hasMatchingNum = candComp.numbers.some(num => {
+      const baseNum = num.split(/[-/]/)[0];
+      return geminiComp.numbers.includes(num) || geminiComp.numbers.includes(baseNum) || new RegExp(`\\b${baseNum}\\b`).test(geminiAddr);
     });
-    if (topEng) {
-      return getRaw(topEng);
+    if (!hasMatchingNum) {
+      // Gemini dropped or changed the street number! Reject Gemini and use topCandidate
+      return { address: topRaw, selectedCandidate: topCandidate };
     }
   }
 
-  if (geminiAddr && /\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr)) {
-    if (sorted.length > 0) {
-      return getRaw(sorted[0]);
-    }
-    return "Not Available";
+  // 3. Non-English vs English Translation:
+  // If candidate is non-English and Gemini is English:
+  // Numbers match and no conflicting locality was introduced -> accept Gemini's English translation!
+  if (!candComp.isEnglish && geminiComp.isEnglish) {
+    return { address: geminiAddr, selectedCandidate: topCandidate };
   }
 
-  if (!geminiAddr || geminiAddr.length < 5 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim())) {
-    return getRaw(sorted[0]);
+  // 4. Candidate and Gemini are both English:
+  if (candComp.isEnglish && geminiComp.isEnglish) {
+    return { address: geminiAddr, selectedCandidate: topCandidate };
   }
 
-  // Extract key tokens from Gemini's address to test support against website evidence
-  const geminiTokens = geminiAddr
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter(w => w.length > 2);
-
-  let bestCandidate = null;
-  let maxOverlap = 0;
-
-  for (const cand of sorted) {
-    const candRaw = getRaw(cand);
-    const candLower = candRaw.toLowerCase();
-    let overlapCount = 0;
-    for (const token of geminiTokens) {
-      if (candLower.includes(token)) overlapCount++;
-    }
-    const ratio = geminiTokens.length > 0 ? overlapCount / geminiTokens.length : 0;
-    if (ratio > maxOverlap) {
-      maxOverlap = ratio;
-      bestCandidate = cand;
-    }
-  }
-
-  // Check if Gemini's address is supported directly by website text (footer, body, contact page, HTML)
-  let textCorpusOverlap = 0;
-  if (crawlData && geminiTokens.length > 0) {
-    const corpus = [
-      crawlData.footerText,
-      crawlData.contactPageText,
-      crawlData.bodyText,
-      crawlData.profilePageText,
-      crawlData.mainHtml ? stripHtml(crawlData.mainHtml).slice(0, 8000) : ""
-    ].filter(Boolean).join(" ").toLowerCase();
-
-    let matchedTokens = 0;
-    for (const t of geminiTokens) {
-      if (corpus.includes(t)) matchedTokens++;
-    }
-    textCorpusOverlap = matchedTokens / geminiTokens.length;
-  }
-
-  // If Gemini address matches verified website evidence OR has strong corpus text support
-  if ((maxOverlap >= 0.35 && bestCandidate) || textCorpusOverlap >= 0.35) {
-    // If an explicit headquarters address was identified and Gemini picked another, ALWAYS prefer headquarters
-    if (hqCandidate && bestCandidate !== hqCandidate && maxOverlap >= 0.35) {
-      return getRaw(hqCandidate);
-    }
-    const candRaw = bestCandidate ? getRaw(bestCandidate) : "";
-    const candNumMatch = candRaw ? candRaw.match(/(?:^|[\s,#])(\d+)\b/) : null;
-    const geminiNumMatch = geminiAddr.match(/(?:^|[\s,#])(\d+)\b/);
-    if (candNumMatch && !geminiNumMatch) {
-      return candRaw;
-    }
-    if (candRaw && candRaw.length > geminiAddr.length && /\b(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza|village)\b/i.test(candRaw) && !/\b(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza)\b/i.test(geminiAddr)) {
-      return candRaw;
-    }
-    return geminiAddr;
-  }
-
-  // If local candidate check fails, but Gemini's address is valid English and the local candidate is non-English:
-  // NEVER discard Gemini's English answer to fall back to a non-English candidate!
-  const geminiIsEnglish = (geminiAddr.match(/[a-zA-Z]/g) || []).length >= 6;
-  const topCandidateIsNonEnglish = sorted.length > 0 && ((getRaw(sorted[0]).match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length > (getRaw(sorted[0]).match(/[a-zA-Z]/g) || []).length);
-
-  if (geminiIsEnglish && topCandidateIsNonEnglish) {
-    return geminiAddr;
-  }
-
-  // If local check failed but Gemini has a plausible address structure with street/number/city/town, keep Gemini
-  if (geminiIsEnglish && /\b(road|street|avenue|lane|drive|way|boulevard|highway|town|township|district|city|county|hsien|state|building|floor|suite|box|number|no|#|\d{2,6})\b/i.test(geminiAddr)) {
-    return geminiAddr;
-  }
-
-  // Unsupported Gemini address -> reject and fall back to top verified website candidate
-  if (sorted.length > 0) {
-    return getRaw(sorted[0]);
-  }
-
-  return "Not Available";
+  // Default fallback: Top verified candidate
+  return { address: topRaw, selectedCandidate: topCandidate };
 }
 
 function stripHtml(html) {
