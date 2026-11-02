@@ -804,13 +804,25 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
       addAddressCandidate(targetList, line, defaultSource, false);
     }
   }
+
+  // 7. Paragraphs, list items, or table cells containing physical address patterns
+  const pAddrRegex = /<(?:p|li|td)[^>]*>([\s\S]*?)<\/(?:p|li|td)>/gi;
+  let pm;
+  while ((pm = pAddrRegex.exec(html)) !== null) {
+    const raw = stripHtml(pm[1]);
+    if (raw.length >= 15 && raw.length <= 250 &&
+      /\b(road|street|avenue|lane|drive|way|boulevard|highway|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|via|corso|viale|strasse)\b/i.test(raw) &&
+      /\b(?:\d{1,5}|no\.?\s*\d+|#\s*\d+)\b/i.test(raw)) {
+      addAddressCandidate(targetList, raw, defaultSource, false);
+    }
+  }
 }
 
 /**
  * Compares Gemini's suggested address against verified website candidates.
  * Prioritizes explicitly identified headquarters addresses and rejects unsupported addresses.
  */
-function verifyAndSelectAddress(geminiAddr, candidates) {
+function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
   if (!candidates || candidates.length === 0) {
     if (!geminiAddr || geminiAddr.length < 8 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim())) {
       return "Not Available";
@@ -890,22 +902,53 @@ function verifyAndSelectAddress(geminiAddr, candidates) {
     }
   }
 
-  // If Gemini address matches verified website evidence
-  if (maxOverlap >= 0.35 && bestCandidate) {
+  // Check if Gemini's address is supported directly by website text (footer, body, contact page, HTML)
+  let textCorpusOverlap = 0;
+  if (crawlData && geminiTokens.length > 0) {
+    const corpus = [
+      crawlData.footerText,
+      crawlData.contactPageText,
+      crawlData.bodyText,
+      crawlData.profilePageText,
+      crawlData.mainHtml ? stripHtml(crawlData.mainHtml).slice(0, 8000) : ""
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    let matchedTokens = 0;
+    for (const t of geminiTokens) {
+      if (corpus.includes(t)) matchedTokens++;
+    }
+    textCorpusOverlap = matchedTokens / geminiTokens.length;
+  }
+
+  // If Gemini address matches verified website evidence OR has strong corpus text support
+  if ((maxOverlap >= 0.35 && bestCandidate) || textCorpusOverlap >= 0.35) {
     // If an explicit headquarters address was identified and Gemini picked another, ALWAYS prefer headquarters
-    if (hqCandidate && bestCandidate !== hqCandidate) {
+    if (hqCandidate && bestCandidate !== hqCandidate && maxOverlap >= 0.35) {
       return getRaw(hqCandidate);
     }
-    // If website candidate preserves a street number that Gemini dropped, prefer candidate
-    const candRaw = getRaw(bestCandidate);
-    const candNumMatch = candRaw.match(/(?:^|[\s,#])(\d+)\b/);
+    const candRaw = bestCandidate ? getRaw(bestCandidate) : "";
+    const candNumMatch = candRaw ? candRaw.match(/(?:^|[\s,#])(\d+)\b/) : null;
     const geminiNumMatch = geminiAddr.match(/(?:^|[\s,#])(\d+)\b/);
     if (candNumMatch && !geminiNumMatch) {
       return candRaw;
     }
-    if (candRaw.length > geminiAddr.length && /\b(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza|village)\b/i.test(candRaw) && !/\b(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza)\b/i.test(geminiAddr)) {
+    if (candRaw && candRaw.length > geminiAddr.length && /\b(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza|village)\b/i.test(candRaw) && !/\b(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza)\b/i.test(geminiAddr)) {
       return candRaw;
     }
+    return geminiAddr;
+  }
+
+  // If local candidate check fails, but Gemini's address is valid English and the local candidate is non-English:
+  // NEVER discard Gemini's English answer to fall back to a non-English candidate!
+  const geminiIsEnglish = (geminiAddr.match(/[a-zA-Z]/g) || []).length >= 6;
+  const topCandidateIsNonEnglish = sorted.length > 0 && ((getRaw(sorted[0]).match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length > (getRaw(sorted[0]).match(/[a-zA-Z]/g) || []).length);
+
+  if (geminiIsEnglish && topCandidateIsNonEnglish) {
+    return geminiAddr;
+  }
+
+  // If local check failed but Gemini has a plausible address structure with street/number/city/town, keep Gemini
+  if (geminiIsEnglish && /\b(road|street|avenue|lane|drive|way|boulevard|highway|town|township|district|city|county|hsien|state|building|floor|suite|box|number|no|#|\d{2,6})\b/i.test(geminiAddr)) {
     return geminiAddr;
   }
 
@@ -1618,7 +1661,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.companyName = compName;
 
   // 6. Company Address: Compare Gemini's answer against website candidates, prioritizing Headquarters
-  let addr = verifyAndSelectAddress(result.companyAddress, crawlData.addressCandidates);
+  let addr = verifyAndSelectAddress(result.companyAddress, crawlData.addressCandidates, crawlData);
 
   if (addr && addr !== "Not Available") {
     addr = addr.replace(/[\(\)\[\]\{\}]/g, " ");
@@ -2139,6 +2182,9 @@ function hasExplicitCityWord(cleanAddr) {
 
 function hasCityDesignation(addr) {
   if (!addr) return false;
+  // Chinese / East Asian City, Town, Township, District characters: 市 (City), 鎮/镇 (Town), 鄉/乡 (Township), 區/区 (District)
+  if (/[\u5e02\u93ae\u9547\u9109\u4e61\u5340\u533a]/.test(addr)) return true;
+
   const stripped = addr.replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
   if (hasExplicitCityWord(stripped)) return true;
   const qualRegex = new RegExp(`\\b(?:${CITY_QUALIFIERS.join("|")})\\b`, "i");
@@ -2487,8 +2533,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])(\d+)\s*#\b/gi, '$1Number $2');
   a = a.replace(/\blot\s+no\.?\s*(?=\d)/gi, 'Lot Number ');
   a = a.replace(/\bplot\s+no\.?\s*(?=\d)/gi, 'Plot Number ');
-  a = a.replace(/(^|[,\s])Sec\.\s*(?=\d)/gi, '$1Section ');
-  a = a.replace(/(^|[,\s])Sec\b\s*(?=\d)/gi, '$1Section ');
+  a = a.replace(/(^|[,\s])Sec\.\s*(?=[A-Za-z0-9])/gi, '$1Section ');
+  a = a.replace(/(^|[,\s])Sec\b\s*(?=[A-Za-z0-9])/gi, '$1Section ');
+  a = a.replace(/\b(Hsinchu|Changhua|Miaoli|Yunlin|Chiayi|Pingtung|Taitung|Hualien|Yilan|Nantou|Kinmen|Penghu)\s+Country\b/gi, "$1 County");
   a = a.replace(/(^|[,\s])Ln\.\s*(?=\d)/gi, '$1Lane ');
   a = a.replace(/(^|[,\s])Ln\b\s*(?=\d)/gi, '$1Lane ');
   a = a.replace(/(^|[,\s])Aly\.\s*(?=\d)/gi, '$1Alley ');
