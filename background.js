@@ -757,6 +757,12 @@ async function crawlWebsite(targetUrl) {
                       mainHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
   const ogSiteName = (ogSiteMatch && ogSiteMatch[1] && ogSiteMatch[1].trim()) || "";
 
+  // Check for online purchase / shopping cart ("Shopchart")
+  const shopCartCheck = detectPurchaseOrShoppingCart(mainHtml + "\n" + contactHtml, (extracted && extracted.bodyText) || "");
+  if (shopCartCheck && shopCartCheck.detected) {
+    status = "Not Working";
+  }
+
   return {
     originalUrl: targetUrl,
     finalUrl,
@@ -764,6 +770,8 @@ async function crawlWebsite(targetUrl) {
     status,
     fetchError,
     mainHtml,
+    contactHtml: contactHtml.slice(0, 50000),
+    shopCartCheck,
     logoText,
     ogSiteName,
     addressCandidates,
@@ -1533,6 +1541,65 @@ function detectRestrictedKeywords(text) {
 }
 
 /**
+ * Detects online purchase or shopping cart ("Shopchart") features on a website.
+ * Rule: purchase / Shopchart in website found means mark it as Not Working site.
+ */
+function detectPurchaseOrShoppingCart(html = "", text = "") {
+  if (!html && !text) return { detected: false, reason: "" };
+
+  const rawHtml = String(html || "");
+  const rawText = String(text || "");
+
+  // 1. E-commerce platforms & checkout classes/IDs (e.g. WooCommerce, Shopify, Magento, Snipcart)
+  const platformRegex = /\b(?:woocommerce-cart|woocommerce-checkout|wc-block-cart|add_to_cart_button|single_add_to_cart_button|shopify-section-cart|cart-drawer|shopify-payment-button|minicart-wrapper|block-minicart|action\s+showcart|snipcart-checkout|snipcart-add-item|ec-cart)\b/i;
+  const platMatch = rawHtml.match(platformRegex);
+  if (platMatch) {
+    return { detected: true, reason: `E-commerce platform indicator: ${platMatch[0]}` };
+  }
+
+  // 2. Cart / Checkout HTML element attributes (class, id, data-widget, aria-label)
+  const cartAttrRegex = /(?:class|id|data-widget|data-target|aria-label)=["'][^"']*\b(?:shopping[-_]?cart|shop[-_]?cart|shop[-_]?chart|shopping[-_]?bag|shopping[-_]?basket|mini[-_]?cart|cart[-_]?contents|cart[-_]?icon|cart[-_]?drawer|cart[-_]?button|header[-_]?cart|btn[-_]?cart|view[-_]?cart)\b[^"']*["']/i;
+  const attrMatch = rawHtml.match(cartAttrRegex);
+  if (attrMatch) {
+    return { detected: true, reason: `Shopping cart element attribute: ${attrMatch[0]}` };
+  }
+
+  // 3. Cart / Checkout links (href)
+  const cartLinkRegex = /<a[^>]+href=["'][^"']*(?:\/(?:cart|shopping[-_]?cart|shop[-_]?cart|checkout|basket|my[-_]?cart|shopping[-_]?bag)\b)(?:\/|["'?#])/i;
+  const linkMatch = rawHtml.match(cartLinkRegex);
+  if (linkMatch) {
+    return { detected: true, reason: `Shopping cart / checkout link: ${linkMatch[0].slice(0, 80)}` };
+  }
+
+  // 4. E-commerce CTA buttons or forms: "Add to Cart", "Add to Bag", "Buy Now", "Proceed to Checkout", "Purchase" button
+  const ctaButtonRegex = /<(?:button|a|input)[^>]*>[\s\S]{0,100}?\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now|buy\s+online|purchase\s+online|purchase\s+now|proceed\s+to\s+checkout|checkout\s+now|view\s+cart|my\s+cart|order\s+online)\b[\s\S]{0,100}?<\/(?:button|a)>/i;
+  const btnMatch = rawHtml.match(ctaButtonRegex);
+  if (btnMatch) {
+    return { detected: true, reason: `E-commerce CTA button: ${btnMatch[0].slice(0, 80)}` };
+  }
+
+  // 4b. Direct Purchase button (avoiding "Purchase Order", "Terms of Purchase")
+  const purchaseBtnRegex = /<(?:button|a)[^>]*>\s*(?:Purchase|Buy Online|Shop Online|Cart|Checkout)\s*<\/(?:button|a)>/i;
+  const pBtnMatch = rawHtml.match(purchaseBtnRegex);
+  if (pBtnMatch) {
+    return { detected: true, reason: `Purchase button/link: ${pBtnMatch[0]}` };
+  }
+
+  // 5. Explicit visible phrases in text or HTML
+  // User specifically noted: "purchase / Shopchart in website found"
+  // Handled: shopping cart, shop cart, shopchart, shopping chart, add to cart, buy online, purchase online, items in cart
+  const textPhrasesRegex = /(?:\b(?:shopping\s*cart|shop\s*cart|shop\s*chart|shopchart|shopping\s*chart|view\s*cart|my\s*cart|your\s*cart|items?\s+in\s+(?:your\s+)?cart|add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+online|buy\s+now|purchase\s+online|purchase\s+now|proceed\s+to\s+checkout|online\s+purchase|make\s+a\s+purchase|direct\s+purchase)\b|\b(?:cart|bag|basket)\s*[\(\[]\s*\d+\s*[\)\]]|\bcart\s*:\s*\d+)/i;
+
+  const cleanBody = rawText || rawHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ").replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+  const textMatch = cleanBody.match(textPhrasesRegex);
+  if (textMatch) {
+    return { detected: true, reason: `Purchase / Shopcart phrase in page: "${textMatch[0]}"` };
+  }
+
+  return { detected: false, reason: "" };
+}
+
+/**
  * Prompts Google Gemini with complete, uncorrupted website content and strict QC instructions.
  */
 async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck) {
@@ -1548,6 +1615,13 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck) 
 
   const prompt = `
 You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
+
+WEBSITE STATUS QC RULES (Rule 1):
+- Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash Site" | "Redirect Site".
+- CRITICAL PURCHASE / SHOPPING CART ("SHOPCHART") QC RULE:
+  If the website contains an online purchase feature, shopping cart, or shop cart ('Shopchart', e.g. "Add to Cart", "Shopping Cart", "View Cart", "Checkout", "Buy Online", "Purchase Online", shopping bag, basket, e-commerce checkout), you MUST mark "websiteStatus": "Not Working"!
+- If the domain is expired / parked, mark "Domain Expired".
+- If the website failed to load or has no content, mark "Not Working".
 
 CRITICAL GLOBAL LANGUAGE REQUIREMENT (ALWAYS TARGET ENGLISH):
 - ALWAYS target and extract English language text for Company Name and Company Address.
@@ -2008,8 +2082,11 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   const hasState = address && hasStateInAddress(address, country);
   const hasCity = address && hasCityInAddress(address, country);
 
+  const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
+  const websiteStatus = (shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working");
+
   return {
-    websiteStatus: crawlData.initialStatus || "Working",
+    websiteStatus: websiteStatus,
     businessType: restrictedCheck.isRestricted ? "Restricted Site" : "Manufacturer",
     companyProfile: crawlData.hasCompanyProfile ? "Available" : "Not Available",
     companyName: companyName,
@@ -2024,7 +2101,9 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     productImages: imgCount,
     numberOfProductDescriptions: descCount,
     isRestricted: restrictedCheck.isRestricted,
-    restrictedReason: restrictedCheck.matchedKeyword
+    restrictedReason: restrictedCheck.matchedKeyword,
+    isShopCartSite: !!(shopCartCheck && shopCartCheck.detected),
+    shopCartReason: (shopCartCheck && shopCartCheck.reason) || ""
   };
 }
 
@@ -2034,8 +2113,14 @@ function heuristicExtraction(crawlData, restrictedCheck) {
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const result = { ...data };
 
-  // 1. Website Status: Failed fetch (status 0, network error, empty HTML) MUST be Not Working
-  if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working" || crawlData.status === "Domain Expired") {
+  // 1. Website Status:
+  // Rule 1 QC: Purchase / Shopping Cart ("Shopchart") detected on website MUST mark Not Working!
+  const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
+  if (shopCartCheck && shopCartCheck.detected) {
+    result.websiteStatus = "Not Working";
+    result.isShopCartSite = true;
+    result.shopCartReason = shopCartCheck.reason;
+  } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working" || crawlData.status === "Domain Expired") {
     result.websiteStatus = crawlData.status || "Not Working";
   } else if (restrictedCheck && restrictedCheck.isRestricted) {
     result.websiteStatus = "Working";

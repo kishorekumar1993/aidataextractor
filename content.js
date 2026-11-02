@@ -652,7 +652,11 @@
 
       renderPreview(data);
       const fillReport = fillFormFields(data);
-      updateStatus(`✅ Success! Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
+      if (data.isShopCartSite) {
+        updateStatus(`⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Website Status set to Not Working.`, "warning");
+      } else {
+        updateStatus(`✅ Success! Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
+      }
     } catch (err) {
       if (crawlBtn) crawlBtn.disabled = false;
       if (quickBtn) {
@@ -875,7 +879,7 @@
     previewList.innerHTML = "";
 
     const items = [
-      { key: "Status", val: data.websiteStatus },
+      { key: "Status", val: data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus },
       { key: "Business Type", val: data.businessType },
       { key: "Company Profile", val: data.companyProfile },
       { key: "Company Name", val: data.companyName },
