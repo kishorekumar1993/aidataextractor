@@ -1288,6 +1288,43 @@ function stripHtml(html) {
 }
 
 /**
+ * Strict corporate email validator.
+ * Rejects web URLs, images/assets, placeholders, prose artifacts (e.g. "collected at www.domain.com"),
+ * and domains starting with www.
+ */
+function isValidCorporateEmail(email) {
+  if (!email || typeof email !== "string") return false;
+  const em = email.trim().toLowerCase();
+
+  // Basic standard RFC-style email format
+  if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(em)) return false;
+
+  const atIdx = em.indexOf("@");
+  if (atIdx <= 0 || atIdx === em.length - 1) return false;
+
+  const user = em.slice(0, atIdx);
+  const host = em.slice(atIdx + 1);
+
+  // Email host/domain must never start with www., http., https., or contain /
+  if (/^(?:www\d?|http|https)\./i.test(host) || host.includes("/")) return false;
+
+  // Domain cannot end with non-email file extension
+  if (/\.(png|jpg|jpeg|gif|svg|webp|css|js|woff|woff2|ttf|eot|ico|bmp|mp4|webm|pdf|exe|zip|rar|tar|gz|json|xml|map)$/i.test(host)) return false;
+
+  // Reject dummy/placeholder emails
+  if (/^(?:user@example|email@domain|name@email|test@|sample@|info@domain|your@email|placeholder@|noreply@|no-reply@|donotreply@)/i.test(em)) return false;
+
+  // Prose verb/preposition artifacts from text scraping (e.g. "collected at www.domain.com")
+  const proseVerbs = /^(?:collected|located|registered|hosted|available|visited|published|stored|created|updated|viewed|see|look|shop|buy|contacted|served|found)$/i;
+  if (proseVerbs.test(user)) return false;
+
+  // Reject if username or host is excessively long or has invalid characters
+  if (user.length > 64 || host.length > 255) return false;
+
+  return true;
+}
+
+/**
  * Extracts and decodes all valid email addresses from any HTML snippet or page.
  * Handles mailto links, Cloudflare obfuscation, HTML numeric/hex entities, URL encoding, and [at] patterns.
  */
@@ -1315,14 +1352,14 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     candidateEmails.add(em.toLowerCase().trim());
   }
 
-  // 3. Decode HTML numeric & hex entities, and normalize [at] / (at) / [dot]
+  // 3. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
   const emailSearchText = html
     .replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec))
     .replace(/&#x([0-9a-f]+);/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&amp;/g, "&")
     .replace(/&commat;/gi, "@")
     .replace(/%40/gi, "@")
-    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\s+at\s+)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\s+dot\s+|\.)\s*([a-zA-Z]{2,})/gi, "$1@$2.$3");
+    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\.)\s*([a-zA-Z]{2,})/gi, "$1@$2.$3");
 
   const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
   const rawEmails = emailSearchText.match(emailRegex) || [];
@@ -1332,9 +1369,7 @@ function extractEmailsFromHtml(html, hostDomain = "") {
 
   const uniqueEmails = [];
   for (const em of candidateEmails) {
-    if (!/\.(png|jpg|jpeg|gif|svg|webp|css|js|woff|woff2|ttf|eot|ico|bmp|mp4|webm|pdf)$/i.test(em) &&
-        !/^(user@example|email@domain|name@email|test@|sample@|info@domain|your@email|placeholder@)/i.test(em) &&
-        !uniqueEmails.includes(em)) {
+    if (isValidCorporateEmail(em) && !uniqueEmails.includes(em)) {
       uniqueEmails.push(em);
     }
   }
@@ -1445,9 +1480,11 @@ function parseHtmlDetails(html, baseUrl) {
  */
 function rankEmails(emails, targetDomain) {
   if (!emails || emails.length === 0) return [];
+  const validList = emails.filter(e => isValidCorporateEmail(e));
+  if (validList.length === 0) return [];
   const domainClean = (targetDomain || "").replace(/^www\./i, "").toLowerCase();
 
-  const scored = emails.map(email => {
+  const scored = validList.map(email => {
     const lower = email.toLowerCase().trim();
     let score = 0;
     const [user, host] = lower.split("@");
@@ -2343,18 +2380,19 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 9. Email ID
   let email = (result.emailId || "").trim().toLowerCase();
-  if (!email || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(email)) {
-    email = (crawlData.emails && crawlData.emails.length > 0) ? crawlData.emails[0] : "";
+  if (!isValidCorporateEmail(email)) {
+    const validFromCrawl = (crawlData.emails || []).find(e => isValidCorporateEmail(e));
+    email = validFromCrawl || "";
   }
   result.emailId = email;
 
   // 10. Secondary Email ID (Must analyze complete website for distinct alternate corporate email)
   let secEmail = (result.secondaryEmailId || "").trim().toLowerCase();
-  if (!secEmail || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(secEmail) || secEmail === email) {
-    const alternate = (crawlData.emails || []).find(e => e.toLowerCase() !== email.toLowerCase());
+  if (!isValidCorporateEmail(secEmail) || secEmail === email) {
+    const alternate = (crawlData.emails || []).find(e => isValidCorporateEmail(e) && e.toLowerCase() !== email.toLowerCase());
     secEmail = alternate ? alternate.toLowerCase() : "";
   }
-  if (secEmail === email) secEmail = "";
+  if (secEmail === email || !isValidCorporateEmail(secEmail)) secEmail = "";
   result.secondaryEmailId = secEmail;
 
   // 11. Phone Number: Country-specific cleaning & validation
