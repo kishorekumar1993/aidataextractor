@@ -467,6 +467,28 @@
     });
   }
 
+  /**
+   * Capitalizes the first letter of every word (Title Case) per instruction: "All words come start with Captial make it"
+   * Preserves standard corporate acronyms (USA, UK, PT, CV, SDN BHD, etc.).
+   */
+  function toTitleCase(str) {
+    if (!str || typeof str !== "string") return "";
+    const upperAcronyms = new Set([
+      "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
+      "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "SDN", "BHD", "LTD", "PLC", "LLC", "INC", "CORP"
+    ]);
+    let s = str.replace(/['’`]\s*s\b/gi, "'s");
+    return s.replace(/[\p{L}\p{N}]+/gu, function (word, offset, fullStr) {
+      if (offset > 0 && fullStr[offset - 1] === "'" && word.toLowerCase() === "s") {
+        return "s";
+      }
+      const upper = word.toUpperCase();
+      if (upperAcronyms.has(upper)) return upper;
+      if (/^GmbH$/i.test(word)) return "GmbH";
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    });
+  }
+
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
     const elements = detectFormElements();
@@ -530,26 +552,32 @@
       }
     }
 
-    // 4. Company Name
+    // 4. Company Name (All words start with Capital)
     if (elements.companyName && data.companyName) {
-      if (setInputValue(elements.companyName, data.companyName)) {
+      const formattedName = toTitleCase(data.companyName);
+      if (setInputValue(elements.companyName, formattedName)) {
         highlightField(elements.companyName);
         filledCount++;
       }
     }
 
-    // 5. Country Name
+    // 5. Country Name (All words start with Capital)
     if (elements.countryName && data.countryName) {
-      if (setInputValue(elements.countryName, data.countryName)) {
+      let formattedCountry = toTitleCase(data.countryName);
+      if (/^united\s*states\s*of\s*america$/i.test(formattedCountry)) {
+        formattedCountry = "United States Of America";
+      }
+      if (setInputValue(elements.countryName, formattedCountry)) {
         highlightField(elements.countryName);
         filledCount++;
       }
     }
 
-    // 6. Company Address (Ensure comma before state, and address ending must not have comma or point)
+    // 6. Company Address (Ensure comma before state, address ending must not have comma or point, and all words start with Capital)
     if (elements.companyAddress && data.companyAddress) {
       let cleanAddress = String(data.companyAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
       cleanAddress = cleanAddress.replace(/\s+,/g, ",").replace(/,\s*,/g, ", ").replace(/,\s*/g, ", ");
+      cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
       if (setInputValue(elements.companyAddress, cleanAddress)) {
         highlightField(elements.companyAddress);
         filledCount++;
@@ -1029,9 +1057,9 @@
       { key: "Status", val: statusVal, isAlert: isRestr || data.websiteStatus === "Not Working" },
       { key: "Business Type", val: businessTypeVal },
       { key: "Company Profile", val: isRestr ? "-" : data.companyProfile },
-      { key: "Company Name", val: isRestr ? "-" : data.companyName },
-      { key: "Country", val: isRestr ? "-" : data.countryName },
-      { key: "Address", val: isRestr ? "-" : data.companyAddress },
+      { key: "Company Name", val: isRestr ? "-" : toTitleCase(data.companyName) },
+      { key: "Country", val: isRestr ? "-" : toTitleCase(data.countryName) },
+      { key: "Address", val: isRestr ? "-" : toTitleCase(data.companyAddress) },
       { key: "State", val: isRestr ? "-" : data.state },
       { key: "City", val: isRestr ? "-" : data.city },
       { key: "Email", val: isRestr ? "-" : data.emailId },

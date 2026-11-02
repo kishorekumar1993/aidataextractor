@@ -1956,7 +1956,11 @@ BUSINESS TYPE & RESTRICTED SITE QC RULES (Rule 2):
   - YOU MUST MARK "websiteStatus": "Not Working"!
   - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": "businessType": "", "companyProfile": "", "companyName": "", "countryName": "", "companyAddress": "", "state": "", "city": "", "emailId": "", "secondaryEmailId": "", "phoneNumber": "", "numberOfProducts": "", "productImages": "", "numberOfProductDescriptions": ""!
 
-CRITICAL GLOBAL LANGUAGE REQUIREMENT (ALWAYS TARGET ENGLISH):
+CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALWAYS TARGET ENGLISH & TITLE CASE):
+- CRITICAL CAPITALIZATION QC RULE ("All words come start with Captial make it"):
+  Every word in "companyName", "companyAddress", and "countryName" MUST start with a Capital letter (Title Case).
+  E.g. "United States Of America" (with capital 'Of'), "Number 46 Market Hill, Maldon, Essex", "Empire West Incorporated", "Danzer UK Limited", "City Of Industry, California".
+  Do NOT leave small words like "of", "and", "in" in lowercase. Capitalize every single word!
 - ALWAYS target and extract English language text for Company Name and Company Address.
 - NEVER return Chinese, Japanese, Korean, Arabic, Thai, Cyrillic, or other non-Latin characters for "companyName" or "companyAddress" when English or Romanized/Latin text is available anywhere on the website or in the physical address candidates.
 - If the website displays information in both a local script (e.g. Traditional Chinese "馬興村彰馬街56-106號, 秀水鄉, 彰化縣") and English (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County, Taiwan"), you MUST ALWAYS CHOOSE THE ENGLISH VERSION.
@@ -2650,7 +2654,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   if (country && country.length > 2) {
     if (/taiwan/i.test(country) || /r\.?o\.?c\.?/i.test(country)) country = "Taiwan";
-    else if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(country.trim())) country = "United States of America";
+    else if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(country.trim())) country = "United States Of America";
     else if (/england/i.test(country)) country = "England";
     else if (/scotland/i.test(country)) country = "Scotland";
     else if (/wales/i.test(country)) country = "Wales";
@@ -2768,9 +2772,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     country = detectCountryFromAddress(addr);
   }
   if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(country.trim())) {
-    country = "United States of America";
+    country = "United States Of America";
   }
-  result.countryName = country.trim() === "United States of America" ? "United States of America" : toTitleCase(country.trim());
+  result.countryName = toTitleCase(country.trim());
 
   // 7. State: Validated based on presence of State / Province / County / Hsien / Region or Capital
   if (!addr || addr.length < 8 || addr.toLowerCase() === "not available") {
@@ -4665,23 +4669,18 @@ function cleanPhoneNumber(rawPhone, country) {
 function toTitleCase(str) {
   if (!str) return "";
   const upperAcronyms = new Set([
-    "USA", "UK", "UAE", "M", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
-    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT"
-  ]);
-  const lowerWords = new Set([
-    "of", "mit", "und", "a", "per", "di", "in", "da", "de", "del", "della", "à", "par", "en", "z", "onder", "van"
+    "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
+    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "SDN", "BHD", "LTD", "PLC", "LLC", "INC", "CORP"
   ]);
   let s = str.replace(/['’`]\s*s\b/gi, "'s");
+  // Every word starts with a Capital letter per QC instruction: "All words come start with Captial make it"
   return s.replace(/[\p{L}\p{N}]+/gu, function (word, offset, fullStr) {
     if (offset > 0 && fullStr[offset - 1] === "'" && word.toLowerCase() === "s") {
       return "s";
     }
     const upper = word.toUpperCase();
     if (upperAcronyms.has(upper)) return upper;
-    const lower = word.toLowerCase();
-    if (offset > 0 && lowerWords.has(lower)) {
-      return lower;
-    }
+    if (/^GmbH$/i.test(word)) return "GmbH";
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });
 }
