@@ -65,7 +65,7 @@ const RESTRICTED_PATTERNS = [
     label: "Alcohol & Breweries" 
   },
   { 
-    pattern: /\b(?:animals?|pets?|puppy|puppies|dogs?|cats?|pet\s*shop|pet\s*store|animal\s*breeding|livestock|cattle|poultry\s*farming|pig\s*farming|animal\s*feed|slaughterhouse|veterinary)\b/i, 
+    pattern: /\b(?:animals?|pets?|puppy|puppies|kitten|kittens|dogs?|canine|feline|pet\s*shop|pet\s*store|pet\s*food|pet\s*care|animal\s*breeding|livestock|cattle|poultry\s*farming|pig\s*farming|animal\s*feed|slaughterhouse|veterinary|vet\s*clinic|domestic\s*cats?|pet\s*cats?|cats?\s*(?:and|&)\s*dogs?|dogs?\s*(?:and|&)\s*cats?|cats?\s*(?:food|feed|litter|care|grooming|breed|breeds|adoption|rescue|supplies|accessories|bed|shelter|boarding))\b/i, 
     label: "Animals & Pets" 
   },
   { 
@@ -1805,7 +1805,8 @@ function checkCompanyProfilePresence(html, text, profilePageText = "") {
  */
 function extractImageAttributes(html) {
   if (!html || typeof html !== "string") return "";
-  const matches = [...html.matchAll(/<img[^>]+(?:alt|title|src)=["']([^"']+)["']/gi)];
+  // Only extract human-readable alt/title attributes, NOT raw src URLs (which often contain /cat/ or /categories/)
+  const matches = [...html.matchAll(/<img[^>]+(?:alt|title)=["']([^"']+)["']/gi)];
   return matches.map(m => m[1]).join(" ");
 }
 
@@ -1814,13 +1815,23 @@ function extractImageAttributes(html) {
  * Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
  */
 function detectRestrictedKeywords(text, html = "") {
-  const combined = ((text || "") + " " + extractImageAttributes(html)).trim();
+  let combined = ((text || "") + " " + extractImageAttributes(html)).trim();
   if (!combined) return { isRestricted: false, matchedKeyword: null, reason: "" };
+
+  // Sanitize non-animal category/catalogue/cable/machinery expressions before matching
+  // (e.g. "Category", "Cat: ...", "Cat. No. ...", "Cat 5", "Cat 6", "Product Cat", "/cat/")
+  const sanitized = combined
+    .replace(/\b(?:category|categories|categorized|catalogue|catalog|subcat|sub-category)\b/gi, " ")
+    .replace(/\b(?:prod(?:uct)?|item|sub|main|shop)?\s*cat\s*[:.\-–]/gi, " ")
+    .replace(/\bcat\s*(?:[0-9]|no\.?|num\.?|number|#|code|part|id|class|rating|cable|cables|utp|stp|patch|loader|excavator|dozer|tractor|engine|diesel|machinery|equipment)\b/gi, " ")
+    .replace(/\bcat\s+(?:5|5e|6|6a|7|7a|8)\b/gi, " ")
+    .replace(/[/\\_]cat[/\\_]/gi, " ");
+
   for (const item of RESTRICTED_PATTERNS) {
     const regex = item.pattern || item;
     const label = item.label || "Prohibited Category";
-    if (regex.test(combined)) {
-      const m = combined.match(regex);
+    if (regex.test(sanitized)) {
+      const m = sanitized.match(regex);
       return {
         isRestricted: true,
         matchedKeyword: m ? m[0] : "",
@@ -1948,6 +1959,10 @@ BUSINESS TYPE & RESTRICTED SITE QC RULES (Rule 2):
   10. Food / Foods / Beverages / Food manufacturing / Restaurants / Cafes / Bakeries / Catering / Groceries / Meat / Dairy / Snack
   11. Alcohol / Breweries / Wineries / Distilleries / Liquor / Wine / Beer / Spirits
   12. Animals / Pets / Dogs / Cats / Livestock / Cattle / Poultry / Animal feed / Veterinary
+      * CRITICAL EXCEPTION FOR "CAT":
+        - "Cat" or "Cat." as an abbreviation for "Category" (e.g. "Cat: Valves", "Product Cat", "Cat. No.", "Item Cat") or "Cat 5 / Cat 6" (network cabling) or "CAT" (Caterpillar machinery/equipment) is NOT an animal!
+        - STRICTLY DO NOT mark a site as Animals or Not Working when "Cat" is used as Category, Catalogue, Cable, or Machinery!
+        - Only classify as Animals when it refers to actual living animals, pets, pet care, or livestock.
   13. Gambling / Casinos / Betting / Poker / Lotteries
   14. Tobacco / Cigarettes / Cigars / Vaping / E-cigarettes / Nicotine
   15. Cannabis / Marijuana / THC / CBD / Narcotics / Illicit drugs
