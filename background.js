@@ -507,6 +507,11 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   name = name.replace(/&amp;/gi, "&").replace(/&nbsp;/gi, " ");
   name = name.replace(/^[\s\-_|:•·,;*#~]+|[\s\-_|:•·,;*#~]+$/g, "").trim();
 
+  // 1b. Strip embedded CTA / navigational breadcrumbs if present:
+  // e.g. "Aerospace Contact Us Data Plastics Ltd" -> "Data Plastics Ltd"
+  name = name.replace(/^.*?\b(?:contact(?:\s+us)?|about(?:\s+us)?|welcome(?:\s+to(?:\s+the\s+official\s+website\s+of)?)?|get\s+in\s+touch(?:\s+with)?|reach\s+us|visit\s+us|find\s+us)\b\s*[:\-–—|•·*\/]?\s*/i, "").trim();
+  name = name.replace(/^[A-Za-z0-9\s]+[•·|*\/]\s*/, "").trim();
+
   // 2. Strip common unwanted leading prefixes (iterative loop to handle chained prefixes like "Submit scroll to top Contact")
   const prefixRegex = /^(?:(?:contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+the\s+official\s+website\s+of)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo)\b[\s\-_|:•·,]*)+/i;
 
@@ -539,9 +544,9 @@ function extractLegalCandidatesFromHtml(html) {
   if (!html) return [];
   const text = html.replace(/<script[\s\S]*?<\/script>/gi, " ")
                    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+                   .replace(/<\/(?:p|div|h[1-6]|li|td|tr|th|header|footer|nav|section|article|aside|caption|blockquote|ul|ol|table|br\s*\/?)>/gi, "\n")
                    .replace(/<[^>]+>/g, " ")
-                   .replace(/&nbsp;/gi, " ")
-                   .replace(/\s+/g, " ");
+                   .replace(/&nbsp;/gi, " ");
 
   const candidates = new Set();
 
@@ -824,10 +829,9 @@ async function crawlWebsite(targetUrl) {
 
   // Check redirect host
   try {
-    const origHost = new URL(targetUrl).hostname.replace(/^www\./, "");
-    const finalHost = new URL(finalUrl).hostname.replace(/^www\./, "");
-    if (origHost !== finalHost && !finalHost.includes(origHost) && !origHost.includes(finalHost)) {
+    if (isRedirectDomain(targetUrl, finalUrl)) {
       status = "Redirect Site";
+      redirected = true;
     }
   } catch (e) { }
 
@@ -2110,14 +2114,43 @@ Return ONLY valid JSON matching this schema:
   return parsed;
 }
 
-function cleanDomainStem(url) {
+function extractDomainStem(urlOrHost) {
+  if (!urlOrHost || typeof urlOrHost !== "string") return "";
+  let host = urlOrHost.trim().toLowerCase();
   try {
-    const hostname = new URL(url).hostname;
-    const parts = hostname.replace(/^www\./i, "").split(".");
-    return parts[0].toLowerCase();
+    if (host.includes("://")) {
+      host = new URL(host).hostname;
+    } else if (host.includes("/")) {
+      host = host.split("/")[0];
+    }
+  } catch (e) { }
+  host = host.replace(/^www\d?\./i, "");
+  host = host.replace(/\.(?:co\.[a-z]{2}|com\.[a-z]{2}|org\.[a-z]{2}|net\.[a-z]{2}|gov\.[a-z]{2}|edu\.[a-z]{2}|[a-z]{2,})$/i, "");
+  host = host.replace(/\.[a-z]{2,}$/i, "");
+  return host.replace(/[^a-z0-9]/g, "");
+}
+
+function cleanDomainStem(url) {
+  return extractDomainStem(url);
+}
+
+function isRedirectDomain(origUrl, finalUrl) {
+  if (!origUrl || !finalUrl) return false;
+  try {
+    const origStem = extractDomainStem(origUrl);
+    const finalStem = extractDomainStem(finalUrl);
+    return !!(origStem && finalStem && origStem !== finalStem);
   } catch (e) {
-    return "";
+    return false;
   }
+}
+
+function normalizeNameForComparison(name) {
+  if (!name || typeof name !== "string") return "";
+  return name.toLowerCase()
+    .replace(/\b(?:pty\.?\s*ltd\.?|proprietary\s*limited|limited|ltd\.?|inc\.?|incorporated|llc|llp|corp\.?|corporation|co\.,\s*ltd\.?|company\s*limited|pte\.?\s*ltd\.?|pvt\.?\s*ltd\.?|sdn\.?\s*bhd\.?|berhad|gmbh|plc|s\.?l\.?u\.?|s\.?a\.?u\.?|s\.?l\.?|s\.?a\.?)\b/gi, " ")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
 }
 
 function isSeoSloganOrTagline(name) {
@@ -2302,6 +2335,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.websiteStatus = "Not Working";
     result.isShopCartSite = true;
     result.shopCartReason = shopCartCheck.reason;
+  } else if (crawlData.status === "Redirect Site" || isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl)) {
+    result.websiteStatus = "Redirect Site";
   } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working" || crawlData.status === "Domain Expired") {
     result.websiteStatus = crawlData.status || "Not Working";
   } else if (restrictedCheck && restrictedCheck.isRestricted) {
@@ -3407,20 +3442,23 @@ function preferOfficialCompanyName(name, crawlData) {
       continue;
     }
     let score = 0;
-    const offStem = cleanDomainStem(official.replace(/\b(?:pty|ltd|limited|proprietary|inc|llc|corp|co|sdn|bhd)\b/gi, ""));
-    const curStem = cleanDomainStem(current);
+    const offNorm = normalizeNameForComparison(official);
+    const curNorm = normalizeNameForComparison(current);
 
-    if (offStem && curStem) {
-      if (offStem === curStem) score += 100;
-      else if (offStem.startsWith(curStem) || curStem.startsWith(offStem)) score += 80;
-      else if (offStem.includes(curStem) || curStem.includes(offStem)) score += 60;
+    if (offNorm && curNorm) {
+      if (offNorm === curNorm) score += 100;
+      else if (offNorm.startsWith(curNorm) || curNorm.startsWith(offNorm)) score += 80;
+      else if (offNorm.includes(curNorm) || curNorm.includes(offNorm)) score += 60;
     }
-    if (domainStem && offStem) {
-      if (offStem === domainStem) score += 90;
-      else if (offStem.startsWith(domainStem) || domainStem.startsWith(offStem)) score += 70;
-      else if (offStem.includes(domainStem) || domainStem.includes(offStem)) score += 50;
+    if (domainStem && offNorm) {
+      if (offNorm === domainStem) score += 90;
+      else if (offNorm.startsWith(domainStem) || domainStem.startsWith(offNorm)) score += 70;
+      else if (offNorm.includes(domainStem) || domainStem.includes(offNorm)) score += 50;
     }
     if (companyNamesMatch(current, official)) score += 80;
+
+    // Favor concise, exact official names over overly long/noisy matches
+    score -= Math.min(20, Math.floor(official.length / 5));
 
     if (score > bestScore) {
       bestScore = score;

@@ -685,6 +685,8 @@
           ? `⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Website Status set to Not Working (all other fields cleared).`
           : `⚠️ Website Status set to Not Working (all other fields left empty).`;
         updateStatus(msg, "warning");
+      } else if (data.websiteStatus === "Redirect Site") {
+        updateStatus(`🔄 Redirect Site detected! Website Status set to Redirect Site. Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
       } else {
         updateStatus(`✅ Success! Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
       }
