@@ -454,6 +454,42 @@ function extractCopyrightCompanyName(html) {
 }
 
 /**
+ * Strips navigational, CTA, and page-context prefixes and marketing taglines from company names.
+ * Ensures official registered names are clean, complete, and free of extraneous artifacts.
+ */
+function cleanCompanyPrefixesAndSuffixes(rawName) {
+  if (!rawName || typeof rawName !== "string") return "";
+  let name = rawName.trim();
+
+  // 1. Strip HTML entities and special boundary chars
+  name = name.replace(/&amp;/gi, "&").replace(/&nbsp;/gi, " ");
+  name = name.replace(/^[\s\-_|:•·,;*#~]+|[\s\-_|:•·,;*#~]+$/g, "").trim();
+
+  // 2. Strip common unwanted leading prefixes (iterative loop to handle chained prefixes like "Submit scroll to top Contact")
+  const prefixRegex = /^(?:(?:contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+the\s+official\s+website\s+of)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo)\b[\s\-_|:•·,]*)+/i;
+
+  let prev = "";
+  while (prev !== name) {
+    prev = name;
+    name = name.replace(prefixRegex, "").trim();
+    name = name.replace(/^[\s\-_|:•·,;*#~]+|[\s\-_|:•·,;*#~]+$/g, "").trim();
+  }
+
+  // 3. Strip trailing marketing taglines / SEO categories if corporate legal suffix is already present
+  // e.g. "Danzer UK Limited - Timber Merchants Suppliers of Hardwoods" -> "Danzer UK Limited"
+  const legalSuffixCutoff = /\b(Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada|Sociedad\s*An[oó]nima)\b\s*[-–—|:•·,]\s*.*$/i;
+  name = name.replace(legalSuffixCutoff, "$1");
+
+  // 4. Strip trailing SEO taglines even without separator if starts with " - Manufacturer of...", " | Suppliers of..."
+  name = name.replace(/\s*[-–—|:•·]\s*(?:manufacturer|supplier|wholesaler|distributor|timber\s*merchants|specialists|services|official\s*website|home|online\s*store).*$/i, "");
+
+  // 5. Clean boundary punctuation
+  name = name.replace(/^[\s\-_|:•·,;*#~]+|[\s\-_|:•·,;*#~]+$/g, "").trim();
+
+  return name;
+}
+
+/**
  * Extracts candidate official registered legal corporate names from HTML text
  * across all crawled pages (e.g. from ABN/ACN/registration anchors, terms/authority clauses, copyright, and legal suffixes).
  */
@@ -467,23 +503,31 @@ function extractLegalCandidatesFromHtml(html) {
 
   const candidates = new Set();
 
+  function addCleanCandidate(rawCand) {
+    if (!rawCand) return;
+    const cleaned = cleanCompanyPrefixesAndSuffixes(rawCand);
+    if (cleaned.length >= 3 && cleaned.length <= 60 && !/^(?:all|and|the|for|with|from|including|our|your|their|loss|damage|expenses|costs)\b/i.test(cleaned)) {
+      candidates.add(cleaned);
+    }
+  }
+
   // Pattern 1: ABN / ACN / CIF / NIF preceded or followed by company name (e.g. "Custom Flatpack Pty Ltd ... ABN : 37 139 481 575" or "Empresa S.L. ... CIF: B-12345678")
   const abnNearRegex = /([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))[^\.\n\r<]{0,60}?(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?/gi;
   let m;
   while ((m = abnNearRegex.exec(text)) !== null) {
-    if (m[1]) candidates.add(m[1].trim());
+    if (m[1]) addCleanCandidate(m[1].trim());
   }
 
   // Reverse: ABN / CIF followed by name
   const abnBeforeRegex = /(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?[^\.\n\r<]{0,60}?([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))/gi;
   while ((m = abnBeforeRegex.exec(text)) !== null) {
-    if (m[1]) candidates.add(m[1].trim());
+    if (m[1]) addCleanCandidate(m[1].trim());
   }
 
   // Pattern 2: "means [Name] Pty Ltd", "operated by [Name] Pty Ltd", "authority of [Name] Pty Ltd", "trading as [Name] Pty Ltd"
   const legalContextRegex = /(?:means|operated\s+by|registered\s+as|trading\s+as|property\s+of|authority\s+of)\s+([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))/gi;
   while ((m = legalContextRegex.exec(text)) !== null) {
-    if (m[1]) candidates.add(m[1].trim());
+    if (m[1]) addCleanCandidate(m[1].trim());
   }
 
   // Pattern 3: Explicit legal suffix preceded by capitalized words
@@ -493,7 +537,7 @@ function extractLegalCandidatesFromHtml(html) {
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
         !/^(?:all|and|the|for|with|from|including|our|your|their)\b/i.test(cand) &&
         cand.length >= 3 && cand.length <= 60) {
-      candidates.add(cand);
+      addCleanCandidate(cand);
     }
   }
 
@@ -1837,6 +1881,10 @@ COMPANY NAME RULES (Rule 4):
    - If an official registered corporate name with prefix, suffix, and category exists anywhere on the site (e.g. "Custom Flatpack Proprietary Limited" / "Custom Flatpack Pty Ltd"), you MUST output that FULL official registered name! NEVER output an incomplete brand or marketing name like "Custom Flat Packs".
    - When the page title or header contains both a service description/slogan and a business name (e.g. "Expert Cabinet Maker in Canberra | Custom Flat Packs"), identify the business brand ("Custom Flatpack") and find its full registered legal corporate entity ("Custom Flatpack Proprietary Limited").
    - Reject phrases like "Expert ... in [City]", "Best ... in [City]", "Leading Manufacturer of ...", "Professional ... Services" when they are marketing taglines.
+6. STRICTLY REMOVE NAVIGATION, CTA, AND PAGE-CONTEXT PREFIXES:
+   - NEVER prefix the company name with navigation or call-to-action words like "Contact ", "Contact Us ", "About ", "Welcome to ", "Home - ", "Visit ", "Get In Touch With ", "Connect With ", "Policy ", "Submit ", "Scroll to Top ", "Privacy Notice of ", "Copyright ", etc.
+   - Example: If a page heading says "Contact Danzer UK Limited", the official company name is "Danzer UK Limited" (NEVER "Contact Danzer UK Limited").
+   - Strip marketing taglines or product category descriptors attached after the legal suffix (e.g. "Danzer UK Limited - Timber Merchants Suppliers of Hardwoods" -> "Danzer UK Limited").
 
 COUNTRY NAME VALIDATION RULES:
 1. Country Name MUST be taken DIRECTLY from the physical address on the website. Expand "Taiwan, R.O.C." to "Taiwan".
@@ -2258,19 +2306,23 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
   let compName = decodeHtmlEntities((result.companyName || "").trim());
   compName = compName.replace(/['’`]\s*s\b/gi, "'s");
+  compName = cleanCompanyPrefixesAndSuffixes(compName);
 
   // Prefer the fuller official name (copyright / JSON-LD) when it carries the legal suffix
   compName = preferOfficialCompanyName(compName, crawlData);
   compName = decodeHtmlEntities(compName);
   compName = compName.replace(/['’`]\s*s\b/gi, "'s");
+  compName = cleanCompanyPrefixesAndSuffixes(compName);
 
   // Restore legal suffixes (Ltd, Inc, Sdn Bhd, etc.) from footer/copyright evidence
   compName = restoreLegalSuffixIfOmitted(compName, crawlData);
   compName = decodeHtmlEntities(compName);
   compName = compName.replace(/['’`]\s*s\b/gi, "'s");
+  compName = cleanCompanyPrefixesAndSuffixes(compName);
 
   // Expand abbreviations to full form and clean brackets
   compName = expandCompanyAbbreviations(compName, country);
+  compName = cleanCompanyPrefixesAndSuffixes(compName);
   compName = compName.replace(/[\(\)\[\]\{\}]/g, " ");
   compName = compName.replace(/^[^\w]+|[^\w]+$/g, "");
   compName = compName.replace(/\s+/g, " ").trim();
@@ -3250,31 +3302,33 @@ function namesOverlap(a, b) {
 }
 
 function preferOfficialCompanyName(name, crawlData) {
-  let current = (name || "").trim();
-  const jsonLdName = extractJsonLdOrganizationName(crawlData && crawlData.mainHtml);
-  const copyrightName = (crawlData && crawlData.copyrightText) || "";
+  let current = cleanCompanyPrefixesAndSuffixes((name || "").trim());
+  const jsonLdName = cleanCompanyPrefixesAndSuffixes(extractJsonLdOrganizationName(crawlData && crawlData.mainHtml));
+  const copyrightName = cleanCompanyPrefixesAndSuffixes((crawlData && crawlData.copyrightText) || "");
   const logoText = (crawlData && crawlData.logoText) || "";
   const ogSiteName = (crawlData && crawlData.ogSiteName) || "";
   const title = (crawlData && crawlData.title) || "";
   const domain = (crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "";
   const domainStem = cleanDomainStem(domain);
-  const legalCandidates = (crawlData && crawlData.legalCompanyCandidates) || [];
+  const legalCandidates = ((crawlData && crawlData.legalCompanyCandidates) || []).map(c => cleanCompanyPrefixesAndSuffixes(c)).filter(Boolean);
 
   // 1. If the current name is an SEO marketing slogan or tagline, replace it with the true brand
   if (isSeoSloganOrTagline(current)) {
     const brandFromTitle = extractBestBrandFromTitle(title, domain, logoText, ogSiteName);
     if (brandFromTitle && !isSeoSloganOrTagline(brandFromTitle)) {
-      current = brandFromTitle;
+      current = cleanCompanyPrefixesAndSuffixes(brandFromTitle);
     } else if (logoText && !isSeoSloganOrTagline(logoText)) {
-      current = logoText;
+      current = cleanCompanyPrefixesAndSuffixes(logoText);
     } else if (ogSiteName && !isSeoSloganOrTagline(ogSiteName)) {
-      current = ogSiteName;
+      current = cleanCompanyPrefixesAndSuffixes(ogSiteName);
     }
   }
 
   // 2. Search for the FULL official registered corporate name (with complete legal suffix/prefix/category).
   // If current name is missing legal suffix (incomplete, e.g. "Custom Flat Packs"), an official candidate matching the domain/brand MUST win!
-  const allCandidates = [...legalCandidates, jsonLdName, copyrightName].filter(n => n && n.length >= 3 && n.length <= 160);
+  const allCandidates = [...legalCandidates, jsonLdName, copyrightName]
+    .map(n => cleanCompanyPrefixesAndSuffixes(n))
+    .filter(n => n && n.length >= 3 && n.length <= 160);
   
   let bestOfficial = null;
   let bestScore = -1;
@@ -3306,17 +3360,17 @@ function preferOfficialCompanyName(name, crawlData) {
   }
 
   if (bestOfficial && bestScore >= 60) {
-    return bestOfficial;
+    return cleanCompanyPrefixesAndSuffixes(bestOfficial);
   }
 
   // 3. Fallback: if current is still empty or looks like a slogan
   if (!current || isSeoSloganOrTagline(current)) {
     const fallbackBrand = extractBestBrandFromTitle(title, domain, logoText, ogSiteName);
-    if (fallbackBrand) return fallbackBrand;
-    if (logoText) return logoText;
+    if (fallbackBrand) return cleanCompanyPrefixesAndSuffixes(fallbackBrand);
+    if (logoText) return cleanCompanyPrefixesAndSuffixes(logoText);
   }
 
-  return current;
+  return cleanCompanyPrefixesAndSuffixes(current);
 }
 
 /**
