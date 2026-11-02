@@ -427,45 +427,56 @@
   /**
    * Pre-fills the page form fields following the exact instruction rules.
    */
+  /**
+   * Automatically confirms custom confirmation popups/modals that appear when
+   * marking website status as "Not Working" (e.g. "Are You Sure? You are about to mark this website as 'Not Working'.").
+   */
+  function autoConfirmNotWorkingModal() {
+    const checkIntervals = [50, 150, 300, 600, 1000, 1500];
+    checkIntervals.forEach(delay => {
+      setTimeout(() => {
+        // Find visible modal or dialog elements
+        const modals = Array.from(document.querySelectorAll('.modal, .swal2-container, .swal-overlay, div[role="dialog"], .confirmation-modal, .popup, div[class*="modal"], div[class*="dialog"], div[class*="confirm"], div[class*="alert"]'));
+        for (const modal of modals) {
+          const text = (modal.textContent || "").toLowerCase();
+          if (text.includes("confirmation required") || text.includes("are you sure") || text.includes("not working")) {
+            const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+            const okBtn = buttons.find(b => {
+              const bText = (b.textContent || b.value || "").trim().toLowerCase();
+              return bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText.includes("ok");
+            });
+            if (okBtn) {
+              console.log("[AI Assistant] Auto-confirmed 'Not Working' modal dialog");
+              okBtn.click();
+              return;
+            }
+          }
+        }
+        // Direct button text search if modal wrapper wasn't matched
+        const allBtns = Array.from(document.querySelectorAll('button, input[type="button"]'));
+        const okBtn = allBtns.find(b => {
+          const bText = (b.textContent || b.value || "").trim().toLowerCase();
+          const pText = (b.closest("div")?.parentElement?.textContent || "").toLowerCase();
+          return (bText === "ok" || bText === "✓ ok") && (pText.includes("are you sure") || pText.includes("not working") || pText.includes("confirmation required"));
+        });
+        if (okBtn) {
+          console.log("[AI Assistant] Auto-confirmed 'Not Working' button");
+          okBtn.click();
+        }
+      }, delay);
+    });
+  }
+
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
     const elements = detectFormElements();
     let filledCount = 0;
 
-    // CRITICAL QC RULE: "if restricted site means show me proper error message and dont fill any think show the error message"
-    // Select Business Type as "Restricted Site", set Website Status, and clear/leave empty ALL other fields!
-    if (data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site") {
-      if (elements.businessType) {
-        if (setSelectValue(elements.businessType, "Restricted Site")) {
-          highlightField(elements.businessType);
-          filledCount++;
-        }
-      }
-      if (elements.websiteStatus && data.websiteStatus) {
-        if (setSelectValue(elements.websiteStatus, data.websiteStatus || "Working")) {
-          highlightField(elements.websiteStatus);
-          filledCount++;
-        }
-      }
+    const isProhibitedOrRestricted = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site");
 
-      // Clear all other fields (company name, address, country, state, city, phone, email, products, etc.)
-      for (const [key, el] of Object.entries(elements)) {
-        if (!el || key === "websiteUrl" || key === "websiteStatus" || key === "businessType") continue;
-        if (el.tagName && el.tagName.toLowerCase() === "select") {
-          el.selectedIndex = 0;
-          el.dispatchEvent(new Event("change", { bubbles: true }));
-        } else {
-          setInputValue(el, "");
-        }
-        el.classList.remove("ai-prefilled-field");
-      }
-
-      return { filledCount, isRestricted: true };
-    }
-
-    // CRITICAL QC RULE: "Notworking means all empty"
-    // When Website Status is "Not Working", select "Not Working" and clear/leave empty ALL other fields!
-    if (data.websiteStatus === "Not Working") {
+    // CRITICAL QC RULE Note 2 & "Notworking means all empty":
+    // When Website Status is "Not Working" (or prohibited category detected), select "Not Working" and clear/leave empty ALL other fields!
+    if (data.websiteStatus === "Not Working" || isProhibitedOrRestricted) {
       if (elements.websiteStatus) {
         if (setSelectValue(elements.websiteStatus, "Not Working")) {
           highlightField(elements.websiteStatus);
@@ -473,7 +484,10 @@
         }
       }
 
-      // Clear all other fields
+      // Automatically confirm the "Are You Sure? You are about to mark this website as 'Not Working'" modal
+      autoConfirmNotWorkingModal();
+
+      // Clear all other fields (leave empty string / default placeholder)
       for (const [key, el] of Object.entries(elements)) {
         if (!el || key === "websiteUrl" || key === "websiteStatus") continue;
         if (el.tagName && el.tagName.toLowerCase() === "select") {
@@ -485,7 +499,11 @@
         el.classList.remove("ai-prefilled-field");
       }
 
-      return { filledCount };
+      if (isProhibitedOrRestricted) {
+        showRestrictedBanner(data.restrictedReason || "Prohibited Category Detected");
+      }
+
+      return { filledCount, isNotWorking: true, isRestricted: isProhibitedOrRestricted };
     }
 
     // 1. Website Status
@@ -683,9 +701,9 @@
     banner.innerHTML = `
       <span style="font-size: 26px; line-height: 1;">⛔</span>
       <div style="flex: 1;">
-        <div style="font-weight: 700; font-size: 15px; color: #ffffff; letter-spacing: 0.3px;">RESTRICTED SITE DETECTED</div>
+        <div style="font-weight: 700; font-size: 15px; color: #ffffff; letter-spacing: 0.3px;">PROHIBITED CONTENT / WORD DETECTED</div>
         <div style="font-size: 13px; color: #fecaca; margin-top: 3px; line-height: 1.4;">
-          <strong>Category:</strong> ${cleanReason}. Per instructions, Business Type is marked as Restricted Site and all company/contact fields are left empty.
+          <strong>Category/Word:</strong> ${cleanReason}. Per strict instruction Note 2: Do not work on websites related to prohibited categories or words. Website Status is set to <strong>Not Working</strong> and all other fields have been left empty.
         </div>
       </div>
       <button id="ai-dismiss-restricted-btn" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; white-space: nowrap;">Dismiss</button>
@@ -744,18 +762,18 @@
       const data = response.data;
       cachedExtractedData = data;
 
-      // STRICT QC: If restricted site, show proper error message, clear all company fields, and select Restricted Site
-      if (data && (data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site")) {
+      // STRICT QC: If prohibited or restricted site, show proper error message, clear all fields, and select Not Working
+      if (data && (data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site")) {
         const reason = data.restrictedReason || "Prohibited Category Detected";
         fillFormFields(data);
         renderPreview(data);
-        updateStatus(`⛔ RESTRICTED SITE: ${reason}. Business Type set to Restricted Site (all other fields cleared).`, "error");
+        updateStatus(`⛔ PROHIBITED CATEGORY / WORD DETECTED: ${reason}. Website Status set to Not Working (all fields cleared).`, "error");
         showRestrictedBanner(reason);
         if (quickBtn) {
           quickBtn.disabled = false;
           quickBtn.style.backgroundColor = "#dc2626";
           quickBtn.style.borderColor = "#991b1b";
-          quickBtn.innerHTML = `⛔ Restricted Site`;
+          quickBtn.innerHTML = `⛔ Not Working (Prohibited Word)`;
           setTimeout(() => {
             quickBtn.style.backgroundColor = "#059669";
             quickBtn.style.borderColor = "#047857";
@@ -861,12 +879,12 @@
     if (fillCachedBtn) {
       fillCachedBtn.addEventListener("click", () => {
         if (cachedExtractedData) {
-          if (cachedExtractedData.isRestricted || String(cachedExtractedData.businessType || "").toLowerCase() === "restricted site") {
+          if (cachedExtractedData.isProhibitedSite || cachedExtractedData.isRestricted || String(cachedExtractedData.businessType || "").toLowerCase() === "restricted site") {
             const reason = cachedExtractedData.restrictedReason || "Prohibited Category Detected";
             fillFormFields(cachedExtractedData);
             renderPreview(cachedExtractedData);
             showRestrictedBanner(reason);
-            updateStatus(`⛔ RESTRICTED SITE: ${reason}. Business Type set to Restricted Site (all other fields cleared).`, "error");
+            updateStatus(`⛔ PROHIBITED CATEGORY / WORD DETECTED: ${reason}. Website Status set to Not Working (all fields cleared).`, "error");
             return;
           }
           fillFormFields(cachedExtractedData);
@@ -1001,26 +1019,27 @@
     previewSection.style.display = "block";
     previewList.innerHTML = "";
 
-    const isRestr = !!(data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site");
-    const businessTypeVal = isRestr
-      ? `⛔ Restricted Site (${data.restrictedReason || "Prohibited Category"})`
-      : (data.businessType || "-");
+    const isRestr = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site");
+    const statusVal = isRestr 
+      ? `Not Working (Prohibited: ${data.restrictedReason || "Prohibited Category"})`
+      : (data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus);
+    const businessTypeVal = isRestr ? "-" : (data.businessType || "-");
 
     const items = [
-      { key: "Status", val: data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus },
-      { key: "Business Type", val: businessTypeVal, isAlert: isRestr },
-      { key: "Company Profile", val: data.companyProfile },
-      { key: "Company Name", val: data.companyName },
-      { key: "Country", val: data.countryName },
-      { key: "Address", val: data.companyAddress },
-      { key: "State", val: data.state },
-      { key: "City", val: data.city },
-      { key: "Email", val: data.emailId },
-      { key: "Secondary Email", val: data.secondaryEmailId || "(None)" },
-      { key: "Phone", val: data.phoneNumber },
-      { key: "No. Products", val: data.numberOfProducts },
-      { key: "Product Images", val: data.productImages },
-      { key: "Product Descs", val: data.numberOfProductDescriptions }
+      { key: "Status", val: statusVal, isAlert: isRestr || data.websiteStatus === "Not Working" },
+      { key: "Business Type", val: businessTypeVal },
+      { key: "Company Profile", val: isRestr ? "-" : data.companyProfile },
+      { key: "Company Name", val: isRestr ? "-" : data.companyName },
+      { key: "Country", val: isRestr ? "-" : data.countryName },
+      { key: "Address", val: isRestr ? "-" : data.companyAddress },
+      { key: "State", val: isRestr ? "-" : data.state },
+      { key: "City", val: isRestr ? "-" : data.city },
+      { key: "Email", val: isRestr ? "-" : data.emailId },
+      { key: "Secondary Email", val: isRestr ? "-" : (data.secondaryEmailId || "(None)") },
+      { key: "Phone", val: isRestr ? "-" : data.phoneNumber },
+      { key: "No. Products", val: isRestr ? "-" : data.numberOfProducts },
+      { key: "Product Images", val: isRestr ? "-" : data.productImages },
+      { key: "Product Descs", val: isRestr ? "-" : data.numberOfProductDescriptions }
     ];
 
     items.forEach(item => {

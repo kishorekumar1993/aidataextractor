@@ -17,47 +17,56 @@ const DEFAULT_MODEL =
   (typeof self !== "undefined" && self.ENV && self.ENV.DEFAULT_MODEL) ||
   "gemini-3.5-flash-lite";
 
-// Primary prohibited core industries per Instruction Sheet
+// Primary prohibited core industries per Instruction Sheet Note 2
+// Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
 const RESTRICTED_PATTERNS = [
   { 
-    pattern: /\b(?:porn|pornography|xxx|erotic|sex\s*shop|escort\s*service|adult\s*content|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|sex\s*worker|sensual\s*massage|nude|nudity|onlyfans)\b/i, 
-    label: "Adult Content & Entertainment" 
+    pattern: /\b(?:porn(?:o|ography|ographic)?|xxx|erotic|adult|sex\s*shop|escort\s*service|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|sex\s*worker|sensual\s*massage|nude|nudity|onlyfans)\b/i, 
+    label: "Adult & Porn" 
   },
   { 
-    pattern: /(?<!(?:glue|heat|spray|grease|air|nail|stud|rivet|staple|caulk|massage|palette|putty)\s+)\b(?:firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor|combat\s*knives|tactical\s*knives|hunting\s*knives|daggers?|swords?|machetes?|bayonets?|custom\s*knives|knife\s*maker|knives\s*manufacturer)\b/i, 
-    label: "Weapons, Firearms & Knives" 
+    pattern: /\b(?:weapons?|firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor|combat\s*knives|tactical\s*knives|hunting\s*knives|knives|knife|daggers?|swords?|machetes?|bayonets?|custom\s*knives|knife\s*maker)\b/i, 
+    label: "Weapons & Knives" 
   },
   { 
-    pattern: /\b(?:military\s*(?:defence|defense)\s*contractor|armed\s*forces\s*equipment|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?)\b/i, 
-    label: "Military & Defence Armaments" 
+    pattern: /\b(?:defence|defense|military|armed\s*forces|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?|defence\s*contractor|defense\s*contractor)\b/i, 
+    label: "Defence & Military" 
   },
   { 
-    pattern: /(?<!(?:model|toy|rc)\s+)\b(?:aircraft\s*manufactur(?:er|ing)|airplane\s*manufactur(?:er|ing)|commercial\s*aviation|airlines?|air\s*charter|avionics\s*systems?|aerospace\s*manufactur(?:er|ing)|aerospace\s*engineering|helicopters?\s*manufactur(?:er|ing)|jet\s*aircraft)\b/i, 
-    label: "Aircraft, Aviation & Aerospace" 
+    pattern: /\b(?:aircraft|aircrafts|airplane|airplanes|commercial\s*aviation|airlines?|air\s*charter|avionics|helicopters?|jet\s*aircraft|jets)\b/i, 
+    label: "Aircraft & Aviation" 
   },
   { 
-    pattern: /\b(?:shipyard|shipbuilding|naval\s*shipyard|ship\s*builder|boat\s*builder|yacht\s*manufactur(?:er|ing)|commercial\s*vessels?\s*manufactur(?:er|ing)|maritime\s*shipping|naval\s*vessels?)\b/i, 
-    label: "Marine, Ships & Shipbuilding" 
+    pattern: /\b(?:aerospace|aerospace\s*engineering|aerospace\s*components?|aerospace\s*parts?)\b/i, 
+    label: "Aerospace" 
   },
   { 
-    pattern: /(?<!(?:resistance\s+to|resistant\s+to|proof\s+against)\s+)\b(?:chemicals?\s*manufactur(?:er|ing)|specialty\s*chemicals?|industrial\s*chemicals?|petrochemicals?\s*manufactur(?:er|ing)|agrochemicals?|pesticides?\s*manufactur(?:er|ing)|hazardous\s*chemicals?|chemical\s*synthesis|solvents?\s*manufactur(?:er|ing)|bulk\s*chemicals?)\b/i, 
+    pattern: /\b(?:marine|maritime|naval|naval\s*vessels?|commercial\s*vessels?)\b/i, 
+    label: "Marine" 
+  },
+  { 
+    pattern: /\b(?:ship|ships|shipyard|shipyards|shipbuilding|ship\s*builder|boat\s*builder|boats?|yachts?)\b/i, 
+    label: "Ships & Boats" 
+  },
+  { 
+    pattern: /\b(?:chemicals?|specialty\s*chemicals?|industrial\s*chemicals?|petrochemicals?|agrochemicals?|pesticides?|hazardous\s*chemicals?|chemical\s*synthesis|solvents?|toxic\s*chemicals?)\b/i, 
     label: "Chemicals & Petrochemicals" 
   },
   { 
-    pattern: /\b(?:pharmaceuticals?\s*manufactur(?:er|ing)?|prescription\s*drugs?|online\s*pharmacy|medicine\s*manufactur(?:er|ing)?|medical\s*devices?\s*manufactur(?:er|ing)?|hospital\s*care|patient\s*care|dental\s*clinic|outpatient\s*clinic|surgery\s*center|veterinary\s*hospital|psychiatric\s*hospital|healthcare\s*clinic|health\s*clinic|diagnostic\s*center)\b/i, 
-    label: "Medicine, Pharmaceuticals & Hospitals" 
+    pattern: /\b(?:medicine|medicines|medical|pharmaceuticals?|prescription\s*drugs?|online\s*pharmacy|hospital|hospitals|patient\s*care|dental\s*clinic|outpatient\s*clinic|surgery|veterinary\s*hospital|psychiatric\s*hospital|healthcare|health\s*clinic|diagnostic\s*center|clinic|clinics)\b/i, 
+    label: "Medicine, Medical & Hospital" 
   },
   { 
-    pattern: /(?<!(?:machinery|machine|equipment|packaging|moulding|molding|automation|processing\s+machine)\s+(?:for\s+)?)\b(?:food\s*manufactur(?:er|ing)|food\s*processing\s*plant|food\s*products?\s*manufactur(?:er|ing)?|bakery\s*products?|catering\s*services?|restaurants?|bistros?|cafes?|eateries|snack\s*manufactur(?:er|ing)|dairy\s*products?\s*manufactur(?:er|ing)|meat\s*processing|poultry\s*processing|seafood\s*processing|edible\s*oils?\s*manufactur(?:er|ing)|confectionery\s*manufactur(?:er|ing))\b/i, 
-    label: "Food, Beverages & Restaurants" 
+    pattern: /\b(?:food|foods|beverages?|food\s*processing|bakery|bakeries|catering|restaurants?|bistros?|cafes?|eateries|snack|dairy|meat\s*processing|poultry\s*processing|seafood|edible\s*oils?|confectionery)\b/i, 
+    label: "Food & Beverages" 
   },
   { 
-    pattern: /\b(?:brewery|microbrewery|distillery|distilleries|liquor\s*store|liquor\s*shop|spirits\s*manufacturer|wine\s*producer|winery|wineries|vineyards?|craft\s*beer|whiskey|whisky|vodka|tequila|rum|gin|alcoholic\s*beverages?)\b/i, 
-    label: "Alcohol, Breweries & Wineries" 
+    pattern: /\b(?:alcohol|alcoholic|brewery|breweries|distillery|distilleries|liquor\s*store|liquor\s*shop|liquor|wine\s*producer|winery|wineries|vineyards?|wine|craft\s*beer|beer|whiskey|whisky|vodka|tequila|rum|gin|spirits)\b/i, 
+    label: "Alcohol & Breweries" 
   },
   { 
-    pattern: /\b(?:pet\s*shop|pet\s*store|puppy\s*mill|dog\s*breeding|cat\s*breeding|animal\s*breeding|livestock\s*farming|cattle\s*ranching|poultry\s*farming|pig\s*farming|animal\s*feed\s*manufactur(?:er|ing)|slaughterhouse|veterinary\s*clinic)\b/i, 
-    label: "Animals, Pets & Livestock" 
+    pattern: /\b(?:animals?|pets?|puppy|puppies|dogs?|cats?|pet\s*shop|pet\s*store|animal\s*breeding|livestock|cattle|poultry\s*farming|pig\s*farming|animal\s*feed|slaughterhouse|veterinary)\b/i, 
+    label: "Animals & Pets" 
   },
   { 
     pattern: /\b(?:gambling|online\s*casino|casinos?|sports\s*betting|betting\s*site|slot\s*machines?|video\s*slots|poker\s*room|roulette|blackjack|baccarat|bookmaker|sportsbook|lottery|lotto|sports\s*wagering|jackpot\s*betting)\b/i, 
@@ -431,17 +440,17 @@ async function handleCrawlAndExtract(rawUrl) {
     throw new Error(`Unable to crawl ${targetUrl}: ${reason}. Form was not modified.`);
   }
 
-  // Step 2: PRE-AI STRICT CHECKS (Restricted Category & Online Shopping Cart)
-  // Check across target URL, final URL, page HTML, metadata, and crawled text
+  // Step 2: PRE-AI STRICT CHECKS (Prohibited Category / Word & Online Shopping Cart)
+  // Check across target URL, final URL, page HTML, metadata, image tags, and crawled text
   const siteContent = (crawlResult.combinedText || "") + " " + (crawlResult.mainHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
-  const restrictedCheck = detectRestrictedKeywords(siteContent);
+  const restrictedCheck = detectRestrictedKeywords(siteContent, crawlResult.mainHtml || "");
 
-  // PRE-AI CHECK 1: If Restricted Site, immediately abort AI crawl and return restricted status!
-  // Rule: "if restricted site means show me proper error message and dont fill any think show the error message"
+  // PRE-AI CHECK 1: If Prohibited Category / Word appears anywhere on the site (text or images):
+  // Rule Note 2: "Do not work on that site... make these rule strictly if any word appear make it notwroking" & "Notworking means all empty"
   if (restrictedCheck.isRestricted) {
     return {
-      websiteStatus: "Working",
-      businessType: "Restricted Site",
+      websiteStatus: "Not Working",
+      businessType: "",
       companyProfile: "",
       companyName: "",
       countryName: "",
@@ -455,8 +464,9 @@ async function handleCrawlAndExtract(rawUrl) {
       productImages: "",
       numberOfProductDescriptions: "",
       isRestricted: true,
+      isProhibitedSite: true,
       restrictedReason: restrictedCheck.reason,
-      _note: `Restricted Site Identified Pre-AI (${restrictedCheck.reason})`
+      _note: `Prohibited Category / Word Detected (${restrictedCheck.reason}) - Marked as Not Working`
     };
   }
 
@@ -852,7 +862,7 @@ async function crawlWebsite(targetUrl) {
     // If homepage already shows this is an online shopping cart or restricted site,
     // skip crawling 15 subpages to respond instantly and preserve resources!
     const earlyCart = detectPurchaseOrShoppingCart(mainHtml);
-    const earlyRestricted = detectRestrictedKeywords(mainHtml + " " + targetUrl);
+    const earlyRestricted = detectRestrictedKeywords(mainHtml + " " + targetUrl, mainHtml);
     const shouldSkipSubpages = (earlyCart && earlyCart.detected) || earlyRestricted.isRestricted;
 
     if (!shouldSkipSubpages) {
@@ -1790,13 +1800,27 @@ function checkCompanyProfilePresence(html, text, profilePageText = "") {
   return false;
 }
 
-function detectRestrictedKeywords(text) {
-  if (!text) return { isRestricted: false, matchedKeyword: null, reason: "" };
+/**
+ * Extracts alt, title, and src attributes from image tags to detect prohibited visual content.
+ */
+function extractImageAttributes(html) {
+  if (!html || typeof html !== "string") return "";
+  const matches = [...html.matchAll(/<img[^>]+(?:alt|title|src)=["']([^"']+)["']/gi)];
+  return matches.map(m => m[1]).join(" ");
+}
+
+/**
+ * Checks website text and images against prohibited categories per Note 2.
+ * Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
+ */
+function detectRestrictedKeywords(text, html = "") {
+  const combined = ((text || "") + " " + extractImageAttributes(html)).trim();
+  if (!combined) return { isRestricted: false, matchedKeyword: null, reason: "" };
   for (const item of RESTRICTED_PATTERNS) {
     const regex = item.pattern || item;
     const label = item.label || "Prohibited Category";
-    if (regex.test(text)) {
-      const m = text.match(regex);
+    if (regex.test(combined)) {
+      const m = combined.match(regex);
       return {
         isRestricted: true,
         matchedKeyword: m ? m[0] : "",
@@ -1908,25 +1932,29 @@ WEBSITE STATUS QC RULES (Rule 1):
 - If the website failed to load or has no content, mark "Not Working".
 
 BUSINESS TYPE & RESTRICTED SITE QC RULES (Rule 2):
-- Select one from: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
-- RESTRICTED SITE CRITICAL QC RULE ("if restricted site means show me proper error message and dont fill any think"):
-  If the website's core business belongs to ANY prohibited/restricted category:
-  1. Adult Content, Pornography, Sex Shops, Erotica, Escort services
-  2. Weapons, Firearms, Ammunition, Knives (combat/tactical/hunting/swords), Explosives
-  3. Military & Defence Armaments, Defense contractors, Artillery, Combat gear
-  4. Aircraft, Commercial Aviation, Airlines, Aerospace manufacturing
-  5. Marine, Ships, Shipbuilding, Boat builders, Yachts, Naval vessels
-  6. Chemicals, Petrochemicals, Industrial chemicals, Agrochemicals, Toxic/hazardous chemicals
-  7. Medicine, Pharmaceuticals, Prescription drugs, Medical devices, Hospitals, Healthcare clinics, Surgery, Dental
-  8. Food products, Food manufacturing/processing, Bakeries, Catering, Restaurants, Cafes, Groceries, Meat/Dairy
-  9. Alcohol, Liquor, Breweries, Wineries, Distilleries, Wine, Beer, Spirits
-  10. Animals, Pets, Pet shops, Animal breeding, Livestock farming, Cattle, Poultry, Veterinary clinics
-  11. Gambling, Online casinos, Sports betting, Poker, Lotteries
-  12. Tobacco, Cigarettes, Cigars, Vaping, E-cigarettes, Nicotine
-  13. Cannabis, Marijuana, THC, CBD, Narcotics, Illicit drugs
+- Select one from: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Other".
+- CRITICAL PROHIBITED / RESTRICTED WEBSITES QC RULE (Note 2):
+  Instruction Note 2 Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
+  If words or images related to ANY of these categories appear ANYWHERE on the site:
+  1. Porn / Adult Content / Erotica / Onlyfans
+  2. Weapons / Firearms / Ammunition / Knives (combat, hunting, kitchen, pocket, sword, etc.)
+  3. Defence / Military / Armaments / Artillery / Defense contractors
+  4. Aircraft / Airplanes / Aviation / Helicopters / Jets
+  5. Aerospace / Aerospace engineering / Aerospace parts
+  6. Marine / Maritime / Naval / Vessels
+  7. Ships / Boats / Shipyard / Shipbuilding / Yachts
+  8. Chemical / Petrochemicals / Agrochemicals / Pesticides / Solvents / Hazardous chemicals
+  9. Medicine / Medical / Pharmaceuticals / Prescription drugs / Hospitals / Clinics / Healthcare / Doctors / Dental / Surgery
+  10. Food / Foods / Beverages / Food manufacturing / Restaurants / Cafes / Bakeries / Catering / Groceries / Meat / Dairy / Snack
+  11. Alcohol / Breweries / Wineries / Distilleries / Liquor / Wine / Beer / Spirits
+  12. Animals / Pets / Dogs / Cats / Livestock / Cattle / Poultry / Animal feed / Veterinary
+  13. Gambling / Casinos / Betting / Poker / Lotteries
+  14. Tobacco / Cigarettes / Cigars / Vaping / E-cigarettes / Nicotine
+  15. Cannabis / Marijuana / THC / CBD / Narcotics / Illicit drugs
+  16. Counterfeits / Replica goods / Fake ID / Hacking / Loan sharks
   THEN:
-  - Mark "businessType": "Restricted Site"
-  - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": companyProfile: "", companyName: "", countryName: "", companyAddress: "", state: "", city: "", emailId: "", secondaryEmailId: "", phoneNumber: "", numberOfProducts: "", productImages: "", numberOfProductDescriptions: ""!
+  - YOU MUST MARK "websiteStatus": "Not Working"!
+  - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": "businessType": "", "companyProfile": "", "companyName": "", "countryName": "", "companyAddress": "", "state": "", "city": "", "emailId": "", "secondaryEmailId": "", "phoneNumber": "", "numberOfProducts": "", "productImages": "", "numberOfProductDescriptions": ""!
 
 CRITICAL GLOBAL LANGUAGE REQUIREMENT (ALWAYS TARGET ENGLISH):
 - ALWAYS target and extract English language text for Company Name and Company Address.
@@ -2168,6 +2196,9 @@ EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE):
    - If two or more distinct valid corporate emails exist on the website, secondaryEmailId MUST be populated with the second distinct email. NEVER leave it empty when an alternate email is present!
    - secondaryEmailId MUST be different and distinct from emailId (never output identical emails in both fields).
    - Return "" ONLY if the entire website contains just one single email address.
+4. STRICT EMAIL ANTI-ARTIFACT QC RULE:
+   - NEVER extract scraping, legal, or privacy policy artifacts like "collected@www...", "posted@...", "sent@...", "accessed@...", or any email containing "www." in the domain.
+   - ONLY extract genuine corporate contact emails.
 
 PHONE NUMBER RULES (Rule 11):
 - phoneNumber: Complete phone number, digits only.
@@ -2290,16 +2321,14 @@ Return ONLY valid JSON matching this schema:
     throw lastError || new Error("All Gemini models failed to return structured data");
   }
 
-  if (!parsed.emailId && crawlData.emails.length > 0) {
-    parsed.emailId = crawlData.emails[0];
+  if (!isValidCorporateEmail(parsed.emailId)) {
+    parsed.emailId = (crawlData.emails || []).find(e => isValidCorporateEmail(e)) || "";
   }
-  if (!parsed.secondaryEmailId && crawlData.emails.length > 1) {
-    const second = crawlData.emails.find(e => e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
-    if (second) {
-      parsed.secondaryEmailId = second;
-    }
+  if (!isValidCorporateEmail(parsed.secondaryEmailId) || (parsed.secondaryEmailId && parsed.secondaryEmailId.toLowerCase() === (parsed.emailId || "").toLowerCase())) {
+    const second = (crawlData.emails || []).find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
+    parsed.secondaryEmailId = second || "";
   }
-  if (!parsed.phoneNumber && crawlData.phones.length > 0) {
+  if (!parsed.phoneNumber && crawlData.phones && crawlData.phones.length > 0) {
     parsed.phoneNumber = crawlData.phones[0];
   }
 
@@ -2520,24 +2549,39 @@ function heuristicExtraction(crawlData, restrictedCheck) {
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const result = { ...data };
 
-  // 1. Website Status:
-  // Rule 1 QC: Purchase / Shopping Cart ("Shopchart") detected on website MUST mark Not Working!
+  // 1. Prohibited Category / Word Check (Highest Priority Rule Note 2)
+  // "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
+  const isProhibited = (restrictedCheck && restrictedCheck.isRestricted) || 
+                       String(result.businessType || "").toLowerCase() === "restricted site" ||
+                       !!result.isProhibitedSite;
+  if (isProhibited) {
+    result.websiteStatus = "Not Working";
+    result.businessType = "";
+    result.companyProfile = "";
+    result.companyName = "";
+    result.countryName = "";
+    result.companyAddress = "";
+    result.state = "";
+    result.city = "";
+    result.emailId = "";
+    result.secondaryEmailId = "";
+    result.phoneNumber = "";
+    result.numberOfProducts = "";
+    result.productImages = "";
+    result.numberOfProductDescriptions = "";
+    result.isRestricted = true;
+    result.isProhibitedSite = true;
+    result.restrictedReason = (restrictedCheck && restrictedCheck.reason) || result.restrictedReason || "Prohibited Category Detected";
+    return result;
+  }
+
+  // 2. Online Shopping Cart / Purchase ("Shopchart") Check
+  // Rule: purchase / Shopchart in website found means mark it as Not Working site
   const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
   if (shopCartCheck && shopCartCheck.detected) {
     result.websiteStatus = "Not Working";
     result.isShopCartSite = true;
     result.shopCartReason = shopCartCheck.reason;
-  } else if (crawlData.status === "Redirect Site" || isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl)) {
-    result.websiteStatus = "Redirect Site";
-  } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working" || crawlData.status === "Domain Expired") {
-    result.websiteStatus = crawlData.status || "Not Working";
-  } else if (restrictedCheck && restrictedCheck.isRestricted) {
-    result.websiteStatus = "Working";
-  }
-
-  // CRITICAL RULE: "Notworking means all empty"
-  // When websiteStatus is "Not Working", all other fields MUST be empty!
-  if (result.websiteStatus === "Not Working") {
     result.businessType = "";
     result.companyProfile = "";
     result.companyName = "";
@@ -2554,20 +2598,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     return result;
   }
 
-  // 2. Business Type & Restricted Site Detection
-  if (restrictedCheck && restrictedCheck.isRestricted) {
-    result.businessType = "Restricted Site";
-    result.isRestricted = true;
-    result.restrictedReason = restrictedCheck.reason || (restrictedCheck.matchedKeyword ? `Prohibited Category (${restrictedCheck.matchedKeyword})` : "Prohibited Category");
-  } else if (String(result.businessType || "").toLowerCase() === "restricted site") {
-    result.isRestricted = true;
-    result.restrictedReason = result.restrictedReason || "Restricted Site (AI Identified Prohibited Industry)";
+  // 3. Website Status (Redirect Site, Domain Expired, or Offline)
+  if (crawlData.status === "Redirect Site" || isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl)) {
+    result.websiteStatus = "Redirect Site";
+  } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working" || crawlData.status === "Domain Expired") {
+    result.websiteStatus = crawlData.status || "Not Working";
   }
 
-  // STRICT QC: "if restricted site means show me proper error message and dont fill any think show the error message"
-  // When a site is Restricted, clear ALL other fields so no data is filled or left over!
-  if (result.isRestricted) {
-    result.businessType = "Restricted Site";
+  // CRITICAL RULE: "Notworking means all empty"
+  // When websiteStatus is "Not Working", all other fields MUST be empty!
+  if (result.websiteStatus === "Not Working") {
+    result.businessType = "";
     result.companyProfile = "";
     result.companyName = "";
     result.countryName = "";
