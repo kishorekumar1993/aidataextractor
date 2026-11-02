@@ -428,46 +428,6 @@
    * Pre-fills the page form fields following the exact instruction rules.
    */
   /**
-   * Automatically confirms custom confirmation popups/modals that appear when
-   * marking website status as "Not Working" (e.g. "Are You Sure? You are about to mark this website as 'Not Working'.").
-   */
-  function autoConfirmNotWorkingModal() {
-    const checkIntervals = [50, 150, 300, 600, 1000, 1500];
-    checkIntervals.forEach(delay => {
-      setTimeout(() => {
-        // Find visible modal or dialog elements
-        const modals = Array.from(document.querySelectorAll('.modal, .swal2-container, .swal-overlay, div[role="dialog"], .confirmation-modal, .popup, div[class*="modal"], div[class*="dialog"], div[class*="confirm"], div[class*="alert"]'));
-        for (const modal of modals) {
-          const text = (modal.textContent || "").toLowerCase();
-          if (text.includes("confirmation required") || text.includes("are you sure") || text.includes("not working")) {
-            const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
-            const okBtn = buttons.find(b => {
-              const bText = (b.textContent || b.value || "").trim().toLowerCase();
-              return bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText.includes("ok");
-            });
-            if (okBtn) {
-              console.log("[AI Assistant] Auto-confirmed 'Not Working' modal dialog");
-              okBtn.click();
-              return;
-            }
-          }
-        }
-        // Direct button text search if modal wrapper wasn't matched
-        const allBtns = Array.from(document.querySelectorAll('button, input[type="button"]'));
-        const okBtn = allBtns.find(b => {
-          const bText = (b.textContent || b.value || "").trim().toLowerCase();
-          const pText = (b.closest("div")?.parentElement?.textContent || "").toLowerCase();
-          return (bText === "ok" || bText === "✓ ok") && (pText.includes("are you sure") || pText.includes("not working") || pText.includes("confirmation required"));
-        });
-        if (okBtn) {
-          console.log("[AI Assistant] Auto-confirmed 'Not Working' button");
-          okBtn.click();
-        }
-      }, delay);
-    });
-  }
-
-  /**
    * Capitalizes the first letter of every word (Title Case) per instruction: "All words come start with Captial make it"
    * Preserves standard corporate acronyms (USA, UK, PT, CV, SDN BHD, etc.).
    */
@@ -506,8 +466,7 @@
         }
       }
 
-      // Automatically confirm the "Are You Sure? You are about to mark this website as 'Not Working'" modal
-      autoConfirmNotWorkingModal();
+      // DO NOT auto-submit or auto-confirm confirmation modals: user must confirm and submit manually!
 
       // Clear all other fields (leave empty string / default placeholder)
       for (const [key, el] of Object.entries(elements)) {
