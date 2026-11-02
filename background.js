@@ -41,13 +41,50 @@ const ALL_CAPITALS = [
 
 // High-risk suburbs and localities that MUST NOT be classified as cities (Strict QC Rule)
 const NON_CITY_SUBURBS = [
+  // South Africa
   "sandton", "rosebank", "randburg", "midrand", "bryanston", "fourways", "centurion", "menlyn",
   "umhlanga", "bedfordview", "edenvale", "alberton", "rivonia", "woodmead", "morningside",
   "kempton park", "jet park", "boksburg industrial", "isando", "germiston", "roodepoort",
   "constantia", "camps bay", "sea point", "claremont", "bellville", "durbanville", "somerset west",
+  // United States
   "brooklyn", "queens", "manhattan", "bronx", "staten island", "hollywood", "beverly hills",
-  "campbellfield", "dandenong", "st kilda", "parramatta", "chatswood", "fitzroy", "carlton",
-  "richmond", "altona", "epping", "footscray", "box hill", "clayton", "springvale", "ringwood"
+  // Australia Suburbs & Localities (MUST NOT be considered as City)
+  "campbellfield", "dandenong", "dandenong south", "braeside", "bayswater", "bayswater north",
+  "clayton", "clayton south", "tullamarine", "thomastown", "somerton", "laverton", "laverton north",
+  "truganina", "altona", "altona north", "derrimut", "ravenhall", "heidelberg", "heidelberg west",
+  "preston", "coburg", "reservoir", "epping", "broadmeadows", "keon park", "richmond",
+  "moorabbin", "cheltenham", "mordialloc", "springvale", "noble park", "notting hill", "mulgrave",
+  "knoxfield", "scoresby", "rowville", "croydon", "croydon south", "ringwood", "kilsyth",
+  "footscray", "brooklyn", "sunshine", "sunshine west", "yarraville", "port melbourne",
+  "south melbourne", "brunswick", "essendon", "st kilda", "hawthorn", "camberwell", "box hill",
+  "werribee", "hoppers crossing", "point cook", "frankston", "mornington", "carrum downs",
+  "seven hills", "blacktown", "parramatta", "rydalmere", "silverwater", "wetherill park",
+  "smithfield", "alexandria", "rosebery", "prestons", "moorebank", "liverpool", "ingleburn",
+  "penrith", "st marys", "saint marys", "chullora", "bankstown", "canterbury", "revesby", "padstow",
+  "mascot", "botany", "brookvale", "manly", "frenchs forest", "chatswood", "north sydney",
+  "strathfield", "homebush", "auburn", "lidcombe", "granville", "guildford", "villawood",
+  "chester hill", "eastern creek", "huntingwood", "erskine park", "glendenning", "arndell park",
+  "kings park", "girraween", "castle hill", "norwest", "baulkham hills", "hornsby",
+  "campbelltown", "camden", "smeaton grange", "taren point", "miranda", "caringbah",
+  "acacia ridge", "rocklea", "wacol", "brendale", "yatala", "coopers plains", "archerfield",
+  "salisbury", "darra", "richlands", "carole park", "logan", "loganholme",
+  "underwood", "slacks creek", "springwood", "browns plains", "crestmead", "murarrie",
+  "hemmant", "lytton", "tingalpa", "wynnum", "hendra", "eagle farm", "pinkenba",
+  "geebung", "virginia", "zillmere", "strathpine", "lawnton", "north lakes", "caboolture",
+  "southport", "surfers paradise", "burleigh heads", "molendinar", "nerang", "varsity lakes",
+  "carrara", "ashmore", "stapylton", "maroochydore", "caloundra", "kunda park", "coolum beach",
+  "welshpool", "kewdale", "canning vale", "malaga", "osborne park", "balcatta", "wangara",
+  "joondalup", "fremantle", "o'connor", "bibra lake", "cockburn central", "henderson",
+  "kwinana", "rockingham", "bassendean", "belmont", "victoria park",
+  "subiaco", "west perth", "east perth", "clarkson", "landsdale", "morley", "maddington",
+  "kenwick", "cannington", "forrestdale", "myaree", "willetton", "midland", "hazelmere",
+  "wingfield", "regency park", "kilkenny", "hindmarsh", "beverley", "flinders park",
+  "edwardstown", "lonsdale", "pooraka", "elizabeth", "edinburgh", "gepps cross", "dry creek",
+  "port adelaide", "alberton", "glandore", "mile end", "thebarton", "norwood", "unley",
+  "prospect", "glynde", "glenorchy", "derwent park", "moonah", "cambridge", "sorell",
+  "kingston", "invermay", "mowbray", "kings meadows", "devonport", "burnie",
+  "fyshwick", "hume", "mitchell", "belconnen", "woden", "tuggeranong", "gungahlin",
+  "winnellie", "pinelands", "berrimah", "yarrawonga", "palmerston", "alice springs"
 ];
 
 // International Recognized Towns, Districts, Municipalities
@@ -2250,69 +2287,15 @@ function isUkLocation(address, country) {
   return false;
 }
 
-// Comprehensive Australian Cities, Towns, and Suburbs (gazetted localities)
-const AUSTRALIAN_CITIES_AND_SUBURBS = [
-  // Major Capital and Regional Cities
+// Official Australian Cities (Towns, Capital & Regional Cities ONLY - Suburbs excluded)
+const AUSTRALIAN_CITIES = [
   "sydney", "melbourne", "brisbane", "perth", "adelaide", "hobart", "canberra", "darwin",
   "geelong", "gold coast", "newcastle", "wollongong", "sunshine coast", "townsville", "cairns",
   "toowoomba", "ballarat", "bendigo", "launceston", "mackay", "rockhampton", "bunbury",
   "coffs harbour", "bundaberg", "wagga wagga", "hervey bay", "mildura", "shepparton",
   "port macquarie", "tamworth", "orange", "dubbo", "bathurst", "albury", "wodonga",
   "gladstone", "nowra", "bomaderry", "warrnambool", "kalgoorlie", "geraldton", "mount gambier",
-  "lismore", "armidale", "goulburn", "cessnock", "maitland",
-
-  // Major Victoria Suburbs & Industrial Hubs
-  "campbellfield", "dandenong", "dandenong south", "braeside", "bayswater", "bayswater north",
-  "clayton", "clayton south", "tullamarine", "thomastown", "somerton", "laverton", "laverton north",
-  "truganina", "altona", "altona north", "derrimut", "ravenhall", "heidelberg", "heidelberg west",
-  "preston", "coburg", "reservoir", "epping", "broadmeadows", "keon park", "richmond",
-  "moorabbin", "cheltenham", "mordialloc", "springvale", "noble park", "notting hill", "mulgrave",
-  "knoxfield", "scoresby", "rowville", "croydon", "croydon south", "ringwood", "kilsyth",
-  "footscray", "brooklyn", "sunshine", "sunshine west", "yarraville", "port melbourne",
-  "south melbourne", "brunswick", "essendon", "st kilda", "hawthorn", "camberwell", "box hill",
-  "werribee", "hoppers crossing", "point cook", "frankston", "mornington", "carrum downs",
-
-  // Major New South Wales Suburbs & Industrial Hubs
-  "seven hills", "blacktown", "parramatta", "rydalmere", "silverwater", "wetherill park",
-  "smithfield", "alexandria", "rosebery", "prestons", "moorebank", "liverpool", "ingleburn",
-  "penrith", "st marys", "saint marys", "chullora", "bankstown", "canterbury", "revesby", "padstow",
-  "mascot", "botany", "brookvale", "manly", "frenchs forest", "chatswood", "north sydney",
-  "strathfield", "homebush", "auburn", "lidcombe", "granville", "guildford", "villawood",
-  "chester hill", "eastern creek", "huntingwood", "erskine park", "glendenning", "arndell park",
-  "kings park", "girraween", "castle hill", "norwest", "baulkham hills", "hornsby",
-  "campbelltown", "camden", "smeaton grange", "taren point", "miranda", "caringbah",
-
-  // Major Queensland Suburbs & Industrial Hubs
-  "acacia ridge", "rocklea", "wacol", "brendale", "yatala", "coopers plains", "archerfield",
-  "salisbury", "darra", "richlands", "carole park", "ipswich", "logan", "loganholme",
-  "underwood", "slacks creek", "springwood", "browns plains", "crestmead", "murarrie",
-  "hemmant", "lytton", "tingalpa", "wynnum", "hendra", "eagle farm", "pinkenba",
-  "geebung", "virginia", "zillmere", "strathpine", "lawnton", "north lakes", "caboolture",
-  "southport", "surfers paradise", "burleigh heads", "molendinar", "nerang", "varsity lakes",
-  "carrara", "ashmore", "stapylton", "maroochydore", "caloundra", "kunda park", "coolum beach",
-
-  // Major Western Australia Suburbs & Industrial Hubs
-  "welshpool", "kewdale", "canning vale", "malaga", "osborne park", "balcatta", "wangara",
-  "joondalup", "fremantle", "o'connor", "bibra lake", "cockburn central", "henderson",
-  "kwinana", "rockingham", "bayswater", "bassendean", "belmont", "victoria park",
-  "subiaco", "west perth", "east perth", "clarkson", "landsdale", "morley", "maddington",
-  "kenwick", "cannington", "forrestdale", "myaree", "willetton", "midland", "hazelmere",
-
-  // Major South Australia Suburbs & Industrial Hubs
-  "wingfield", "regency park", "kilkenny", "hindmarsh", "beverley", "flinders park",
-  "edwardstown", "lonsdale", "st marys", "pooraka", "salisbury", "salisbury south",
-  "elizabeth", "edinburgh", "gepps cross", "dry creek", "port adelaide", "alberton",
-  "glandore", "mile end", "thebarton", "norwood", "unley", "prospect", "glynde", "campbelltown",
-
-  // Major Tasmania Suburbs & Industrial Hubs
-  "glenorchy", "derwent park", "moonah", "cambridge", "sorell", "kingston", "invermay",
-  "mowbray", "prospect", "kings meadows", "devonport", "burnie",
-
-  // Major ACT Suburbs & Industrial Hubs
-  "fyshwick", "hume", "mitchell", "belconnen", "woden", "tuggeranong", "gungahlin",
-
-  // Major Northern Territory Suburbs & Industrial Hubs
-  "winnellie", "pinelands", "berrimah", "yarrawonga", "palmerston", "alice springs"
+  "lismore", "armidale", "goulburn", "cessnock", "maitland"
 ];
 
 function isAustralianLocation(address, country) {
@@ -2409,7 +2392,7 @@ function addressLooksLikeSuburbOnly(cleanAddr) {
     const escaped = suburb.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
     if (new RegExp(`\\b${escaped}\\b`, "i").test(withoutDesignation)) {
       const rest = withoutDesignation.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ");
-      if (!hasRecognizedPlaceName(rest, RECOGNIZED_TOWNS) && !hasRecognizedPlaceName(rest, UK_CITIES_AND_TOWNS) && !hasCityDesignation(rest)) {
+      if (!hasRecognizedPlaceName(rest, RECOGNIZED_TOWNS) && !hasRecognizedPlaceName(rest, AUSTRALIAN_CITIES) && !hasRecognizedPlaceName(rest, UK_CITIES_AND_TOWNS) && !hasCityDesignation(rest)) {
         return true;
       }
     }
@@ -2426,6 +2409,14 @@ function isNotCitySegment(segment) {
   if (!segment) return true;
   const s = segment.trim().toLowerCase();
   if (s.length < 2) return true;
+
+  // Suburbs are NOT cities (Strict QC Rule)
+  for (const sub of NON_CITY_SUBURBS) {
+    const escaped = sub.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+    if (new RegExp(`^${escaped}$`, "i").test(s) || (new RegExp(`\\b${escaped}\\b`, "i").test(s) && !hasRecognizedPlaceName(s, RECOGNIZED_TOWNS) && !hasRecognizedPlaceName(s, AUSTRALIAN_CITIES) && !hasCityDesignation(s))) {
+      return true;
+    }
+  }
 
   // Street types
   if (/\b(?:street|road|avenue|lane|drive|way|close|court|place|terrace|crescent|boulevard|highway|parade|walk|row|mews|view|gate|hill|wharf|parkway|alley|st|rd|ave|dr|ln|blvd|hwy|ct|pl)\b/i.test(s)) {
@@ -2521,18 +2512,29 @@ function evaluateCityQC(address, country) {
     return "Available";
   }
 
-  // 2. UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
+  // 2. Suburb-only addresses: If the address only has a suburb and no recognized city/town, MUST evaluate as Not Available!
+  if (addressLooksLikeSuburbOnly(cleanAddr)) {
+    return "Not Available";
+  }
+
+  // 3. UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
   if (isUkLocation(cleanAddr, country) && hasUkCityOrTown(cleanAddr)) {
     return "Available";
   }
 
-  // 3. Australian Suburb / City evaluation (gazetted localities and regional/capital cities)
-  if (isAustralianLocation(cleanAddr, country) && hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES_AND_SUBURBS)) {
+  // 4. Australian City evaluation: Only genuine official Australian cities (suburbs excluded)
+  if (isAustralianLocation(cleanAddr, country) && hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES)) {
     return "Available";
   }
 
-  // 4. Structural address detection (e.g. "..., Moor Street, Heywood, Lancashire" -> "Heywood" precedes verified state)
-  if (detectCityFromStructure(cleanAddr, country)) {
+  // 5. Recognized International Towns/Cities
+  if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+    return "Available";
+  }
+
+  // 6. Structural address detection (e.g. "..., Moor Street, Heywood, Lancashire" -> "Heywood" precedes verified state)
+  const structCity = detectCityFromStructure(cleanAddr, country);
+  if (structCity && !isNotCitySegment(structCity)) {
     return "Available";
   }
 
