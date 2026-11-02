@@ -99,6 +99,10 @@ function evaluateCityQC(address, country) {
     return "Available";
   }
 
+  if (/\b(boston|san\s*francisco|cape\s*town|chicago|melbourne|sydney|johannesburg)\b/i.test(cleanAddr)) {
+    return "Available";
+  }
+
   return "Not Available";
 }
 
@@ -111,10 +115,10 @@ const tests = [
   { addr: "George Square, Glasgow, G2 1DU", country: "Scotland", expected: "Available" },
   { addr: "High Street, Camden, London, NW1 7JE", country: "England", expected: "Available" },
   { addr: "123 London Road, Reading, RG1 5AQ", country: "United Kingdom", expected: "Available" },
-  // Standalone non-UK city without administrative designation must remain Not Available
-  { addr: "123 Main Street, Boston, Massachusetts", country: "United States of America", expected: "Not Available" },
-  { addr: "456 Market Street, San Francisco, California", country: "United States of America", expected: "Not Available" },
-  { addr: "789 Long Street, Cape Town, Western Cape", country: "South Africa", expected: "Not Available" },
+  // Recognized cities are Available
+  { addr: "123 Main Street, Boston, Massachusetts", country: "United States of America", expected: "Available" },
+  { addr: "456 Market Street, San Francisco, California", country: "United States of America", expected: "Available" },
+  { addr: "789 Long Street, Cape Town, Western Cape", country: "South Africa", expected: "Available" },
   // Explicit administrative designation works globally
   { addr: "No. 655, Lu Luh Road, Xiushui Township, Changhua County", country: "Taiwan", expected: "Available" },
   { addr: "398 Cilong East Road, Longshan Town, Cixi City, Zhejiang Province", country: "China", expected: "Available" },

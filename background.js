@@ -124,7 +124,152 @@ const RECOGNIZED_TOWNS = [
   "johannesburg", "cape town", "pretoria", "durban", "bloemfontein", "port elizabeth",
   "nairobi", "lagos", "accra", "dar es salaam", "addis ababa", "casablanca",
   "buenos aires", "sao paulo", "rio de janeiro", "santiago", "bogota", "lima", "caracas",
-  "mexico city", "guadalajara", "monterrey"
+  "mexico city", "guadalajara", "monterrey",
+  // Additional US cities
+  "sacramento", "kansas city", "st louis", "saint louis", "new orleans", "orlando",
+  "raleigh", "salt lake city", "richmond va", "buffalo", "rochester", "tucson",
+  "fresno", "mesa", "omaha", "oakland", "tulsa", "wichita", "arlington", "bakersfield",
+  "aurora", "anaheim", "honolulu", "santa ana", "riverside", "corpus christi",
+  "lexington", "henderson", "stockton", "saint paul", "st paul", "cincinnati",
+  "newark", "greensboro", "plano", "lincoln", "toledo", "jersey city", "chandler",
+  "madison", "gilbert", "north las vegas", "irvine", "fort wayne", "durham",
+  "chula vista", "norfolk", "lubbock", "reno", "gilbert", "boise", "spokane",
+  "baton rouge", "des moines", "tacoma", "san bernardino", "modesto", "fontana",
+  "moreno valley", "fayetteville", "yonkers", "huntington beach", "montgomery",
+  "little rock", "akron", "shreveport", "augusta", "grand rapids", "huntington",
+  "mobile", "overland park", "knoxville", "worcester", "brownsville", "newport news",
+  "santa clarita", "providence", "fort lauderdale", "chattanooga", "tempe",
+  "oceanside", "garden grove", "rancho cucamonga", "cape coral", "santa rosa",
+  "vancouver wa", "sioux falls", "peoria", "ontario ca", "elk grove", "salem",
+  "pembroke pines", "eugene", "corona", "cary", "springfield", "fort collins",
+  "jackson", "alexandria", "hayward", "clarksville", "lakewood", "lancaster",
+  "salinas", "palmdale", "hollywood fl", "pasadena", "sunnyvale", "macon",
+  "pomona", "escondido", "killeen", "naperville", "joliet", "bellevue",
+  "rockford", "savannah", "paterson", "torrance", "bridgeport", "mcallen",
+  "syracuse", "midland", "surprise", "denton", "roseville", "thornton",
+  "miramar", "pasadena tx", "mesquite", "dayton", "waco", "fullerton",
+  "olathe", "carrollton", "west valley city", "columbia", "gainesville",
+  "sterling heights", "cedar rapids", "visalia", "coral springs", "new haven",
+  "stamford", "thousand oaks", "concord", "elizabeth", "kent", "simi valley",
+  "lafayette", "topeka", "round rock", "west palm beach", "berkeley",
+  "norman", "santa clara", "fargo", "abilene", "vallejo", "allentown",
+  "wilmington", "evansville", "ann arbor", "pearland", "beaumont", "odessa",
+  // Additional China / Taiwan cities
+  "cixi", "yiwu", "yuyao", "fenghua", "beilun", "zhenhai", "yinzhou", "haishu",
+  "xiangshan", "ninghai", "putuo", "dinghai", "daishan", "shengzhou", "zhuji",
+  "shaoxing", "jiaxing", "huzhou", "jinhua", "quzhou", "lishui", "taizhou",
+  "wenzhou", "dongyang", "lanxi", "yongkang", "wenling", "ruian", "yueqing",
+  "kunshan", "changshu", "zhangjiagang", "taicang", "wujiang", "jiangyin",
+  "yixing", "changzhou", "wuxi", "nantong", "yangzhou", "zhenjiang", "xuzhou",
+  "huaian", "yancheng", "lianyungang", "suqian", "taizhou js", "zhongshan",
+  "zhuhai", "huizhou", "dongguan", "foshan", "jiangmen", "zhaoqing", "shantou",
+  "jieyang", "chaozhou", "zhanjiang", "maoming", "qingyuan", "shaoguan",
+  "heyuan", "meizhou", "yunfu", "yangjiang", "shunde", "nanhai", "sanshui",
+  "panyu", "huadu", "zengcheng", "conghua", "baoan", "longgang", "nanshan",
+  "futian", "luohu", "yantian", "pingshan", "guangming", "longhua",
+  "taoyuan", "hsinchu", "chiayi", "changhua", "pingtung", "taitung", "miaoli",
+  "nantou", "yunlin", "penghu", "kinmen", "keelung", "hualien", "yilan",
+  // Additional India
+  "coimbatore", "kochi", "kozhikode", "thiruvananthapuram", "madurai", "tiruchirappalli",
+  "salem in", "tiruppur", "erode", "vellore", "mangalore", "mysore", "mysuru",
+  "hubli", "belgaum", "gulbarga", "warangal", "vijayawada", "guntur", "nellore",
+  "tirupati", "rajahmundry", "raipur", "bhilai", "jabalpur", "gwalior", "ujjain",
+  "kota", "ajmer", "udaipur", "jodhpur", "bikaner", "amritsar", "jalandhar",
+  "chandigarh", "dehradun", "haridwar", "noida", "faridabad", "gurgaon", "gurugram",
+  "meerut", "aligarh", "varanasi", "allahabad", "prayagraj", "gorakhpur", "kanpur",
+  "ranchi", "jamshedpur", "dhanbad", "cuttack", "bhubaneswar", "rourkela",
+  "guwahati", "siliguri", "durgapur", "asansol", "howrah", "navi mumbai",
+  "kalyan", "vasai", "virar", "noida", "aurangabad", "solapur", "kolhapur",
+  "amravati", "nanded", "sangli", "jalgaon",
+  // Additional Europe
+  "antwerp", "ghent", "bruges", "charleroi", "liege", "namur",
+  "utrecht", "the hague", "eindhoven", "tilburg", "groningen", "almere", "breda",
+  "nijmegen", "enschede", "haarlem", "arnhem", "zaanstad", "haarlemmermeer",
+  "basel", "lausanne", "bern", "winterthur", "lucerne", "st gallen", "lugano",
+  "graz", "linz", "salzburg", "innsbruck",
+  "krakow", "wroclaw", "poznan", "gdansk", "szczecin", "lodz", "lublin", "katowice",
+  "gothenburg", "malmo", "uppsala", "vasteras", "orebro", "linkoping",
+  "aarhus", "odense", "aalborg", "bergen", "trondheim", "stavanger", "tampere", "turku", "oulu",
+  "cork", "galway", "limerick", "waterford",
+  "valencia", "seville", "zaragoza", "malaga", "murcia", "palma", "bilbao", "alicante",
+  "cordoba", "valladolid", "vigo", "gijon", "l'hospitalet", "granada",
+  "florence", "bologna", "genoa", "bari", "catania", "venice", "verona", "messina",
+  "padua", "trieste", "brescia", "parma", "taranto", "prato", "modena", "reggio calabria",
+  "reggio emilia", "perugia", "livorno", "ravenna", "cagliari", "foggia", "rimini", "salerno",
+  "lyon", "toulouse", "nice", "nantes", "montpellier", "strasbourg", "bordeaux", "lille",
+  "rennes", "reims", "le havre", "saint-etienne", "toulon", "grenoble", "dijon", "angers",
+  "nuremberg", "duisburg", "bochum", "wuppertal", "bielefeld", "bonn", "munster",
+  "karlsruhe", "mannheim", "augsburg", "wiesbaden", "gelsenkirchen", "monchengladbach",
+  "braunschweig", "chemnitz", "kiel", "aachen", "halle", "magdeburg", "freiburg",
+  "krefeld", "lubeck", "oberhausen", "erfurt", "mainz", "rostock", "kassel", "hagen",
+  "saarbrucken", "hamm", "potsdam", "ludwigshafen", "oldenburg", "osnabruck", "leverkusen",
+  "heidelberg", "solingen", "darmstadt", "herne", "neuss", "regensburg", "paderborn",
+  "ingolstadt", "wurzburg", "furth", "ulm", "heilbronn", "pforzheim", "wolfsburg",
+  "gottingen", "bottrop", "reutlingen", "koblenz", "breitcheid", "offenbach",
+  "porto", "braga", "coimbra", "funchal", "setubal",
+  "thessaloniki", "patras", "heraklion", "larissa", "volos",
+  "cluj-napoca", "timisoara", "iasi", "constanta", "craiova", "brasov", "galati",
+  "plovdiv", "varna", "burgas", "ruse",
+  "zagreb", "split", "rijeka", "osijek",
+  "bratislava", "kosice", "ljubljana", "maribor", "tallinn", "tartu", "riga", "vilnius", "kaunas",
+  // Additional SE Asia / Middle East / Africa / Oceania / LatAm
+  "ipoh", "seremban", "alor setar", "kota bharu", "kuala terengganu", "sibu", "bintulu",
+  "kota tinggi", "pontian", "segamat", "merning", "rawang", "kajang", "ampang", "cheras",
+  "puchong", "cyberjaya", "nilai", "port dickson", "banting", "kuala selangor",
+  "sungai petani", "kulim", "butterworth", "bukit mertajam", "taiping", "teluk intan",
+  "sitiawan", "lumut", "kampar", "bentong", "raub", "temerloh", "jerantut",
+  "davao city", "cebu city", "quezon city", "makati", "taguig", "pasig", "caloocan",
+  "paranaque", "las pinas", "muntinlupa", "marikina", "mandaluyong", "pasay",
+  "bacolod", "iloilo", "cagayan de oro", "zamboanga", "general santos", "baguio",
+  "antipolo", "dasmarinas", "bacoor", "calamba", "santa rosa", "binan", "san pedro",
+  "imus", "cabuyao", "lipa", "batangas city", "lucena", "naga", "legazpi",
+  "chiang rai", "khon kaen", "nakhon ratchasima", "hat yai", "udon thani", "chon buri",
+  "nonthaburi", "pak kret", "hatyai", "phuket", "pattaya",
+  "can tho", "hai phong", "bien hoa", "nha trang", "hue", "vung tau", "thu dau mot",
+  "haiphong", "nam dinh", "vinh", "buon ma thuot", "quy nhon", "thai nguyen",
+  "bandar seri begawan", "sibu",
+  "jeddah", "dammam", "khobar", "dhahran", "jubail", "yanbu", "abha", "tabuk",
+  "muscat", "salalah", "sohar", "nizwa",
+  "sharjah", "ajman", "ras al khaimah", "fujairah", "al ain",
+  "casablanca", "rabat", "marrakesh", "fes", "tangier", "agadir", "meknes", "oujda",
+  "tunis", "sfax", "sousse", "algiers", "oran", "constantine",
+  "lagos", "abuja", "kano", "ibadan", "port harcourt", "benin city", "kaduna",
+  "accra", "kumasi", "tamale", "takoradi",
+  "nairobi", "mombasa", "kisumu", "nakuru",
+  "kampala", "kigali", "lusaka", "harare", "gaborone", "windhoek", "maputo",
+  "dar es salaam", "dodoma", "addis ababa", "djibouti",
+  "auckland", "wellington", "christchurch", "hamilton nz", "tauranga", "dunedin",
+  "palmerston north", "napier", "nelson", "rotorua", "new plymouth", "whangarei",
+  "invercargill",
+  "gold coast", "newcastle au", "wollongong", "geelong", "hobart", "townsville",
+  "cairns", "toowoomba", "ballarat", "bendigo", "albury", "launceston", "mackay",
+  "rockhampton", "bunbury", "bundaberg", "coffs harbour", "wagga wagga", "hervey bay",
+  "mildura", "shepparton", "gladstone", "port macquarie", "tamworth au", "orange",
+  "dubbo", "geraldton", "kalgoorlie", "albany au", "mount gambier", "whyalla",
+  "sao paulo", "rio de janeiro", "brasilia", "salvador", "fortaleza", "belo horizonte",
+  "manaus", "curitiba", "recife", "porto alegre", "belem", "goiania", "guarulhos",
+  "campinas", "sao luis", "sao goncalo", "maceio", "duque de caxias", "natal",
+  "teresina", "campo grande", "nova iguacu", "sao bernardo do campo", "joao pessoa",
+  "santo andre", "osasco", "jaboatao", "sao jose dos campos", "ribeirao preto",
+  "uberlandia", "sorocaba", "contagem", "aracaju", "feira de santana", "cuiaba",
+  "joinville", "juiz de fora", "londrina", "aparecida de goiania", "niteroi",
+  "porto velho", "serra", "florianopolis", "vila velha", "campos dos goytacazes",
+  "santiago", "valparaiso", "concepcion", "antofagasta", "vina del mar", "temuco",
+  "bogota", "medellin", "cali", "barranquilla", "cartagena", "cucuta", "soledad",
+  "bucaramanga", "pereira",
+  "lima", "arequipa", "trujillo", "chiclayo", "piura", "cusco",
+  "quito", "guayaquil", "cuenca", "santo domingo", "santiago de los caballeros",
+  "caracas", "maracaibo", "valencia ve", "barquisimeto",
+  "buenos aires", "cordoba ar", "rosario", "mendoza", "tucuman", "la plata",
+  "mar del plata", "salta",
+  "montevideo", "asuncion", "la paz", "santa cruz", "cochabamba",
+  "mexico city", "guadalajara", "monterrey", "puebla", "tijuana", "leon", "juarez",
+  "zapopan", "merida", "san luis potosi", "aguascalientes", "hermosillo", "saltillo",
+  "mexicali", "culiacan", "acapulco", "queretaro", "torreon", "morelia", "reynosa",
+  "tampico", "cancun", "veracruz", "chihuahua", "durango", "toluca",
+  "guatemala city", "san salvador", "tegucigalpa", "managua", "san jose cr",
+  "panama city", "havana", "santiago de cuba", "kingston jm", "port of spain",
+  "bridgetown", "nassau"
 ];
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -229,6 +374,34 @@ async function fetchDecodedHtml(url, options = {}) {
 }
 
 /**
+ * Pulls the official registered company name from a copyright / legal line.
+ * Keeps legal suffixes such as Co., Ltd — previous parsers stopped at the first comma.
+ */
+function extractCopyrightCompanyName(html) {
+  if (!html) return "";
+  const decoded = decodeHtmlEntities(html);
+  const patterns = [
+    /(?:©|&copy;|copyright)\s*(?:©|&copy;)?\s*(?:20\d{2}(?:\s*[-–\/]\s*20\d{2})?)?\s*([^<\n\r|]{3,200}?)(?:\.?\s*all\s+rights\s+reserved|\s*<\/|$)/i,
+    /all\s+rights\s+reserved(?:\s+by)?\s+([^<\n\r|]{3,200}?)(?:\s*<\/|$)/i
+  ];
+  for (const re of patterns) {
+    const m = decoded.match(re);
+    if (!m || !m[1]) continue;
+    let name = stripHtml(m[1])
+      .replace(/all\s+rights\s+reserved/gi, " ")
+      .replace(/\b(?:copyright|powered\s+by|designed\s+by|website\s+by)\b.*$/i, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/[|•·]+$/g, "")
+      .trim();
+    if (name.length >= 3 && name.length <= 160 && !/^(?:20\d{2}|home|welcome)$/i.test(name)) {
+      return name;
+    }
+  }
+  return "";
+}
+
+/**
  * Deep crawls homepage, handles HTML <frameset>/<frame>, contact pages, footer, JSON-LD, products.
  */
 async function crawlWebsite(targetUrl) {
@@ -265,11 +438,9 @@ async function crawlWebsite(targetUrl) {
 
     mainHtml = mainRes.html || "";
 
-    // Extract copyright line for exact official company name verification
-    const copyMatch = mainHtml.match(/(?:©|&copy;|copyright|all\s+rights\s+reserved)\s*(?:20\d\d[-–\d\s]*)?([^<\n\r,;|]+)/i);
-    if (copyMatch && copyMatch[1]) {
-      copyrightText = stripHtml(copyMatch[1]).replace(/all\s+rights\s+reserved/gi, "").trim();
-    }
+    // Extract copyright line for exact official company name verification.
+    // Do not stop at commas — "Co., Ltd" is otherwise truncated to "Co."
+    copyrightText = extractCopyrightCompanyName(mainHtml);
 
     // Support HTML <frameset> / <frame src="..."> / <iframe src="..."> (e.g. polyprise.com.tw)
     const frameMatches = [...mainHtml.matchAll(/<(?:frame|iframe)[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
@@ -640,7 +811,7 @@ function verifyAndSelectAddress(geminiAddr, candidates) {
     if (candNumMatch && !geminiNumMatch) {
       return candRaw;
     }
-    if (candRaw.length > geminiAddr.length && /(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza|village)/i.test(candRaw) && !/(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza)/i.test(geminiAddr)) {
+    if (candRaw.length > geminiAddr.length && /\b(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza|village)\b/i.test(candRaw) && !/\b(road|street|avenue|lane|drive|way|boulevard|highway|rd|st|ave|blvd|via|corso|viale|piazza)\b/i.test(geminiAddr)) {
       return candRaw;
     }
     return geminiAddr;
@@ -848,20 +1019,42 @@ function rankEmails(emails, targetDomain) {
 function checkCompanyProfilePresence(html, text, profilePageText = "") {
   if (!html && !text && !profilePageText) return false;
   const rawHtml = html || "";
-  const combined = ((profilePageText || "") + " " + (text || stripHtml(rawHtml))).toLowerCase();
+  const profile = (profilePageText || "").trim();
+  const body = (text || stripHtml(rawHtml) || "").trim();
+  const combined = (profile + " " + body).toLowerCase();
 
-  // 1. Downloadable Company Profile PDF link (e.g. company-profile.pdf)
-  if (/href=["'][^"']*(?:company[-_]?profile|corporate[-_]?profile)[^"']*\.pdf["']/i.test(rawHtml)) {
+  if (/coming\s+soon|under\s+construction|lorem\s+ipsum|domain\s+parking|this\s+domain/i.test(combined) && combined.length < 400) {
+    return false;
+  }
+
+  // Dedicated About / Company Profile page was crawled with real copy
+  if (profile.length >= 80 && !/^(?:not\s+available|n\/a)$/i.test(profile)) {
     return true;
   }
 
-  // 2. Substantive corporate background evidence:
-  // Must verify genuine meaningful content (founding year, history narrative, mission/vision, or corporate profile table)
-  const hasHistory = /\b(?:established\s+(?:in\s+)?\d{4}|founded\s+(?:in\s+)?\d{4}|since\s+\d{4}|started\s+(?:in\s+)?\d{4}|history\s+of\s+our\s+company|our\s+history|company\s+history|corporate\s+milestones?)\b/i.test(combined);
-  const hasMissionScope = /\b(?:our\s+mission|our\s+vision|core\s+values|business\s+scope|company\s+background|corporate\s+overview|company\s+overview|about\s+our\s+company|who\s+we\s+are)\b/i.test(combined);
-  const hasProfileTable = /\b(?:capital|registered\s+capital|turnover|annual\s+sales|factory\s+size|plant\s+area|number\s+of\s+employees|business\s+type|year\s+established)\b[\s\S]{0,100}\b(?:\d+|ltd|co)/i.test(combined);
+  // Downloadable Company Profile PDF
+  if (/href=["'][^"']*(?:company[-_]?profile|corporate[-_]?profile|about[-_]?us)[^"']*\.pdf["']/i.test(rawHtml)) {
+    return true;
+  }
 
-  if (hasHistory || (hasMissionScope && combined.length >= 250) || hasProfileTable) {
+  // About Us / Company Profile heading or nav plus body content of a real business
+  const hasAboutHeading = /<(?:h[1-6]|title|a|li|span|div)[^>]*>[^<]{0,80}(?:company\s*profile|corporate\s*profile|about\s*us|about\s+the\s+company|who\s*we\s*are|our\s+company|our\s+story|our\s+history)[^<]{0,40}<\/(?:h[1-6]|title|a|li|span|div)>/i.test(rawHtml);
+  const hasAboutLink = /href=["'][^"']*(?:about[-_]?us|aboutus|company[-_]?profile|corporate[-_]?profile|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story)[^"']*["']/i.test(rawHtml);
+  if ((hasAboutHeading || hasAboutLink) && (profile.length >= 40 || body.length >= 250)) {
+    return true;
+  }
+
+  // JSON-LD Organization / LocalBusiness description
+  if (/"@type"\s*:\s*"(?:Organization|LocalBusiness|Corporation)"[\s\S]{0,800}"(?:description|name)"\s*:/i.test(rawHtml)) {
+    return true;
+  }
+
+  // Substantive corporate background evidence
+  const hasHistory = /\b(?:established\s+(?:in\s+)?\d{4}|founded\s+(?:in\s+)?\d{4}|since\s+\d{4}|started\s+(?:in\s+)?\d{4}|history\s+of\s+our\s+company|our\s+history|company\s+history|corporate\s+milestones?|we\s+are\s+a\s+(?:leading|professional|manufacturer|supplier|trading)|specializ(?:e|es|ed|ing)\s+in)\b/i.test(combined);
+  const hasMissionScope = /\b(?:our\s+mission|our\s+vision|core\s+values|business\s+scope|company\s+background|corporate\s+overview|company\s+overview|about\s+our\s+company|who\s+we\s+are|about\s+us)\b/i.test(combined);
+  const hasProfileTable = /\b(?:capital|registered\s+capital|turnover|annual\s+sales|factory\s+size|plant\s+area|number\s+of\s+employees|business\s+type|year\s+established)\b[\s\S]{0,120}\b(?:\d+|ltd|co|limited)\b/i.test(combined);
+
+  if (hasHistory || (hasMissionScope && combined.length >= 180) || hasProfileTable) {
     return true;
   }
 
@@ -942,21 +1135,13 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    - Do not guess or infer. Only evaluate what is explicitly written in the address.
 
 2. CITY VALIDATION RULES – STRICT QC RULE:
-   The city field MUST be marked "Available" ONLY if:
-   a) The official website's address explicitly identifies a qualifying Town, Township, District, or Municipality (e.g. contains the explicit designation "Town", "Township", "District", "Municipality", "Metropolitan Municipality", "Borough").
-      - Explicit Town: Available (e.g. "Longshan Town", "Yangmei Town")
-      - Explicit Township: Available (e.g. "Xiushui Township")
-      - Explicit District: Available (e.g. "Banqiao District", "Xinzhuang District")
-      - Explicit Municipality: Available (e.g. "Ekurhuleni Municipality")
-      - Explicit Borough: Available
-   b) UNITED KINGDOM EXCEPTION: For addresses in the United Kingdom (England, Scotland, Wales, Northern Ireland), recognized UK cities, towns, and London boroughs (e.g. London, Manchester, Birmingham, Leeds, Glasgow, Edinburgh, Liverpool, Bristol, Belfast, Cardiff, Westminster, Camden, Reading, etc.) evaluate as "Available".
+   The city field MUST be marked "Available" if ANY of the following is true:
+   a) The official website's address explicitly identifies a qualifying Town, Township, District, Municipality, Borough, or City (e.g. "Longshan Town", "Xiushui Township", "Banqiao District", "Ekurhuleni Municipality", "Cixi City").
+   b) The address contains a recognized city / town / municipal name (e.g. Chicago, Melbourne, Boston, San Francisco, Cape Town, Manchester, Johor Bahru, Shenzhen).
+   c) UNITED KINGDOM: recognized UK cities, towns, and London boroughs evaluate as "Available".
    STRICTLY MARK "Not Available" FOR:
-   - Standalone city names outside the UK: Not Available (e.g. standalone "Chicago", "Melbourne", "Rome", "Milan", "Cape Town", "Taipei", "Centralia", "Wheeling" without an explicit qualifying Town/District/Municipality designation word are NOT Available).
-   - Capital cities outside the UK: Not Available (the capital-city exception does NOT apply to city validation; capital cities only apply to state validation).
-   - Suburb: Not Available
-   - Locality: Not Available
-   - Neighborhood: Not Available
-   - Industrial Area / Business Park: Not Available
+   - Suburb / locality / neighborhood only (e.g. Sandton, Rosebank) with no city/town/district.
+   - Industrial Area / Business Park only, with no city/town/district.
    - New Taipei City: Must remain "Not Available" unless a qualifying administrative area (e.g. Banqiao District) is separately identified in the address.
 
 PRODUCT, IMAGE & DESCRIPTION QC RULES (ACCURATELY BASED ON SITE):
@@ -987,14 +1172,16 @@ CRITICAL SYNCHRONIZATION QC RULE:
 
 COMPANY PROFILE QC RULES (Rule 3):
 - This is a drop-down option ("Available" | "Not Available").
-- Mark "Available" if a genuine, dedicated Company Profile, Corporate Profile, or substantive About Us section/page/document is provided on the website:
-  * Contains company background, history, founder/founding year (e.g. "Founded in 2004", "Established in 1978"), business overview, mission/vision, or corporate introduction narrative.
-  * OR the site has a dedicated "Company Profile" page/section (e.g. table with Location, Establishment, Capital, Turnover, Business Scope) or downloadable Company Profile PDF.
+- If a real operating business is identified AND the site has a Company Profile / About Us / Our Company / Who We Are page, section, PDF, or narrative, mark "Available".
+- Mark "Available" if:
+  * Dedicated Company Profile, Corporate Profile, About Us, Our Story, or Who We Are page/section exists.
+  * Company background, history, founding year, mission/vision, factory intro, or corporate table is present.
+  * Downloadable Company Profile PDF exists.
 - Mark "Not Available" if:
-  * The site has NO Company Profile or About Us section/page.
+  * The site has NO Company Profile or About Us section/page AND no company background narrative.
   * The site is an e-commerce shop or product catalog with only products, pricing, and a shopping cart, with NO company background.
   * The site only has a basic Contact page or address in the footer without any company profile, history, or story.
-  * The site only has a generic 1-line promotional slogan (e.g. "Welcome to our website", "Best quality products") without any company history or profile.
+  * The site only has a generic 1-line promotional slogan without any company history or profile.
   * The site is under construction, a domain parking page, or non-functional.
 
 COMPANY NAME RULES (Rule 4):
@@ -1194,7 +1381,10 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   const text = crawlData.combinedText;
 
   let companyName = "";
-  if (crawlData.title) {
+  if (crawlData.copyrightText && /\b(ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|co\.?)\b/i.test(crawlData.copyrightText)) {
+    companyName = crawlData.copyrightText;
+  }
+  if (!companyName && crawlData.title) {
     const parts = crawlData.title.split(/[-–|:•]/).map(p => p.trim()).filter(Boolean);
     const validPart = parts.find(p => !/^(home|welcome|about|contact|index|official\s*website)\b/i.test(p));
     companyName = validPart || parts[0] || "";
@@ -1263,10 +1453,23 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.businessType = "Restricted Site";
   }
 
-  // 3. Company Profile: Verify substantive corporate background content
-  if (crawlData.hasCompanyProfile) {
+  // 3. Company Profile: if a real business About / Profile page exists, mark Available
+  const profileDetected = crawlData.hasCompanyProfile ||
+    checkCompanyProfilePresence(crawlData.mainHtml, crawlData.bodyText, crawlData.profilePageText);
+  const hasBusinessEvidence = !!(
+    (result.companyName && result.companyName.trim().length > 2) ||
+    (crawlData.copyrightText && crawlData.copyrightText.trim().length > 2)
+  );
+  const hasAboutSignal = !!(crawlData.profilePageText && crawlData.profilePageText.trim().length >= 80);
+  if (profileDetected || (hasBusinessEvidence && hasAboutSignal)) {
     result.companyProfile = "Available";
-  } else {
+  } else if (/^available$/i.test(String(result.companyProfile || "")) && hasBusinessEvidence &&
+      ((crawlData.bodyText || "").length > 300) &&
+      /\b(about\s+us|company\s+profile|our\s+company|who\s+we\s+are|founded|established|manufacturer|factory)\b/i.test(
+        (crawlData.profilePageText || "") + " " + (crawlData.bodyText || "") + " " + (crawlData.footerText || "")
+      )) {
+    result.companyProfile = "Available";
+  } else if (profileDetected === false && !hasAboutSignal) {
     result.companyProfile = "Not Available";
   }
 
@@ -1287,7 +1490,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
   let compName = (result.companyName || "").trim();
 
-  // Restore legal suffixes ONLY when the complete company name matches official website evidence
+  // Prefer the fuller official name (copyright / JSON-LD) when it carries the legal suffix
+  compName = preferOfficialCompanyName(compName, crawlData);
+
+  // Restore legal suffixes (Ltd, Inc, Sdn Bhd, etc.) from footer/copyright evidence
   compName = restoreLegalSuffixIfOmitted(compName, crawlData);
 
   // Expand abbreviations to full form and clean brackets
@@ -1461,6 +1667,137 @@ function hasCapitalInAddress(addr, country) {
 /**
  * Independent State verification function strictly based on the physical address string.
  */
+const STATE_AND_PROVINCE_NAMES = [
+  // Australia
+  "victoria", "new south wales", "queensland", "western australia", "south australia",
+  "tasmania", "northern territory", "australian capital territory",
+  // South Africa
+  "gauteng", "western cape", "eastern cape", "kwazulu natal", "kwazulu-natal", "mpumalanga",
+  "free state", "limpopo", "north west", "northern cape",
+  // Canada
+  "ontario", "quebec", "british columbia", "alberta", "manitoba", "saskatchewan",
+  "nova scotia", "new brunswick", "newfoundland", "newfoundland and labrador",
+  "prince edward island", "northwest territories", "nunavut", "yukon",
+  // United States
+  "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut",
+  "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa",
+  "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan",
+  "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire",
+  "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio",
+  "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota",
+  "tennessee", "texas", "utah", "vermont", "virginia", "washington", "washington state",
+  "west virginia", "wisconsin", "wyoming", "district of columbia", "puerto rico",
+  // India
+  "andhra pradesh", "arunachal pradesh", "assam", "bihar", "chhattisgarh", "goa", "gujarat",
+  "haryana", "himachal pradesh", "jharkhand", "karnataka", "kerala", "madhya pradesh",
+  "maharashtra", "manipur", "meghalaya", "mizoram", "nagaland", "odisha", "punjab",
+  "rajasthan", "sikkim", "tamil nadu", "telangana", "tripura", "uttar pradesh",
+  "uttarakhand", "west bengal", "delhi", "jammu and kashmir", "ladakh", "puducherry",
+  "chandigarh", "andaman and nicobar", "dadra and nagar haveli", "daman and diu", "lakshadweep",
+  // UK counties / regions
+  "greater london", "greater manchester", "west midlands", "west yorkshire", "south yorkshire",
+  "tyne and wear", "merseyside", "berkshire", "buckinghamshire", "cambridgeshire", "cheshire",
+  "cornwall", "cumbria", "derbyshire", "devon", "dorset", "durham", "essex", "gloucestershire",
+  "hampshire", "hertfordshire", "kent", "lancashire", "leicestershire", "lincolnshire",
+  "norfolk", "northamptonshire", "northumberland", "nottinghamshire", "oxfordshire",
+  "shropshire", "somerset", "staffordshire", "suffolk", "surrey", "sussex", "east sussex",
+  "west sussex", "warwickshire", "wiltshire", "worcestershire", "yorkshire", "bedfordshire",
+  "rutland", "herefordshire", "isle of wight", "bristol", "midlothian", "strathclyde",
+  "grampian", "tayside", "fife", "highland", "lothian", "borders", "dyfed", "gwynedd",
+  "powys", "clwyd", "glamorgan", "gwent", "antrim", "armagh", "down", "fermanagh", "tyrone",
+  "county durham", "east yorkshire", "north yorkshire",
+  // Malaysia
+  "selangor", "kuala lumpur", "penang", "pulau pinang", "johor", "perak", "sabah", "sarawak",
+  "pahang", "terengganu", "kelantan", "kedah", "perlis", "negeri sembilan", "melaka", "malacca",
+  "putrajaya", "labuan",
+  // China / Taiwan
+  "guangdong", "zhejiang", "jiangsu", "shandong", "sichuan", "fujian", "hubei", "henan",
+  "yunnan", "liaoning", "hebei", "shaanxi", "shanxi", "gansu", "qinghai", "xinjiang", "tibet",
+  "inner mongolia", "jilin", "heilongjiang", "anhui", "jiangxi", "guizhou", "hainan", "ningxia",
+  "guangxi", "chongqing", "shanghai", "beijing", "tianjin",
+  "changhua", "taoyuan", "hsinchu", "miaoli", "nantou", "yunlin", "chiayi", "pingtung",
+  "taitung", "hualien", "yilan", "penghu", "kinmen", "lienchiang", "keelung", "taichung",
+  "tainan", "kaohsiung",
+  // Indonesia
+  "jakarta", "bali", "java", "jawa", "jawa barat", "jawa tengah", "jawa timur", "banten",
+  "sumatra", "sumatera", "sumatera utara", "sumatera barat", "sumatera selatan",
+  "kalimantan", "sulawesi", "yogyakarta special region", "daerah istimewa yogyakarta",
+  "nusa tenggara", "papua", "maluku", "riau", "jambi", "bengkulu", "lampung", "aceh",
+  // Korea
+  "gyeonggi", "gangwon", "chungcheong", "chungcheongbuk", "chungcheongnam", "jeolla",
+  "jeollabuk", "jeollanam", "gyeongsang", "gyeongsangbuk", "gyeongsangnam", "jeju",
+  // Japan prefectures
+  "hokkaido", "aomori", "iwate", "miyagi", "akita", "yamagata", "fukushima", "ibaraki",
+  "tochigi", "gunma", "saitama", "chiba", "tokyo", "kanagawa", "niigata", "toyama", "ishikawa",
+  "fukui", "yamanashi", "nagano", "gifu", "shizuoka", "aichi", "mie", "shiga", "kyoto",
+  "osaka", "hyogo", "nara", "wakayama", "tottori", "shimane", "okayama", "hiroshima",
+  "yamaguchi", "tokushima", "kagawa", "ehime", "kochi", "fukuoka", "saga", "nagasaki",
+  "kumamoto", "oita", "miyazaki", "kagoshima", "okinawa",
+  // UAE / Saudi
+  "abu dhabi", "dubai", "sharjah", "ajman", "fujairah", "ras al khaimah", "umm al quwain",
+  "riyadh", "makkah", "madinah", "eastern province", "asir", "jizan", "najran", "tabuk",
+  "hail", "qassim", "al qassim", "al bahah", "al jawf", "northern borders",
+  // France regions
+  "ile de france", "île-de-france", "provence", "normandie", "normandy", "bretagne", "brittany",
+  "occitanie", "nouvelle aquitaine", "pays de la loire", "auvergne", "hauts de france",
+  "grand est", "bourgogne", "centre val", "corsica", "corse", "rhone alpes", "alsace",
+  "lorraine", "picardy", "champagne",
+  // Spain
+  "andalucia", "andalusia", "catalonia", "catalunya", "madrid community", "comunidad de madrid",
+  "valencia", "comunitat valenciana", "galicia", "basque", "pais vasco", "castilla",
+  "castile", "aragon", "extremadura", "murcia", "asturias", "cantabria", "navarre", "navarra",
+  "la rioja", "canary islands", "balearic",
+  // Italy regions
+  "abruzzo", "basilicata", "calabria", "campania", "emilia romagna", "friuli venezia giulia",
+  "lazio", "liguria", "lombardia", "lombardy", "marche", "molise", "piemonte", "piedmont",
+  "puglia", "apulia", "sardegna", "sardinia", "sicilia", "sicily", "toscana", "tuscany",
+  "trentino alto adige", "umbria", "valle d aosta", "valle d'aosta", "veneto",
+  // Germany states
+  "baden-wurttemberg", "baden württemberg", "bavaria", "bayern", "berlin", "brandenburg",
+  "bremen", "hamburg", "hessen", "hesse", "mecklenburg", "niedersachsen", "lower saxony",
+  "nordrhein westfalen", "north rhine westphalia", "rheinland pfalz", "rhineland palatinate",
+  "saarland", "sachsen", "saxony", "sachsen anhalt", "saxony anhalt", "schleswig holstein",
+  "thuringen", "thüringen", "thuringia",
+  // New Zealand
+  "auckland", "wellington", "canterbury", "otago", "waikato", "bay of plenty", "manawatu",
+  "hawke's bay", "taranaki", "southland", "northland", "marlborough", "tasman", "west coast",
+  "gisborne", "nelson",
+  // Philippines
+  "metro manila", "national capital region", "cebu", "davao", "laguna", "cavite", "bulacan",
+  "rizal", "pampanga", "batangas", "pangasinan", "negros occidental", "iloilo", "leyte",
+  "zamboanga", "misamis oriental", "benguet",
+  // Thailand
+  "bangkok", "chiang mai", "phuket", "chonburi", "chon buri", "samut prakan", "nonthaburi",
+  "pathum thani", "nakhon ratchasima", "khon kaen", "songkhla", "rayong", "saraburi",
+  // Vietnam
+  "ho chi minh", "hanoi", "dong nai", "binh duong", "hai phong", "can tho", "da nang",
+  "ba ria vung tau", "long an", "tien giang",
+  // Netherlands / Belgium / Switzerland / Austria / Poland
+  "north holland", "south holland", "noord holland", "zuid holland", "utrecht", "gelderland",
+  "overijssel", "limburg", "noord brabant", "friesland", "groningen", "drenthe", "zeeland",
+  "flevoland", "flanders", "wallonia", "brussels",
+  "zurich", "bern", "vaud", "aargau", "st gallen", "geneva", "lucerne", "ticino", "valais",
+  "vienna", "wien", "styria", "steiermark", "tyrol", "tirol", "upper austria", "lower austria",
+  "salzburg", "carinthia", "vorarlberg", "burgenland",
+  "mazovia", "mazowieckie", "silesia", "slaskie", "greater poland", "wielkopolskie",
+  "lesser poland", "malopolskie", "pomerania", "pomorskie", "lower silesia", "dolnoslaskie",
+  // Mexico / Brazil / others
+  "jalisco", "nuevo leon", "puebla", "guanajuato", "yucatan", "quintana roo", "baja california",
+  "veracruz", "chihuahua", "sonora", "coahuila", "tamaulipas", "michoacan", "oaxaca",
+  "sao paulo", "rio de janeiro", "minas gerais", "bahia", "parana", "rio grande do sul",
+  "pernambuco", "ceara", "para", "santa catarina", "goias", "maranhao", "amazonas",
+  "ontario", "gauteng"
+];
+
+function hasNamedStateOrProvince(lower) {
+  for (const name of STATE_AND_PROVINCE_NAMES) {
+    if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, name)) continue;
+    const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&").replace(/\\s/g, "\\s+");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(lower)) return true;
+  }
+  return false;
+}
+
 function hasStateInAddress(addr, country) {
   if (!addr) return false;
   const lower = addr.toLowerCase();
@@ -1478,10 +1815,9 @@ function hasStateInAddress(addr, country) {
   if (hasCapitalInAddress(lower, country)) return true;
 
   // Generic administrative markers that confirm a state/region is present
-  if (/\b(province|state|county|prefecture|district|region|territory|emirate|canton|department|governorate|oblast|voivodeship)\b/i.test(lower)) return true;
+  if (/\b(province|state|county|prefecture|hsien|district|region|territory|emirate|canton|department|governorate|oblast|voivodeship|bundesland|regione|regi[oó]n|regi[aã]o|wilayah|negeri)\b/i.test(lower)) return true;
 
-  // Explicit state / province / county / prefecture / hsien markers (Hsien = County in Taiwan)
-  return /\b(hsien|victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|gauteng|western\s*cape|eastern\s*cape|kwazulu.?natal|mpumalanga|free\s*state|limpopo|north\s*west|northern\s*cape|ontario|quebec|british\s*columbia|alberta|manitoba|saskatchewan|nova\s*scotia|new\s*brunswick|newfoundland|california|texas|florida|new\s*york|pennsylvania|illinois|ohio|georgia|north\s*carolina|michigan|new\s*jersey|virginia|washington\s*state|arizona|massachusetts|tennessee|indiana|missouri|maryland|wisconsin|colorado|minnesota|south\s*carolina|alabama|louisiana|kentucky|oregon|oklahoma|connecticut|utah|iowa|nevada|arkansas|mississippi|kansas|new\s*mexico|nebraska|idaho|west\s*virginia|hawaii|new\s*hampshire|maine|montana|rhode\s*island|delaware|south\s*dakota|north\s*dakota|alaska|vermont|wyoming|district\s*of\s*columbia|maharashtra|tamil\s*nadu|karnataka|gujarat|uttar\s*pradesh|telangana|kerala|punjab|haryana|rajasthan|bihar|west\s*bengal|andhra\s*pradesh|madhya\s*pradesh|assam|odisha|jharkhand|chhattisgarh|goa|himachal\s*pradesh|uttarakhand|delhi|bavaria|bavaria|sachsen|thüringen|niedersachsen|nordrhein.westfalen|rheinland|hessen|schleswig.holstein|mecklenburg|saarland|sachsen.anhalt|berlin|hamburg|bremen|yorkshire|lancashire|kent|surrey|essex|cornwall|devon|norfolk|suffolk|hertfordshire|cambridgeshire|oxfordshire|berkshire|hampshire|dorset|somerset|wiltshire|shropshire|staffordshire|worcestershire|warwickshire|northamptonshire|leicestershire|nottinghamshire|derbyshire|lincolnshire|cheshire|merseyside|greater\s*manchester|west\s*yorkshire|south\s*yorkshire|west\s*midlands|tyne\s*and\s*wear|selangor|kuala\s*lumpur|penang|johor|perak|sabah|sarawak|pahang|terengganu|kelantan|kedah|perlis|negeri\s*sembilan|melaka|putrajaya|labuan|guangdong|zhejiang|jiangsu|shandong|sichuan|fujian|hubei|henan|yunnan|liaoning|hebei|shaanxi|shanxi|gansu|qinghai|xinjiang|tibet|inner\s*mongolia|jilin|heilongjiang|anhui|jiangxi|guizhou|hainan|ningxia|jakarta|bali|java|sumatra|kalimantan|sulawesi|jawa|sumatera|yogyakarta\s*special\s*region|gyeonggi|gangwon|chungcheong|jeolla|gyeongsang|jeju|abu\s*dhabi|dubai|sharjah|ajman|fujairah|ras\s*al\s*khaimah|umm\s*al\s*quwain|riyadh|makkah|madinah|eastern\s*province|asir|jizan|najran|tabuk|hail|qassim|ile.de.france|provence|normandie|bretagne|occitanie|nouvelle.aquitaine|pays\s*de\s*la\s*loire|auvergne|hauts.de.france|grand\s*est|bourgogne|centre.val|corsica|andalucia|catalonia|madrid\s*community|valencia|galicia|basque|abruzzo|basilicata|calabria|campania|emilia[\s\-_]*romagna|friuli[\s\-_]*venezia[\s\-_]*giulia|lazio|liguria|lombardia|lombardy|marche|molise|piemonte|piedmont|puglia|apulia|sardegna|sardinia|sicilia|sicily|toscana|tuscany|trentino[\s\-_]*alto[\s\-_]*adige|umbria|valle[\s\-_]*d[\s\-_]*aosta|veneto)\b/i.test(lower);
+  return hasNamedStateOrProvince(lower);
 }
 
 function hasCityInAddress(addr, country) {
@@ -1500,7 +1836,28 @@ const UK_CITIES_AND_TOWNS = [
   "londonderry", "derry", "carlisle", "worcester", "bath", "durham", "lincoln", "hereford", "armagh",
   "inverness", "stirling", "canterbury", "lichfield", "newry", "ripon", "bangor", "truro", "ely",
   "wells", "st asaph", "st davids", "perth", "chelmsford", "milton keynes", "colchester", "doncaster",
-  "wrexham", "dunfermline",
+  "wrexham", "dunfermline", "bradford", "wakefield", "barnsley", "doncaster",
+  "gateshead", "sunderland", "south shields", "stockton-on-tees", "hartlepool",
+  "middlesborough", "redditch", "crawley", "ipswich", "colchester", "chelmsford",
+  "maidstone", "gillingham", "chatham", "rochester", "gravesend", "dartford",
+  "tunbridge wells", "eastbourne", "hastings", "worthing", "hove", "crawley",
+  "horsham", "guildford", "woking", "reigate", "epsom", "kingston", "richmond",
+  "uxbridge", "harrow", "enfield", "romford", "ilford", "bromley", "croydon",
+  "sutton", "kingston upon thames", "basingstoke", "high wycombe", "aylesbury",
+  "slough", "maidenhead", "bracknell", "newbury", "andover", "winchester",
+  "eastleigh", "fareham", "gosport", "havant", "waterlooville", "alton",
+  "chesterfield", "barnsley", "rotherham", "huddersfield", "halifax", "dewsbury",
+  "keighley", "harrogate", "york", "scarborough", "hull", "grimsby", "scunthorpe",
+  "lincoln", "boston", "grantham", "spalding", "skegness", "workington", "whitehaven",
+  "kendal", "penrith", "carlisle", "lancaster", "morecambe", "blackpool", "preston",
+  "blackburn", "burnley", "accrington", "bury", "bolton", "wigan", "st helens",
+  "warrington", "runcorn", "widnes", "birkenhead", "wallasey", "southport",
+  "ayr", "kilmarnock", "greenock", "paisley", "east kilbride", "hamilton",
+  "cumbernauld", "livingston", "kirkcaldy", "dunfermline", "perth", "inverness",
+  "stirling", "falkirk", "dumfries", "elgin", "peterhead", "oban",
+  "swansea", "newport", "wrexham", "barry", "bridgend", "neath", "port talbot",
+  "cwmbran", "llanelli", "merthyr tydfil", "caerphilly", "pontypridd", "bangor",
+  "lisburn", "newry", "derry", "londonderry", "bangor ni", "newtownabbey", "craigavon",
 
   // Major UK Towns & Municipal Centres
   "reading", "slough", "luton", "bolton", "bournemouth", "swindon", "northampton", "middlesbrough",
@@ -1564,11 +1921,49 @@ function hasUkCityOrTown(cleanAddr) {
   return false;
 }
 
+function isPlaceUsedAsStreetName(cleanAddr, name) {
+  const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+  const streetSuffix = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
+  const streetPrefix = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard)\\s+";
+  return new RegExp(`(?:${streetPrefix})\\b${escaped}\\b|\\b${escaped}\\b(?:${streetSuffix})`, "i").test(cleanAddr);
+}
+
+function hasRecognizedPlaceName(cleanAddr, names) {
+  for (const name of names) {
+    if (!name || name.length < 3) continue;
+    if (isPlaceUsedAsStreetName(cleanAddr, name)) continue;
+    const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(cleanAddr)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasCityDesignation(addr) {
+  const stripped = (addr || "").replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
+  return /\b(township|town|district|municipality|metropolitan\s*municipality|borough|city|kabupaten|kota|amphoe|amphur|comune|gemeinde|municipio)\b/i.test(stripped);
+}
+
+function addressLooksLikeSuburbOnly(cleanAddr) {
+  if (!cleanAddr) return false;
+  const withoutDesignation = cleanAddr.replace(/\b(township|town|district|municipality|metropolitan\s*municipality|borough|city)\b/gi, " ");
+  for (const suburb of NON_CITY_SUBURBS) {
+    const escaped = suburb.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(withoutDesignation)) {
+      const rest = withoutDesignation.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ");
+      if (!hasRecognizedPlaceName(rest, RECOGNIZED_TOWNS) && !hasRecognizedPlaceName(rest, UK_CITIES_AND_TOWNS) && !hasCityDesignation(rest)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
- * Strict City QC Evaluator conforming to CITY VALIDATION RULES – STRICT QC RULE.
- * City = Available ONLY if the official website's address explicitly identifies a qualifying Town, Township, District or Municipality,
- * or matches an official UK city, town, or London borough.
- * Standalone city names outside UK, suburbs, localities, and industrial areas are NOT Available.
+ * City QC: Available when the address has a Town/Township/District/Municipality/City
+ * designation, a recognized city/town, or a UK city/town/borough.
+ * Suburbs/localities/industrial-only addresses stay Not Available.
  */
 function evaluateCityQC(address, country) {
   if (!address || typeof address !== "string" || address.trim().length < 3) {
@@ -1579,37 +1974,99 @@ function evaluateCityQC(address, country) {
   // New Taipei City rule: Must remain Not Available unless a qualifying administrative area is separately identified
   if (isNewTaipeiCity(cleanAddr)) {
     const addrWithoutNTC = cleanAddr.replace(/\bnew\s*taipei(\s*city)?\b/gi, " ");
-    if (/\b(district|town|township|municipality|metropolitan\s*municipality|borough)\b/i.test(addrWithoutNTC)) {
+    if (hasCityDesignation(addrWithoutNTC) || hasRecognizedPlaceName(addrWithoutNTC, RECOGNIZED_TOWNS)) {
       return "Available";
     }
     return "Not Available";
   }
 
-  // Strict City QC Rule per user instruction:
-  // City = Available ONLY if the official website's address explicitly identifies a qualifying Town, Township, District or Municipality.
-  // - Suburb: Not Available
-  // - Locality: Not Available
-  // - Neighborhood: Not Available
-  // - Industrial Area: Not Available
-  // - Standalone city name: Not Available (no automatic capital-city or recognized-place exceptions)
-  // - Explicit Town: Available
-  // - Explicit Township: Available
-  // - Explicit District: Available
-  // - Explicit Municipality: Available
-  // - Explicit Borough: Available
-  // Remove standalone city names that literally contain town as part of their proper name (e.g. Cape Town, George Town)
-  const addrWithoutTownNamedCities = cleanAddr.replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
-
-  if (/\b(town|township|district|municipality|metropolitan\s*municipality|borough)\b/i.test(addrWithoutTownNamedCities)) {
+  if (hasCityDesignation(cleanAddr)) {
     return "Available";
   }
 
-  // UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
   if (isUkLocation(cleanAddr, country) && hasUkCityOrTown(cleanAddr)) {
     return "Available";
   }
 
+  if (addressLooksLikeSuburbOnly(cleanAddr)) {
+    return "Not Available";
+  }
+
+  if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+    return "Available";
+  }
+
   return "Not Available";
+}
+
+const LEGAL_SUFFIX_CAPTURE =
+  "((?:[\\(\\[]?\\s*(?:pty|pte|pvt|sdn|bhd|co\\.?|corp\\.?|inc\\.?|llc|llp|pllc|gmbh|sa|bv|nv|ag|oy|ab|as|m|malaysia)\\s*[\\)\\]]?[\\s,]*){0,3}(?:ltd\\.?|limited|inc\\.?|incorporated|bhd\\.?|berhad|sdn\\s*bhd|sendirian\\s*berhad|llc|pllc|llp|gmbh|s\\.?r\\.?l\\.?s?|s\\.?p\\.?a\\.?|plc\\.?|corp\\.?|corporation|company\\s+limited|proprietary\\s+limited|private\\s+limited))";
+
+function companyEvidenceCorpus(crawlData) {
+  if (!crawlData) return "";
+  return [
+    crawlData.copyrightText,
+    crawlData.footerText,
+    crawlData.contactPageText,
+    crawlData.profilePageText,
+    crawlData.bodyText,
+    crawlData.title,
+    crawlData.combinedText,
+    crawlData.mainHtml ? stripHtml(crawlData.mainHtml).slice(0, 12000) : ""
+  ].filter(Boolean).join(" \n ");
+}
+
+function extractJsonLdOrganizationName(html) {
+  if (!html) return "";
+  const scriptRegex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = scriptRegex.exec(html)) !== null) {
+    try {
+      const data = JSON.parse(match[1]);
+      const items = Array.isArray(data) ? data : (data && data["@graph"] ? data["@graph"] : [data]);
+      for (const item of items) {
+        if (!item || typeof item !== "object") continue;
+        const type = String(item["@type"] || "");
+        if (/Organization|LocalBusiness|Corporation|Company/i.test(type) && item.name) {
+          return String(item.name).trim();
+        }
+      }
+    } catch (e) { }
+  }
+  return "";
+}
+
+function hasCompleteLegalSuffix(name) {
+  if (!name) return false;
+  const n = name.trim();
+  if (/\b(?:co\.?|company|pty\.?|pte\.?|pvt\.?|sdn\.?)\s*$/i.test(n)) return false;
+  return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|limited\s+liability\s+(?:company|partnership)|limited|incorporated|corporation|berhad|gmbh|llc|llp|pllc|ltd|inc|plc)\b/i.test(n);
+}
+
+function namesOverlap(a, b) {
+  const tokens = (s) => (s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 2 && !/^(the|and|for|ltd|limited|inc|llc|corp|company|pty|pte|pvt|sdn|bhd)$/i.test(w));
+  const ta = tokens(a);
+  const tb = new Set(tokens(b));
+  if (ta.length === 0 || tb.size === 0) return false;
+  const hit = ta.filter(t => tb.has(t)).length;
+  return hit >= Math.min(2, ta.length) || hit / ta.length >= 0.5;
+}
+
+function preferOfficialCompanyName(name, crawlData) {
+  const current = (name || "").trim();
+  const jsonLdName = extractJsonLdOrganizationName(crawlData && crawlData.mainHtml);
+  const copyrightName = (crawlData && crawlData.copyrightText) || "";
+  const candidates = [jsonLdName, copyrightName].filter(n => n && n.length >= 3 && n.length <= 160);
+
+  for (const official of candidates) {
+    if (!hasCompleteLegalSuffix(official) && !/\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc)\b/i.test(official)) {
+      continue;
+    }
+    if (!current || namesOverlap(current, official) || official.toLowerCase().includes(current.toLowerCase()) || current.toLowerCase().includes(official.toLowerCase().replace(/\b(?:ltd|limited|inc|llc|corp|co)\b/gi, "").trim())) {
+      return official;
+    }
+  }
+  return current;
 }
 
 /**
@@ -1622,32 +2079,31 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
   if (!name || typeof name !== "string" || name.trim().length < 2) return name;
   let cleanName = name.trim();
 
-  // If already ends in an expanded or abbreviated corporate entity designation, no need to restore
-  if (/\b(proprietary\s*limited|private\s*limited|public\s*limited\s*company|sendirian\s*berhad|berhad|limited\s*liability\s*company|limited\s*liability\s*partnership|limited|incorporated|corporation|company|inc|llc|llp|pllc|ltd|pty|pte|pvt|sdn\s*bhd|bhd|plc|societ[aà]|responsabilit[aà]|azioni|collettivo|semplice)\b/i.test(cleanName)) {
+  if (hasCompleteLegalSuffix(cleanName)) {
     return cleanName;
   }
 
-  // Search official website evidence: Copyright line, Footer, Contact page, Company Profile
-  const sources = [
-    crawlData && crawlData.copyrightText,
-    crawlData && crawlData.footerText,
-    crawlData && crawlData.contactPageText,
-    crawlData && crawlData.profilePageText
-  ].filter(Boolean);
+  const corpus = companyEvidenceCorpus(crawlData);
+  if (!corpus) return cleanName;
 
-  if (sources.length === 0) return cleanName;
+  const baseName = cleanName.replace(/\b(?:co\.?|company|corp\.?|corporation)\s*$/i, "").trim() || cleanName;
+  const escapedName = baseName.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+  const legalRegex = new RegExp(`\\b${escapedName}\\s*[,.]?\\s*${LEGAL_SUFFIX_CAPTURE}`, "i");
 
-  const escapedName = cleanName.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-  const legalRegex = new RegExp(
-    `\\b${escapedName}\\s*(?:,?\\s*)((?:[\\(\\[]?(?:pty|pte|pvt|sdn|bhd|co|corp|inc|llc|llp|pllc|gmbh|sa|bv|srl|spa|snc|sas|m|malaysia)[\\)\\]]?[\\s,]*)?(?:ltd|limited|inc|incorporated|bhd|berhad|sdn\\s*bhd|sendirian\\s*berhad|llc|pllc|llp|gmbh|s\\.?r\\.?l\\.?s?|s\\.?p\\.?a\\.?|s\\.?n\\.?c\\.?|s\\.?a\\.?s\\.?|s\\.?c\\.?a\\.?r\\.?l\\.?|srls?|spa|snc|sas|scarl|scpa|corp|corporation|co|company)\\.?)`,
-    "i"
-  );
-
-  for (const text of sources) {
-    const match = text.match(legalRegex);
-    if (match && match[1]) {
-      return cleanName + " " + match[1];
+  const match = corpus.match(legalRegex);
+  if (match && match[1]) {
+    const suffix = match[1].replace(/\s+/g, " ").trim();
+    if (/\b(?:co\.?|company|corp\.?)\s*$/i.test(cleanName) && /^(?:co\.?|company|corp\.?)\b/i.test(suffix)) {
+      return baseName + " " + suffix;
     }
+    return cleanName + " " + suffix;
+  }
+
+  // Fallback: find any legal-suffix company name in copyright that overlaps this name
+  const copyright = (crawlData && crawlData.copyrightText) || "";
+  const copyMatch = copyright.match(new RegExp(`([A-Z][A-Za-z0-9&.'\\- ]{2,80}\\s+${LEGAL_SUFFIX_CAPTURE})`, "i"));
+  if (copyMatch && copyMatch[0] && namesOverlap(cleanName, copyMatch[0])) {
+    return copyMatch[0].trim();
   }
 
   return cleanName;

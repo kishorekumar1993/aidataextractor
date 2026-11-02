@@ -95,21 +95,21 @@ assert(
   'Available'
 );
 
-console.log('\n=== TEST 3: Strict Non-UK City QC (Standalone cities without designation must remain Not Available) ===');
+console.log('\n=== TEST 3: City QC (recognized cities and explicit designations are Available) ===');
 assert(
-  'USA Boston without designation is Not Available',
+  'USA Boston is Available',
   sandbox.evaluateCityQC('123 Main Street, Boston, Massachusetts', 'United States of America'),
-  'Not Available'
+  'Available'
 );
 assert(
-  'USA San Francisco without designation is Not Available',
+  'USA San Francisco is Available',
   sandbox.evaluateCityQC('456 Market Street, San Francisco, California', 'United States of America'),
-  'Not Available'
+  'Available'
 );
 assert(
-  'South Africa Cape Town without designation is Not Available',
+  'South Africa Cape Town is Available',
   sandbox.evaluateCityQC('789 Long Street, Cape Town, Western Cape', 'South Africa'),
-  'Not Available'
+  'Available'
 );
 assert(
   'Taiwan New Taipei City without district is Not Available',
@@ -184,6 +184,91 @@ const chinaProcessed = sandbox.applyStrictInstructions(chinaRaw, { status: 'Work
 assert('China Address full road and village preserved', chinaProcessed.companyAddress, 'Number 398, Cilong East Road, Jin\'Ao Village, Longshan Town, Cixi City, Zhejiang Province');
 assert('China City is Available (Longshan Town, Cixi City)', chinaProcessed.city, 'Available');
 assert('China State is Available (Zhejiang Province)', chinaProcessed.state, 'Available');
+
+console.log('\n=== TEST 6: Company name keeps Ltd / Co. Ltd full form ===');
+assert(
+  'Co., Ltd expands to Company Limited',
+  sandbox.expandCompanyAbbreviations('Say Nen Gear Co., Ltd.'),
+  'Say Nen Gear Company Limited'
+);
+assert(
+  'Ltd expands to Limited',
+  sandbox.expandCompanyAbbreviations('Acme Trading Ltd'),
+  'Acme Trading Limited'
+);
+const restored = sandbox.restoreLegalSuffixIfOmitted('Acme Trading', {
+  copyrightText: '© 2024 Acme Trading Co., Ltd. All Rights Reserved',
+  footerText: 'Acme Trading Co., Ltd',
+  contactPageText: '',
+  profilePageText: ''
+});
+assert(
+  'Missing Ltd suffix restored from copyright',
+  sandbox.expandCompanyAbbreviations(restored).replace(/\s+/g, ' ').trim(),
+  'Acme Trading Company Limited'
+);
+const coOnly = sandbox.restoreLegalSuffixIfOmitted('Cixi Hongchang Electronics Company', {
+  copyrightText: 'Cixi Hongchang Electronics Co., Ltd',
+  footerText: '',
+  contactPageText: '',
+  profilePageText: ''
+});
+assert(
+  'Company without Ltd restores Co., Ltd from copyright',
+  /ltd|limited/i.test(coOnly),
+  true
+);
+
+console.log('\n=== TEST 7: Company profile Available when About/business evidence exists ===');
+assert(
+  'Dedicated profile page text marks profile present',
+  sandbox.checkCompanyProfilePresence('<html></html>', 'Welcome', 'About Us\nWe are a manufacturer of electronic sirens established in 2004 with a factory in Cixi.'),
+  true
+);
+const profileProcessed = sandbox.applyStrictInstructions(
+  {
+    websiteStatus: 'Working',
+    businessType: 'Manufacturer',
+    companyProfile: 'Not Available',
+    companyName: 'Cixi Hongchang Electronics Co., Ltd',
+    companyAddress: '398 Cilong East Road, Longshan Town, Cixi City, Zhejiang Province',
+    countryName: 'China',
+    state: 'Not Available',
+    city: 'Not Available',
+    emailId: 'kama@hcsiren.com',
+    phoneNumber: '57463789931',
+    numberOfProducts: '3',
+    productImages: '3',
+    numberOfProductDescriptions: '3'
+  },
+  {
+    status: 'Working',
+    mainHtml: '<html><a href="/about-us.html">About Us</a><h2>About Us</h2><p>We are a professional manufacturer established in 2004.</p></html>',
+    bodyText: 'We are a professional manufacturer established in 2004 specializing in electronic sirens.',
+    profilePageText: 'About Us We are a professional manufacturer of electronic sirens established in 2004.',
+    hasCompanyProfile: false,
+    addressCandidates: []
+  },
+  { isRestricted: false }
+);
+assert('Profile becomes Available when About Us content is found', profileProcessed.companyProfile, 'Available');
+
+console.log('\n=== TEST 8: State Available for named states missing from the old short list ===');
+assert(
+  'Washington state name is Available',
+  sandbox.hasStateInAddress('1200 4th Avenue, Seattle, Washington', 'United States of America'),
+  true
+);
+assert(
+  'Taoyuan in Taiwan address is Available',
+  sandbox.hasStateInAddress('Yangmei District, Taoyuan', 'Taiwan'),
+  true
+);
+assert(
+  'Johor is Available',
+  sandbox.hasStateInAddress('Jalan Persiaran, Johor Bahru, Johor', 'Malaysia'),
+  true
+);
 
 if (!allPassed) {
   console.error('\nSOME TESTS FAILED!');
