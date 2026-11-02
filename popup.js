@@ -16,19 +16,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnSaveKey = document.getElementById("btn-save-key");
   const btnTestKey = document.getElementById("btn-test-key");
   const statusMsg = document.getElementById("api-test-status");
-  const toggleAutoCrawl = document.getElementById("toggle-auto-crawl");
   const toggleStrictFilter = document.getElementById("toggle-strict-filter");
   const btnOpenTestPortal = document.getElementById("btn-open-test-portal");
 
   // Load existing settings or pre-configure defaults
-  chrome.storage.sync.get(["apiKey", "model", "autoFillOnUrlChange", "strictFilter"], (res) => {
+  chrome.storage.sync.get(["apiKey", "model", "strictFilter"], (res) => {
     apiKeyInput.value = res.apiKey || DEFAULT_API_KEY;
     modelSelect.value = res.model || DEFAULT_MODEL;
-    if (res.autoFillOnUrlChange !== undefined) {
-      toggleAutoCrawl.checked = res.autoFillOnUrlChange;
-    } else {
-      toggleAutoCrawl.checked = true;
-    }
     if (res.strictFilter !== undefined) {
       toggleStrictFilter.checked = res.strictFilter;
     } else {
@@ -51,13 +45,11 @@ document.addEventListener("DOMContentLoaded", () => {
   btnSaveKey.addEventListener("click", () => {
     const key = apiKeyInput.value.trim();
     const model = modelSelect.value;
-    const autoCrawl = toggleAutoCrawl.checked;
     const strict = toggleStrictFilter.checked;
 
     chrome.storage.sync.set({
       apiKey: key,
       model: model,
-      autoFillOnUrlChange: autoCrawl,
       strictFilter: strict
     }, () => {
       showStatus("Settings saved successfully!", "success");

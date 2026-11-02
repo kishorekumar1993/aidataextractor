@@ -4,7 +4,6 @@
   console.log("AI Web Crawler & Pre-Fill Assistant active on:", window.location.href);
 
   let cachedExtractedData = null;
-  let autoPrefillEnabled = true;
   let lastProcessedUrl = "";
 
   function isExtensionAlive() {
@@ -50,17 +49,6 @@
         showReloadBanner();
       }
     });
-  }
-
-  // Safely initialize storage preferences
-  if (isExtensionAlive()) {
-    try {
-      chrome.storage.sync.get(["autoFillOnUrlChange"], (res) => {
-        if (res && res.autoFillOnUrlChange !== undefined) {
-          autoPrefillEnabled = !!res.autoFillOnUrlChange;
-        }
-      });
-    } catch (e) { }
   }
 
   if (document.readyState === "loading") {
@@ -718,13 +706,6 @@
           <span>Ready to crawl from Website Name</span>
         </div>
 
-        <div class="ai-toggle-group">
-          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-            <input type="checkbox" id="ai-auto-prefill-toggle" ${autoPrefillEnabled ? "checked" : ""}>
-            <span>Auto-crawl on URL change</span>
-          </label>
-        </div>
-
         <div id="ai-preview-section" style="display: none;" class="ai-preview-table">
           <div style="font-weight: 600; margin-bottom: 6px; color: #374151;">Extracted Data Preview:</div>
           <div id="ai-preview-list"></div>
@@ -772,17 +753,7 @@
     const clearBtn = document.getElementById("ai-clear-btn");
     if (clearBtn) clearBtn.addEventListener("click", clearFilledFields);
 
-    const autoToggle = document.getElementById("ai-auto-prefill-toggle");
-    if (autoToggle) {
-      autoToggle.addEventListener("change", (e) => {
-        autoPrefillEnabled = e.target.checked;
-        if (isExtensionAlive()) {
-          try {
-            chrome.storage.sync.set({ autoFillOnUrlChange: autoPrefillEnabled });
-          } catch (e) { }
-        }
-      });
-    }
+
   }
 
   function injectInlineQuickButton() {
@@ -859,10 +830,6 @@
       const target = e.target;
       if (target && (target.placeholder?.toLowerCase().includes("http") || target.name?.toLowerCase().includes("website") || target.value?.startsWith("http") || target.id?.toLowerCase().includes("website"))) {
         updateDetectedUrlDisplay();
-        const currentUrl = getTargetUrl();
-        if (autoPrefillEnabled && currentUrl && currentUrl !== lastProcessedUrl) {
-          debounce(triggerCrawlAndFill, 1400)();
-        }
       }
     });
 
@@ -876,10 +843,6 @@
 
     setInterval(() => {
       updateDetectedUrlDisplay();
-      const currentUrl = getTargetUrl();
-      if (autoPrefillEnabled && currentUrl && currentUrl !== lastProcessedUrl) {
-        debounce(triggerCrawlAndFill, 1200)();
-      }
     }, 1500);
   }
 
