@@ -19,13 +19,15 @@ const DEFAULT_MODEL =
 
 // Primary prohibited core industries per Instruction Sheet
 const RESTRICTED_PATTERNS = [
-  /\b(porn|pornography|xxx|erotic|sex\s*shop|escort\s*service)\b/i,
-  /\b(weapons?|firearms?|ammunition|rifles?|guns?|military\s*weapons?)\b/i,
-  /\b(prescription\s*drugs|hospital\s*care|medical\s*clinic)\b/i,
-  /\b(military\s*defence\s*contractor|armed\s*forces\s*equipment|tactical\s*armaments)\b/i,
-  /\b(commercial\s*aviation\s*fleet|aircraft\s*manufacturer|naval\s*shipyard)\b/i,
-  /\b(brewery|distillery|liquor\s*store|wine\s*producer)\b/i,
-  /\b(livestock\s*farming|pet\s*shop|animal\s*breeding|veterinary\s*hospital)\b/i
+  { pattern: /\b(porn|pornography|xxx|erotic|sex\s*shop|escort\s*service|adult\s*content|cam\s*girl|strip\s*club)\b/i, label: "Adult Content" },
+  { pattern: /\b(weapons?|firearms?|ammunition|rifles?|guns?|military\s*weapons?|explosives?)\b/i, label: "Weapons & Firearms" },
+  { pattern: /\b(gambling|casino|betting|sports\s*betting|slot\s*machine|poker|lottery|bookmaker)\b/i, label: "Gambling & Betting" },
+  { pattern: /\b(tobacco|cigarettes?|cigars?|vape|vaping|e-?cigarette|cannabis|marijuana|cbd\s*oil)\b/i, label: "Tobacco & Cannabis" },
+  { pattern: /\b(prescription\s*drugs|hospital\s*care|medical\s*clinic|illicit\s*drugs)\b/i, label: "Medical & Prescription Drugs" },
+  { pattern: /\b(military\s*defence\s*contractor|armed\s*forces\s*equipment|tactical\s*armaments)\b/i, label: "Military & Tactical Armaments" },
+  { pattern: /\b(commercial\s*aviation\s*fleet|aircraft\s*manufacturer|naval\s*shipyard)\b/i, label: "Commercial Aviation / Naval Shipyard" },
+  { pattern: /\b(brewery|distillery|liquor\s*store|wine\s*producer)\b/i, label: "Alcohol & Liquor" },
+  { pattern: /\b(livestock\s*farming|pet\s*shop|animal\s*breeding|veterinary\s*hospital)\b/i, label: "Livestock & Animal Breeding" }
 ];
 
 // National Capital Cities for Rule 8 capital city exception
@@ -1490,12 +1492,20 @@ function checkCompanyProfilePresence(html, text, profilePageText = "") {
 }
 
 function detectRestrictedKeywords(text) {
-  for (const regex of RESTRICTED_PATTERNS) {
+  if (!text) return { isRestricted: false, matchedKeyword: null, reason: "" };
+  for (const item of RESTRICTED_PATTERNS) {
+    const regex = item.pattern || item;
+    const label = item.label || "Prohibited Category";
     if (regex.test(text)) {
-      return { isRestricted: true, matchedKeyword: text.match(regex)[0] };
+      const m = text.match(regex);
+      return {
+        isRestricted: true,
+        matchedKeyword: m ? m[0] : "",
+        reason: `${label} ("${m ? m[0] : ""}")`
+      };
     }
   }
-  return { isRestricted: false, matchedKeyword: null };
+  return { isRestricted: false, matchedKeyword: null, reason: "" };
 }
 
 /**
@@ -2001,9 +2011,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.websiteStatus = "Working";
   }
 
-  // 2. Business Type
+  // 2. Business Type & Restricted Site Detection
   if (restrictedCheck && restrictedCheck.isRestricted) {
     result.businessType = "Restricted Site";
+    result.isRestricted = true;
+    result.restrictedReason = restrictedCheck.reason || (restrictedCheck.matchedKeyword ? `Prohibited Category (${restrictedCheck.matchedKeyword})` : "Prohibited Category");
+  } else if (String(result.businessType || "").toLowerCase() === "restricted site") {
+    result.isRestricted = true;
+    result.restrictedReason = result.restrictedReason || "Restricted Site (AI Identified Prohibited Industry)";
   }
 
   // 3. Company Profile: if a real business About / Profile page exists, mark Available

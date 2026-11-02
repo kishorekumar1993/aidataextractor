@@ -441,6 +441,9 @@
    */
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
+    if (data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site") {
+      return { filledCount: 0 };
+    }
     const elements = detectFormElements();
     let filledCount = 0;
 
@@ -650,14 +653,18 @@
       const data = response.data;
       cachedExtractedData = data;
 
+      // STRICT QC: If restricted site, show proper error message and DO NOT fill anything!
+      if (data && (data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site")) {
+        const reason = data.restrictedReason || "Prohibited Category Detected";
+        updateStatus(`⛔ Restricted Site: ${reason}. This website is restricted and cannot be filled.`, "error");
+        const previewSection = document.getElementById("ai-preview-section");
+        if (previewSection) previewSection.style.display = "none";
+        return;
+      }
+
       renderPreview(data);
       const fillReport = fillFormFields(data);
-
-      if (data.isRestricted) {
-        updateStatus(`⚠️ Restricted Site: ${data.restrictedReason || "Prohibited Category"}. Form set to Restricted Site.`, "warning");
-      } else {
-        updateStatus(`✅ Success! Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
-      }
+      updateStatus(`✅ Success! Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
     } catch (err) {
       if (crawlBtn) crawlBtn.disabled = false;
       if (quickBtn) {
@@ -749,6 +756,11 @@
     if (fillCachedBtn) {
       fillCachedBtn.addEventListener("click", () => {
         if (cachedExtractedData) {
+          if (cachedExtractedData.isRestricted || String(cachedExtractedData.businessType || "").toLowerCase() === "restricted site") {
+            const reason = cachedExtractedData.restrictedReason || "Prohibited Category Detected";
+            updateStatus(`⛔ Restricted Site: ${reason}. This website is restricted and cannot be filled.`, "error");
+            return;
+          }
           fillFormFields(cachedExtractedData);
           updateStatus("Pre-filled form with extracted data.", "success");
         } else {
