@@ -649,26 +649,26 @@ function extractLegalCandidatesFromHtml(html) {
   }
 
   // Pattern 1: ABN / ACN / CIF / NIF preceded or followed by company name (e.g. "Custom Flatpack Pty Ltd ... ABN : 37 139 481 575" or "Empresa S.L. ... CIF: B-12345678")
-  const abnNearRegex = /([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))[^\.\n\r<]{0,60}?(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?/gi;
+  const abnNearRegex = /([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))[^\.\n\r<]{0,60}?(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?/gi;
   let m;
   while ((m = abnNearRegex.exec(text)) !== null) {
     if (m[1]) addCleanCandidate(m[1].trim());
   }
 
   // Reverse: ABN / CIF followed by name
-  const abnBeforeRegex = /(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?[^\.\n\r<]{0,60}?([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))/gi;
+  const abnBeforeRegex = /(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?[^\.\n\r<]{0,60}?([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))/gi;
   while ((m = abnBeforeRegex.exec(text)) !== null) {
     if (m[1]) addCleanCandidate(m[1].trim());
   }
 
   // Pattern 2: "means [Name] Pty Ltd", "operated by [Name] Pty Ltd", "authority of [Name] Pty Ltd", "trading as [Name] Pty Ltd"
-  const legalContextRegex = /(?:means|operated\s+by|registered\s+as|trading\s+as|property\s+of|authority\s+of)\s+([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))/gi;
+  const legalContextRegex = /(?:means|operated\s+by|registered\s+as|trading\s+as|property\s+of|authority\s+of)\s+([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))/gi;
   while ((m = legalContextRegex.exec(text)) !== null) {
     if (m[1]) addCleanCandidate(m[1].trim());
   }
 
   // Pattern 3: Explicit legal suffix preceded by capitalized words
-  const generalLegalRegex = /\b([A-Z][A-Za-z0-9&.'\- ]{1,45}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Incorporated|LLC|LLP|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?))\b/g;
+  const generalLegalRegex = /\b([A-Z][A-Za-z0-9&.'\- ]{1,45}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Incorporated|LLC|LLP|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))\b/g;
   while ((m = generalLegalRegex.exec(text)) !== null) {
     const cand = m[1].trim();
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
@@ -676,6 +676,12 @@ function extractLegalCandidatesFromHtml(html) {
         cand.length >= 3 && cand.length <= 60) {
       addCleanCandidate(cand);
     }
+  }
+
+  // Pattern 4: Indonesian legal entities with prefix PT, CV, UD, etc. (e.g. "PT Astra International Tbk")
+  const indoPrefixRegex = /\b((?:PT|P\.T\.|CV|C\.V\.|UD|U\.D\.|Perseroan\s+Terbatas)\s+[A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}(?:\s+Tbk\.?)?)\b/g;
+  while ((m = indoPrefixRegex.exec(text)) !== null) {
+    addCleanCandidate(m[1].trim());
   }
 
   return Array.from(candidates);
@@ -1941,6 +1947,10 @@ ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
        - Buildings & Floors: Nr. / Nr -> Nummer, Hs. -> Haus, Geb. -> Gebäude, Aufg. -> Aufgang, Whg. -> Wohnung, OG / O.G. -> Obergeschoss (e.g. 1. OG -> 1. Obergeschoss), EG / E.G. -> Erdgeschoss, UG / U.G. -> Untergeschoss, Stck. / Stock -> Stockwerk, Postfach / PF -> Postfach.
        - Locations: a. M. -> am Main (e.g. Frankfurt a. M. -> Frankfurt am Main), a. d. -> an der.
        - Bundesländer abbreviations: BW -> Baden-Württemberg, BY -> Bayern, BE -> Berlin, BB -> Brandenburg, HB -> Bremen, HH -> Hamburg, HE -> Hessen, MV -> Mecklenburg-Vorpommern, NI -> Niedersachsen, NW / NRW -> Nordrhein-Westfalen, RP -> Rheinland-Pfalz, SL -> Saarland, SN -> Sachsen, ST -> Sachsen-Anhalt, SH -> Schleswig-Holstein, TH -> Thüringen.
+     * Indonesia Abbreviations:
+       - Thoroughfares & Areas: Jl. / Jln. -> Jalan, Gg. -> Gang, Komp. / Kompl. -> Komplek, Kel. -> Kelurahan, Kec. -> Kecamatan, Kab. -> Kabupaten, Prov. / Prop. -> Provinsi, Kav. -> Kavling, Blok -> Blok, Kws. Industri -> Kawasan Industri.
+       - Building Details: No. -> Number, Rt. / Rw. -> RT / RW.
+       - Regions: DKI Jakarta, DI Yogyakarta.
      * State & Province abbreviations GLOBALLY:
        - Australia: VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland, WA -> Western Australia, SA -> South Australia, TAS -> Tasmania, ACT -> Australian Capital Territory, NT -> Northern Territory.
        - United States: CA -> California, TX -> Texas, NY -> New York, FL -> Florida, IL -> Illinois, PA -> Pennsylvania, OH -> Ohio, GA -> Georgia, NC -> North Carolina, MI -> Michigan, NJ -> New Jersey, VA -> Virginia, WA -> Washington, etc.
@@ -2043,13 +2053,54 @@ COMPANY NAME RULES (Rule 4):
    - Example: "FP Chassis Australia (Pty) Ltd" -> "FP Chassis Australia Proprietary Limited"
    - Example: "Meramec USA Inc" -> "Meramec USA Incorporated"
 4. EXPAND LEGAL ABBREVIATIONS GLOBALLY TO FULL WORDS:
-   - Australia & South Africa:
-     * [Pty]Ltd, (Pty) Ltd, Pty Ltd, Pty. Ltd. -> Proprietary Limited
-     * Pty, Pty. -> Proprietary
+   - Indonesia:
+     * PT, PT., P.T. -> Perseroan Terbatas (prefix before name: e.g. "PT Astra International Tbk" -> "Perseroan Terbatas Astra International Terbuka")
+     * CV, CV., C.V. -> Commanditaire Vennootschap
+     * UD, UD., U.D. -> Usaha Dagang
+     * PD, PD., P.D. -> Perusahaan Daerah
+     * Tbk, Tbk. -> Terbuka
    - Malaysia:
      * Sdn Bhd, Sdn. Bhd. -> Sendirian Berhad
      * Bhd, Bhd. -> Berhad
+     * PLT -> Perkongsian Liabiliti Terhad
      * NEVER output "Proprietary Limited" for Malaysian companies!
+   - Germany / Austria / Switzerland (DACH):
+     * GmbH, G.m.b.H. -> Gesellschaft mit beschränkter Haftung
+     * GmbH & Co. KG, GmbH + Co. KG -> Gesellschaft mit beschränkter Haftung and Compagnie Kommanditgesellschaft
+     * AG, A.G. -> Aktiengesellschaft
+     * KG -> Kommanditgesellschaft
+     * OHG -> Offene Handelsgesellschaft
+     * UG (haftungsbeschränkt) -> Unternehmergesellschaft haftungsbeschränkt
+     * GbR -> Gesellschaft bürgerlichen Rechts
+     * e.K. -> eingetragener Kaufmann
+   - Spain & Latin America:
+     * S.L., SL -> Sociedad Limitada
+     * S.A., SA -> Sociedad Anónima
+     * S.L.U., SLU -> Sociedad Limitada Unipersonal
+     * S.A.U., SAU -> Sociedad Anónima Unipersonal
+     * S.Coop. -> Sociedad Cooperativa
+   - Italy:
+     * S.r.l., SRL -> Società a Responsabilità Limitata
+     * S.r.l.s., SRLS -> Società a Responsabilità Limitata Semplificata
+     * S.p.A., SPA -> Società per Azioni
+     * S.a.s. -> Società in Accomandita Semplice
+     * S.n.c. -> Società in Nome Collettivo
+   - France & Belgium:
+     * SARL, S.A.R.L. -> Société à Responsabilité Limitée
+     * SAS, S.A.S. -> Société par Actions Simplifiée
+     * SASU, S.A.S.U. -> Société par Actions Simplifiée Unipersonnelle
+   - Netherlands & Belgium:
+     * B.V., BV -> Besloten Vennootschap
+     * N.V., NV -> Naamloze Vennootschap
+   - Poland:
+     * Sp. z o.o. -> Spółka z ograniczoną odpowiedzialnością
+   - Nordics:
+     * AB -> Aktiebolag
+     * AS -> Aksjeselskap
+     * Oy -> Osakeyhtiö
+   - Australia & South Africa:
+     * [Pty]Ltd, (Pty) Ltd, Pty Ltd, Pty. Ltd. -> Proprietary Limited
+     * Pty, Pty. -> Proprietary
    - Singapore / India / United Kingdom:
      * Pte Ltd, Pte. Ltd., (Pte) Ltd -> Private Limited
      * Pvt Ltd, Pvt. Ltd., (Pvt) Ltd -> Private Limited
@@ -2540,7 +2591,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = expandCompanyAbbreviations(compName, country);
   compName = cleanCompanyPrefixesAndSuffixes(compName);
   compName = compName.replace(/[\(\)\[\]\{\}]/g, " ");
-  compName = compName.replace(/^[^\w]+|[^\w]+$/g, "");
+  compName = compName.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
   compName = compName.replace(/\s+/g, " ").trim();
   compName = toTitleCase(compName);
   result.companyName = compName;
@@ -3434,7 +3485,7 @@ function evaluateCityQC(address, country) {
 }
 
 const LEGAL_SUFFIX_CAPTURE =
-  "((?:[\\(\\[]?\\s*(?:pty|pte|pvt|sdn|bhd|co\\.?|corp\\.?|inc\\.?|llc|llp|pllc|gmbh|sa|bv|nv|ag|oy|ab|as|m|malaysia)\\s*[\\)\\]]?[\\s,]*){0,3}(?:ltd\\.?|limited|inc\\.?|incorporated|bhd\\.?|berhad|sdn\\s*bhd|sendirian\\s*berhad|llc|pllc|llp|gmbh|s\\.?r\\.?l\\.?s?|s\\.?p\\.?a\\.?|plc\\.?|corp\\.?|corporation|company\\s+limited|proprietary\\s+limited|private\\s+limited))";
+  "((?:[\\(\\[]?\\s*(?:pty|pte|pvt|sdn|bhd|co\\.?|corp\\.?|inc\\.?|llc|llp|pllc|gmbh|sa|bv|nv|ag|kg|oy|ab|as|m|malaysia)\\s*[\\)\\]]?[\\s,]*){0,3}(?:ltd\\.?|limited|inc\\.?|incorporated|bhd\\.?|berhad|sdn[\\.\\s]+bhd\\.?|sendirian\\s*berhad|llc|pllc|llp|gmbh(?:\\s*(?:&|\\+|und|and|u\\.)\\s*co\\.?\\s*kg)?|gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+haftung(?:\\s+and\\s+compagnie\\s+kommanditgesellschaft)?|aktiengesellschaft|kommanditgesellschaft|ag|kg|s\\.?r\\.?l\\.?s?|s\\.?p\\.?a\\.?|s\\.?l\\.?u?\\.?|s\\.?a\\.?u?\\.?|sociedad\\s*limitada|sociedad\\s*an[oó]nima|tbk\\.?|terbuka|plc\\.?|corp\\.?|corporation|company\\s+limited|proprietary\\s+limited|private\\s+limited|besloten\\s*vennootschap|b\\.?v\\.?|n\\.?v\\.?))";
 
 function companyEvidenceCorpus(crawlData) {
   if (!crawlData) return "";
@@ -3474,7 +3525,10 @@ function hasCompleteLegalSuffix(name) {
   if (!name) return false;
   const n = name.trim();
   if (/\b(?:co\.?|company|pty\.?|pte\.?|pvt\.?|sdn\.?)\s*$/i.test(n)) return false;
-  return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|limited\s+liability\s+(?:company|partnership)|limited|incorporated|corporation|berhad|gmbh|llc|llp|pllc|ltd|inc|plc)\b/i.test(n);
+  // Indonesian prefixes
+  if (/^(?:PT|P\.T\.|CV|C\.V\.|UD|U\.D\.|Perseroan\s+Terbatas)\b/i.test(n)) return true;
+  // Complete forms across countries
+  return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|berhad|perkongsian\s+liabiliti\s+terhad|limited\s+liability\s+(?:company|partnership)|gesellschaft\s+mit\s+beschr[äa]nkter\s+haftung|aktiengesellschaft|kommanditgesellschaft|offene\s+handelsgesellschaft|unternehmergesellschaft|eingetragener\s+kaufmann|sociedad\s+limitada|sociedad\s+an[oó]nima|societ[aà]\s+(?:a\s+responsabilit[aà]\s+limitata|per\s+azioni|in\s+accomandita\s+semplice|in\s+nome\s+collettivo)|soci[eé]t[eé]\s+(?:[aà]\s+responsabilit[eé]\s+limit[eé]e|par\s+actions\s+simplifi[eé]e)|besloten\s+vennootschap|naamloze\s+vennootschap|sp[oó][lł]ka\s+z\s+ograniczon[aą]\s+odpowiedzialno[sś]ci[aą]|aktiebolag|aksjeselskap|osakeyhti[oö]|terbuka|tbk|gmbh|ag|kg|llc|llp|pllc|ltd|inc|plc|corp|corporation)\b/i.test(n);
 }
 
 function companyNamesMatch(a, b) {
@@ -3614,12 +3668,26 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
     }
   }
 
+  // 1b. Check if legal candidates have Indonesian prefix matching this name (e.g. cand = "PT Astra Otoparts", cleanName = "Astra Otoparts")
+  for (const cand of legalCandidates) {
+    if (/^(?:PT|P\.T\.|CV|C\.V\.|UD|U\.D\.|Perseroan\s+Terbatas)\b/i.test(cand) && companyNamesMatch(cleanName, cand)) {
+      return cand;
+    }
+  }
+
   // 2. Check corpus regex
   const corpus = companyEvidenceCorpus(crawlData);
   if (!corpus) return cleanName;
 
   const baseName = cleanName.replace(/\b(?:co\.?|company|corp\.?|corporation)\s*$/i, "").trim() || cleanName;
   const escapedName = baseName.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+
+  // 2b. Indonesian prefix search in corpus
+  const indoPrefixMatch = corpus.match(new RegExp(`\\b((?:PT|P\\.T\\.|CV|C\\.V\\.|UD|U\\.D\\.|Perseroan\\s+Terbatas)\\s+${escapedName}(?:\\s+Tbk\\.?)?)\\b`, "i"));
+  if (indoPrefixMatch && indoPrefixMatch[1]) {
+    return indoPrefixMatch[1].trim();
+  }
+
   const legalRegex = new RegExp(`\\b${escapedName}\\s*[,.]?\\s*${LEGAL_SUFFIX_CAPTURE}`, "i");
 
   const match = corpus.match(legalRegex);
@@ -3636,6 +3704,12 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
   const copyMatch = copyright.match(new RegExp(`([A-Z][A-Za-z0-9&.'\\- ]{2,80}\\s+${LEGAL_SUFFIX_CAPTURE})`, "i"));
   if (copyMatch && copyMatch[0] && (namesOverlap(cleanName, copyMatch[0]) || companyNamesMatch(cleanName, copyMatch[0]))) {
     return copyMatch[0].trim();
+  }
+
+  // 3b. Fallback: Indonesian prefix in copyright
+  const copyIndoMatch = copyright.match(new RegExp(`((?:PT|P\\.T\\.|CV|C\\.V\\.|UD|U\\.D\\.|Perseroan\\s+Terbatas)\\s+[A-Z0-9][A-Za-z0-9&.'\\- ]{2,60}(?:\\s+Tbk\\.?)?)`, "i"));
+  if (copyIndoMatch && copyIndoMatch[1] && (namesOverlap(cleanName, copyIndoMatch[1]) || companyNamesMatch(cleanName, copyIndoMatch[1]))) {
+    return copyIndoMatch[1].trim();
   }
 
   return cleanName;
@@ -3655,12 +3729,45 @@ function expandCompanyAbbreviations(name, country = "") {
 
   // Handle (M) or [M] country identifier before Sdn Bhd (Rule 4: Remove brackets, preserve M / country name)
   n = n.replace(/[\[\(]\s*m\s*[\]\)]\s*(?=(?:sdn|sendirian|bhd|berhad|\b))/gi, " M ");
+  n = n.replace(/[\[\(]\s*(malaysia)\s*[\]\)]/gi, " $1 ");
 
   // 2. Remove brackets from company name per Rule 4
   n = n.replace(/[\(\)\[\]\{\}]/g, " ");
 
-  // 3. Expand legal entity abbreviations to full form strictly when present in official name
-  // Italian entities
+  // 3. Indonesia entities (prefix and suffix)
+  n = n.replace(/(^|[\s,])(?:pt|p\.t\.)\b\.?\s+/gi, "$1Perseroan Terbatas ");
+  n = n.replace(/\b(?:pt|p\.t\.)\b\.?$/gi, "Perseroan Terbatas");
+  n = n.replace(/(^|[\s,])(?:cv|c\.v\.)\b\.?\s+/gi, "$1Commanditaire Vennootschap ");
+  n = n.replace(/\b(?:cv|c\.v\.)\b\.?$/gi, "Commanditaire Vennootschap");
+  n = n.replace(/(^|[\s,])(?:ud|u\.d\.)\b\.?\s+/gi, "$1Usaha Dagang ");
+  n = n.replace(/\b(?:ud|u\.d\.)\b\.?$/gi, "Usaha Dagang");
+  n = n.replace(/(^|[\s,])(?:pd|p\.d\.)\b\.?\s+/gi, "$1Perusahaan Daerah ");
+  n = n.replace(/\b(?:tbk)\b\.?/gi, "Terbuka");
+
+  // 4. Malaysia entities
+  n = n.replace(/\bsdn[\.\s]+bhd\.?\b/gi, "Sendirian Berhad");
+  n = n.replace(/\bsdn\s*bhd\.?\b/gi, "Sendirian Berhad");
+  n = n.replace(/\bsdn\b\.?/gi, "Sendirian");
+  n = n.replace(/\bbhd\b\.?/gi, "Berhad");
+  n = n.replace(/\bplt\b\.?/gi, "Perkongsian Liabiliti Terhad");
+
+  // 5. Germany / Austria / Switzerland (DACH)
+  n = n.replace(/\bgmbh\s*(?:&|\+|und|and|u\.)\s*co\.?\s*kg\.?\b/gi, "Gesellschaft mit beschränkter Haftung and Compagnie Kommanditgesellschaft");
+  n = n.replace(/\bgmbh\s*(?:&|\+|und|and|u\.)\s*co\.?\b/gi, "Gesellschaft mit beschränkter Haftung and Compagnie");
+  n = n.replace(/\b(?:g[\.\s]*m[\.\s]*b[\.\s]*h|gmbh)\b\.?/gi, "Gesellschaft mit beschränkter Haftung");
+  n = n.replace(/\b(?:u[\.\s]*g|ug)\s*(?:\(haftungsbeschr[äa]nkt\)|haftungsbeschr[äa]nkt)?\b\.?/gi, "Unternehmergesellschaft haftungsbeschränkt");
+  n = n.replace(/\b(?:a[\.\s]*g|ag)\b\.?$/gi, "Aktiengesellschaft");
+  n = n.replace(/\b(?:a[\.\s]*g|ag)\b\.?\s+(?=(?:und|and|co|kg)\b)/gi, "Aktiengesellschaft ");
+  if (/germany|deutschland|austria|[öo]sterreich|switzerland|schweiz/i.test(country) || /\b(?:ag|a\.g\.)\b\.?$/i.test(n)) {
+    n = n.replace(/\b(?:a[\.\s]*g|ag)\b\.?/gi, "Aktiengesellschaft");
+  }
+  n = n.replace(/\b(?:k[\.\s]*g|kg)\b\.?$/gi, "Kommanditgesellschaft");
+  n = n.replace(/\b(?:o[\.\s]*h[\.\s]*g|ohg)\b\.?/gi, "Offene Handelsgesellschaft");
+  n = n.replace(/\b(?:g[\.\s]*b[\.\s]*r|gbr)\b\.?/gi, "Gesellschaft bürgerlichen Rechts");
+  n = n.replace(/\b(?:e[\.\s]*k|ek)\b\.?$/gi, "eingetragener Kaufmann");
+  n = n.replace(/\b(?:e[\.\s]*v|ev)\b\.?$/gi, "eingetragener Verein");
+
+  // 6. Italian entities
   n = n.replace(/\b(?:s[\.\s]*r[\.\s]*l[\.\s]*s|srls)\b/gi, "Società a Responsabilità Limitata Semplificata");
   n = n.replace(/\b(?:s[\.\s]*c[\.\s]*a[\.\s]*r[\.\s]*l|scarl)\b/gi, "Società Cooperativa a Responsabilità Limitata");
   n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p[\.\s]*a|scpa)\b/gi, "Società Cooperativa per Azioni");
@@ -3670,7 +3777,7 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b/gi, "Società in Accomandita Semplice");
   n = n.replace(/\bs[\.\s]*s[\.\s]*\b/gi, "Società Semplice ");
 
-  // Spanish entities
+  // 7. Spanish entities
   n = n.replace(/\b(?:s[\.\s]*l[\.\s]*u\.?|slu)\b/gi, "Sociedad Limitada Unipersonal");
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*u\.?|sau)\b/gi, "Sociedad Anónima Unipersonal");
   n = n.replace(/\b(?:s[\.\s]+l|s\.l\.?|sl)\b\.?/gi, "Sociedad Limitada");
@@ -3678,20 +3785,33 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p\.?|scp)\b/gi, "Sociedad Civil Privada");
   n = n.replace(/\b(?:s[\.\s]*coop\.?|scoop)\b/gi, "Sociedad Cooperativa");
 
-  // Malaysian entities
-  n = n.replace(/\bsdn\s*bhd\.?\b/gi, "Sendirian Berhad");
-  n = n.replace(/\bbhd\.?\b/gi, "Berhad");
+  // 8. France & Belgium
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*r[\.\s]*l|sarl)\b/gi, "Société à Responsabilité Limitée");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s[\.\s]*u|sasu)\b/gi, "Société par Actions Simplifiée Unipersonnelle");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b/gi, "Société par Actions Simplifiée");
 
-  // Australia & South Africa
+  // 9. Netherlands & Belgium
+  n = n.replace(/\b(?:b[\.\s]*v\.?|bv)\b/gi, "Besloten Vennootschap");
+  n = n.replace(/\b(?:n[\.\s]*v\.?|nv)\b/gi, "Naamloze Vennootschap");
+
+  // 10. Poland
+  n = n.replace(/\b(?:sp\.?\s*z\s*o\.?\s*o\.?|sp[oó][lł]ka\s+z\s+o\.?o\.?)\b/gi, "Spółka z ograniczoną odpowiedzialnością");
+
+  // 11. Nordics
+  n = n.replace(/\b(?:aktiebolag|ab)\b\.?$/gi, "Aktiebolag");
+  n = n.replace(/\b(?:aksjeselskap|as)\b\.?$/gi, "Aksjeselskap");
+  n = n.replace(/\b(?:osakeyhti[oö]|oy)\b\.?$/gi, "Osakeyhtiö");
+
+  // 12. Australia & South Africa
   n = n.replace(/\bpty\s*ltd\.?\b/gi, "Proprietary Limited");
   n = n.replace(/\bpty\.?\b/gi, "Proprietary");
 
-  // Singapore, India, UK
+  // 13. Singapore, India, UK
   n = n.replace(/\bpte\s*ltd\.?\b/gi, "Private Limited");
   n = n.replace(/\bpvt\s*ltd\.?\b/gi, "Private Limited");
   n = n.replace(/\bplc\.?\b/gi, "Public Limited Company");
 
-  // United States & Global
+  // 14. United States & Global
   n = n.replace(/\bpllc\.?\b/gi, "Professional Limited Liability Company");
   n = n.replace(/\bllp\.?\b/gi, "Limited Liability Partnership");
   n = n.replace(/\bllc\.?\b/gi, "Limited Liability Company");
@@ -4124,6 +4244,25 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/,\s*\b(?:th)\b\.?/gi, ', Thüringen');
   }
 
+  // ==========================================
+  // 10. Indonesia Abbreviations
+  // ==========================================
+  a = a.replace(/(^|[,\s])jl\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Jalan ');
+  a = a.replace(/(^|[,\s])jln\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Jalan ');
+  a = a.replace(/(^|[,\s])gg\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Gang ');
+  a = a.replace(/(^|[,\s])komp\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Komplek ');
+  a = a.replace(/(^|[,\s])kompl\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Komplek ');
+  a = a.replace(/(^|[,\s])kav\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Kavling ');
+  a = a.replace(/(^|[,\s])kel\b\.?\s+(?=[A-Za-z])/gi, '$1Kelurahan ');
+  a = a.replace(/(^|[,\s])kec\b\.?\s+(?=[A-Za-z])/gi, '$1Kecamatan ');
+  a = a.replace(/(^|[,\s])kab\b\.?\s+(?=[A-Za-z])/gi, '$1Kabupaten ');
+  a = a.replace(/(^|[,\s])prov\b\.?\s+(?=[A-Za-z])/gi, '$1Provinsi ');
+  a = a.replace(/(^|[,\s])prop\b\.?\s+(?=[A-Za-z])/gi, '$1Provinsi ');
+  a = a.replace(/\bkws\.?\s*ind(?:ustri)?\.?/gi, 'Kawasan Industri');
+  a = a.replace(/\brt\.?\s*(\d+)\s*\/?\s*rw\.?\s*(\d+)/gi, 'RT $1 RW $2');
+  a = a.replace(/(^|[,\s])dki\s+jakarta\b/gi, '$1DKI Jakarta');
+  a = a.replace(/(^|[,\s])d\.?i\.?\s+yogyakarta\b/gi, '$1DI Yogyakarta');
+
   // Clean up any double spaces introduced
   a = a.replace(/\s+/g, " ").trim();
 
@@ -4436,15 +4575,24 @@ function cleanPhoneNumber(rawPhone, country) {
 
 function toTitleCase(str) {
   if (!str) return "";
-  const upperAcronyms = new Set(["USA", "UK", "UAE", "M", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS"]);
+  const upperAcronyms = new Set([
+    "USA", "UK", "UAE", "M", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
+    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT"
+  ]);
+  const lowerWords = new Set([
+    "of", "mit", "und", "a", "per", "di", "in", "da", "de", "del", "della", "à", "par", "en", "z", "onder", "van"
+  ]);
   let s = str.replace(/['’`]\s*s\b/gi, "'s");
-  return s.replace(/\b\w+/g, function (word, offset, fullStr) {
+  return s.replace(/[\p{L}\p{N}]+/gu, function (word, offset, fullStr) {
     if (offset > 0 && fullStr[offset - 1] === "'" && word.toLowerCase() === "s") {
       return "s";
     }
     const upper = word.toUpperCase();
     if (upperAcronyms.has(upper)) return upper;
-    if (word.toLowerCase() === "of" && /united\s+states/i.test(s)) return "of";
+    const lower = word.toLowerCase();
+    if (offset > 0 && lowerWords.has(lower)) {
+      return lower;
+    }
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });
 }
