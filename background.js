@@ -586,7 +586,8 @@ async function crawlWebsite(targetUrl) {
  */
 function addAddressCandidate(targetList, rawText, source, isHq = false) {
   if (!rawText || typeof rawText !== "string") return;
-  const cleaned = rawText
+  const decoded = decodeHtmlEntities(rawText);
+  const cleaned = decoded
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/^(?:address|add|addr|location|headquarters|head\s*office|registered\s*office|corporate\s*office|廠址|地址)\s*[:：\-–]?\s*/i, "")
@@ -594,7 +595,16 @@ function addAddressCandidate(targetList, rawText, source, isHq = false) {
     .trim();
 
   if (cleaned.length < 8) return;
-  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|number|no|#|\d{3,6})\b/i.test(cleaned) &&
+
+  // STRICT REJECTION: never accept protected email strings, javascript, or non-address text
+  if (/\[email\s*protected\]|data-cfemail|__cf_email__|email\s*protected|\bprotected\b|mailto:/i.test(cleaned)) {
+    return;
+  }
+  if (/\b(?:privacy\s*policy|terms\s*of|all\s*rights\s*reserved|cookie\s*policy|subscribe|newsletter)\b/i.test(cleaned)) {
+    return;
+  }
+
+  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|number|no|#|sec|section)\b/i.test(cleaned) &&
     !/[\u4e00-\u9fa5]{3,}/.test(cleaned)) {
     return;
   }
@@ -740,12 +750,16 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     }
   }
 
-  // 2. <h1-6> with "address" followed by <p>, <div>, <span>, <li>, <td>
-  const headingRegex = /<h[1-6][^>]*>[^<]*address[^<]*<\/h[1-6]>\s*<(?:p|div|span|li|td)[^>]*>([\s\S]*?)<\/(?:p|div|span|li|td)>/gi;
+  // 2. <h1-6> with "address" or "contact" followed by <p>, <div>, <span>, <li>, <td> (excluding email headings)
+  const headingRegex = /<h[1-6][^>]*>(?![^<]*(?:email|e-mail))[^<]*(?:address|location|head\s*office|headquarters|contact\s*us|contact)[^<]*<\/h[1-6]>\s*<(?:p|div|span|li|td)[^>]*>([\s\S]*?)<\/(?:p|div|span|li|td)>/gi;
   let hm;
   while ((hm = headingRegex.exec(html)) !== null) {
     const raw = stripHtml(hm[1]);
-    if (raw.length > 10) {
+    const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
+    for (const line of lines) {
+      addAddressCandidate(targetList, line, defaultSource, false);
+    }
+    if (raw.length > 10 && lines.length <= 1) {
       addAddressCandidate(targetList, raw, defaultSource, false);
     }
   }
@@ -777,6 +791,17 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     const raw = stripHtml(lm[1]);
     if (raw.length > 10) {
       addAddressCandidate(targetList, raw, defaultSource, false);
+    }
+  }
+
+  // 6. Map-marker icon followed by address text (e.g. <span class="fa fa-map-marker"></span> No. 492, ...)
+  const markerRegex = /(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location)[^>]*>[\s\S]{0,100}?(?:<\/(?:span|i|div)>\s*){1,3}([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  let mm;
+  while ((mm = markerRegex.exec(html)) !== null) {
+    const raw = stripHtml(mm[1]);
+    const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
+    for (const line of lines) {
+      addAddressCandidate(targetList, line, defaultSource, false);
     }
   }
 }
@@ -828,6 +853,13 @@ function verifyAndSelectAddress(geminiAddr, candidates) {
     if (topEng) {
       return getRaw(topEng);
     }
+  }
+
+  if (geminiAddr && /\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr)) {
+    if (sorted.length > 0) {
+      return getRaw(sorted[0]);
+    }
+    return "Not Available";
   }
 
   if (!geminiAddr || geminiAddr.length < 5 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim())) {
@@ -1567,13 +1599,15 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
 
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
-  let compName = (result.companyName || "").trim();
+  let compName = decodeHtmlEntities((result.companyName || "").trim());
 
   // Prefer the fuller official name (copyright / JSON-LD) when it carries the legal suffix
   compName = preferOfficialCompanyName(compName, crawlData);
+  compName = decodeHtmlEntities(compName);
 
   // Restore legal suffixes (Ltd, Inc, Sdn Bhd, etc.) from footer/copyright evidence
   compName = restoreLegalSuffixIfOmitted(compName, crawlData);
+  compName = decodeHtmlEntities(compName);
 
   // Expand abbreviations to full form and clean brackets
   compName = expandCompanyAbbreviations(compName, country);
@@ -2349,7 +2383,7 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
 
 function expandCompanyAbbreviations(name, country = "") {
   if (!name) return "";
-  let n = name;
+  let n = decodeHtmlEntities(name);
 
   // 1. Handle bracketed forms before stripping brackets: [Pty] Ltd, (Pty) Ltd, [Pte] Ltd, etc.
   n = n.replace(/[\[\(]\s*pty\s*[\]\)]\s*ltd\.?/gi, "Proprietary Limited");
@@ -3028,7 +3062,10 @@ function cleanPhoneNumber(rawPhone, country) {
 function toTitleCase(str) {
   if (!str) return "";
   const upperAcronyms = new Set(["USA", "UK", "UAE", "M", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS"]);
-  return str.replace(/\b\w+/g, function (word) {
+  return str.replace(/\b\w+/g, function (word, offset, fullStr) {
+    if (offset > 0 && fullStr[offset - 1] === "'" && word.toLowerCase() === "s") {
+      return "s";
+    }
     const upper = word.toUpperCase();
     if (upperAcronyms.has(upper)) return upper;
     if (word.toLowerCase() === "of" && /united\s+states/i.test(str)) return "of";
@@ -3037,14 +3074,17 @@ function toTitleCase(str) {
 }
 
 function decodeHtmlEntities(str) {
-  if (!str) return "";
+  if (!str || typeof str !== "string") return "";
   return str
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ");
+    .replace(/&#(\d+);?/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&#x([0-9a-fA-F]+);?/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\u00A0/g, " ");
 }
 
 /**
