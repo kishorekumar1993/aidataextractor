@@ -1785,12 +1785,14 @@ function extractBestBrandFromTitle(title, domain, logoText = "", ogSiteName = ""
   const domainStem = cleanDomainStem(domain);
   let bestPart = parts[0];
   let bestScore = -999;
-  for (const part of parts) {
-    if (/^(?:home|welcome|about|contact|index|official\s*website)\b/i.test(part)) continue;
-    const s = scoreTitleSegment(part, domainStem, logoText, ogSiteName);
+  for (let part of parts) {
+    const cleanedPart = part.replace(/^(?:welcome\s+to\s+|welcome\s*[-–—|:•]\s*)/i, "").trim();
+    if (/^(?:home(\s+page)?|welcome|about(\s+us)?|contact(\s+us)?|index|official\s*website)$/i.test(cleanedPart)) continue;
+    const candidate = cleanedPart || part;
+    const s = scoreTitleSegment(candidate, domainStem, logoText, ogSiteName);
     if (s > bestScore) {
       bestScore = s;
-      bestPart = part;
+      bestPart = candidate;
     }
   }
   return bestPart;
