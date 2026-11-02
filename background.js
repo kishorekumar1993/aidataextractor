@@ -942,15 +942,17 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    - Do not guess or infer. Only evaluate what is explicitly written in the address.
 
 2. CITY VALIDATION RULES – STRICT QC RULE:
-   The city field MUST be marked "Available" ONLY if the official website's address explicitly identifies a qualifying Town, Township, District, or Municipality (e.g. contains the explicit designation "Town", "Township", "District", "Municipality", "Metropolitan Municipality", "Borough").
-   - Explicit Town: Available (e.g. "Longshan Town", "Yangmei Town")
-   - Explicit Township: Available (e.g. "Xiushui Township")
-   - Explicit District: Available (e.g. "Banqiao District", "Xinzhuang District")
-   - Explicit Municipality: Available (e.g. "Ekurhuleni Municipality")
-   - Explicit Borough: Available
+   The city field MUST be marked "Available" ONLY if:
+   a) The official website's address explicitly identifies a qualifying Town, Township, District, or Municipality (e.g. contains the explicit designation "Town", "Township", "District", "Municipality", "Metropolitan Municipality", "Borough").
+      - Explicit Town: Available (e.g. "Longshan Town", "Yangmei Town")
+      - Explicit Township: Available (e.g. "Xiushui Township")
+      - Explicit District: Available (e.g. "Banqiao District", "Xinzhuang District")
+      - Explicit Municipality: Available (e.g. "Ekurhuleni Municipality")
+      - Explicit Borough: Available
+   b) UNITED KINGDOM EXCEPTION: For addresses in the United Kingdom (England, Scotland, Wales, Northern Ireland), recognized UK cities, towns, and London boroughs (e.g. London, Manchester, Birmingham, Leeds, Glasgow, Edinburgh, Liverpool, Bristol, Belfast, Cardiff, Westminster, Camden, Reading, etc.) evaluate as "Available".
    STRICTLY MARK "Not Available" FOR:
-   - Standalone city name: Not Available (e.g. standalone "Chicago", "Melbourne", "Rome", "Milan", "Cape Town", "London", "Taipei", "Centralia", "Wheeling" without an explicit qualifying Town/District/Municipality designation word are NOT Available).
-   - Capital cities: Not Available (the capital-city exception does NOT apply to city validation; capital cities only apply to state validation).
+   - Standalone city names outside the UK: Not Available (e.g. standalone "Chicago", "Melbourne", "Rome", "Milan", "Cape Town", "Taipei", "Centralia", "Wheeling" without an explicit qualifying Town/District/Municipality designation word are NOT Available).
+   - Capital cities outside the UK: Not Available (the capital-city exception does NOT apply to city validation; capital cities only apply to state validation).
    - Suburb: Not Available
    - Locality: Not Available
    - Neighborhood: Not Available
@@ -1486,14 +1488,87 @@ function hasCityInAddress(addr, country) {
   return evaluateCityQC(addr, country) === "Available";
 }
 
-/**
- * Strict City QC Evaluator conforming to CITY VALIDATION RULES – CRITICAL QC RULE.
- * Evaluates whether the address string itself contains an official Town, District, or Municipality.
- */
+// UK Cities, Towns, and London Boroughs for UK City validation
+const UK_CITIES_AND_TOWNS = [
+  // Official UK Cities
+  "london", "birmingham", "manchester", "leeds", "glasgow", "liverpool", "newcastle upon tyne", "newcastle",
+  "sheffield", "bristol", "edinburgh", "belfast", "cardiff", "coventry", "nottingham", "leicester",
+  "sunderland", "brighton and hove", "brighton", "kingston upon hull", "hull", "plymouth", "stoke-on-trent",
+  "wolverhampton", "derby", "swansea", "southampton", "salford", "aberdeen", "westminster", "portsmouth",
+  "york", "peterborough", "dundee", "lancaster", "oxford", "newport", "preston", "st albans", "norwich",
+  "chester", "cambridge", "salisbury", "exeter", "gloucester", "lisburn", "chichester", "winchester",
+  "londonderry", "derry", "carlisle", "worcester", "bath", "durham", "lincoln", "hereford", "armagh",
+  "inverness", "stirling", "canterbury", "lichfield", "newry", "ripon", "bangor", "truro", "ely",
+  "wells", "st asaph", "st davids", "perth", "chelmsford", "milton keynes", "colchester", "doncaster",
+  "wrexham", "dunfermline",
+
+  // Major UK Towns & Municipal Centres
+  "reading", "slough", "luton", "bolton", "bournemouth", "swindon", "northampton", "middlesbrough",
+  "blackpool", "huddersfield", "ipswich", "blackburn", "watford", "rotherham", "stockport", "oldham",
+  "walsall", "telford", "rochdale", "solihull", "poole", "halifax", "burnley", "scunthorpe", "grimsby",
+  "hartlepool", "darlington", "southport", "wigan", "st helens", "warrington", "crewe", "macclesfield",
+  "ellesmere port", "chesterfield", "mansfield", "worksop", "newark", "beeston", "loughborough",
+  "hinckley", "kettering", "corby", "wellingborough", "bedford", "dunstable", "stevenage",
+  "hemel hempstead", "welwyn garden city", "harlow", "basildon", "southend-on-sea", "brentwood",
+  "braintree", "clacton-on-sea", "bury st edmunds", "lowestoft", "great yarmouth", "kings lynn",
+  "thetford", "taunton", "yeovil", "bridgwater", "weston-super-mare", "trowbridge", "chippenham",
+  "cheltenham", "stroud", "tewkesbury", "shrewsbury", "oswestry", "redditch", "kidderminster",
+  "bromsgrove", "malvern", "warwick", "leamington spa", "rugby", "stratford-upon-avon", "nuneaton",
+  "tamworth", "cannock", "stafford", "burton upon trent", "newcastle-under-lyme", "leek",
+  "falkirk", "paisley", "east kilbride", "livingston", "cumbernauld", "hamilton", "kirkcaldy",
+  "ayr", "kilmarnock", "greenock", "coatbridge", "glenrothes", "airdrie", "irvine", "dumfries",
+  "motherwell", "rutherglen", "cambuslang", "barrhead", "bellshill", "blantyre", "elgin",
+  "arbroath", "alloa", "dumbarton", "kirkintilloch", "clarkston", "bathgate", "stenhousemuir",
+  "peterhead", "barry", "bridgend", "neath", "cwmbran", "llanelli", "merthyr tydfil", "caerphilly",
+  "pontypridd", "ebbw vale", "aberystwyth",
+
+  // London Boroughs
+  "city of london", "city of westminster", "barking and dagenham", "barnet", "bexley", "brent",
+  "bromley", "camden", "croydon", "ealing", "enfield", "greenwich", "hackney", "hammersmith and fulham",
+  "haringey", "harrow", "havering", "hillingdon", "hounslow", "islington", "kensington and chelsea",
+  "kingston upon thames", "lambeth", "lewisham", "merton", "newham", "redbridge", "richmond upon thames",
+  "southwark", "sutton", "tower hamlets", "waltham forest", "wandsworth"
+];
+
+function isUkLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:united\s*kingdom|uk|u\.k\.|great\s*britain|england|scotland|wales|northern\s*ireland)\b/i.test(c)) {
+    return true;
+  }
+  const a = (address || "").toLowerCase();
+  if (/\b(?:united\s*kingdom|england|scotland|wales|northern\s*ireland)\b/i.test(a)) {
+    return true;
+  }
+  // Standard UK postcode format: e.g. SW1A 1AA, EC1A 1BB, W1A 0AX, M1 1AE, B1 1BB, G1 1XQ, EH1 1YZ
+  if (/\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(a)) {
+    return true;
+  }
+  // Major UK counties / regions
+  if (/\b(greater\s*london|greater\s*manchester|west\s*midlands|west\s*yorkshire|south\s*yorkshire|tyne\s*and\s*wear|merseyside|berkshire|buckinghamshire|cambridgeshire|cheshire|cornwall|cumbria|derbyshire|devon|dorset|durham|essex|gloucestershire|hampshire|hertfordshire|kent|lancashire|leicestershire|lincolnshire|norfolk|northamptonshire|northumberland|nottinghamshire|oxfordshire|shropshire|somerset|staffordshire|suffolk|surrey|sussex|warwickshire|wiltshire|worcestershire|yorkshire)\b/i.test(a)) {
+    return true;
+  }
+  return false;
+}
+
+function hasUkCityOrTown(cleanAddr) {
+  const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
+  const streetPrefixPattern = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park)\\s+";
+
+  for (const name of UK_CITIES_AND_TOWNS) {
+    const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+    const regex = new RegExp(`(?<!${streetPrefixPattern})\\b${escaped}\\b(?!${streetSuffixPattern})`, "i");
+    if (regex.test(cleanAddr)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Strict City QC Evaluator conforming to CITY VALIDATION RULES – STRICT QC RULE.
- * City = Available ONLY if the official website's address explicitly identifies a qualifying Town, Township, District or Municipality.
- * Standalone city names, capital cities, suburbs, localities, and industrial areas are NOT Available.
+ * City = Available ONLY if the official website's address explicitly identifies a qualifying Town, Township, District or Municipality,
+ * or matches an official UK city, town, or London borough.
+ * Standalone city names outside UK, suburbs, localities, and industrial areas are NOT Available.
  */
 function evaluateCityQC(address, country) {
   if (!address || typeof address !== "string" || address.trim().length < 3) {
@@ -1526,6 +1601,11 @@ function evaluateCityQC(address, country) {
   const addrWithoutTownNamedCities = cleanAddr.replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
 
   if (/\b(town|township|district|municipality|metropolitan\s*municipality|borough)\b/i.test(addrWithoutTownNamedCities)) {
+    return "Available";
+  }
+
+  // UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
+  if (isUkLocation(cleanAddr, country) && hasUkCityOrTown(cleanAddr)) {
     return "Available";
   }
 
@@ -1733,6 +1813,8 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\best\b\.?\s+(?=(?:park|area|zone)\b)/gi, "Estate ");
   a = a.replace(/\bjln\b\.?/gi, "Jalan");
   a = a.replace(/\blrg\b\.?/gi, "Lorong");
+  a = a.replace(/(^|[\s,])bt\.?\s+caves\b/gi, '$1Batu Caves');
+  a = a.replace(/(^|[\s,])bt\.?\s*(?=\d)/gi, '$1Batu ');
   a = a.replace(/\bbt\b\.?/gi, "Bukit");
   a = a.replace(/\bkg\b\.?/gi, "Kampung");
   a = a.replace(/\bmt\.?\s+(?=[A-Z])/gi, "Mount ");
@@ -1897,11 +1979,11 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bbdr\b\.?\s+(?=[A-Za-z])/gi, 'Bandar ');
 
   // Planning & Municipal Zoning Sectors (Klang, Petaling Jaya, Subang Jaya)
-  a = a.replace(/(^|[\s,\/\-])ku\s*[-–]?\s*(\d{1,2})\b/gi, '$1Klang Utara $2');
-  a = a.replace(/(^|[\s,\/\-])ks\s*[-–]?\s*(\d{1,2})\b/gi, '$1Klang Selatan $2');
-  a = a.replace(/(^|[\s,\/\-])pju\s*[-–]?\s*(\d{1,2})\b/gi, '$1Petaling Jaya Utara $2');
-  a = a.replace(/(^|[\s,\/\-])pjs\s*[-–]?\s*(\d{1,2})\b/gi, '$1Petaling Jaya Selatan $2');
-  a = a.replace(/(^|[\s,\/\-])usj\s*[-–]?\s*(\d{1,2})\b/gi, '$1UEP Subang Jaya $2');
+  a = a.replace(/(^|[\s,\/\-])ku\s*[-–\/\.]?\s*(\d{1,2})\b/gi, '$1Klang Utara $2');
+  a = a.replace(/(^|[\s,\/\-])ks\s*[-–\/\.]?\s*(\d{1,2})\b/gi, '$1Klang Selatan $2');
+  a = a.replace(/(^|[\s,\/\-])pju\s*[-–\/\.]?\s*(\d{1,2})\b/gi, '$1Petaling Jaya Utara $2');
+  a = a.replace(/(^|[\s,\/\-])pjs\s*[-–\/\.]?\s*(\d{1,2})\b/gi, '$1Petaling Jaya Selatan $2');
+  a = a.replace(/(^|[\s,\/\-])usj\s*[-–\/\.]?\s*(\d{1,2})\b/gi, '$1UEP Subang Jaya $2');
 
   // Rivers, Hills & Milestones (Sg -> Sungai, Bkt -> Bukit, Bt -> Batu / Bukit)
   a = a.replace(/(^|[\s,])sg\.?\s+(?=[A-Za-z])/gi, '$1Sungai ');
