@@ -15,7 +15,7 @@ const DEFAULT_API_KEY =
 const DEFAULT_MODEL =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
   (typeof self !== "undefined" && self.ENV && self.ENV.DEFAULT_MODEL) ||
-  "gemini-2.5-flash";
+  "gemini-3.5-flash-lite";
 
 // Primary prohibited core industries per Instruction Sheet
 const RESTRICTED_PATTERNS = [
@@ -903,6 +903,24 @@ ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
      * Compass / Directional prefixes & suffixes: E. / E -> East (e.g. "301 E. Marquardt Drive" -> "301 East Marquardt Drive"), W. / W -> West, N. / N -> North, S. / S -> South, NE / N.E. -> Northeast, NW / N.W. -> Northwest, SE / S.E. -> Southeast, SW / S.W. -> Southwest.
      * Street types: St -> Street, Rd -> Road, Ave -> Avenue, Cnr -> Corner, Dr -> Drive, Blvd -> Boulevard, Ln -> Lane, Ct -> Court, Pl -> Place, Hwy -> Highway, Cres -> Crescent, Pde -> Parade, Tce/Ter -> Terrace, Cl -> Close, Sq -> Square, Pkwy -> Parkway, Cir -> Circle, Gr/Gv -> Grove, Mews -> Mews, Way -> Way, Wlk -> Walk, Gdns -> Gardens, Esp -> Esplanade, Crst -> Crest, Prom -> Promenade, Rte -> Route, Tpke -> Turnpike, Ctr -> Centre, Aly -> Alley, Arc -> Arcade, Bnd -> Bend, Brg -> Bridge, Byp -> Bypass, Cswy -> Causeway, Cmn -> Common, Xing -> Crossing, Ext -> Extension, Fwy -> Freeway, Grn -> Green, Holw -> Hollow, Jct -> Junction, Knl -> Knoll, Lndg -> Landing, Mdw/Mdws -> Meadow/Meadows, Ml/Mls -> Mill/Mills, Mt -> Mount, Oval -> Oval, Pass -> Pass, Path -> Path, Pike -> Pike, Plz -> Plaza, Pt -> Point, Rdg -> Ridge, Rnch -> Ranch, Row -> Row, Run -> Run, Shr -> Shore, Spg/Spgs -> Spring/Springs, Sta -> Station, Strm -> Stream, Sumit/Smt -> Summit, Trce -> Trace, Trl -> Trail, Tunl -> Tunnel, Via -> Via, Vis -> Vista, Whf -> Wharf, No. -> Number, Nr -> Near.
      * Units / Buildings / Floors: Ste -> Suite, Apt -> Apartment, Bldg -> Building, Flr -> Floor, Dept -> Department, Rm -> Room, POB / PO Box -> Post Office Box.
+     * Italy (Italia) Abbreviations:
+       - Street Prefixes: V.le / Vle -> Viale, C.so / Cso -> Corso, P.zza / Pzza / P.za / Pza -> Piazza, P.le / Ple -> Piazzale, L.go / Lgo -> Largo, Str. -> Strada, S.P. -> Strada Provinciale, S.S. -> Strada Statale, S.R. -> Strada Regionale, V.colo / Vclo -> Vicolo, Circonv. -> Circonvallazione.
+       - Compass: Est -> East, Ovest -> West, Nord -> North, Sud -> South.
+       - Zones / Localities: Zona Ind. / Z.I. -> Zona Industriale, Zona Art. / Z.A. -> Zona Artigianale, Loc. -> Località, Fraz. -> Frazione, C.da / Cda -> Contrada, B.go / Bgo -> Borgo.
+       - Building Details: N. / Civ. / N.ro -> Numero, Pal. -> Palazzina, Sc. -> Scala, Int. -> Interno, P. / P.to -> Piano.
+     * Singapore Abbreviations:
+       - Thoroughfares & Areas: Jln -> Jalan, Lrg / Lor -> Lorong, Bt -> Bukit, Kg -> Kampung, Tg -> Tanjong, Ind / Indl -> Industrial (e.g. Tuas Ind Estate -> Tuas Industrial Estate, Defu Ind Park -> Defu Industrial Park), Est -> Estate, Pk -> Park, Blk -> Block (e.g. Blk 3014 -> Block 3014), Techpark / Tech Park -> Technology Park.
+     * Malaysia Abbreviations:
+       - Thoroughfares & Areas: Jln -> Jalan, Lrg -> Lorong, Lbh -> Lebuh, Lbr -> Lebuhraya, Sg. -> Sungai, Bkt. -> Bukit, Bt. -> Batu (or Bukit), Kg -> Kampung, Tg -> Tanjung, Tmn -> Taman, Bdr -> Bandar, Psn -> Persiaran, Mdn -> Medan, Kws -> Kawasan, Kws. Perind. / Perind. -> Kawasan Perindustrian, Zon Perind. -> Zon Perindustrian, Sek. -> Seksyen, Pst -> Pusat, Bgn -> Bangunan, Tkt -> Tingkat, Peti Surat -> Post Office Box.
+       - Planning / Municipal Zoning Sectors: KU (e.g. 1/KU9, KU9) -> Klang Utara (e.g. 1/Klang Utara 9), KS (e.g. KS1) -> Klang Selatan, PJU -> Petaling Jaya Utara, PJS -> Petaling Jaya Selatan, USJ -> UEP Subang Jaya, PJ -> Petaling Jaya, JB -> Johor Bahru.
+       - State abbreviations: KL -> Kuala Lumpur, Sgr / Sel. -> Selangor, Jhr / Joh. -> Johor, Pnk / Pg / Pen. -> Penang, Prk / Pk. -> Perak, Kdh / Ked. -> Kedah, Phg / Pah. -> Pahang, N.S. -> Negeri Sembilan, Mlk / Mel. -> Melaka, Trg / Ter. -> Terengganu, Kel. -> Kelantan, Swk / Sar. -> Sarawak, Sbh / Sab. -> Sabah, Per. -> Perlis, WP -> Wilayah Persekutuan.
+     * Germany (Deutschland) Abbreviations:
+       - Suffix -str. / -str -> -strasse (e.g. Industriestr. -> Industriestrasse, Bahnhofstr. -> Bahnhofstrasse, Hauptstr. -> Hauptstrasse, Siemensstr. -> Siemensstrasse), Standalone Str. / Str -> Strasse (e.g. Berliner Str. -> Berliner Strasse).
+       - Suffix -pl. / -pl -> -platz (e.g. Marktpl. -> Marktplatz), Standalone Pl. / Pl -> Platz.
+       - Commercial / Industrial: Gewerbegebiet / Gew. / Gewerbepark -> Gewerbegebiet / Gewerbepark, Industriegebiet / Ind. / Industriepark -> Industriegebiet / Industriepark.
+       - Buildings & Floors: Nr. / Nr -> Nummer, Hs. -> Haus, Geb. -> Gebäude, Aufg. -> Aufgang, Whg. -> Wohnung, OG / O.G. -> Obergeschoss (e.g. 1. OG -> 1. Obergeschoss), EG / E.G. -> Erdgeschoss, UG / U.G. -> Untergeschoss, Stck. / Stock -> Stockwerk, Postfach / PF -> Postfach.
+       - Locations: a. M. -> am Main (e.g. Frankfurt a. M. -> Frankfurt am Main), a. d. -> an der.
+       - Bundesländer abbreviations: BW -> Baden-Württemberg, BY -> Bayern, BE -> Berlin, BB -> Brandenburg, HB -> Bremen, HH -> Hamburg, HE -> Hessen, MV -> Mecklenburg-Vorpommern, NI -> Niedersachsen, NW / NRW -> Nordrhein-Westfalen, RP -> Rheinland-Pfalz, SL -> Saarland, SN -> Sachsen, ST -> Sachsen-Anhalt, SH -> Schleswig-Holstein, TH -> Thüringen.
      * State & Province abbreviations GLOBALLY:
        - Australia: VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland, WA -> Western Australia, SA -> South Australia, TAS -> Tasmania, ACT -> Australian Capital Territory, NT -> Northern Territory.
        - United States: CA -> California, TX -> Texas, NY -> New York, FL -> Florida, IL -> Illinois, PA -> Pennsylvania, OH -> Ohio, GA -> Georgia, NC -> North Carolina, MI -> Michigan, NJ -> New Jersey, VA -> Virginia, WA -> Washington, etc.
@@ -1461,7 +1479,7 @@ function hasStateInAddress(addr, country) {
   if (/\b(province|state|county|prefecture|district|region|territory|emirate|canton|department|governorate|oblast|voivodeship)\b/i.test(lower)) return true;
 
   // Explicit state / province / county / prefecture / hsien markers (Hsien = County in Taiwan)
-  return /\b(hsien|victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|gauteng|western\s*cape|eastern\s*cape|kwazulu.?natal|mpumalanga|free\s*state|limpopo|north\s*west|northern\s*cape|ontario|quebec|british\s*columbia|alberta|manitoba|saskatchewan|nova\s*scotia|new\s*brunswick|newfoundland|california|texas|florida|new\s*york|pennsylvania|illinois|ohio|georgia|north\s*carolina|michigan|new\s*jersey|virginia|washington\s*state|arizona|massachusetts|tennessee|indiana|missouri|maryland|wisconsin|colorado|minnesota|south\s*carolina|alabama|louisiana|kentucky|oregon|oklahoma|connecticut|utah|iowa|nevada|arkansas|mississippi|kansas|new\s*mexico|nebraska|idaho|west\s*virginia|hawaii|new\s*hampshire|maine|montana|rhode\s*island|delaware|south\s*dakota|north\s*dakota|alaska|vermont|wyoming|district\s*of\s*columbia|maharashtra|tamil\s*nadu|karnataka|gujarat|uttar\s*pradesh|telangana|kerala|punjab|haryana|rajasthan|bihar|west\s*bengal|andhra\s*pradesh|madhya\s*pradesh|assam|odisha|jharkhand|chhattisgarh|goa|himachal\s*pradesh|uttarakhand|delhi|bavaria|bavaria|sachsen|thüringen|niedersachsen|nordrhein.westfalen|rheinland|hessen|schleswig.holstein|mecklenburg|saarland|sachsen.anhalt|berlin|hamburg|bremen|yorkshire|lancashire|kent|surrey|essex|cornwall|devon|norfolk|suffolk|hertfordshire|cambridgeshire|oxfordshire|berkshire|hampshire|dorset|somerset|wiltshire|shropshire|staffordshire|worcestershire|warwickshire|northamptonshire|leicestershire|nottinghamshire|derbyshire|lincolnshire|cheshire|merseyside|greater\s*manchester|west\s*yorkshire|south\s*yorkshire|west\s*midlands|tyne\s*and\s*wear|selangor|kuala\s*lumpur|penang|johor|perak|sabah|sarawak|pahang|terengganu|kelantan|kedah|perlis|negeri\s*sembilan|melaka|putrajaya|labuan|guangdong|zhejiang|jiangsu|shandong|sichuan|fujian|hubei|henan|yunnan|liaoning|hebei|shaanxi|shanxi|gansu|qinghai|xinjiang|tibet|inner\s*mongolia|jilin|heilongjiang|anhui|jiangxi|guizhou|hainan|ningxia|jakarta|bali|java|sumatra|kalimantan|sulawesi|jawa|sumatera|yogyakarta\s*special\s*region|gyeonggi|gangwon|chungcheong|jeolla|gyeongsang|jeju|abu\s*dhabi|dubai|sharjah|ajman|fujairah|ras\s*al\s*khaimah|umm\s*al\s*quwain|riyadh|makkah|madinah|eastern\s*province|asir|jizan|najran|tabuk|hail|qassim|ile.de.france|provence|normandie|bretagne|occitanie|nouvelle.aquitaine|pays\s*de\s*la\s*loire|auvergne|hauts.de.france|grand\s*est|bourgogne|centre.val|corsica|andalucia|catalonia|madrid\s*community|valencia|galicia|basque)\b/i.test(lower);
+  return /\b(hsien|victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|gauteng|western\s*cape|eastern\s*cape|kwazulu.?natal|mpumalanga|free\s*state|limpopo|north\s*west|northern\s*cape|ontario|quebec|british\s*columbia|alberta|manitoba|saskatchewan|nova\s*scotia|new\s*brunswick|newfoundland|california|texas|florida|new\s*york|pennsylvania|illinois|ohio|georgia|north\s*carolina|michigan|new\s*jersey|virginia|washington\s*state|arizona|massachusetts|tennessee|indiana|missouri|maryland|wisconsin|colorado|minnesota|south\s*carolina|alabama|louisiana|kentucky|oregon|oklahoma|connecticut|utah|iowa|nevada|arkansas|mississippi|kansas|new\s*mexico|nebraska|idaho|west\s*virginia|hawaii|new\s*hampshire|maine|montana|rhode\s*island|delaware|south\s*dakota|north\s*dakota|alaska|vermont|wyoming|district\s*of\s*columbia|maharashtra|tamil\s*nadu|karnataka|gujarat|uttar\s*pradesh|telangana|kerala|punjab|haryana|rajasthan|bihar|west\s*bengal|andhra\s*pradesh|madhya\s*pradesh|assam|odisha|jharkhand|chhattisgarh|goa|himachal\s*pradesh|uttarakhand|delhi|bavaria|bavaria|sachsen|thüringen|niedersachsen|nordrhein.westfalen|rheinland|hessen|schleswig.holstein|mecklenburg|saarland|sachsen.anhalt|berlin|hamburg|bremen|yorkshire|lancashire|kent|surrey|essex|cornwall|devon|norfolk|suffolk|hertfordshire|cambridgeshire|oxfordshire|berkshire|hampshire|dorset|somerset|wiltshire|shropshire|staffordshire|worcestershire|warwickshire|northamptonshire|leicestershire|nottinghamshire|derbyshire|lincolnshire|cheshire|merseyside|greater\s*manchester|west\s*yorkshire|south\s*yorkshire|west\s*midlands|tyne\s*and\s*wear|selangor|kuala\s*lumpur|penang|johor|perak|sabah|sarawak|pahang|terengganu|kelantan|kedah|perlis|negeri\s*sembilan|melaka|putrajaya|labuan|guangdong|zhejiang|jiangsu|shandong|sichuan|fujian|hubei|henan|yunnan|liaoning|hebei|shaanxi|shanxi|gansu|qinghai|xinjiang|tibet|inner\s*mongolia|jilin|heilongjiang|anhui|jiangxi|guizhou|hainan|ningxia|jakarta|bali|java|sumatra|kalimantan|sulawesi|jawa|sumatera|yogyakarta\s*special\s*region|gyeonggi|gangwon|chungcheong|jeolla|gyeongsang|jeju|abu\s*dhabi|dubai|sharjah|ajman|fujairah|ras\s*al\s*khaimah|umm\s*al\s*quwain|riyadh|makkah|madinah|eastern\s*province|asir|jizan|najran|tabuk|hail|qassim|ile.de.france|provence|normandie|bretagne|occitanie|nouvelle.aquitaine|pays\s*de\s*la\s*loire|auvergne|hauts.de.france|grand\s*est|bourgogne|centre.val|corsica|andalucia|catalonia|madrid\s*community|valencia|galicia|basque|abruzzo|basilicata|calabria|campania|emilia[\s\-_]*romagna|friuli[\s\-_]*venezia[\s\-_]*giulia|lazio|liguria|lombardia|lombardy|marche|molise|piemonte|piedmont|puglia|apulia|sardegna|sardinia|sicilia|sicily|toscana|tuscany|trentino[\s\-_]*alto[\s\-_]*adige|umbria|valle[\s\-_]*d[\s\-_]*aosta|veneto)\b/i.test(lower);
 }
 
 function hasCityInAddress(addr, country) {
@@ -1674,6 +1692,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bCty\b\.?/gi, "County");
   a = a.replace(/\bProv\b\.?/gi, "Province");
   a = a.replace(/\bMun\b\.?/gi, "Municipality");
+  a = a.replace(/(^|[,\s])nr\b\.?\s*(?=\d)/gi, "$1Nummer ");
   a = a.replace(/\bNr\b\.?/gi, "Near");
   a = a.replace(/\bhsien\b/gi, "County");
 
@@ -1734,7 +1753,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bbldg\b\.?/gi, "Building");
   a = a.replace(/\bflr\b\.?/gi, "Floor");
   a = a.replace(/\bfl\.\s*(?=\d)/gi, "Floor ");
-  a = a.replace(/(\d+)(?:st|nd|rd|th)?\s*\bfl\b\.?/gi, "$1 Floor");
+  a = a.replace(/(\d+(?:st|nd|rd|th)?)\s*\bfl\b\.?/gi, "$1 Floor");
   a = a.replace(/(\b\d+)\s*F\b(?=[,\s]|$)/gi, "$1 Floor");
   a = a.replace(/(^|[,\s])Flr?\.?\s*(?=\d)/gi, "$1Floor ");
   a = a.replace(/\bste\b\.?/gi, "Suite");
@@ -1804,6 +1823,191 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     }
   }
 
+  // ==========================================
+  // 7. Italy (Italia) Abbreviations
+  // ==========================================
+  // Street prefixes
+  a = a.replace(/(^|[,\s])v\.?le\b\.?/gi, '$1Viale');
+  a = a.replace(/(^|[,\s])vle\b/gi, '$1Viale');
+  a = a.replace(/(^|[,\s])c\.?so\b\.?/gi, '$1Corso');
+  a = a.replace(/(^|[,\s])cso\b/gi, '$1Corso');
+  a = a.replace(/(^|[,\s])p\.?zza\b\.?/gi, '$1Piazza');
+  a = a.replace(/(^|[,\s])pzza\b/gi, '$1Piazza');
+  a = a.replace(/(^|[,\s])p\.?za\b\.?/gi, '$1Piazza');
+  a = a.replace(/(^|[,\s])pza\b/gi, '$1Piazza');
+  a = a.replace(/(^|[,\s])p\.?le\b\.?/gi, '$1Piazzale');
+  a = a.replace(/(^|[,\s])ple\b/gi, '$1Piazzale');
+  a = a.replace(/(^|[,\s])l\.?go\b\.?/gi, '$1Largo');
+  a = a.replace(/(^|[,\s])lgo\b/gi, '$1Largo');
+  a = a.replace(/(^|[,\s])v\.?colo\b\.?/gi, '$1Vicolo');
+  a = a.replace(/(^|[,\s])vclo\b/gi, '$1Vicolo');
+  a = a.replace(/(^|[,\s])circonv\b\.?/gi, '$1Circonvallazione');
+  a = a.replace(/(^|[,\s])circ\b\.?\s+(?=[A-Za-z])/gi, '$1Circonvallazione ');
+
+  // Compass directions in Italian addresses
+  a = a.replace(/(^|[,\s])est\b/gi, '$1East');
+  a = a.replace(/(^|[,\s])ovest\b/gi, '$1West');
+  a = a.replace(/(^|[,\s])nord\b/gi, '$1North');
+  a = a.replace(/(^|[,\s])sud\b/gi, '$1South');
+
+  // Roads: Strada, SP, SS, SR
+  a = a.replace(/(^|[,\s])str\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Strada ');
+  a = a.replace(/\bs\.?p\.?\s*(?=\d)/gi, 'Strada Provinciale ');
+  a = a.replace(/\bs\.?s\.?\s*(?=\d)/gi, 'Strada Statale ');
+  a = a.replace(/\bs\.?r\.?\s*(?=\d)/gi, 'Strada Regionale ');
+
+  // Internal details (Scala, Palazzina, etc.)
+  a = a.replace(/\bsc\b\.?\s*(?=[A-Za-z0-9])/gi, 'Scala ');
+  a = a.replace(/\bpal\b\.?\s*(?=[A-Za-z0-9])/gi, 'Palazzina ');
+  a = a.replace(/\bint\b\.?\s*(?=\d|[A-Za-z])/gi, 'Interno ');
+  a = a.replace(/(^|[,\s])p\b\.?\s*(?=\d)/gi, '$1Piano ');
+  a = a.replace(/\bp\.?to\b\.?\s*(?=\d)/gi, 'Piano ');
+  a = a.replace(/\bciv(?:ico)?\.?\s*(?=\d)/gi, 'Numero ');
+  a = a.replace(/\bn\.?ro\b\.?\s*(?=\d)/gi, 'Numero ');
+  a = a.replace(/(^|[,\s])n\.\s*(?=\d)/gi, '$1Numero ');
+
+  // Administrative / Zones
+  a = a.replace(/\b(?:zona\s+ind\.?|z\.?i\.?|z\.?\s*ind\.?|zona\s+ind\.?le)\b\.?/gi, 'Zona Industriale');
+  a = a.replace(/\b(?:zona\s+art\.?|z\.?a\.?|zona\s+art\.?le)\b\.?/gi, 'Zona Artigianale');
+  a = a.replace(/(^|[,\s])loc\b\.?\s+(?=[A-Za-z])/gi, '$1Località ');
+  a = a.replace(/(^|[,\s])fraz\b\.?\s+(?=[A-Za-z])/gi, '$1Frazione ');
+  a = a.replace(/(^|[,\s])c\.?da\b\.?\s+(?=[A-Za-z])/gi, '$1Contrada ');
+  a = a.replace(/(^|[,\s])cda\b\s+(?=[A-Za-z])/gi, '$1Contrada ');
+  a = a.replace(/(^|[,\s])b\.?go\b\.?\s+(?=[A-Za-z])/gi, '$1Borgo ');
+  a = a.replace(/(^|[,\s])bgo\b\s+(?=[A-Za-z])/gi, '$1Borgo ');
+
+  // ==========================================
+  // 8. Singapore & Malaysia Abbreviations
+  // ==========================================
+  // Thoroughfares & Blocks
+  a = a.replace(/\bblk\b\.?\s*(?=\d|[A-Za-z])/gi, 'Block ');
+  a = a.replace(/\bjln\b\.?/gi, 'Jalan');
+  a = a.replace(/\blrg\b\.?/gi, 'Lorong');
+  a = a.replace(/\blor\b\.?\s*(?=\d|[A-Za-z])/gi, 'Lorong ');
+  a = a.replace(/\blbh\b\.?/gi, 'Lebuh');
+  a = a.replace(/\blbr\b\.?/gi, 'Lebuhraya');
+  a = a.replace(/\bpsn\b\.?/gi, 'Persiaran');
+  a = a.replace(/\bmdn\b\.?/gi, 'Medan');
+
+  // Hills, Villages, Capes, Settlements
+  a = a.replace(/\bbt\b\.?\s+(?=[A-Za-z])/gi, 'Bukit ');
+  a = a.replace(/\bkg\b\.?\s+(?=[A-Za-z])/gi, 'Kampung ');
+  a = a.replace(/\btg\b\.?\s+(?=[A-Za-z])/gi, 'Tanjung ');
+  a = a.replace(/\btmn\b\.?\s+(?=[A-Za-z])/gi, 'Taman ');
+  a = a.replace(/\bbdr\b\.?\s+(?=[A-Za-z])/gi, 'Bandar ');
+
+  // Planning & Municipal Zoning Sectors (Klang, Petaling Jaya, Subang Jaya)
+  a = a.replace(/(^|[\s,\/\-])ku\s*[-–]?\s*(\d{1,2})\b/gi, '$1Klang Utara $2');
+  a = a.replace(/(^|[\s,\/\-])ks\s*[-–]?\s*(\d{1,2})\b/gi, '$1Klang Selatan $2');
+  a = a.replace(/(^|[\s,\/\-])pju\s*[-–]?\s*(\d{1,2})\b/gi, '$1Petaling Jaya Utara $2');
+  a = a.replace(/(^|[\s,\/\-])pjs\s*[-–]?\s*(\d{1,2})\b/gi, '$1Petaling Jaya Selatan $2');
+  a = a.replace(/(^|[\s,\/\-])usj\s*[-–]?\s*(\d{1,2})\b/gi, '$1UEP Subang Jaya $2');
+
+  // Rivers, Hills & Milestones (Sg -> Sungai, Bkt -> Bukit, Bt -> Batu / Bukit)
+  a = a.replace(/(^|[\s,])sg\.?\s+(?=[A-Za-z])/gi, '$1Sungai ');
+  a = a.replace(/(^|[\s,])bkt\.?\s+(?=[A-Za-z])/gi, '$1Bukit ');
+  a = a.replace(/(^|[\s,])bt\.?\s+caves\b/gi, '$1Batu Caves');
+  a = a.replace(/(^|[\s,])bt\.?\s*(?=\d)/gi, '$1Batu ');
+  a = a.replace(/(^|[\s,])bt\.?\s+(?=[A-Za-z])/gi, '$1Bukit ');
+
+  // Common Malaysian City Abbreviations
+  a = a.replace(/,\s*\bpj\b/gi, ', Petaling Jaya');
+  a = a.replace(/,\s*\bjb\b/gi, ', Johor Bahru');
+
+  // Areas & Zones
+  a = a.replace(/\bkws\.?\s*perind(?:ustrian)?\.?/gi, 'Kawasan Perindustrian');
+  a = a.replace(/\bzon\s*perind(?:ustrian)?\.?/gi, 'Zon Perindustrian');
+  a = a.replace(/\bperind(?:ustrian)?\b\.?/gi, 'Perindustrian');
+  a = a.replace(/\bkws\b\.?\s+(?=[A-Za-z])/gi, 'Kawasan ');
+  a = a.replace(/\bsek\b\.?\s*(?=\d|[A-Za-z])/gi, 'Seksyen ');
+  a = a.replace(/\bpst\b\.?\s+(?=[A-Za-z])/gi, 'Pusat ');
+  a = a.replace(/\bbgn\b\.?\s+(?=[A-Za-z])/gi, 'Bangunan ');
+  a = a.replace(/\btkt\b\.?\s*(?=\d|[A-Za-z])/gi, 'Tingkat ');
+  a = a.replace(/\bpeti\s*surat\b\.?/gi, 'Post Office Box');
+
+  // Singapore Industrial & Tech Parks
+  a = a.replace(/\bind\b\.?\s+(?=(?:area|park|estate|zone|district|region|terrace|basin|sector)\b)/gi, 'Industrial ');
+  a = a.replace(/\bindl\b\.?/gi, 'Industrial');
+  a = a.replace(/\bpk\b\.?/gi, 'Park');
+  a = a.replace(/\best\b\.?\s+(?=(?:park|area|zone|estate)\b)/gi, 'Estate ');
+  a = a.replace(/\btech\s*park\b/gi, 'Technology Park');
+  a = a.replace(/\btechpark\b/gi, 'Technology Park');
+
+  // Malaysian State abbreviations
+  if (cLower.includes('malaysia') || /\b(?:selangor|johor|penang|perak|kuala\s*lumpur)\b/i.test(a)) {
+    a = a.replace(/,\s*\b(?:kl|k\.l\.)\b\.?/gi, ', Kuala Lumpur');
+    a = a.replace(/,\s*\b(?:sgr|sel)\b\.?/gi, ', Selangor');
+    a = a.replace(/,\s*\b(?:jhr|joh)\b\.?/gi, ', Johor');
+    a = a.replace(/,\s*\b(?:pnk|pg|pen)\b\.?/gi, ', Penang');
+    a = a.replace(/,\s*\b(?:prk|pk)\b\.?/gi, ', Perak');
+    a = a.replace(/,\s*\b(?:kdh|ked)\b\.?/gi, ', Kedah');
+    a = a.replace(/,\s*\b(?:phg|pah)\b\.?/gi, ', Pahang');
+    a = a.replace(/,\s*\b(?:n\.?s\.?|n\.?\s*sembilan)\b/gi, ', Negeri Sembilan');
+    a = a.replace(/,\s*\b(?:mlk|mel)\b\.?/gi, ', Melaka');
+    a = a.replace(/,\s*\b(?:trg|ter)\b\.?/gi, ', Terengganu');
+    a = a.replace(/,\s*\b(?:kel)\b\.?/gi, ', Kelantan');
+    a = a.replace(/,\s*\b(?:swk|sar)\b\.?/gi, ', Sarawak');
+    a = a.replace(/,\s*\b(?:sbh|sab)\b\.?/gi, ', Sabah');
+    a = a.replace(/,\s*\b(?:per)\b\.?/gi, ', Perlis');
+    a = a.replace(/,\s*\b(?:wp|w\.p\.)\b\.?/gi, ', Wilayah Persekutuan');
+  }
+
+  // ==========================================
+  // 9. Germany (Deutschland) Abbreviations
+  // ==========================================
+  // Street & Square: Compound suffixes (e.g. Industriestr. -> Industriestrasse, Marktpl. -> Marktplatz)
+  a = a.replace(/([a-zA-ZäöüÄÖÜß\-]+)str\b\.?(?=\s*\d|\s*,|\s*$|\s+[A-Za-z])/gi, function (match, base) {
+    return base + (base === base.toUpperCase() ? 'STRASSE' : 'strasse');
+  });
+  a = a.replace(/(^|[,\s])str\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Strasse ');
+  a = a.replace(/([a-zA-ZäöüÄÖÜß\-]+)pl\b\.?(?=\s*\d|\s*,|\s*$|\s+[A-Za-z])/gi, function (match, base) {
+    return base + (base === base.toUpperCase() ? 'PLATZ' : 'platz');
+  });
+  a = a.replace(/(^|[,\s])pl\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Platz ');
+
+  // Commercial / Industrial zones
+  a = a.replace(/\bgew(?:erbe)?\.?\s*gebiet\b/gi, 'Gewerbegebiet');
+  a = a.replace(/\bgew(?:erbe)?\.?\s*park\b/gi, 'Gewerbepark');
+  a = a.replace(/\bind(?:ustrie)?\.?\s*gebiet\b/gi, 'Industriegebiet');
+  a = a.replace(/\bind(?:ustrie)?\.?\s*park\b/gi, 'Industriepark');
+
+  // House / Building / Entrance / Floors
+  a = a.replace(/(^|[,\s])nr\b\.?\s*(?=\d)/gi, '$1Nummer ');
+  a = a.replace(/(^|[,\s])hs\b\.?\s*(?=\d)/gi, '$1Haus ');
+  a = a.replace(/(^|[,\s])geb\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Gebäude ');
+  a = a.replace(/(^|[,\s])aufg\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Aufgang ');
+  a = a.replace(/(^|[,\s])whg\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Wohnung ');
+  a = a.replace(/(\d+)\.?\s*\bOG\b/g, '$1. Obergeschoss');
+  a = a.replace(/\b(?:o\.?g\.?|og)\b/gi, 'Obergeschoss');
+  a = a.replace(/\b(?:e\.?g\.?|eg)\b/gi, 'Erdgeschoss');
+  a = a.replace(/\b(?:u\.?g\.?|ug)\b/gi, 'Untergeschoss');
+  a = a.replace(/\bstck\b\.?\s*(?=\d)/gi, 'Stockwerk ');
+  a = a.replace(/\bpf\b\.?\s*(?=\d)/gi, 'Postfach ');
+  a = a.replace(/\bpostfach\b/gi, 'Postfach');
+
+  // Geographic river / location markers
+  a = a.replace(/\ba\.?\s*m\b\.?/gi, 'am Main');
+  a = a.replace(/\ba\.?\s*d\b\.?/gi, 'an der');
+  a = a.replace(/\bi\.?\s*b\b\.?/gi, 'im Breisgau');
+  a = a.replace(/\bv\.?\s*d\.?\s*h\b\.?/gi, 'vor der Höhe');
+
+  // German Bundesländer abbreviations
+  if (cLower.includes('germany') || cLower.includes('deutschland')) {
+    a = a.replace(/,\s*\b(?:bw)\b\.?/gi, ', Baden-Württemberg');
+    a = a.replace(/,\s*\b(?:by)\b\.?/gi, ', Bayern');
+    a = a.replace(/,\s*\b(?:bb)\b\.?/gi, ', Brandenburg');
+    a = a.replace(/,\s*\b(?:he)\b\.?/gi, ', Hessen');
+    a = a.replace(/,\s*\b(?:mv)\b\.?/gi, ', Mecklenburg-Vorpommern');
+    a = a.replace(/,\s*\b(?:ni)\b\.?/gi, ', Niedersachsen');
+    a = a.replace(/,\s*\b(?:nw|nrw)\b\.?/gi, ', Nordrhein-Westfalen');
+    a = a.replace(/,\s*\b(?:rp)\b\.?/gi, ', Rheinland-Pfalz');
+    a = a.replace(/,\s*\b(?:sl)\b\.?/gi, ', Saarland');
+    a = a.replace(/,\s*\b(?:sn)\b\.?/gi, ', Sachsen');
+    a = a.replace(/,\s*\b(?:st)\b\.?/gi, ', Sachsen-Anhalt');
+    a = a.replace(/,\s*\b(?:sh)\b\.?/gi, ', Schleswig-Holstein');
+    a = a.replace(/,\s*\b(?:th)\b\.?/gi, ', Thüringen');
+  }
+
   // Clean up any double spaces introduced
   a = a.replace(/\s+/g, " ").trim();
 
@@ -1826,12 +2030,16 @@ function ensureCommaBeforeState(addr) {
     "Kentucky", "Oregon", "Oklahoma", "Connecticut", "Utah", "Iowa", "Nevada", "Arkansas", "Mississippi",
     "Kansas", "New Mexico", "Nebraska", "West Virginia", "Idaho", "Hawaii", "New Hampshire", "Maine", "Montana",
     "Rhode Island", "Delaware", "South Dakota", "North Dakota", "Alaska", "Vermont", "Wyoming",
-    "Gauteng", "Western Cape", "Eastern Cape", "KwaZulu-Natal", "Mpumalanga", "Free State", "Limpopo"
+    "Gauteng", "Western Cape", "Eastern Cape", "KwaZulu-Natal", "Mpumalanga", "Free State", "Limpopo",
+    "Lombardia", "Lazio", "Veneto", "Piemonte", "Emilia-Romagna", "Toscana", "Campania", "Sicilia", "Puglia", "Liguria",
+    "Marche", "Abruzzo", "Friuli Venezia Giulia", "Trentino-Alto Adige", "Umbria", "Sardegna", "Calabria", "Basilicata", "Molise", "Valle d'Aosta",
+    "Baden-Württemberg", "Bayern", "Brandenburg", "Hessen", "Mecklenburg-Vorpommern", "Niedersachsen", "Nordrhein-Westfalen", "Rheinland-Pfalz", "Saarland", "Sachsen", "Sachsen-Anhalt", "Schleswig-Holstein", "Thüringen",
+    "Selangor", "Johor", "Penang", "Perak", "Kedah", "Pahang", "Negeri Sembilan", "Melaka", "Terengganu", "Kelantan", "Sarawak", "Sabah", "Perlis", "Kuala Lumpur"
   ];
 
   let res = addr;
   for (const st of states) {
-    const regex = new RegExp(`([a-zA-Z\\)])\\s+\\b(${st})\\b(?!\\s+(?:Street|Road|Avenue|Drive|Lane|Boulevard|Way|Place|Court|Highway|Close|Crescent|Square|Terrace|Park|Estate|Industrial|Unit|Suite|Building|Floor|Bldg|St|Rd|Ave|Dr|Ln|Blvd|Hwy|Ct|Pl)\\b)`, "gi");
+    const regex = new RegExp(`([a-zA-Z0-9\\)])\\s+\\b(${st})\\b(?!\\s+(?:Street|Road|Avenue|Drive|Lane|Boulevard|Way|Place|Court|Highway|Close|Crescent|Square|Terrace|Park|Estate|Industrial|Unit|Suite|Building|Floor|Bldg|St|Rd|Ave|Dr|Ln|Blvd|Hwy|Ct|Pl)\\b)`, "gi");
     res = res.replace(regex, "$1, $2");
   }
   return res;
