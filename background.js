@@ -595,7 +595,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false) {
 
   if (cleaned.length < 8) return;
   if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|number|no|#|\d{3,6})\b/i.test(cleaned) &&
-      !/[\u4e00-\u9fa5]{3,}/.test(cleaned)) {
+    !/[\u4e00-\u9fa5]{3,}/.test(cleaned)) {
     return;
   }
 
@@ -3066,7 +3066,7 @@ function detectCountryFromAddress(address) {
   if (/\b(united\s*arab\s*emirates|uae)\b/i.test(lower)) return "United Arab Emirates";
   if (/\b(italy|italia)\b/i.test(lower)) return "Italy";
   if (/\b(spain|espana)\b/i.test(lower)) return "Spain";
-
+  //.
   // 2. Definitive administrative regions/towns explicitly appearing in physical address
   if (/\b(taoyuan\s*hsien|taoyuan|yangmei|taipei|new\s*taipei|kaohsiung|taichung|tainan|hsinchu)\b/i.test(lower)) {
     return "Taiwan";
