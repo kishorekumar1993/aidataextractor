@@ -12,7 +12,7 @@ An intelligent, AI-powered browser extension designed specifically for automated
    - Leverages **Google Gemini API** (Gemini 1.5 Flash / Gemini 2.0 Flash) with fallback to a resilient local heuristic rule engine if offline or no key is provided.
 
 2. **Full Compliance with Instruction Sheet**:
-   - **Rule 1 (Website Status)**: Identifies Working, Not Working, Domain Expired, Non English, Under Construction, Flash Site, Redirect Site. Flags subdomains and redirects. If online purchase or shopping cart (Shopchart) is found on the website, marks as Not Working.
+   - **Rule 1 (Website Status)**: Identifies Working, Not Working, Domain Expired, Non English, Under Construction, Flash Site, Redirect Site. Flags subdomains and redirects. If online purchase or shopping cart (Shopchart) is found on the website, marks as Not Working. When website status is Not Working, all other fields are left completely empty.
    - **Rule 2 (Business Type)**: Classifies between Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler, Service Provider, Online Shopping, Restricted Site, Other. (If an online shopping site also manufactures, it classifies under Manufacturer).
    - **Rule 3 (Company Profile)**: Selects "Available" or "Not Available" based on About Us / Profile / Company Overview sections.
    - **Rule 4 (Company Name)**: Full company name, removes brackets `() [] {}`, preserves country name if present, capitalizes first letter of every word (Title Case), and trims special characters.

@@ -1620,6 +1620,10 @@ WEBSITE STATUS QC RULES (Rule 1):
 - Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash Site" | "Redirect Site".
 - CRITICAL PURCHASE / SHOPPING CART ("SHOPCHART") QC RULE:
   If the website contains an online purchase feature, shopping cart, or shop cart ('Shopchart', e.g. "Add to Cart", "Shopping Cart", "View Cart", "Checkout", "Buy Online", "Purchase Online", shopping bag, basket, e-commerce checkout), you MUST mark "websiteStatus": "Not Working"!
+- CRITICAL NOT WORKING QC RULE ("Notworking means all empty"):
+  If "websiteStatus" is "Not Working" (due to failed site, offline site, empty content, or purchase / shopping cart ("Shopchart") found on site):
+  ALL OTHER FIELDS MUST BE EMPTY STRINGS ""!
+  Do NOT extract companyName, countryName, address, state, city, emails, phones, products, businessType, or profile. Leave every other field as empty string "".
 - If the domain is expired / parked, mark "Domain Expired".
 - If the website failed to load or has no content, mark "Not Working".
 
@@ -2085,6 +2089,30 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
   const websiteStatus = (shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working");
 
+  // CRITICAL RULE: "Notworking means all empty"
+  if (websiteStatus === "Not Working") {
+    return {
+      websiteStatus: "Not Working",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      isRestricted: restrictedCheck.isRestricted,
+      restrictedReason: restrictedCheck.matchedKeyword,
+      isShopCartSite: !!(shopCartCheck && shopCartCheck.detected),
+      shopCartReason: (shopCartCheck && shopCartCheck.reason) || ""
+    };
+  }
+
   return {
     websiteStatus: websiteStatus,
     businessType: restrictedCheck.isRestricted ? "Restricted Site" : "Manufacturer",
@@ -2124,6 +2152,25 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.websiteStatus = crawlData.status || "Not Working";
   } else if (restrictedCheck && restrictedCheck.isRestricted) {
     result.websiteStatus = "Working";
+  }
+
+  // CRITICAL RULE: "Notworking means all empty"
+  // When websiteStatus is "Not Working", all other fields MUST be empty!
+  if (result.websiteStatus === "Not Working") {
+    result.businessType = "";
+    result.companyProfile = "";
+    result.companyName = "";
+    result.countryName = "";
+    result.companyAddress = "";
+    result.state = "";
+    result.city = "";
+    result.emailId = "";
+    result.secondaryEmailId = "";
+    result.phoneNumber = "";
+    result.numberOfProducts = "";
+    result.productImages = "";
+    result.numberOfProductDescriptions = "";
+    return result;
   }
 
   // 2. Business Type & Restricted Site Detection

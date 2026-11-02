@@ -435,6 +435,31 @@
     const elements = detectFormElements();
     let filledCount = 0;
 
+    // CRITICAL QC RULE: "Notworking means all empty"
+    // When Website Status is "Not Working", select "Not Working" and clear/leave empty ALL other fields!
+    if (data.websiteStatus === "Not Working") {
+      if (elements.websiteStatus) {
+        if (setSelectValue(elements.websiteStatus, "Not Working")) {
+          highlightField(elements.websiteStatus);
+          filledCount++;
+        }
+      }
+
+      // Clear all other fields
+      for (const [key, el] of Object.entries(elements)) {
+        if (!el || key === "websiteUrl" || key === "websiteStatus") continue;
+        if (el.tagName && el.tagName.toLowerCase() === "select") {
+          el.selectedIndex = 0;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        } else {
+          setInputValue(el, "");
+        }
+        el.classList.remove("ai-prefilled-field");
+      }
+
+      return { filledCount };
+    }
+
     // 1. Website Status
     if (elements.websiteStatus && data.websiteStatus) {
       if (setSelectValue(elements.websiteStatus, data.websiteStatus)) {
@@ -652,8 +677,11 @@
 
       renderPreview(data);
       const fillReport = fillFormFields(data);
-      if (data.isShopCartSite) {
-        updateStatus(`⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Website Status set to Not Working.`, "warning");
+      if (data.websiteStatus === "Not Working") {
+        const msg = data.isShopCartSite
+          ? `⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Website Status set to Not Working (all other fields cleared).`
+          : `⚠️ Website Status set to Not Working (all other fields left empty).`;
+        updateStatus(msg, "warning");
       } else {
         updateStatus(`✅ Success! Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
       }
