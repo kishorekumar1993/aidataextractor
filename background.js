@@ -439,6 +439,49 @@ function extractCopyrightCompanyName(html) {
 }
 
 /**
+ * Extracts branding or company name from header logo alt/title or og:site_name metadata.
+ */
+function extractSiteLogoText(html) {
+  if (!html) return "";
+
+  // 1. Meta og:site_name
+  const ogMatch = html.match(/<meta[^>]+property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i) ||
+                  html.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
+  if (ogMatch && ogMatch[1] && ogMatch[1].trim().length >= 2 && !/^(?:home|website|default)$/i.test(ogMatch[1].trim())) {
+    return ogMatch[1].trim();
+  }
+
+  // 2. Header logo image alt or title
+  const headerMatch = html.match(/<header[\s\S]*?<\/header>/i);
+  const searchArea = headerMatch ? headerMatch[0] : html.slice(0, 10000);
+
+  // Look for logo class/id image
+  const logoImgMatch = searchArea.match(/<img[^>]+(?:class|id)=["'][^"']*logo[^"']*["'][^>]+(?:alt|title)=["']([^"']+)["']/i) ||
+                       searchArea.match(/<img[^>]+(?:alt|title)=["']([^"']+)["'][^>]+(?:class|id)=["'][^"']*logo[^"']*["']/i);
+  if (logoImgMatch && logoImgMatch[1]) {
+    const val = logoImgMatch[1].replace(/\blogo\b/gi, "").trim();
+    if (val.length >= 2 && !/^(?:home|image|banner|site)$/i.test(val)) return val;
+  }
+
+  // Look for any image in header with alt or title
+  const anyHeaderImg = searchArea.match(/<img[^>]+(?:alt|title)=["']([^"']{3,60})["']/i);
+  if (anyHeaderImg && anyHeaderImg[1]) {
+    const val = anyHeaderImg[1].replace(/\b(?:logo|website|homepage)\b/gi, "").trim();
+    if (val.length >= 2 && !/^(?:home|image|banner|site|skip\s*to\s*content|loading)$/i.test(val)) return val;
+  }
+
+  // 3. Header brand link (e.g. <a class="logo" ... title="..."> or <a class="brand">Brand</a>)
+  const logoLinkMatch = searchArea.match(/<a[^>]+class=["'][^"']*(?:logo|brand|navbar-brand)[^"']*["'][^>]*title=["']([^"']+)["']/i) ||
+                        searchArea.match(/<a[^>]+class=["'][^"']*(?:logo|brand|navbar-brand)[^"']*["'][^>]*>([\s\S]*?)<\/a>/i);
+  if (logoLinkMatch && logoLinkMatch[1]) {
+    const val = logoLinkMatch[1].replace(/<[^>]+>/g, "").trim();
+    if (val.length >= 2 && val.length <= 60 && !/^(?:home|index|logo)$/i.test(val)) return val;
+  }
+
+  return "";
+}
+
+/**
  * Deep crawls homepage, handles HTML <frameset>/<frame>, contact pages, footer, JSON-LD, products.
  */
 async function crawlWebsite(targetUrl) {
@@ -607,6 +650,11 @@ async function crawlWebsite(targetUrl) {
     return pA - pB;
   });
 
+  const logoText = extractSiteLogoText(mainHtml);
+  const ogSiteMatch = mainHtml.match(/<meta[^>]+property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i) ||
+                      mainHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
+  const ogSiteName = (ogSiteMatch && ogSiteMatch[1] && ogSiteMatch[1].trim()) || "";
+
   return {
     originalUrl: targetUrl,
     finalUrl,
@@ -614,6 +662,8 @@ async function crawlWebsite(targetUrl) {
     status,
     fetchError,
     mainHtml,
+    logoText,
+    ogSiteName,
     addressCandidates,
     detectedAddresses: addressCandidates.map(c => (typeof c === "object" ? c.raw : c)),
     isDynamicSpa,
@@ -1516,6 +1566,10 @@ COMPANY NAME RULES (Rule 4):
      * LLP, L.L.P. -> Limited Liability Partnership
      * Co, Co. -> Company
      * Corp, Corp. -> Corporation
+5. EXTRACT TRUE BRAND / COMPANY NAME (NEVER MARKETING SLOGANS OR SEO TAGLINES):
+   - When the page title or header contains both a service description/slogan and a business name (e.g. "Expert Cabinet Maker in Canberra | Custom Flat Packs"), extract the actual BUSINESS / BRAND NAME ("Custom Flat Packs"), NEVER the marketing slogan or service description ("Expert Cabinet Maker in Canberra").
+   - Cross-reference with the website domain (Target URL: ${crawlData.originalUrl}): the company name almost always corresponds to the brand in the domain name.
+   - Reject phrases like "Expert ... in [City]", "Best ... in [City]", "Leading Manufacturer of ...", "Professional ... Services" when they are marketing taglines.
 
 COUNTRY NAME VALIDATION RULES:
 1. Country Name MUST be taken DIRECTLY from the physical address on the website. Expand "Taiwan, R.O.C." to "Taiwan".
@@ -1552,6 +1606,7 @@ PHONE NUMBER RULES (Rule 11):
 WEBSITE DATA FOR THIS CRAWL:
 Target URL: ${crawlData.originalUrl}
 Page Title: ${crawlData.title}
+Detected Website Brand / Logo: ${crawlData.logoText || crawlData.ogSiteName || "(None)"}
 Company Profile Evidence Detected: ${crawlData.hasCompanyProfile ? "Yes (Dedicated Profile / About page, heading, or PDF detected)" : "No"}
 All Corporate Emails Discovered on Website: ${crawlData.emails.join(", ") || "(None)"}
 Detected Contact Phones: ${crawlData.phones.join(", ") || "(None)"}
@@ -1670,6 +1725,77 @@ Return ONLY valid JSON matching this schema:
   return parsed;
 }
 
+function cleanDomainStem(url) {
+  try {
+    const hostname = new URL(url).hostname;
+    const parts = hostname.replace(/^www\./i, "").split(".");
+    return parts[0].toLowerCase();
+  } catch (e) {
+    return "";
+  }
+}
+
+function isSeoSloganOrTagline(name) {
+  if (!name || typeof name !== "string") return false;
+  const n = name.trim();
+  if (typeof hasCompleteLegalSuffix === "function" && hasCompleteLegalSuffix(n)) return false;
+  if (/\b(?:pty\s*ltd|limited|inc|incorporated|llc|gmbh|sdn\s*bhd)\b/i.test(n)) return false;
+  if (/^(?:expert|best|leading|professional|premier|top|specialist|quality|affordable|cheap|reliable|trusted)\b/i.test(n)) {
+    return true;
+  }
+  if (/\b(?:in\s+(?:canberra|sydney|melbourne|brisbane|perth|adelaide|hobart|darwin|gold\s*coast|newcastle|london|new\s*york|chicago|los\s*angeles|taiwan|australia|singapore|malaysia))\b/i.test(n)) {
+    return true;
+  }
+  if (/^(?:manufacturer|supplier|wholesaler|distributor|maker|installer|builder|contractor)\s+of\b/i.test(n)) {
+    return true;
+  }
+  return false;
+}
+
+function scoreTitleSegment(segment, domainStem, logoText, ogSiteName) {
+  const segLower = segment.toLowerCase().trim();
+  let score = 0;
+  if (/^(?:expert|best|leading|professional|premier|top|specialist|quality|affordable|cheap|reliable|trusted)\b/i.test(segLower)) {
+    score -= 50;
+  }
+  if (/\b(?:in\s+(?:canberra|sydney|melbourne|brisbane|perth|adelaide|london|new\s*york|chicago|taiwan|australia))\b/i.test(segLower)) {
+    score -= 40;
+  }
+  if (/^(?:manufacturer|supplier|wholesaler|distributor|installer|maker|builder|contractor)\s+of\b/i.test(segLower)) {
+    score -= 40;
+  }
+  const segCondensed = segLower.replace(/[^a-z0-9]/g, "");
+  if (domainStem && domainStem.length >= 3) {
+    if (segCondensed === domainStem) score += 100;
+    else if (segCondensed.startsWith(domainStem) || domainStem.startsWith(segCondensed)) score += 70;
+    else if (segCondensed.includes(domainStem) || domainStem.includes(segCondensed)) score += 50;
+  }
+  if (logoText && segLower.includes(logoText.toLowerCase())) score += 80;
+  if (ogSiteName && segLower.includes(ogSiteName.toLowerCase())) score += 80;
+  if (/\b(?:ltd|limited|inc|incorporated|llc|corp|corporation|pty|proprietary|pvt|pte|sdn|bhd|gmbh)\b/i.test(segLower)) {
+    score += 60;
+  }
+  return score;
+}
+
+function extractBestBrandFromTitle(title, domain, logoText = "", ogSiteName = "") {
+  if (!title) return "";
+  const parts = title.split(/[-–—|:•]/).map(p => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return parts[0] || "";
+  const domainStem = cleanDomainStem(domain);
+  let bestPart = parts[0];
+  let bestScore = -999;
+  for (const part of parts) {
+    if (/^(?:home|welcome|about|contact|index|official\s*website)\b/i.test(part)) continue;
+    const s = scoreTitleSegment(part, domainStem, logoText, ogSiteName);
+    if (s > bestScore) {
+      bestScore = s;
+      bestPart = part;
+    }
+  }
+  return bestPart;
+}
+
 /**
  * Deterministic fallback extraction.
  */
@@ -1680,10 +1806,11 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   if (crawlData.copyrightText && /\b(ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|co\.?)\b/i.test(crawlData.copyrightText)) {
     companyName = crawlData.copyrightText;
   }
+  if (!companyName && crawlData.logoText && !isSeoSloganOrTagline(crawlData.logoText)) {
+    companyName = crawlData.logoText;
+  }
   if (!companyName && crawlData.title) {
-    const parts = crawlData.title.split(/[-–|:•]/).map(p => p.trim()).filter(Boolean);
-    const validPart = parts.find(p => !/^(home|welcome|about|contact|index|official\s*website)\b/i.test(p));
-    companyName = validPart || parts[0] || "";
+    companyName = extractBestBrandFromTitle(crawlData.title, crawlData.originalUrl || crawlData.finalUrl, crawlData.logoText, crawlData.ogSiteName);
   }
   if (!companyName || companyName.length < 3) {
     try {
@@ -2635,11 +2762,28 @@ function namesOverlap(a, b) {
 }
 
 function preferOfficialCompanyName(name, crawlData) {
-  const current = (name || "").trim();
+  let current = (name || "").trim();
   const jsonLdName = extractJsonLdOrganizationName(crawlData && crawlData.mainHtml);
   const copyrightName = (crawlData && crawlData.copyrightText) || "";
-  const candidates = [jsonLdName, copyrightName].filter(n => n && n.length >= 3 && n.length <= 160);
+  const logoText = (crawlData && crawlData.logoText) || "";
+  const ogSiteName = (crawlData && crawlData.ogSiteName) || "";
+  const title = (crawlData && crawlData.title) || "";
+  const domain = (crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "";
 
+  // 1. If the current name is an SEO marketing slogan or tagline, replace it with the true brand
+  if (isSeoSloganOrTagline(current)) {
+    const brandFromTitle = extractBestBrandFromTitle(title, domain, logoText, ogSiteName);
+    if (brandFromTitle && !isSeoSloganOrTagline(brandFromTitle)) {
+      current = brandFromTitle;
+    } else if (logoText && !isSeoSloganOrTagline(logoText)) {
+      current = logoText;
+    } else if (ogSiteName && !isSeoSloganOrTagline(ogSiteName)) {
+      current = ogSiteName;
+    }
+  }
+
+  // 2. Check JSON-LD and Copyright candidates for official registered corporate names
+  const candidates = [jsonLdName, copyrightName].filter(n => n && n.length >= 3 && n.length <= 160);
   for (const official of candidates) {
     if (!hasCompleteLegalSuffix(official) && !/\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc)\b/i.test(official)) {
       continue;
@@ -2648,6 +2792,14 @@ function preferOfficialCompanyName(name, crawlData) {
       return official;
     }
   }
+
+  // 3. If current is still empty or looks like a slogan, fallback to brandFromTitle or logo
+  if (!current || isSeoSloganOrTagline(current)) {
+    const fallbackBrand = extractBestBrandFromTitle(title, domain, logoText, ogSiteName);
+    if (fallbackBrand) return fallbackBrand;
+    if (logoText) return logoText;
+  }
+
   return current;
 }
 
