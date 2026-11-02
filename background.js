@@ -439,6 +439,53 @@ function extractCopyrightCompanyName(html) {
 }
 
 /**
+ * Extracts candidate official registered legal corporate names from HTML text
+ * across all crawled pages (e.g. from ABN/ACN/registration anchors, terms/authority clauses, copyright, and legal suffixes).
+ */
+function extractLegalCandidatesFromHtml(html) {
+  if (!html) return [];
+  const text = html.replace(/<script[\s\S]*?<\/script>/gi, " ")
+                   .replace(/<style[\s\S]*?<\/style>/gi, " ")
+                   .replace(/<[^>]+>/g, " ")
+                   .replace(/&nbsp;/gi, " ")
+                   .replace(/\s+/g, " ");
+
+  const candidates = new Set();
+
+  // Pattern 1: ABN / ACN preceded or followed by company name (e.g. "Custom Flatpack Pty Ltd ... ABN : 37 139 481 575")
+  const abnNearRegex = /([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC))[^\.\n\r<]{0,60}?(?:ABN|ACN|Registration\s*No|Reg\s*No)[\s:]*\d[\d\s]{5,15}\d/gi;
+  let m;
+  while ((m = abnNearRegex.exec(text)) !== null) {
+    if (m[1]) candidates.add(m[1].trim());
+  }
+
+  // Reverse: ABN followed by name
+  const abnBeforeRegex = /(?:ABN|ACN|Registration\s*No|Reg\s*No)[\s:]*\d[\d\s]{5,15}\d[^\.\n\r<]{0,60}?([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC))/gi;
+  while ((m = abnBeforeRegex.exec(text)) !== null) {
+    if (m[1]) candidates.add(m[1].trim());
+  }
+
+  // Pattern 2: "means [Name] Pty Ltd", "operated by [Name] Pty Ltd", "authority of [Name] Pty Ltd", "trading as [Name] Pty Ltd"
+  const legalContextRegex = /(?:means|operated\s+by|registered\s+as|trading\s+as|property\s+of|authority\s+of)\s+([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC))/gi;
+  while ((m = legalContextRegex.exec(text)) !== null) {
+    if (m[1]) candidates.add(m[1].trim());
+  }
+
+  // Pattern 3: Explicit legal suffix preceded by capitalized words
+  const generalLegalRegex = /\b([A-Z][A-Za-z0-9&.'\- ]{1,45}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Incorporated|LLC|LLP|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC))\b/g;
+  while ((m = generalLegalRegex.exec(text)) !== null) {
+    const cand = m[1].trim();
+    if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
+        !/^(?:all|and|the|for|with|from|including|our|your|their)\b/i.test(cand) &&
+        cand.length >= 3 && cand.length <= 60) {
+      candidates.add(cand);
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+/**
  * Extracts branding or company name from header logo alt/title or og:site_name metadata.
  */
 function extractSiteLogoText(html) {
@@ -552,11 +599,17 @@ async function crawlWebsite(targetUrl) {
     extractMetaAddresses(mainHtml, addressCandidates);
     extractHtmlAddresses(mainHtml, addressCandidates, "contact");
 
-    // Discover Contact & Profile Pages
+    // Extract official registered legal company candidates across homepage
+    const allLegalCandidates = new Set();
+    for (const cand of extractLegalCandidatesFromHtml(mainHtml)) {
+      allLegalCandidates.add(cand);
+    }
+
+    // Discover Contact, About, Terms & Legal Pages
     const contactLinks = discoverContactLinks(mainHtml, finalUrl);
     const fetchedUrls = new Set([finalUrl]);
 
-    for (const cUrl of contactLinks.slice(0, 10)) {
+    for (const cUrl of contactLinks.slice(0, 12)) {
       if (fetchedUrls.has(cUrl)) continue;
       fetchedUrls.add(cUrl);
 
@@ -572,7 +625,7 @@ async function crawlWebsite(targetUrl) {
         if (cRes.ok && cRes.html) {
           const cText = cRes.html;
           contactHtml += "\n" + cText;
-          const isProfilePage = /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
+          const isProfilePage = /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
           const pageSource = isProfilePage ? "profile" : "contact";
 
           extractEmbeddedScriptAddresses(cText, addressCandidates);
@@ -580,8 +633,19 @@ async function crawlWebsite(targetUrl) {
           extractMetaAddresses(cText, addressCandidates);
           extractHtmlAddresses(cText, addressCandidates, pageSource);
 
-          if (isProfilePage || /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(stripHtml(cText).slice(0, 500))) {
+          if (isProfilePage || /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(stripHtml(cText).slice(0, 5000))) {
             profilePageText += "\n" + stripHtml(cText);
+          }
+
+          // Extract legal corporate names across this page
+          for (const cand of extractLegalCandidatesFromHtml(cText)) {
+            allLegalCandidates.add(cand);
+          }
+
+          // Extract copyright on this page if homepage lacked complete legal suffix
+          const pageCopyright = extractCopyrightCompanyName(cText);
+          if (pageCopyright && hasCompleteLegalSuffix(pageCopyright) && (!copyrightText || !hasCompleteLegalSuffix(copyrightText))) {
+            copyrightText = pageCopyright;
           }
 
           // Check CMS dynamic form endpoints
@@ -671,6 +735,7 @@ async function crawlWebsite(targetUrl) {
     footerText: footerText.slice(0, 4000),
     profilePageText: profilePageText.slice(0, 8000),
     copyrightText: copyrightText.slice(0, 500),
+    legalCompanyCandidates: Array.from(allLegalCandidates),
     ...extracted
   };
 }
@@ -836,9 +901,11 @@ function discoverContactLinks(html, baseUrl) {
 
     let score = 0;
     if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us)\b/i.test(rawLower)) score += 10;
-    if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile)\b/i.test(rawLower)) score += 6;
+    if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile)\b/i.test(rawLower)) score += 8;
+    if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|impressum|imprint|mentions-legales)\b/i.test(rawLower)) score += 7;
     if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us)\b/i.test(innerText)) score += 12;
-    if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile)\b/i.test(innerText)) score += 8;
+    if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile)\b/i.test(innerText)) score += 10;
+    if (/\b(terms|terms\s*and\s*conditions|terms\s*of\s*(?:service|use)|privacy\s*policy|legal\s*notice|company\s*info|imprint|impressum)\b/i.test(innerText)) score += 8;
     if (/\b(en|english)\b/i.test(innerText) || /[\/_](?:en|eng)\b/i.test(rawLower) || /[?&]lang=en/i.test(rawLower)) score += 7;
 
     if (score > 0) {
@@ -1566,9 +1633,10 @@ COMPANY NAME RULES (Rule 4):
      * LLP, L.L.P. -> Limited Liability Partnership
      * Co, Co. -> Company
      * Corp, Corp. -> Corporation
-5. EXTRACT TRUE BRAND / COMPANY NAME (NEVER MARKETING SLOGANS OR SEO TAGLINES):
-   - When the page title or header contains both a service description/slogan and a business name (e.g. "Expert Cabinet Maker in Canberra | Custom Flat Packs"), extract the actual BUSINESS / BRAND NAME ("Custom Flat Packs"), NEVER the marketing slogan or service description ("Expert Cabinet Maker in Canberra").
-   - Cross-reference with the website domain (Target URL: ${crawlData.originalUrl}): the company name almost always corresponds to the brand in the domain name.
+5. EXTRACT TRUE BRAND & COMPLETE LEGAL NAME (NEVER MARKETING SLOGANS OR INCOMPLETE DESCRIPTORS):
+   - You MUST analyze ALL website pages (About Us, Company Profile, Terms & Conditions, Privacy Policy, Legal / Impressum, and official registration numbers like ABN/ACN).
+   - If an official registered corporate name with prefix, suffix, and category exists anywhere on the site (e.g. "Custom Flatpack Proprietary Limited" / "Custom Flatpack Pty Ltd"), you MUST output that FULL official registered name! NEVER output an incomplete brand or marketing name like "Custom Flat Packs".
+   - When the page title or header contains both a service description/slogan and a business name (e.g. "Expert Cabinet Maker in Canberra | Custom Flat Packs"), identify the business brand ("Custom Flatpack") and find its full registered legal corporate entity ("Custom Flatpack Proprietary Limited").
    - Reject phrases like "Expert ... in [City]", "Best ... in [City]", "Leading Manufacturer of ...", "Professional ... Services" when they are marketing taglines.
 
 COUNTRY NAME VALIDATION RULES:
@@ -1607,6 +1675,7 @@ WEBSITE DATA FOR THIS CRAWL:
 Target URL: ${crawlData.originalUrl}
 Page Title: ${crawlData.title}
 Detected Website Brand / Logo: ${crawlData.logoText || crawlData.ogSiteName || "(None)"}
+Detected Official Legal Corporate Names (Across All Crawled Pages): ${crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0 ? crawlData.legalCompanyCandidates.slice(0, 8).join(", ") : "(None)"}
 Company Profile Evidence Detected: ${crawlData.hasCompanyProfile ? "Yes (Dedicated Profile / About page, heading, or PDF detected)" : "No"}
 All Corporate Emails Discovered on Website: ${crawlData.emails.join(", ") || "(None)"}
 Detected Contact Phones: ${crawlData.phones.join(", ") || "(None)"}
@@ -1807,6 +1876,18 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   let companyName = "";
   if (crawlData.copyrightText && /\b(ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|co\.?)\b/i.test(crawlData.copyrightText)) {
     companyName = crawlData.copyrightText;
+  }
+  if (!companyName && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0) {
+    const domainStem = cleanDomainStem(crawlData.originalUrl || crawlData.finalUrl);
+    for (const cand of crawlData.legalCompanyCandidates) {
+      if (hasCompleteLegalSuffix(cand)) {
+        const cStem = cleanDomainStem(cand.replace(/\b(?:pty|ltd|limited|proprietary|inc|llc|corp|co)\b/gi, ""));
+        if (cStem && (cStem === domainStem || cStem.includes(domainStem) || domainStem.includes(cStem))) {
+          companyName = cand;
+          break;
+        }
+      }
+    }
   }
   if (!companyName && crawlData.logoText && !isSeoSloganOrTagline(crawlData.logoText)) {
     companyName = crawlData.logoText;
@@ -2754,13 +2835,44 @@ function hasCompleteLegalSuffix(name) {
   return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|limited\s+liability\s+(?:company|partnership)|limited|incorporated|corporation|berhad|gmbh|llc|llp|pllc|ltd|inc|plc)\b/i.test(n);
 }
 
-function namesOverlap(a, b) {
+function companyNamesMatch(a, b) {
+  if (!a || !b) return false;
+  const sA = (a || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const sB = (b || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!sA || !sB) return false;
+  if (sA === sB) return true;
+
+  // Strip legal suffixes from stems
+  const stripLegal = (s) => s.replace(/(?:proprietarylimited|privatelimited|publiclimitedcompany|sendirianberhad|limitedliabilitycompany|limited|incorporated|corporation|berhad|gmbh|llc|llp|pllc|ptyltd|pteltd|pvtltd|sdnbhd|ltd|inc|plc|corp|co)$/g, "");
+  const baseA = stripLegal(sA);
+  const baseB = stripLegal(sB);
+
+  if (baseA && baseB) {
+    if (baseA === baseB) return true;
+    if (baseA.startsWith(baseB) || baseB.startsWith(baseA)) {
+      const minLen = Math.min(baseA.length, baseB.length);
+      const maxLen = Math.max(baseA.length, baseB.length);
+      if (minLen >= 4 && (maxLen - minLen <= 3 || minLen / maxLen >= 0.75)) return true;
+    }
+  }
+
+  // Token matching with fuzzy stem prefix
   const tokens = (s) => (s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 2 && !/^(the|and|for|ltd|limited|inc|llc|corp|company|pty|pte|pvt|sdn|bhd)$/i.test(w));
   const ta = tokens(a);
-  const tb = new Set(tokens(b));
-  if (ta.length === 0 || tb.size === 0) return false;
-  const hit = ta.filter(t => tb.has(t)).length;
-  return hit >= Math.min(2, ta.length) || hit / ta.length >= 0.5;
+  const tb = tokens(b);
+  if (ta.length === 0 || tb.length === 0) return false;
+
+  let hits = 0;
+  for (const t1 of ta) {
+    if (tb.some(t2 => t1 === t2 || (t1.length >= 4 && t2.length >= 4 && (t1.startsWith(t2) || t2.startsWith(t1))))) {
+      hits++;
+    }
+  }
+  return hits >= Math.min(2, ta.length) || (hits / ta.length >= 0.5);
+}
+
+function namesOverlap(a, b) {
+  return companyNamesMatch(a, b);
 }
 
 function preferOfficialCompanyName(name, crawlData) {
@@ -2771,6 +2883,8 @@ function preferOfficialCompanyName(name, crawlData) {
   const ogSiteName = (crawlData && crawlData.ogSiteName) || "";
   const title = (crawlData && crawlData.title) || "";
   const domain = (crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "";
+  const domainStem = cleanDomainStem(domain);
+  const legalCandidates = (crawlData && crawlData.legalCompanyCandidates) || [];
 
   // 1. If the current name is an SEO marketing slogan or tagline, replace it with the true brand
   if (isSeoSloganOrTagline(current)) {
@@ -2784,18 +2898,44 @@ function preferOfficialCompanyName(name, crawlData) {
     }
   }
 
-  // 2. Check JSON-LD and Copyright candidates for official registered corporate names
-  const candidates = [jsonLdName, copyrightName].filter(n => n && n.length >= 3 && n.length <= 160);
-  for (const official of candidates) {
+  // 2. Search for the FULL official registered corporate name (with complete legal suffix/prefix/category).
+  // If current name is missing legal suffix (incomplete, e.g. "Custom Flat Packs"), an official candidate matching the domain/brand MUST win!
+  const allCandidates = [...legalCandidates, jsonLdName, copyrightName].filter(n => n && n.length >= 3 && n.length <= 160);
+  
+  let bestOfficial = null;
+  let bestScore = -1;
+
+  for (const official of allCandidates) {
     if (!hasCompleteLegalSuffix(official) && !/\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc)\b/i.test(official)) {
       continue;
     }
-    if (!current || namesOverlap(current, official) || official.toLowerCase().includes(current.toLowerCase()) || current.toLowerCase().includes(official.toLowerCase().replace(/\b(?:ltd|limited|inc|llc|corp|co)\b/gi, "").trim())) {
-      return official;
+    let score = 0;
+    const offStem = cleanDomainStem(official.replace(/\b(?:pty|ltd|limited|proprietary|inc|llc|corp|co|sdn|bhd)\b/gi, ""));
+    const curStem = cleanDomainStem(current);
+
+    if (offStem && curStem) {
+      if (offStem === curStem) score += 100;
+      else if (offStem.startsWith(curStem) || curStem.startsWith(offStem)) score += 80;
+      else if (offStem.includes(curStem) || curStem.includes(offStem)) score += 60;
+    }
+    if (domainStem && offStem) {
+      if (offStem === domainStem) score += 90;
+      else if (offStem.startsWith(domainStem) || domainStem.startsWith(offStem)) score += 70;
+      else if (offStem.includes(domainStem) || domainStem.includes(offStem)) score += 50;
+    }
+    if (companyNamesMatch(current, official)) score += 80;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestOfficial = official;
     }
   }
 
-  // 3. If current is still empty or looks like a slogan, fallback to brandFromTitle or logo
+  if (bestOfficial && bestScore >= 60) {
+    return bestOfficial;
+  }
+
+  // 3. Fallback: if current is still empty or looks like a slogan
   if (!current || isSeoSloganOrTagline(current)) {
     const fallbackBrand = extractBestBrandFromTitle(title, domain, logoText, ogSiteName);
     if (fallbackBrand) return fallbackBrand;
@@ -2819,6 +2959,15 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
     return cleanName;
   }
 
+  // 1. Check legal company candidates discovered across all pages
+  const legalCandidates = (crawlData && crawlData.legalCompanyCandidates) || [];
+  for (const cand of legalCandidates) {
+    if (hasCompleteLegalSuffix(cand) && companyNamesMatch(cleanName, cand)) {
+      return cand;
+    }
+  }
+
+  // 2. Check corpus regex
   const corpus = companyEvidenceCorpus(crawlData);
   if (!corpus) return cleanName;
 
@@ -2835,10 +2984,10 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
     return cleanName + " " + suffix;
   }
 
-  // Fallback: find any legal-suffix company name in copyright that overlaps this name
+  // 3. Fallback: find any legal-suffix company name in copyright that overlaps this name
   const copyright = (crawlData && crawlData.copyrightText) || "";
   const copyMatch = copyright.match(new RegExp(`([A-Z][A-Za-z0-9&.'\\- ]{2,80}\\s+${LEGAL_SUFFIX_CAPTURE})`, "i"));
-  if (copyMatch && copyMatch[0] && namesOverlap(cleanName, copyMatch[0])) {
+  if (copyMatch && copyMatch[0] && (namesOverlap(cleanName, copyMatch[0]) || companyNamesMatch(cleanName, copyMatch[0]))) {
     return copyMatch[0].trim();
   }
 
