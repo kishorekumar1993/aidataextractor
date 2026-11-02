@@ -611,7 +611,8 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     return;
   }
 
-  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|number|no|#|sec|section|jln|jalan|taman|lorong|lebuh|kawasan|perindustrian|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned) &&
+  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|gpo|lot|unit|factory|shed|warehouse|level|number|no|#|sec|section|jln|jalan|taman|lorong|lebuh|kawasan|perindustrian|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned) &&
+    !/\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act)\b/i.test(cleaned) &&
     !/[\u4e00-\u9fa5]{2,}/.test(cleaned)) {
     return;
   }
@@ -898,8 +899,9 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   while ((pm = pAddrRegex.exec(html)) !== null) {
     const raw = stripHtml(pm[2]);
     if (raw.length >= 15 && raw.length <= 250 &&
-      /\b(road|street|avenue|lane|drive|way|boulevard|highway|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|via|corso|viale|strasse)\b/i.test(raw) &&
-      /\b(?:\d{1,5}|no\.?\s*\d+|#\s*\d+)\b/i.test(raw)) {
+      (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse)\b/i.test(raw) ||
+       /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act)\b/i.test(raw)) &&
+      /\b(?:\d{1,5}|no\.?\s*\d+|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|gpo\s*box)\b/i.test(raw)) {
       const ctx = getContext(pm[1], defaultSource);
       addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
     }
@@ -922,6 +924,17 @@ function extractAddressComponents(addr) {
 
   // Recognized localities across priority countries
   const localityList = [
+    // Australia
+    "melbourne", "sydney", "brisbane", "perth", "adelaide", "hobart", "canberra", "darwin",
+    "geelong", "gold coast", "newcastle", "wollongong", "sunshine coast", "townsville", "cairns",
+    "toowoomba", "ballarat", "bendigo", "launceston", "mackay", "rockhampton", "bunbury",
+    "campbellfield", "dandenong", "braeside", "bayswater", "clayton", "tullamarine", "thomastown",
+    "somerton", "laverton", "truganina", "altona", "silverwater", "wetherill park", "smithfield",
+    "seven hills", "blacktown", "parramatta", "rydalmere", "alexandria", "rosebery", "prestons",
+    "acacia ridge", "rocklea", "wacol", "brendale", "yatala", "welshpool", "kewdale", "canning vale",
+    "malaga", "osborne park", "wingfield", "regency park", "kilkenny", "hindmarsh",
+    "victoria", "new south wales", "queensland", "western australia", "south australia", "tasmania",
+    "northern territory", "australian capital territory",
     // Taiwan
     "taipei", "taichung", "kaohsiung", "tainan", "taoyuan", "hsinchu", "chiayi", "keelung",
     "changhua", "miaoli", "nantou", "yunlin", "pingtung", "yilan", "hualien", "taitung", "penghu",
@@ -1778,6 +1791,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         addr = addr.slice(compName.length).trim();
       }
 
+      // Ensure country is identified from address or domain before expanding abbreviations
+      if (!country || country.length < 2) {
+        country = detectCountryFromAddress(addr);
+        if (!country && crawlData && (/\.au(?:\/|$)/i.test(crawlData.originalUrl || "") || /\.au(?:\/|$)/i.test(crawlData.finalUrl || ""))) {
+          country = "Australia";
+        }
+      }
+
       // Expand street and state/province abbreviations (e.g. St -> Street, VIC -> Victoria, NSW -> New South Wales)
       addr = expandAddressAndStateAbbreviations(addr, country);
 
@@ -1789,10 +1810,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
 
       if (country && country.length > 2) {
-        const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
-        addr = addr.replace(countryRegex, " ");
-        if (/united\s*states/i.test(country)) {
+        if (/australia/i.test(country)) {
+          addr = addr.replace(/,\s*\bAustralia\b\s*$/i, "");
+          addr = addr.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
+        } else if (/united\s*states/i.test(country)) {
           addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.)\b/gi, " ");
+        } else {
+          const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
+          addr = addr.replace(countryRegex, " ");
         }
       }
       addr = addr.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china)\b/gi, " ");
@@ -2225,6 +2250,82 @@ function isUkLocation(address, country) {
   return false;
 }
 
+// Comprehensive Australian Cities, Towns, and Suburbs (gazetted localities)
+const AUSTRALIAN_CITIES_AND_SUBURBS = [
+  // Major Capital and Regional Cities
+  "sydney", "melbourne", "brisbane", "perth", "adelaide", "hobart", "canberra", "darwin",
+  "geelong", "gold coast", "newcastle", "wollongong", "sunshine coast", "townsville", "cairns",
+  "toowoomba", "ballarat", "bendigo", "launceston", "mackay", "rockhampton", "bunbury",
+  "coffs harbour", "bundaberg", "wagga wagga", "hervey bay", "mildura", "shepparton",
+  "port macquarie", "tamworth", "orange", "dubbo", "bathurst", "albury", "wodonga",
+  "gladstone", "nowra", "bomaderry", "warrnambool", "kalgoorlie", "geraldton", "mount gambier",
+  "lismore", "armidale", "goulburn", "cessnock", "maitland",
+
+  // Major Victoria Suburbs & Industrial Hubs
+  "campbellfield", "dandenong", "dandenong south", "braeside", "bayswater", "bayswater north",
+  "clayton", "clayton south", "tullamarine", "thomastown", "somerton", "laverton", "laverton north",
+  "truganina", "altona", "altona north", "derrimut", "ravenhall", "heidelberg", "heidelberg west",
+  "preston", "coburg", "reservoir", "epping", "broadmeadows", "keon park", "richmond",
+  "moorabbin", "cheltenham", "mordialloc", "springvale", "noble park", "notting hill", "mulgrave",
+  "knoxfield", "scoresby", "rowville", "croydon", "croydon south", "ringwood", "kilsyth",
+  "footscray", "brooklyn", "sunshine", "sunshine west", "yarraville", "port melbourne",
+  "south melbourne", "brunswick", "essendon", "st kilda", "hawthorn", "camberwell", "box hill",
+  "werribee", "hoppers crossing", "point cook", "frankston", "mornington", "carrum downs",
+
+  // Major New South Wales Suburbs & Industrial Hubs
+  "seven hills", "blacktown", "parramatta", "rydalmere", "silverwater", "wetherill park",
+  "smithfield", "alexandria", "rosebery", "prestons", "moorebank", "liverpool", "ingleburn",
+  "penrith", "st marys", "saint marys", "chullora", "bankstown", "canterbury", "revesby", "padstow",
+  "mascot", "botany", "brookvale", "manly", "frenchs forest", "chatswood", "north sydney",
+  "strathfield", "homebush", "auburn", "lidcombe", "granville", "guildford", "villawood",
+  "chester hill", "eastern creek", "huntingwood", "erskine park", "glendenning", "arndell park",
+  "kings park", "girraween", "castle hill", "norwest", "baulkham hills", "hornsby",
+  "campbelltown", "camden", "smeaton grange", "taren point", "miranda", "caringbah",
+
+  // Major Queensland Suburbs & Industrial Hubs
+  "acacia ridge", "rocklea", "wacol", "brendale", "yatala", "coopers plains", "archerfield",
+  "salisbury", "darra", "richlands", "carole park", "ipswich", "logan", "loganholme",
+  "underwood", "slacks creek", "springwood", "browns plains", "crestmead", "murarrie",
+  "hemmant", "lytton", "tingalpa", "wynnum", "hendra", "eagle farm", "pinkenba",
+  "geebung", "virginia", "zillmere", "strathpine", "lawnton", "north lakes", "caboolture",
+  "southport", "surfers paradise", "burleigh heads", "molendinar", "nerang", "varsity lakes",
+  "carrara", "ashmore", "stapylton", "maroochydore", "caloundra", "kunda park", "coolum beach",
+
+  // Major Western Australia Suburbs & Industrial Hubs
+  "welshpool", "kewdale", "canning vale", "malaga", "osborne park", "balcatta", "wangara",
+  "joondalup", "fremantle", "o'connor", "bibra lake", "cockburn central", "henderson",
+  "kwinana", "rockingham", "bayswater", "bassendean", "belmont", "victoria park",
+  "subiaco", "west perth", "east perth", "clarkson", "landsdale", "morley", "maddington",
+  "kenwick", "cannington", "forrestdale", "myaree", "willetton", "midland", "hazelmere",
+
+  // Major South Australia Suburbs & Industrial Hubs
+  "wingfield", "regency park", "kilkenny", "hindmarsh", "beverley", "flinders park",
+  "edwardstown", "lonsdale", "st marys", "pooraka", "salisbury", "salisbury south",
+  "elizabeth", "edinburgh", "gepps cross", "dry creek", "port adelaide", "alberton",
+  "glandore", "mile end", "thebarton", "norwood", "unley", "prospect", "glynde", "campbelltown",
+
+  // Major Tasmania Suburbs & Industrial Hubs
+  "glenorchy", "derwent park", "moonah", "cambridge", "sorell", "kingston", "invermay",
+  "mowbray", "prospect", "kings meadows", "devonport", "burnie",
+
+  // Major ACT Suburbs & Industrial Hubs
+  "fyshwick", "hume", "mitchell", "belconnen", "woden", "tuggeranong", "gungahlin",
+
+  // Major Northern Territory Suburbs & Industrial Hubs
+  "winnellie", "pinelands", "berrimah", "yarrawonga", "palmerston", "alice springs"
+];
+
+function isAustralianLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:australia|aus)\b/i.test(c)) return true;
+  const a = (address || "").toLowerCase();
+  if (/\b(?:australia)\b/i.test(a)) return true;
+  if (/\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory)\b/i.test(a)) return true;
+  if (/\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(a)) return true;
+  if (/,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(a)) return true;
+  return false;
+}
+
 function hasUkCityOrTown(cleanAddr) {
   const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
   const streetPrefixPattern = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park)\\s+";
@@ -2380,12 +2481,20 @@ function detectCityFromStructure(addr, country = "") {
     if (!isNotCitySegment(candidate)) {
       return candidate;
     }
+    const cleanCand = candidate.replace(/\b(?:industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park)\b/gi, "").trim();
+    if (cleanCand.length >= 3 && !isNotCitySegment(cleanCand)) {
+      return cleanCand;
+    }
   }
 
   if (parts.length >= 2 && stateIdx === -1) {
     const last = parts[parts.length - 1];
     if (!isNotCitySegment(last)) {
       return last;
+    }
+    const cleanLast = last.replace(/\b(?:industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park)\b/gi, "").trim();
+    if (cleanLast.length >= 3 && !isNotCitySegment(cleanLast)) {
+      return cleanLast;
     }
   }
 
@@ -2397,8 +2506,6 @@ function evaluateCityQC(address, country) {
     return "Not Available";
   }
   const cleanAddr = address.trim().toLowerCase();
-
-  // ss
 
   // New Taipei City rule: Must remain Not Available unless a qualifying administrative area is separately identified
   if (isNewTaipeiCity(cleanAddr)) {
@@ -2419,7 +2526,12 @@ function evaluateCityQC(address, country) {
     return "Available";
   }
 
-  // 3. Structural address detection (e.g. "..., Moor Street, Heywood, Lancashire" -> "Heywood" precedes verified state)
+  // 3. Australian Suburb / City evaluation (gazetted localities and regional/capital cities)
+  if (isAustralianLocation(cleanAddr, country) && hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES_AND_SUBURBS)) {
+    return "Available";
+  }
+
+  // 4. Structural address detection (e.g. "..., Moor Street, Heywood, Lancashire" -> "Heywood" precedes verified state)
   if (detectCityFromStructure(cleanAddr, country)) {
     return "Available";
   }
@@ -2605,9 +2717,10 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // Replace ampersand with 'and' in address
   a = a.replace(/\s*&\s*/g, " and ");
 
-  // 1. "St" as "Saint" in city or place names (e.g. St Louis, Port St Lucie, St Petersburg, St Paul)
-  a = a.replace(/\b(?:port\s+)?st\.?\s+(lucie|louis|paul|petersburg|cloud|albans|kilda|george|john|andrews|charles|joseph|moritz|leonards)\b/gi, function (m, p) {
+  // 1. "St" as "Saint" in city or place names (e.g. St Louis, Port St Lucie, St Petersburg, St Paul, St Marys)
+  a = a.replace(/\b(?:port\s+|mount\s+)?st\.?\s+(lucie|louis|paul|petersburg|cloud|albans|kilda|george|john|andrews|charles|joseph|moritz|leonards|marys|mary's|peters|helens|ives|clair)\b/gi, function (m, p) {
     if (/^port/i.test(m)) return "Port Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+    if (/^mount/i.test(m)) return "Mount Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
     return "Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
   });
 
@@ -2692,6 +2805,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\brd\b\.?/gi, "Road");
   a = a.replace(/\bdr\b\.?/gi, "Drive");
   a = a.replace(/\bln\b\.?/gi, "Lane");
+  a = a.replace(/\bind\b\.?\s*est\b\.?/gi, "Industrial Estate");
   a = a.replace(/\bind\b\.?\s+(?=(?:area|park|estate|zone|district|region)\b)/gi, "Industrial ");
   a = a.replace(/\bindl\b\.?/gi, "Industrial");
   a = a.replace(/\bpk\b\.?/gi, "Park");
@@ -2741,9 +2855,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/([a-zA-Z\)])\s*,?\s*\btas\b\.?/gi, "$1, Tasmania");
     a = a.replace(/([a-zA-Z\)])\s*,?\s*\bact\b\.?/gi, "$1, Australian Capital Territory");
     a = a.replace(/([a-zA-Z\)])\s*,?\s*\bnt\b\.?/gi, "$1, Northern Territory");
-    if (cLower.includes("australia") || /\b(?:wa|sa)\s+\d{4}\b/i.test(a)) {
-      a = a.replace(/([a-zA-Z\)])\s*,?\s*\bwa\b\.?/gi, "$1, Western Australia");
-      a = a.replace(/([a-zA-Z\)])\s*,?\s*\bsa\b\.?/gi, "$1, South Australia");
+    if (cLower.includes("australia") || /\b(?:wa|sa)\b(?=[,\s]|$|\s*\d{4})/i.test(a)) {
+      a = a.replace(/([a-zA-Z\)])\s*,?\s*\bwa\b\.?(?=[,\s]|$|\s*\d{4})/gi, "$1, Western Australia");
+      a = a.replace(/([a-zA-Z\)])\s*,?\s*\bsa\b\.?(?=[,\s]|$|\s*\d{4})/gi, "$1, South Australia");
     }
   }
 
@@ -2812,10 +2926,12 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])circ\b\.?\s+(?=[A-Za-z])/gi, '$1Circonvallazione ');
 
   // Compass directions in Italian addresses
-  a = a.replace(/(^|[,\s])est\b/gi, '$1East');
-  a = a.replace(/(^|[,\s])ovest\b/gi, '$1West');
-  a = a.replace(/(^|[,\s])nord\b/gi, '$1North');
-  a = a.replace(/(^|[,\s])sud\b/gi, '$1South');
+  if (cLower.includes("italy") || cLower.includes("italia")) {
+    a = a.replace(/(^|[,\s])est\b/gi, '$1East');
+    a = a.replace(/(^|[,\s])ovest\b/gi, '$1West');
+    a = a.replace(/(^|[,\s])nord\b/gi, '$1North');
+    a = a.replace(/(^|[,\s])sud\b/gi, '$1South');
+  }
 
   // Roads: Strada, SP, SS, SR
   a = a.replace(/(^|[,\s])str\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Strada ');
@@ -3010,6 +3126,13 @@ function ensureCommaBeforeState(addr) {
     const regex = new RegExp(`([a-zA-Z0-9\\)])\\s+\\b(${st})\\b(?!\\s+(?:Street|Road|Avenue|Drive|Lane|Boulevard|Way|Place|Court|Highway|Close|Crescent|Square|Terrace|Park|Estate|Industrial|Unit|Suite|Building|Floor|Bldg|St|Rd|Ave|Dr|Ln|Blvd|Hwy|Ct|Pl)\\b)`, "gi");
     res = res.replace(regex, "$1, $2");
   }
+
+  // Ensure comma separates street suffix from suburb/city when followed by state
+  const streetSuffixes = "(?:Street|Road|Avenue|Drive|Lane|Boulevard|Highway|Close|Court|Place|Crescent|Parade|Circuit|Terrace|Esplanade|Way|Track)";
+  const stNames = "(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Ontario|Quebec|British Columbia|Alberta|California|Texas|Florida|New York|Pennsylvania|Illinois|Gauteng|Selangor)";
+  const streetSubReg = new RegExp(`(\\b${streetSuffixes})\\s+([A-Za-z\\s]+),\\s*(${stNames})`, "gi");
+  res = res.replace(streetSubReg, "$1, $2, $3");
+
   return res;
 }
 
@@ -3266,7 +3389,7 @@ function detectCountryFromAddress(address) {
   if (/\b(taiwan|r\.?o\.?c\.?)\b/i.test(lower)) return "Taiwan";
   if (/\b(england)\b/i.test(lower)) return "England";
   if (/\b(scotland)\b/i.test(lower)) return "Scotland";
-  if (/\b(wales)\b/i.test(lower)) return "Wales";
+  if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(lower)) return "Wales";
   if (/\b(northern\s*ireland)\b/i.test(lower)) return "Northern Ireland";
   if (/\b(united\s*kingdom|great\s*britain|uk)\b/i.test(lower)) return "United Kingdom";
   if (/\b(united\s*states|usa|united\s*states\s*of\s*america)\b/i.test(lower)) return "United States Of America";
@@ -3301,7 +3424,9 @@ function detectCountryFromAddress(address) {
   if (/\b(gauteng|western\s*cape|eastern\s*cape|kwazulu|natal|mpumalanga|free\s*state|limpopo|north\s*west|northern\s*cape)\b/i.test(lower)) return "South Africa";
   if (/\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s*hampshire|new\s*jersey|new\s*mexico|new\s*york|north\s*carolina|north\s*dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s*island|south\s*carolina|south\s*dakota|tennessee|texas|utah|vermont|virginia|washington|west\s*virginia|wisconsin|wyoming|district\s*of\s*columbia)\b/i.test(lower)) return "United States Of America";
   if (/\b(ontario|quebec|british\s*columbia|alberta|manitoba|nova\s*scotia)\b/i.test(lower)) return "Canada";
-  if (/\b(new\s*south\s*wales|victoria|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|sydney|melbourne|brisbane|perth|adelaide)\b/i.test(lower)) return "Australia";
+  if (/\b(?:new\s*south\s*wales|victoria|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|sydney|melbourne|brisbane|perth|adelaide|canberra|hobart|darwin|gold\s*coast|newcastle|wollongong|geelong|cairns|townsville)\b/i.test(lower) ||
+      /\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(lower) ||
+      /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower)) return "Australia";
   if (/\b(bavaria|bayern|baden-wurttemberg|nordrhein-westfalen|hessen|sachsen)\b/i.test(lower)) return "Germany";
   if (/\b(maharashtra|karnataka|tamil\s*nadu|gujarat|uttar\s*pradesh|telangana|delhi)\b/i.test(lower)) return "India";
   if (/\b(taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung)\s*(hsien|county)\b/i.test(lower)) return "Taiwan";
