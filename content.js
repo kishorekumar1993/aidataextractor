@@ -948,7 +948,7 @@
           fillFormFields(cachedExtractedData);
           updateStatus("Pre-filled form with extracted data.", "success");
         } else {
-          triggerCrawlAndFill();
+          updateStatus("⚠️ No extracted data yet. Click 'Auto-Crawl & Pre-Fill' to crawl.", "warning");
         }
       });
     }
@@ -999,13 +999,6 @@
       quickBtn.addEventListener("click", (e) => {
         e.preventDefault();
         triggerCrawlAndFill();
-      });
-
-      // Also trigger AI Pre-fill when user clicks the native "click here" button!
-      clickHereBtn.addEventListener("click", () => {
-        setTimeout(() => {
-          triggerCrawlAndFill();
-        }, 120);
       });
 
       clickHereBtn.parentNode.insertBefore(quickBtn, clickHereBtn.nextSibling);
