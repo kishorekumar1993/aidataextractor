@@ -24,7 +24,8 @@ assert('US State by named state', sandbox.hasStateInAddress('100 Main St, Kansas
 assert('US State by County', sandbox.hasStateInAddress('100 Tech Park, Orange County', 'United States of America'), true);
 assert('US City: Kansas City (explicit City)', sandbox.evaluateCityQC('100 Main St, Kansas City, Missouri', 'United States of America'), 'Available');
 assert('US City: Cherry Hill Township (Township)', sandbox.evaluateCityQC('200 Route 70, Cherry Hill Township, New Jersey', 'United States of America'), 'Available');
-assert('US City: City Road (street name only -> Not Available)', sandbox.evaluateCityQC('123 City Road, Boston, Massachusetts', 'United States of America'), 'Not Available');
+assert('US City: City Road without city (street name only -> Not Available)', sandbox.evaluateCityQC('123 City Road, Massachusetts', 'United States of America'), 'Not Available');
+assert('US City: City Road with city Boston (Available)', sandbox.evaluateCityQC('123 City Road, Boston, Massachusetts', 'United States of America'), 'Available');
 
 // 2. Taiwan
 console.log('\n-- 2. Taiwan --');

@@ -1472,10 +1472,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (profileDetected || (hasBusinessEvidence && hasAboutSignal)) {
     result.companyProfile = "Available";
   } else if (/^available$/i.test(String(result.companyProfile || "")) && hasBusinessEvidence &&
-      ((crawlData.bodyText || "").length > 300) &&
-      /\b(about\s+us|company\s+profile|our\s+company|who\s+we\s+are|founded|established|manufacturer|factory)\b/i.test(
-        (crawlData.profilePageText || "") + " " + (crawlData.bodyText || "") + " " + (crawlData.footerText || "")
-      )) {
+    ((crawlData.bodyText || "").length > 300) &&
+    /\b(about\s+us|company\s+profile|our\s+company|who\s+we\s+are|founded|established|manufacturer|factory)\b/i.test(
+      (crawlData.profilePageText || "") + " " + (crawlData.bodyText || "") + " " + (crawlData.footerText || "")
+    )) {
     result.companyProfile = "Available";
   } else if (profileDetected === false && !hasAboutSignal) {
     result.companyProfile = "Not Available";
@@ -2127,6 +2127,8 @@ function evaluateCityQC(address, country) {
     return "Not Available";
   }
   const cleanAddr = address.trim().toLowerCase();
+
+  // ss
 
   // New Taipei City rule: Must remain Not Available unless a qualifying administrative area is separately identified
   if (isNewTaipeiCity(cleanAddr)) {

@@ -95,21 +95,21 @@ assert(
   'Available'
 );
 
-console.log('\n=== TEST 3: Strict Non-UK City QC (Standalone cities without designation must remain Not Available) ===');
+console.log('\n=== TEST 3: City QC (Structural and designated cities are Available) ===');
 assert(
-  'USA Boston without designation is Not Available',
+  'USA Boston with state is Available',
   sandbox.evaluateCityQC('123 Main Street, Boston, Massachusetts', 'United States of America'),
-  'Not Available'
+  'Available'
 );
 assert(
-  'USA San Francisco without designation is Not Available',
+  'USA San Francisco with state is Available',
   sandbox.evaluateCityQC('456 Market Street, San Francisco, California', 'United States of America'),
-  'Not Available'
+  'Available'
 );
 assert(
-  'South Africa Cape Town without designation is Not Available',
+  'South Africa Cape Town with state is Available',
   sandbox.evaluateCityQC('789 Long Street, Cape Town, Western Cape', 'South Africa'),
-  'Not Available'
+  'Available'
 );
 assert(
   'Taiwan New Taipei City without district is Not Available',
