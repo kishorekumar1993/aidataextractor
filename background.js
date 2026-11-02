@@ -544,6 +544,8 @@ async function crawlWebsite(targetUrl) {
   let profilePageText = "";
   let copyrightText = "";
   const allLegalCandidates = new Set();
+  const allDiscoveredEmails = new Set();
+  const allDiscoveredPhones = new Set();
 
   try {
     const mainRes = await fetchDecodedHtml(targetUrl, {
@@ -609,7 +611,7 @@ async function crawlWebsite(targetUrl) {
     const contactLinks = discoverContactLinks(mainHtml, finalUrl);
     const fetchedUrls = new Set([finalUrl]);
 
-    for (const cUrl of contactLinks.slice(0, 12)) {
+    for (const cUrl of contactLinks.slice(0, 15)) {
       if (fetchedUrls.has(cUrl)) continue;
       fetchedUrls.add(cUrl);
 
@@ -642,6 +644,13 @@ async function crawlWebsite(targetUrl) {
             allLegalCandidates.add(cand);
           }
 
+          // Extract all corporate emails and phones across this page
+          for (const em of extractEmailsFromHtml(cText, finalUrl)) {
+            allDiscoveredEmails.add(em);
+          }
+          const pagePhoneLinks = [...cText.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
+          for (const p of pagePhoneLinks) allDiscoveredPhones.add(p);
+
           // Extract copyright on this page if homepage lacked complete legal suffix
           const pageCopyright = extractCopyrightCompanyName(cText);
           if (pageCopyright && hasCompleteLegalSuffix(pageCopyright) && (!copyrightText || !hasCompleteLegalSuffix(copyrightText))) {
@@ -658,6 +667,9 @@ async function crawlWebsite(targetUrl) {
                 contactHtml += "\n" + fbRes.html;
                 extractEmbeddedScriptAddresses(fbRes.html, addressCandidates);
                 extractHtmlAddresses(fbRes.html, addressCandidates, "contact");
+                for (const em of extractEmailsFromHtml(fbRes.html, finalUrl)) {
+                  allDiscoveredEmails.add(em);
+                }
               }
             }
           }
@@ -697,12 +709,23 @@ async function crawlWebsite(targetUrl) {
   // Verify substantive company profile presence
   extracted.hasCompanyProfile = checkCompanyProfilePresence(mainHtml, extracted.bodyText, profilePageText);
 
-  // Merge discovered emails/phones from crawled contact pages
+  // Merge discovered emails/phones from all crawled pages
+  for (const em of extracted.emails) allDiscoveredEmails.add(em);
+  for (const p of extracted.phones) allDiscoveredPhones.add(p);
+
   if (contactHtml) {
     const contactParsed = parseHtmlDetails(contactHtml, finalUrl);
-    extracted.emails = Array.from(new Set([...extracted.emails, ...contactParsed.emails]));
-    extracted.phones = Array.from(new Set([...extracted.phones, ...contactParsed.phones]));
+    for (const em of contactParsed.emails) allDiscoveredEmails.add(em);
+    for (const p of contactParsed.phones) allDiscoveredPhones.add(p);
   }
+
+  let hostDomain = "";
+  try {
+    hostDomain = new URL(finalUrl).hostname.replace(/^www\./i, "");
+  } catch (e) { }
+
+  extracted.emails = rankEmails(Array.from(allDiscoveredEmails), hostDomain);
+  extracted.phones = Array.from(allDiscoveredPhones);
 
   // Sort candidates strictly by priority hierarchy:
   // Headquarters (Tier 1) > Contact (Tier 2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > Branch (Tier 8).
@@ -903,9 +926,16 @@ function discoverContactLinks(html, baseUrl) {
     if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us)\b/i.test(rawLower)) score += 10;
     if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile)\b/i.test(rawLower)) score += 8;
     if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|impressum|imprint|mentions-legales)\b/i.test(rawLower)) score += 7;
+    if (/\b(support|customer-support|service|customer-service|help|help-desk|faq)\b/i.test(rawLower)) score += 8;
+    if (/\b(sales|inquiry|enquiry|inquiries|enquiries|quote|request-quote|request-a-quote|order|orders)\b/i.test(rawLower)) score += 8;
+    if (/\b(team|our-team|staff|management|people|leadership)\b/i.test(rawLower)) score += 6;
+    if (/\b(locations|branches|branch|offices|stores|dealers|distributors)\b/i.test(rawLower)) score += 6;
+    if (/\b(feedback|complaints|careers|jobs|directory)\b/i.test(rawLower)) score += 5;
     if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us)\b/i.test(innerText)) score += 12;
     if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile)\b/i.test(innerText)) score += 10;
     if (/\b(terms|terms\s*and\s*conditions|terms\s*of\s*(?:service|use)|privacy\s*policy|legal\s*notice|company\s*info|imprint|impressum)\b/i.test(innerText)) score += 8;
+    if (/\b(customer\s*support|customer\s*service|technical\s*support|help\s*center|support)\b/i.test(innerText)) score += 10;
+    if (/\b(sales|sales\s*enquiry|sales\s*inquiry|request\s*a\s*quote|quote|orders)\b/i.test(innerText)) score += 10;
     if (/\b(en|english)\b/i.test(innerText) || /[\/_](?:en|eng)\b/i.test(rawLower) || /[?&]lang=en/i.test(rawLower)) score += 7;
 
     if (score > 0) {
@@ -1223,6 +1253,61 @@ function stripHtml(html) {
     .trim();
 }
 
+/**
+ * Extracts and decodes all valid email addresses from any HTML snippet or page.
+ * Handles mailto links, Cloudflare obfuscation, HTML numeric/hex entities, URL encoding, and [at] patterns.
+ */
+function extractEmailsFromHtml(html, hostDomain = "") {
+  if (!html || typeof html !== "string") return [];
+  const candidateEmails = new Set();
+
+  // 1. Decode Cloudflare Email Protection (data-cfemail or /cdn-cgi/l/email-protection#)
+  const cfMatches = [...html.matchAll(/(?:data-cfemail=["']|email-protection#)([a-f0-9]{4,})/gi)];
+  for (const m of cfMatches) {
+    const hex = m[1];
+    try {
+      let decoded = "";
+      const key = parseInt(hex.substr(0, 2), 16);
+      for (let n = 2; n < hex.length; n += 2) {
+        decoded += String.fromCharCode(parseInt(hex.substr(n, 2), 16) ^ key);
+      }
+      if (/@/.test(decoded)) candidateEmails.add(decoded.toLowerCase().trim());
+    } catch (e) { }
+  }
+
+  // 2. Decode mailto: links (including mailto:user@domain.com?subject=...)
+  const mailtoMatches = [...html.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)].map(m => m[1]);
+  for (const em of mailtoMatches) {
+    candidateEmails.add(em.toLowerCase().trim());
+  }
+
+  // 3. Decode HTML numeric & hex entities, and normalize [at] / (at) / [dot]
+  const emailSearchText = html
+    .replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec))
+    .replace(/&#x([0-9a-f]+);/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&amp;/g, "&")
+    .replace(/&commat;/gi, "@")
+    .replace(/%40/gi, "@")
+    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\s+at\s+)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\s+dot\s+|\.)\s*([a-zA-Z]{2,})/gi, "$1@$2.$3");
+
+  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
+  const rawEmails = emailSearchText.match(emailRegex) || [];
+  for (const em of rawEmails) {
+    candidateEmails.add(em.toLowerCase().trim());
+  }
+
+  const uniqueEmails = [];
+  for (const em of candidateEmails) {
+    if (!/\.(png|jpg|jpeg|gif|svg|webp|css|js|woff|woff2|ttf|eot|ico|bmp|mp4|webm|pdf)$/i.test(em) &&
+        !/^(user@example|email@domain|name@email|test@|sample@|info@domain|your@email|placeholder@)/i.test(em) &&
+        !uniqueEmails.includes(em)) {
+      uniqueEmails.push(em);
+    }
+  }
+
+  return rankEmails(uniqueEmails, hostDomain);
+}
+
 function parseHtmlDetails(html, baseUrl) {
   if (!html) {
     return {
@@ -1268,49 +1353,8 @@ function parseHtmlDetails(html, baseUrl) {
     hostDomain = new URL(baseUrl).hostname.replace(/^www\./i, "");
   } catch (e) { }
 
-  // Extract & Rank Emails across the complete website HTML (supports Cloudflare obfuscation, HTML entities, and [at] patterns)
-  const candidateEmails = new Set();
-
-  // 1. Decode Cloudflare Email Protection (data-cfemail or /cdn-cgi/l/email-protection#)
-  const cfMatches = [...html.matchAll(/(?:data-cfemail=["']|email-protection#)([a-f0-9]{4,})/gi)];
-  for (const m of cfMatches) {
-    const hex = m[1];
-    try {
-      let decoded = "";
-      const key = parseInt(hex.substr(0, 2), 16);
-      for (let n = 2; n < hex.length; n += 2) {
-        decoded += String.fromCharCode(parseInt(hex.substr(n, 2), 16) ^ key);
-      }
-      if (/@/.test(decoded)) candidateEmails.add(decoded.toLowerCase().trim());
-    } catch (e) { }
-  }
-
-  // 2. Decode HTML numeric & hex entities, and normalize [at] / (at) / [dot]
-  let emailSearchText = html
-    .replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec))
-    .replace(/&#x([0-9a-f]+);/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/&amp;/g, "&")
-    .replace(/&commat;/gi, "@")
-    .replace(/%40/gi, "@")
-    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\s+at\s+)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\s+dot\s+|\.)\s*([a-zA-Z]{2,})/gi, "$1@$2.$3");
-
-  const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
-  const rawEmails = emailSearchText.match(emailRegex) || [];
-  const mailtoMatches = [...emailSearchText.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)].map(m => m[1]);
-
-  for (const em of [...rawEmails, ...mailtoMatches]) {
-    candidateEmails.add(em.toLowerCase().trim());
-  }
-
-  const uniqueEmails = [];
-  for (const em of candidateEmails) {
-    if (!/\.(png|jpg|jpeg|gif|svg|webp|css|js|woff|woff2|ttf|eot)$/i.test(em) &&
-      !/^(user@example|email@domain|name@email|test@|sample@|info@domain|your@email)/i.test(em) &&
-      !uniqueEmails.includes(em)) {
-      uniqueEmails.push(em);
-    }
-  }
-  const rankedEmails = rankEmails(uniqueEmails, hostDomain);
+  // Extract & Rank Emails across the complete website HTML
+  const rankedEmails = extractEmailsFromHtml(html, hostDomain);
 
   // Extract Phone Numbers strictly from telephone contexts
   const phoneLinks = [...html.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
@@ -2117,12 +2161,15 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 9. Email ID
   let email = (result.emailId || "").trim().toLowerCase();
+  if (!email || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(email)) {
+    email = (crawlData.emails && crawlData.emails.length > 0) ? crawlData.emails[0] : "";
+  }
   result.emailId = email;
 
   // 10. Secondary Email ID (Must analyze complete website for distinct alternate corporate email)
   let secEmail = (result.secondaryEmailId || "").trim().toLowerCase();
-  if (!secEmail || secEmail === email) {
-    const alternate = (crawlData.emails || []).find(e => e.toLowerCase() !== email);
+  if (!secEmail || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(secEmail) || secEmail === email) {
+    const alternate = (crawlData.emails || []).find(e => e.toLowerCase() !== email.toLowerCase());
     secEmail = alternate ? alternate.toLowerCase() : "";
   }
   if (secEmail === email) secEmail = "";
