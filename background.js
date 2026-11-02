@@ -1898,6 +1898,10 @@ const UK_CITIES_AND_TOWNS = [
   "lincoln", "boston", "grantham", "spalding", "skegness", "workington", "whitehaven",
   "kendal", "penrith", "carlisle", "lancaster", "morecambe", "blackpool", "preston",
   "blackburn", "burnley", "accrington", "bury", "bolton", "wigan", "st helens",
+  "heywood", "ashton-under-lyne", "sale", "altrincham", "stretford", "leigh", "prestwich",
+  "radcliffe", "middleton", "hyde", "glossop", "wilmslow", "knutsford", "ormskirk",
+  "skelmersdale", "chorley", "clitheroe", "colne", "nelson", "rawtenstall", "bacup",
+  "haslingden", "darwen", "fleetwood", "morecambe", "littleborough",
   "warrington", "runcorn", "widnes", "birkenhead", "wallasey", "southport",
   "ayr", "kilmarnock", "greenock", "paisley", "east kilbride", "hamilton",
   "cumbernauld", "livingston", "kirkcaldy", "dunfermline", "perth", "inverness",
@@ -2047,6 +2051,77 @@ function addressLooksLikeSuburbOnly(cleanAddr) {
  * designation, a recognized city/town, or a UK city/town/borough.
  * Suburbs/localities/industrial-only addresses stay Not Available.
  */
+function isNotCitySegment(segment) {
+  if (!segment) return true;
+  const s = segment.trim().toLowerCase();
+  if (s.length < 2) return true;
+
+  // Street types
+  if (/\b(?:street|road|avenue|lane|drive|way|close|court|place|terrace|crescent|boulevard|highway|parade|walk|row|mews|view|gate|hill|wharf|parkway|alley|st|rd|ave|dr|ln|blvd|hwy|ct|pl)\b/i.test(s)) {
+    return true;
+  }
+
+  // Unit / premise / floor / room / building prefix or descriptor
+  if (/^(?:unit|suite|bldg|building|floor|fl|rm|room|dept|flat|apt|apartment|block|blk|no\.?\s*\d|number\s*\d|p\.?o\.?\s*box|post\s*office\s*box)\b/i.test(s)) {
+    return true;
+  }
+
+  // Industrial / commercial parks / zones / estates
+  if (/\b(?:industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park)\b/i.test(s)) {
+    return true;
+  }
+
+  // Postal codes
+  if (/\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(s) || /^\d{4,6}$/.test(s)) {
+    return true;
+  }
+
+  // Pure numbers, coordinates, or symbols
+  if (/^[\d\s#\-_,./\\]+$/.test(s)) {
+    return true;
+  }
+
+  return false;
+}
+
+function detectCityFromStructure(addr, country = "") {
+  if (!addr || typeof addr !== "string") return null;
+
+  let clean = addr.trim();
+  clean = clean.replace(/,\s*(?:united\s*kingdom|uk|u\.k\.|great\s*britain|england|scotland|wales|northern\s*ireland|united\s*states(?:\s*of\s*america)?|usa|u\.s\.a\.|canada|australia|germany|deutschland|italy|italia|ireland|new\s*zealand|south\s*africa|china|taiwan|malaysia|singapore|indonesia|thailand|india)\s*$/i, "").trim();
+
+  clean = clean.replace(/,\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/gi, "").trim();
+  clean = clean.replace(/,\s*\b\d{5}(?:-\d{4})?\b/g, "").trim();
+  clean = clean.replace(/,\s*\b\d{4,6}\b/g, "").trim();
+
+  const parts = clean.split(",").map(p => p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+
+  let stateIdx = -1;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (hasStateInAddress(parts[i], country)) {
+      stateIdx = i;
+      break;
+    }
+  }
+
+  if (stateIdx > 0) {
+    const candidate = parts[stateIdx - 1];
+    if (!isNotCitySegment(candidate)) {
+      return candidate;
+    }
+  }
+
+  if (parts.length >= 2 && stateIdx === -1) {
+    const last = parts[parts.length - 1];
+    if (!isNotCitySegment(last)) {
+      return last;
+    }
+  }
+
+  return null;
+}
+
 function evaluateCityQC(address, country) {
   if (!address || typeof address !== "string" || address.trim().length < 3) {
     return "Not Available";
@@ -2069,6 +2144,11 @@ function evaluateCityQC(address, country) {
 
   // 2. UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
   if (isUkLocation(cleanAddr, country) && hasUkCityOrTown(cleanAddr)) {
+    return "Available";
+  }
+
+  // 3. Structural address detection (e.g. "..., Moor Street, Heywood, Lancashire" -> "Heywood" precedes verified state)
+  if (detectCityFromStructure(cleanAddr, country)) {
     return "Available";
   }
 
