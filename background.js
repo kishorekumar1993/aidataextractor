@@ -1892,72 +1892,121 @@ function detectRestrictedKeywords(text, html = "") {
 }
 
 /**
- * Detects online purchase or shopping cart ("Shopchart") features on a website.
- * Rule: purchase / Shopchart in website found means mark it as Not Working site.
+ * 3-Tier Multi-Check E-Commerce Verification Rule (Rule 1 & Rule 2).
+ * Rule: A website is E-COMMERCE (Online Shopping) IF AND ONLY IF:
+ *   [Mandatory Core Rule: Direct Transaction Capability (Cart + Unit Price + Online Checkout Gateway)]
+ *   AND
+ *   [Secondary Operational Signal: Delivery / Fulfillment Logistics OR Structured Offer Schema]
+ *
+ * EXCLUSION: If the button/link says "Request a Quote", "Contact Us for Pricing", or "Find a Dealer",
+ * it fails this rule and is classified as a B2B Catalog / Showcase site (NOT e-commerce)!
  */
 function detectPurchaseOrShoppingCart(html = "", text = "") {
   if (!html && !text) return { detected: false, reason: "" };
 
   const rawHtml = String(html || "");
   const rawText = String(text || "");
+  const combined = rawHtml + " " + rawText;
 
-  // 1. E-commerce platforms, SDKs, and scripts (Shopify, WooCommerce, Magento, BigCommerce, etc.)
-  const platformRegex = /\b(?:woocommerce[-_]?cart|woocommerce[-_]?checkout|wc-block-cart|wc-cart-fragments|add_to_cart_button|single_add_to_cart_button|shopify[-_]?section[-_]?cart|cart[-_]?drawer|shopify[-_]?payment[-_]?button|cdn\.shopify\.com|window\.Shopify|Shopify\.routes|minicart[-_]?wrapper|block[-_]?minicart|action\s+showcart|snipcart[-_]?checkout|snipcart[-_]?add[-_]?item|ec[-_]?cart|bigcommerce|ps[-_]?shoppingcart|prestashop|opencart|wix[-_]?dropdown[-_]?cart|sqs[-_]?cart[-_]?dropzone)\b/i;
-  const platMatch = rawHtml.match(platformRegex);
-  if (platMatch) {
-    return { detected: true, reason: `E-commerce platform indicator: ${platMatch[0]}` };
-  }
+  // -------------------------------------------------------------
+  // TIER 0: B2B CATALOG & QUOTE EXCLUSIONS
+  // "Exclusion: If the button says 'Request a Quote', 'Contact Us for Pricing',
+  // or 'Find a Dealer', it fails this rule and is a Catalog / Showcase site, not e-commerce."
+  // -------------------------------------------------------------
+  const quoteExclusionRegex = /\b(?:request\s+(?:a\s+)?quote|get\s+(?:a\s+)?quote|ask\s+for\s+(?:a\s+)?quote|request\s+pricing|contact\s+(?:us\s+)?for\s+pric(?:e|ing)|call\s+for\s+pric(?:e|ing)|price\s+on\s+(?:application|request)|inquir(?:y|e)\s+(?:now|online|cart|basket|list)|send\s+inquiry|add\s+to\s+quote|quote\s+(?:cart|basket|list|request)|rfq|contact\s+sales|quote\s+only)\b/i;
+  const dealerExclusionRegex = /\b(?:find\s+(?:a\s+)?dealer|dealer\s+locator|where\s+to\s+buy|find\s+(?:a\s+)?distributor|distributor\s+locator|locate\s+(?:a\s+)?dealer|dealer\s+network|our\s+distributors)\b/i;
+  const catalogSpecRegex = /\b(?:download\s+catalog(?:ue)?|product\s+catalog(?:ue)?|spec\s+sheet|specification\s+sheet|datasheet|technical\s+specifications)\b/i;
 
-  // 2. Cart / Checkout HTML element attributes (class, id, data-widget, aria-label, etc.)
-  const cartAttrRegex = /(?:class|id|data-widget|data-target|aria-label|name)=["'][^"']*\b(?:shopping[-_]?cart|shop[-_]?cart|shop[-_]?chart|shopping[-_]?chart|shopping[-_]?bag|shopping[-_]?basket|mini[-_]?cart|cart[-_]?contents|cart[-_]?icon|cart[-_]?drawer|cart[-_]?button|header[-_]?cart|btn[-_]?cart|view[-_]?cart|cart[-_]?count|cart[-_]?quantity|cart[-_]?summary|site-header__cart)\b[^"']*["']/i;
-  const attrMatch = rawHtml.match(cartAttrRegex);
-  if (attrMatch) {
-    return { detected: true, reason: `Shopping cart element attribute: ${attrMatch[0]}` };
-  }
+  const hasQuoteExclusion = quoteExclusionRegex.test(combined);
+  const hasDealerExclusion = dealerExclusionRegex.test(combined);
+  const hasCatalogSpec = catalogSpecRegex.test(combined);
+  const hasB2BExclusion = hasQuoteExclusion || hasDealerExclusion;
 
-  // 3. Cart / Checkout links (href)
-  const cartLinkRegex = /<a[^>]+href=["'][^"']*(?:\/(?:cart|shopping[-_]?cart|shop[-_]?cart|shop[-_]?chart|checkout|basket|my[-_]?cart|shopping[-_]?bag)\b)(?:\/|["'?#])/i;
-  const linkMatch = rawHtml.match(cartLinkRegex);
-  if (linkMatch) {
-    return { detected: true, reason: `Shopping cart / checkout link: ${linkMatch[0].slice(0, 80)}` };
-  }
+  // -------------------------------------------------------------
+  // TIER 1: THE TRANSACTION TEST (Mandatory Core Rule)
+  // Must allow direct monetary exchange on-site without manual back-and-forth communication.
+  // Requires: (A) Functional Cart/Basket + (B) Defined Unit Price + (C) Online Checkout Gateway.
+  // -------------------------------------------------------------
 
-  // 4. E-commerce CTA buttons or forms: "Add to Cart", "Add to Bag", "Buy Now", "Shop Now", "Proceed to Checkout", etc.
-  const ctaButtonRegex = /<(?:button|a|input)[^>]*>[\s\S]{0,100}?\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now|buy\s+online|shop\s+now|order\s+now|purchase\s+online|purchase\s+now|proceed\s+to\s+checkout|checkout\s+now|view\s+cart|my\s+cart|order\s+online)\b[\s\S]{0,100}?<\/(?:button|a)>/i;
-  const btnMatch = rawHtml.match(ctaButtonRegex);
-  if (btnMatch) {
-    return { detected: true, reason: `E-commerce CTA button: ${btnMatch[0].slice(0, 80)}` };
-  }
-
-  // 4b. Form action adding to cart / checkout
+  // 1A. Functional Cart / Basket Indicators
+  const cartCtaRegex = /<(?:button|a|input)[^>]*>[\s\S]{0,100}?\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now|order\s+now|buy\s+online|purchase\s+online)\b[\s\S]{0,100}?<\/(?:button|a)>/i;
   const cartFormRegex = /<form[^>]+action=["'][^"']*(?:\/cart\/add|\/cart|\/checkout|\/basket)[^"']*["']/i;
-  const formMatch = rawHtml.match(cartFormRegex);
-  if (formMatch) {
-    return { detected: true, reason: `Shopping cart form: ${formMatch[0].slice(0, 80)}` };
+  const cartButtonClassRegex = /\b(?:single_add_to_cart_button|add_to_cart_button|wc-block-cart|snipcart-add-item|shopify-payment-button)\b/i;
+  const cartWithQtyRegex = /(?:cart|basket|bag)\s*[\(\[]\s*\d+\s*[\)\]]|\b(?:items?\s+in\s+(?:your\s+)?cart)\b/i;
+
+  const hasCartAction = cartCtaRegex.test(rawHtml) || cartFormRegex.test(rawHtml) || cartButtonClassRegex.test(rawHtml) || cartWithQtyRegex.test(combined);
+
+  // 1B. Defined Unit Price (must have real currency prices for products on the page)
+  const currencyPriceRegex = /(?:[\$£€¥₹]|AU\$|CA\$|USD|EUR|GBP)\s*\d+(?:\.\d{2})?\b/;
+  const priceSchemaRegex = /"(?:price|highPrice|lowPrice)"\s*:\s*"?\d+(?:\.\d{2})?"?|itemprop=["']price["'][^>]*content=["']\d+|<meta\s+property=["']product:price:amount["']/i;
+
+  const hasDefinedPrice = currencyPriceRegex.test(combined) || priceSchemaRegex.test(rawHtml);
+
+  // 1C. Online Checkout Gateway
+  const checkoutRouteRegex = /<a[^>]+href=["'][^"']*(?:\/(?:checkout|express_checkout|onepagecheckout|cart\/checkout)\b)(?:\/|["'?#])/i;
+  const checkoutCtaRegex = /<(?:button|a|input)[^>]*>[\s\S]{0,80}?\b(?:proceed\s+to\s+checkout|checkout\s+now|place\s+order|pay\s+now|pay\s+with\s+(?:paypal|stripe|apple\s+pay|google\s+pay|klarna|afterpay))\b[\s\S]{0,80}?<\/(?:button|a)>/i;
+  const checkoutGatewayScriptRegex = /\b(?:checkout\.stripe\.com|paypal\.com\/checkout|pay\.shopify\.com|snipcart\.com|checkout\.razorpay\.com)\b/i;
+
+  const hasCheckoutGateway = checkoutRouteRegex.test(rawHtml) || checkoutCtaRegex.test(rawHtml) || checkoutGatewayScriptRegex.test(combined);
+
+  // -------------------------------------------------------------
+  // TIER 2: FULFILLMENT & POLICY TEST (Secondary Operational Signal)
+  // Clear legal and logistical frameworks for delivering purchased items.
+  // -------------------------------------------------------------
+  const shippingPolicyRegex = /\b(?:shipping\s+(?:policy|information|rates|charges|options|method)|delivery\s+(?:policy|timelines|charges)|free\s+shipping\s+on\s+orders|calculated\s+at\s+checkout|estimated\s+delivery|ships\s+in\s+\d+\s*(?:business\s+)?days|dispatch\s+within\s+\d+\s*(?:business\s+)?days|courier\s+delivery)\b/i;
+  const returnsTrackingRegex = /\b(?:return\s+policy|returns\s+(?:&|and)\s+exchanges|refund\s+policy|order\s+tracking|track\s+(?:your\s+)?order|track\s+shipment)\b/i;
+
+  const hasShippingPolicy = shippingPolicyRegex.test(combined);
+  const hasReturnsOrTracking = returnsTrackingRegex.test(combined);
+  const hasFulfillment = hasShippingPolicy || hasReturnsOrTracking;
+
+  // -------------------------------------------------------------
+  // TIER 3: TECHNICAL & DATA MARKERS (Verification)
+  // Structured Schema (Product + Offer with price) & Active Platform Endpoints
+  // -------------------------------------------------------------
+  const schemaProductOfferRegex = /(?:"@type"\s*:\s*"Product"[\s\S]{0,1200}?"@type"\s*:\s*"Offer"|"@type"\s*:\s*"Offer"[\s\S]{0,600}?"price"\s*:|itemtype=["']https?:\/\/schema\.org\/Product["'][\s\S]{0,1000}?itemtype=["']https?:\/\/schema\.org\/Offer["'])/i;
+  const ecommercePlatformActiveRegex = /\b(?:Shopify\.routes|cdn\.shopify\.com\/s\/files|woocommerce_params|wc-cart-fragments|ps[-_]?shoppingcart|snipcart\.js|bigcommerce|magento)\b/i;
+
+  const hasTechnicalSchema = schemaProductOfferRegex.test(rawHtml);
+  const hasActivePlatform = ecommercePlatformActiveRegex.test(combined);
+  const hasTechnicalMarkers = hasTechnicalSchema || (hasActivePlatform && hasDefinedPrice);
+
+  // -------------------------------------------------------------
+  // FINAL 3-TIER VERIFICATION EVALUATION
+  // -------------------------------------------------------------
+  // Mandatory Core Rule: Direct Transaction Capability requires Cart + Price + Checkout Gateway
+  const hasTransactionCapability = hasCartAction && hasDefinedPrice && (hasCheckoutGateway || hasTechnicalMarkers);
+
+  // If the site has B2B Quote / Dealer Exclusions and lacks a direct online checkout gateway,
+  // it is explicitly a B2B Catalog / Showcase site!
+  if (hasB2BExclusion && !hasCheckoutGateway) {
+    return {
+      detected: false,
+      reason: "",
+      isB2BCatalog: true,
+      b2bSignal: hasQuoteExclusion ? "Request a Quote / Inquire for Price" : "Dealer Locator / Find a Dealer"
+    };
   }
 
-  // 4c. Direct Purchase / Buy / Cart buttons
-  const purchaseBtnRegex = /<(?:button|a)[^>]*>\s*(?:Purchase|Buy Online|Shop Online|Shop Now|Cart|Checkout)\s*<\/(?:button|a)>/i;
-  const pBtnMatch = rawHtml.match(purchaseBtnRegex);
-  if (pBtnMatch) {
-    return { detected: true, reason: `Purchase button/link: ${pBtnMatch[0]}` };
+  // If site meets Mandatory Core Rule (Cart + Price + Checkout) AND at least one Secondary Signal
+  // (Fulfillment Logistics OR Verified Technical Schema):
+  if (hasTransactionCapability && (hasFulfillment || hasTechnicalMarkers)) {
+    // If it also has quote exclusion (rare hybrid), direct checkout + fulfillment still wins only if real checkout exists
+    if (hasB2BExclusion && (!hasCheckoutGateway || !hasFulfillment)) {
+      return { detected: false, reason: "", isB2BCatalog: true };
+    }
+    return {
+      detected: true,
+      reason: `E-Commerce Verified (Cart + Price + Checkout Gateway + ${hasFulfillment ? 'Shipping/Fulfillment Logistics' : 'Technical Offer Schema'})`
+    };
   }
 
-  // 5. Explicit visible phrases in text or HTML
-  // User specifically noted: "purchase / Shopchart in website found"
-  const textPhrasesRegex = /(?:\b(?:shopping\s*cart|shop\s*cart|shop\s*chart|shopchart|shopping\s*chart|view\s*cart|my\s*cart|your\s*cart|items?\s+in\s+(?:your\s+)?cart|add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+online|buy\s+now|purchase\s+online|purchase\s+now|proceed\s+to\s+checkout|online\s+purchase|make\s+a\s+purchase|direct\s+purchase|free\s+shipping\s+on\s+orders\s+over|calculated\s+at\s+checkout)\b|\b(?:cart|bag|basket)\s*[\(\[]\s*\d+\s*[\)\]]|\bcart\s*:\s*\d+)/i;
-
-  const cleanBody = rawText || rawHtml.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ").replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
-  const textMatch = cleanBody.match(textPhrasesRegex);
-  if (textMatch) {
-    return { detected: true, reason: `Purchase / Shopcart phrase in page: "${textMatch[0]}"` };
-  }
-
-  // 6. Price alongside Add to Cart / Buy Now
-  const priceWithBuyRegex = /(?:[\$£€¥₹]|AU\$|CA\$|USD|EUR|GBP)\s*\d+[\d.,]*[\s\S]{0,100}?\b(?:add\s+to\s+cart|buy\s+now|add\s+to\s+basket|add\s+to\s+bag)\b/i;
-  const priceMatch = rawHtml.match(priceWithBuyRegex);
-  if (priceMatch) {
-    return { detected: true, reason: `Price with purchase button: "${priceMatch[0].slice(0, 60)}"` };
+  // Direct retail purchase with cart, defined price, and checkout route
+  if (hasCartAction && hasCheckoutGateway && hasDefinedPrice) {
+    return {
+      detected: true,
+      reason: "E-Commerce Verified (Direct Transaction Capability: Cart + Price + Checkout Gateway)"
+    };
   }
 
   return { detected: false, reason: "" };
@@ -2010,6 +2059,27 @@ BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
     If the website's business type is "Service Provider", "Online Shopping", "Restricted Site", "Other", or ANY business outside the Manufacturer to Wholesaler range:
     - YOU MUST SET "websiteStatus": "Not Working"!
     - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": "businessType": "", "companyProfile": "", "companyName": "", "countryName": "", "companyAddress": "", "state": "", "city": "", "emailId": "", "secondaryEmailId": "", "phoneNumber": "", "numberOfProducts": "", "productImages": "", "numberOfProductDescriptions": ""!
+- CRITICAL 3-TIER VERIFICATION RULE FOR "Online Shopping" (E-Commerce vs B2B Manufacturer / Wholesaler Catalog):
+  A website qualifies as "Online Shopping" (E-Commerce) IF AND ONLY IF it meets the Mandatory Core Rule AND at least one Secondary Signal:
+  1. Rule 1: The Transaction Test (Mandatory Core Rule):
+     - The website must allow the user to complete a monetary exchange for a good entirely on-site without manual back-and-forth communication.
+     - Must have: A functional cart/basket, a defined unit price (e.g. $29.99, €45.00), AND an online checkout gateway (credit/debit card, UPI, net banking, PayPal, Stripe, /checkout).
+     - MANDATORY B2B EXCLUSION: If the button/link says "Request a Quote", "Contact Us for Pricing", "Contact Sales", "Enquire Now", "Inquiry Basket", or "Find a Dealer", it FAILS this rule and is a B2B Catalog / Showcase site, NOT e-commerce!
+       -> You MUST classify such B2B catalog sites as "Manufacturer" or "Wholesaler" with "websiteStatus": "Working" and extract all 14 fields!
+  2. Rule 2: The Fulfillment & Policy Test (Secondary Operational Signal):
+     - Shipping & Returns Policy: Explicit delivery timelines, courier options, shipping charges, and a return/cancellation policy.
+     - Order Tracking: Mechanism for order confirmation emails, invoices, and dispatch/tracking updates.
+     - Exclusion: If the transaction is a recurring contract or consultation booked via a calendar ("Book an Appointment"), it is a Service / Booking site ("Service Provider"), NOT retail e-commerce.
+  3. Rule 3: Technical & Data Markers (Verification):
+     - Structured Schema Markup: Presence of Product and Offer schema defining price, priceCurrency, and availability.
+     - E-Commerce Endpoints: Standard checkout routes (/cart, /checkout, /basket) or e-commerce platform footprints (Shopify, WooCommerce, Magento).
+
+  QUICK CLASSIFICATION CHEAT SHEET:
+  - Cart + Checkout + Price + Direct Shipping -> "Online Shopping" (websiteStatus: "Not Working", all other fields empty "")
+  - Products + Specs + "Contact Sales" / "Enquire" / "Request a Quote" / "Find a Dealer" -> "Manufacturer" or "Wholesaler" (websiteStatus: "Working", extract full company data!)
+  - Prices + "Book an Appointment" / Calendar picker -> "Service Provider" (websiteStatus: "Not Working")
+  - Articles + Affiliate links redirecting to Amazon/other stores -> "Other" (websiteStatus: "Not Working")
+  - Tier pricing ($X/month) + "Sign Up" / "Start Free Trial" -> "Service Provider" (websiteStatus: "Not Working")
 - CRITICAL PROHIBITED / RESTRICTED WEBSITES QC RULE (Note 2):
   Instruction Note 2 Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
   If words or images related to ANY of these categories appear ANYWHERE on the site:
@@ -3509,8 +3579,14 @@ function isSouthAfricanLocation(address, country) {
 function isNewZealandLocation(address, country) {
   const c = (country || "").toLowerCase();
   if (/\b(?:new\s*zealand|nz)\b/i.test(c)) return true;
+  if (c && !/\b(?:new\s*zealand|nz)\b/i.test(c) && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|indonesia)\b/i.test(c)) {
+    return false;
+  }
   const a = (address || "").toLowerCase();
   if (/\b(?:new\s*zealand|\bnz\b)\b/i.test(a)) return true;
+  if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(a, "wellington") && !/\b(?:new\s*zealand|nz)\b/i.test(a)) {
+    return false;
+  }
   if (/\b(?:auckland|wellington|canterbury|waikato|bay\s*of\s*plenty|otago|manawatu|hawke's\s*bay|hawkes\s*bay|taranaki|southland|northland|marlborough|tasman|gisborne|nelson|christchurch|hamilton|tauranga|dunedin|palmerston\s*north|napier|whangarei|invercargill|rotorua|whanganui|hastings|blenheim|timaru|taupo|queenstown|cambridge)\b/i.test(a)) return true;
   return false;
 }
