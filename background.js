@@ -3394,6 +3394,16 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       const allAddressEvidence = (rawSource || "") + " " + (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ") + " " + (crawlData.bodyText || "");
       addr = stripBlindlyAddedNumber(addr, allAddressEvidence);
 
+      // Deduplicate repeated premise numbers e.g. "No. 1013 Number 1013" -> "Number 1013"
+      addr = addr.replace(/(^|[,\s])(?:no\.?|number|#)\s*(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?|number|#)\s*\2\b/gi, '$1Number $2');
+      addr = addr.replace(/(^|[,\s])(?:no\.?\s*)?(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)Number\s+\2\b/gi, '$1Number $2');
+      addr = addr.replace(/(^|[,\s])Number\s+(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?\s*)?\2\b/gi, '$1Number $2');
+
+      // Repair accidental commas splitting two-syllable East Asian districts/townships
+      addr = addr.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, '$1-$2');
+      addr = addr.replace(/\b([A-Z][a-z]+)-[\s,]+([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, '$1-$2');
+      addr = addr.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\b/g, '$1 $2');
+
       // Clean up spaces, commas, and ensure clean formatting
       addr = addr.replace(/\s+,/g, ",");
       addr = addr.replace(/,\s*,/g, ", ");
@@ -4858,6 +4868,17 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   if (!addr) return "";
   let a = addr;
 
+  // Deduplicate repeated premise numbers early (e.g. "No. 1013 Number 1013" -> "Number 1013")
+  a = a.replace(/(^|[,\s])(?:no\.?|number|#)\s*(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?|number|#)\s*\2\b/gi, '$1Number $2');
+  a = a.replace(/(^|[,\s])(?:no\.?\s*)?(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)Number\s+\2\b/gi, '$1Number $2');
+  a = a.replace(/(^|[,\s])Number\s+(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?\s*)?\2\b/gi, '$1Number $2');
+  a = a.replace(/(^|[,\s])(?:no\.?\s*)?(\d+)\s+\2\b/gi, '$1$2');
+
+  // Repair accidental commas splitting two-syllable East Asian districts/townships
+  a = a.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, '$1-$2');
+  a = a.replace(/\b([A-Z][a-z]+)-[\s,]+([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, '$1-$2');
+  a = a.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\b/g, '$1 $2');
+
   // Replace ampersand with 'and' in address
   a = a.replace(/\s*&\s*/g, " and ");
 
@@ -5332,7 +5353,18 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(/(?<!,\s*)\b(Auckland|Christchurch|Hamilton|Tauranga|Dunedin|Lower Hutt|Upper Hutt|Palmerston North|Napier|Porirua|New Plymouth|Rotorua|Whangarei|Invercargill|Nelson|Whanganui|Hastings|Gisborne|Blenheim|Timaru|Taupo|Queenstown|Cambridge)\b/gi, ", $1");
 
   // 5. Ensure comma before East Asian administrative regions (Township, District, County, Hsien)
-  a = a.replace(/(?<!,\s*)\b([A-Z][a-z0-9\u00C0-\u024F]+\s+(?:Township|District|County|Hsien))\b/g, ", $1");
+  // Handles multi-word / hyphenated districts (e.g. Yung-Kang District, Yung Kang District, San-Min District)
+  // MUST NOT insert comma inside multi-word or hyphenated districts like "Yung, Kang District"
+  a = a.replace(/(?<![A-Za-z0-9\-,/]\s*)\b((?:[A-Z][a-z0-9\u00C0-\u024F]+(?:[- ][A-Z][a-z0-9\u00C0-\u024F]+)?)\s+(?:Township|District|County|Hsien))\b/g, ", $1");
+
+  // Repair accidental commas splitting two-syllable East Asian districts/townships:
+  // e.g. "Yung, Kang District" -> "Yung-Kang District", "Yung-, Kang District" -> "Yung-Kang District"
+  a = a.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, "$1-$2");
+  a = a.replace(/\b([A-Z][a-z]+)-[\s,]+([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, "$1-$2");
+
+  // Repair accidental commas splitting two-syllable street names:
+  // e.g. "Chung, Hua Road" -> "Chung Hua Road", "Chung-, Hua Road" -> "Chung-Hua Road"
+  a = a.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\b/g, "$1 $2");
 
   // 6. Comprehensive global states, provinces, regions, and counties
   const states = [
@@ -5505,7 +5537,7 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
   let c = cleanAddr.trim();
 
   // If cleanAddr already starts with a number, premise indicator, or PO Box, no need to restore
-  if (/^(?:\d+|no\.?|nos\.?|nº|#|unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk|kav|kavling|p\.?o\.?\s*box)\b/i.test(c)) {
+  if (/^(?:\d+|no\.?|nos\.?|nº|#|number\b|unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk|kav|kavling|p\.?o\.?\s*box)\b/i.test(c)) {
     return cleanAddr;
   }
 
@@ -5555,10 +5587,16 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
       let leadingNum = m[1].trim();
       leadingNum = leadingNum.replace(/[,;]+$/, "").trim();
       if (leadingNum) {
+        const numDigits = (leadingNum.match(/\d+/) || [])[0];
+        if (numDigits && new RegExp('\\b' + numDigits + '\\b').test(c.slice(0, 40))) {
+          return cleanAddr;
+        }
+        const afterNum = rawAddr.slice(rawAddr.indexOf(leadingNum) + leadingNum.length);
+        const hadComma = /^\s*,/.test(afterNum);
         if (new RegExp('^(?:' + premiseWords + ')\\b', 'i').test(leadingNum) && !leadingNum.includes(",")) {
           return `${leadingNum}, ${c}`;
         }
-        return `${leadingNum} ${c}`;
+        return hadComma ? `${leadingNum}, ${c}` : `${leadingNum} ${c}`;
       }
     }
   }
@@ -5571,11 +5609,17 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
   const mStart = rawAddr.trim().match(startRegex);
   if (mStart && mStart[1]) {
     const lead = mStart[1].trim().replace(/[,;]+$/, "");
+    const leadDigits = (lead.match(/\d+/) || [])[0];
+    if (leadDigits && new RegExp('\\b' + leadDigits + '\\b').test(c.slice(0, 40))) {
+      return cleanAddr;
+    }
     if (!new RegExp('\\b' + lead.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\b', 'i').test(c)) {
+      const afterLead = rawAddr.slice(rawAddr.indexOf(lead) + lead.length);
+      const hadComma = /^\s*,/.test(afterLead);
       if (new RegExp('^(?:' + premiseWords + ')\\b', 'i').test(lead) && !lead.includes(",")) {
         return `${lead}, ${c}`;
       }
-      return `${lead} ${c}`;
+      return hadComma ? `${lead}, ${c}` : `${lead} ${c}`;
     }
   }
 
