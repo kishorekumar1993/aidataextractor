@@ -2447,8 +2447,14 @@ ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
 4. Address Formatting (Rule 6) - COMPLETE PHYSICAL ADDRESS PRESERVATION:
    - TAKE THE COMPLETE PHYSICAL ADDRESS: Retain street address, locality/suburb, town/city, AND State / Province / Territory!
    - STRICTLY DO NOT DROP OR STRIP STATE / PROVINCE / REGION! (e.g. For "40 Sarah St, Campbellfield VIC 3061.", you MUST KEEP the state "Victoria": "40 Sarah Street, Campbellfield, Victoria").
-   - STRICT INITIAL STREET NUMBER PRESERVATION: NEVER drop or strip the leading building / street / premise number (e.g. "12110 Best Place" -> MUST KEEP "12110", "40 Sarah Street" -> MUST KEEP "40", "18 Kuang Fu North Road" -> MUST KEEP "18"). A standalone number at the beginning of an address followed by a street name is the STREET NUMBER, NOT a postal code! You MUST retain the initial building/street number!
-   - COMMA SEPARATION QC RULE: Ensure a comma separates the major address components (Street, Suburb/Town/City, State/Province). For example: "40 Sarah Street, Campbellfield, Victoria" (MUST have a comma before the state "Victoria").
+   - STRICT INITIAL STREET NUMBER & PREMISE PRESERVATION:
+     * NEVER drop or strip the leading building / street / premise number or identifier (e.g. "12110 Best Place" -> MUST KEEP "12110", "40 Sarah Street" -> MUST KEEP "40", "18 Kuang Fu North Road" -> MUST KEEP "18"). A standalone number at the beginning of an address followed by a street name is the STREET NUMBER, NOT a postal code! You MUST retain the initial building/street number!
+     * NEVER drop or strip "Lot" or "Plot" identifiers (e.g. "Lot 45, Jalan Kemajuan" -> MUST KEEP "Lot 45", "Plot 12, Phase II" -> MUST KEEP "Plot 12"). "Lot" and "Plot" are primary premise addresses in industrial zones and estates globally!
+     * NEVER drop or strip Unit, Suite, Building, Floor, or Block details (e.g. "Unit 4", "Suite 200", "Building 5", "Level 3", "Block B").
+   - COMMA SEPARATION QC RULE: Ensure a comma separates EVERY major address component:
+     * Premise / Unit / Suite / Lot / Plot from Street Name (e.g. "Lot 45, Jalan Kemajuan", "Unit 4, 12 Main Street", "Suite 200, 12110 Best Place", "Building 5, 200 Broadway").
+     * Street Name from Suburb / Town / City / Industrial Park (e.g. "12110 Best Place, Cincinnati", "40 Sarah Street, Campbellfield", "46 Market Hill, Maldon", "Subang Industrial Park, Subang Jaya").
+     * Suburb / Town / City from State / Province / Territory (e.g. "Cincinnati, Ohio", "Campbellfield, Victoria", "Subang Jaya, Selangor", "Xiushui Township, Changhua County").
    - ADDRESS ENDING CRITICAL QC RULE: Address ending MUST NOT have a comma (,) or point/period (.). It should be empty of trailing punctuation (e.g. "40 Sarah Street, Campbellfield, Victoria", NEVER end with "." or ",").
    - REMOVE ONLY:
      * Postal codes / ZIP codes that follow the city/state (e.g. "OH 45241" -> strip 45241, "VIC 3061" -> strip 3061). DO NOT strip the initial street number!
@@ -5117,53 +5123,88 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
 }
 
 /**
- * Ensures a comma separates the city/suburb/town from the state/province
- * (e.g. "40 Sarah Street, Campbellfield Victoria" -> "40 Sarah Street, Campbellfield, Victoria")
+ * Ensures clean comma separation across all major address components:
+ * 1. Premise indicators (Lot, Plot, Unit, Suite, Bldg, Level, Floor)
+ * 2. Street types before suburb / city
+ * 3. Industrial / Business parks before city
+ * 4. City / Suburb before State / Province / Territory / County globally
  */
 function ensureCommaBeforeState(addr) {
   if (!addr) return "";
+  let a = addr;
+
+  // 1. Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block)
+  const premiseRegex = /(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory)\s+([A-Za-z0-9\-\/]+)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi;
+  a = a.replace(premiseRegex, (match, p1, type, val) => {
+    return `${p1}${type} ${val}, `;
+  });
+
+  // 2. Ensure comma after street types when followed by locality/city/town/state
+  const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)";
+  const nonStreetLookahead = "(?!\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext|Road|Street|Avenue|Lane|Drive|Place|Close|Court|Terrace|Cres|Dr|Rd|St|Ave|Ln|Blvd|Hwy|Ct|Pl)\\b)";
+  const nextWordPattern = "\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)";
+  const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}${nextWordPattern}`, "g");
+  a = a.replace(streetSepRegex, "$1, $2");
+
+  // 3. Ensure comma after Industrial / Business parks & zones
+  const indParkRegex = /\b((?:industrial|technology|business|science|tech)\s+(?:park|estate|area|zone|district)|kawasan\s+perindustrian(?:\s+[A-Za-z0-9]+)?|taman\s+perindustrian(?:\s+[A-Za-z0-9]+)?|poligono\s+industrial(?:\s+[A-Za-z0-9]+)?|zona\s+industriale(?:\s+[A-Za-z0-9]+)?|gewerbegebiet(?:\s+[A-Za-z0-9]+)?)\s+(?=[A-Z][a-z])/gi;
+  a = a.replace(indParkRegex, "$1, ");
+
+  // 4. Malaysian / Singapore recognized city hubs
+  a = a.replace(/(?<!,\s*)\b(Subang Jaya|Petaling Jaya|Shah Alam|Klang|Kuala Lumpur|Puchong|Cheras|George Town|Johor Bahru|Ipoh)\b/gi, ", $1");
+
+  // 5. Ensure comma before East Asian administrative regions (Township, District, County, Hsien)
+  a = a.replace(/(?<!,\s*)\b([A-Z][a-z0-9\u00C0-\u024F]+\s+(?:Township|District|County|Hsien))\b/g, ", $1");
+
+  // 6. Comprehensive global states, provinces, regions, and counties
   const states = [
-    "Victoria", "New South Wales", "Queensland", "Western Australia", "South Australia", "Tasmania",
-    "Australian Capital Territory", "Northern Territory",
-    "Ontario", "Quebec", "British Columbia", "Alberta", "Manitoba", "Saskatchewan", "Nova Scotia", "New Brunswick",
-    "California", "Texas", "Florida", "New York", "Pennsylvania", "Illinois", "Ohio", "Georgia", "North Carolina",
-    "Michigan", "New Jersey", "Virginia", "Washington", "Arizona", "Massachusetts", "Tennessee", "Indiana",
-    "Missouri", "Maryland", "Wisconsin", "Colorado", "Minnesota", "South Carolina", "Alabama", "Louisiana",
-    "Kentucky", "Oregon", "Oklahoma", "Connecticut", "Utah", "Iowa", "Nevada", "Arkansas", "Mississippi",
-    "Kansas", "New Mexico", "Nebraska", "West Virginia", "Idaho", "Hawaii", "New Hampshire", "Maine", "Montana",
-    "Rhode Island", "Delaware", "South Dakota", "North Dakota", "Alaska", "Vermont", "Wyoming",
-    "Gauteng", "Western Cape", "Eastern Cape", "KwaZulu-Natal", "Mpumalanga", "Free State", "Limpopo",
-    "Lombardia", "Lazio", "Veneto", "Piemonte", "Emilia-Romagna", "Toscana", "Campania", "Sicilia", "Puglia", "Liguria",
-    "Marche", "Abruzzo", "Friuli Venezia Giulia", "Trentino-Alto Adige", "Umbria", "Sardegna", "Calabria", "Basilicata", "Molise", "Valle d'Aosta",
+    // US States
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida", "Georgia",
+    "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland",
+    "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
+    "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania",
+    "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington",
+    "West Virginia", "Wisconsin", "Wyoming", "District of Columbia",
+    // Australia
+    "Victoria", "New South Wales", "Queensland", "Western Australia", "South Australia", "Tasmania", "Northern Territory", "Australian Capital Territory",
+    // Canada
+    "Ontario", "Quebec", "British Columbia", "Alberta", "Manitoba", "Saskatchewan", "Nova Scotia", "New Brunswick", "Newfoundland", "Prince Edward Island",
+    // New Zealand Regions
+    "Canterbury", "Waikato", "Bay of Plenty", "Otago", "Hawke's Bay", "Hawkes Bay", "Taranaki", "Southland", "Northland", "Marlborough", "Tasman", "West Coast", "Manawatu",
+    // UK Counties
+    "Essex", "Kent", "Surrey", "Lancashire", "Yorkshire", "Cheshire", "Hampshire", "Berkshire", "Hertfordshire", "Middlesex", "Gloucestershire", "Warwickshire", "Devon", "Dorset", "Somerset", "Oxfordshire", "Cambridgeshire", "Buckinghamshire", "Staffordshire", "Derbyshire", "Nottinghamshire", "Lincolnshire", "Northamptonshire", "Norfolk", "Suffolk", "Wiltshire", "Worcestershire", "Cornwall", "Cumbria", "Northumberland",
+    // India States
+    "Maharashtra", "Karnataka", "Tamil Nadu", "Gujarat", "Uttar Pradesh", "Telangana", "Andhra Pradesh", "Punjab", "Haryana", "Rajasthan", "Madhya Pradesh", "West Bengal", "Bihar", "Kerala", "Odisha", "Jharkhand", "Assam", "Delhi",
+    // Malaysia States
+    "Selangor", "Johor", "Penang", "Perak", "Kedah", "Pahang", "Negeri Sembilan", "Melaka", "Terengganu", "Kelantan", "Sarawak", "Sabah", "Perlis", "Kuala Lumpur", "Putrajaya",
+    // South Africa
+    "Gauteng", "Western Cape", "Eastern Cape", "KwaZulu-Natal", "Mpumalanga", "Free State", "Limpopo", "North West", "Northern Cape",
+    // Turkey Provinces
+    "Istanbul", "Ankara", "Izmir", "Bursa", "Antalya", "Adana", "Konya", "Gaziantep", "Kocaeli", "Mersin", "Diyarbakir", "Kayseri", "Eskisehir", "Samsun", "Denizli", "Sakarya", "Mugla", "Trabzon",
+    // Italy Regions
+    "Lombardia", "Lazio", "Veneto", "Piemonte", "Emilia-Romagna", "Toscana", "Campania", "Sicilia", "Puglia", "Liguria", "Marche", "Abruzzo", "Friuli Venezia Giulia", "Trentino-Alto Adige", "Umbria", "Sardegna", "Calabria", "Basilicata", "Molise", "Valle d'Aosta",
+    // Germany States
     "Baden-Württemberg", "Bayern", "Brandenburg", "Hessen", "Mecklenburg-Vorpommern", "Niedersachsen", "Nordrhein-Westfalen", "Rheinland-Pfalz", "Saarland", "Sachsen", "Sachsen-Anhalt", "Schleswig-Holstein", "Thüringen",
-    "Selangor", "Johor", "Penang", "Perak", "Kedah", "Pahang", "Negeri Sembilan", "Melaka", "Terengganu", "Kelantan", "Sarawak", "Sabah", "Perlis", "Kuala Lumpur",
+    // Ireland Counties
     "Dublin", "Cork", "Galway", "Kildare", "Meath", "Limerick", "Kerry", "Wicklow", "Clare", "Tipperary", "Wexford", "Donegal",
     // Spain (Provinces & Autonomous Communities)
-    "Álava", "Alava", "Albacete", "Alicante", "Alacant", "Almería", "Almeria", "Asturias", "Ávila", "Avila", "Badajoz",
-    "Islas Baleares", "Baleares", "Barcelona", "Burgos", "Cáceres", "Caceres", "Cádiz", "Cadiz", "Cantabria",
-    "Castellón", "Castellon", "Ciudad Real", "Córdoba", "Cordoba", "Cuenca", "Girona", "Gerona", "Granada",
-    "Guadalajara", "Guipúzcoa", "Guipuzcoa", "Gipuzkoa", "Huelva", "Huesca", "Jaén", "Jaen", "A Coruña", "La Coruña",
-    "La Coruna", "La Rioja", "Las Palmas", "León", "Leon", "Lleida", "Lérida", "Lerida", "Lugo", "Madrid",
-    "Málaga", "Malaga", "Murcia", "Navarra", "Ourense", "Orense", "Palencia", "Pontevedra", "Salamanca",
-    "Santa Cruz de Tenerife", "Segovia", "Sevilla", "Soria", "Tarragona", "Teruel", "Toledo", "Valencia",
-    "Valladolid", "Vizcaya", "Bizkaia", "Zamora", "Zaragoza", "Andalucía", "Andalucia", "Aragón", "Aragon",
-    "Canarias", "Castilla-La Mancha", "Castilla y León", "Castilla y Leon", "Cataluña", "Cataluna", "Extremadura",
-    "Galicia", "País Vasco", "Pais Vasco", "Comunidad de Madrid", "Comunitat Valenciana"
+    "Álava", "Alava", "Albacete", "Alicante", "Alacant", "Almería", "Almeria", "Asturias", "Ávila", "Avila", "Badajoz", "Islas Baleares", "Baleares", "Barcelona", "Burgos", "Cáceres", "Caceres", "Cádiz", "Cadiz", "Cantabria", "Castellón", "Castellon", "Ciudad Real", "Córdoba", "Cordoba", "Cuenca", "Girona", "Gerona", "Granada", "Guadalajara", "Guipúzcoa", "Guipuzcoa", "Gipuzkoa", "Huelva", "Huesca", "Jaén", "Jaen", "A Coruña", "La Coruña", "La Coruna", "La Rioja", "Las Palmas", "León", "Leon", "Lleida", "Lérida", "Lerida", "Lugo", "Madrid", "Málaga", "Malaga", "Murcia", "Navarra", "Ourense", "Orense", "Palencia", "Pontevedra", "Salamanca", "Santa Cruz de Tenerife", "Segovia", "Sevilla", "Soria", "Tarragona", "Teruel", "Toledo", "Valencia", "Valladolid", "Vizcaya", "Bizkaia", "Zamora", "Zaragoza", "Andalucía", "Andalucia", "Aragón", "Aragon", "Canarias", "Castilla-La Mancha", "Castilla y León", "Castilla y Leon", "Cataluña", "Cataluna", "Extremadura", "Galicia", "País Vasco", "Pais Vasco", "Comunidad de Madrid", "Comunitat Valenciana"
   ];
 
-  let res = addr;
   for (const st of states) {
     const regex = new RegExp(`([a-zA-Z0-9\\)])\\s+\\b(${st})\\b(?!\\s+(?:Street|Road|Avenue|Drive|Lane|Boulevard|Way|Place|Court|Highway|Close|Crescent|Square|Terrace|Park|Estate|Industrial|Unit|Suite|Building|Floor|Bldg|St|Rd|Ave|Dr|Ln|Blvd|Hwy|Ct|Pl)\\b)`, "gi");
-    res = res.replace(regex, "$1, $2");
+    a = a.replace(regex, "$1, $2");
   }
 
-  // Ensure comma separates street suffix from suburb/city when followed by state
-  const streetSuffixes = "(?:Street|Road|Avenue|Drive|Lane|Boulevard|Highway|Close|Court|Place|Crescent|Parade|Circuit|Terrace|Esplanade|Way|Track)";
-  const stNames = "(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Ontario|Quebec|British Columbia|Alberta|California|Texas|Florida|New York|Pennsylvania|Illinois|Gauteng|Selangor)";
-  const streetSubReg = new RegExp(`(\\b${streetSuffixes})\\s+([A-Za-z\\s]+),\\s*(${stNames})`, "gi");
-  res = res.replace(streetSubReg, "$1, $2, $3");
+  // 7. Clean up spaces and duplicate commas
+  a = a.replace(/\s+,/g, ",");
+  a = a.replace(/,\s*,+/g, ", ");
+  a = a.replace(/,\s*/g, ", ");
+  a = a.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+  a = a.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
+  a = a.replace(/\s+/g, " ");
 
-  return res;
+  return a;
 }
 
 /**
@@ -5320,9 +5361,10 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
   }
   escapedSeg = escapedSeg.replace(/\s+/g, "\\s+");
 
-  // Regex in rawAddr looking for a street/building number immediately preceding this segment
+  // Regex in rawAddr looking for premise / building / street number immediately preceding this segment
+  // Supports: "Lot 45", "Plot 12", "Unit 4, 12", "Suite 200, 12110", "12110", "No. 18", "Building 5", etc.
   const prefixRegex = new RegExp(
-    '(?:^|[\\s,#;:])((?:(?:unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory)\\s*\\d+[A-Za-z]?[\\s,]+)?(?:(?:no\\.?|nos\\.?|nº|#)\\s*)?\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?)\\s+' + escapedSeg,
+    '(?:^|[\\s,#;:])((?:(?:unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk)\\s*(?:no\\.?|nos\\.?|number|#)?\\s*\\w+(?:[\\s,]+(?:no\\.?|nos\\.?|number|#)?\\s*\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?)?|(?:(?:no\\.?|nos\\.?|nº|#)\\s*)?\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?))[\\s,]+' + escapedSeg,
     'i'
   );
 
@@ -5332,6 +5374,9 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
     // Clean trailing comma if any
     leadingNum = leadingNum.replace(/[,;]+$/, "").trim();
     if (leadingNum) {
+      if (/^(?:lot|plot|unit|suite|ste|bldg|building|floor|fl|level|block|blk)\b/i.test(leadingNum) && !leadingNum.includes(",")) {
+        return `${leadingNum}, ${c}`;
+      }
       return `${leadingNum} ${c}`;
     }
   }

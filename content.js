@@ -656,7 +656,14 @@
 
     // 6. Company Address (Ensure comma before state, address ending must not have comma or point, and all words start with Capital)
     if (elements.companyAddress && data.companyAddress) {
-      let cleanAddress = String(data.companyAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+      let cleanAddress = String(data.companyAddress).trim();
+      // Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block)
+      cleanAddress = cleanAddress.replace(/(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory)\s+([A-Za-z0-9\-\/]+)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi, "$1$2 $3, ");
+      // Ensure comma after street types when followed by word
+      const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)";
+      const nonStreetLookahead = "(?!\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext|Road|Street|Avenue|Lane|Drive|Place|Close|Court|Terrace|Cres|Dr|Rd|St|Ave|Ln|Blvd|Hwy|Ct|Pl)\\b)";
+      const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)`, "g");
+      cleanAddress = cleanAddress.replace(streetSepRegex, "$1, $2");
       cleanAddress = cleanAddress.replace(/\s+,/g, ",").replace(/,\s*,/g, ", ").replace(/,\s*/g, ", ");
       cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
       if (setInputValue(elements.companyAddress, cleanAddress)) {
