@@ -523,7 +523,29 @@
     const elements = detectFormElements();
     let filledCount = 0;
 
-    const isProhibitedOrRestricted = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site");
+    const allowedWorkingTypes = new Set([
+      "manufacturer",
+      "manufacturing",
+      "manufacture",
+      "industrial services",
+      "industrial service",
+      "exporter",
+      "export",
+      "trader",
+      "trading",
+      "distributer",
+      "distributor",
+      "distribution",
+      "supplier",
+      "supplies",
+      "wholesaler",
+      "wholesale"
+    ]);
+
+    const btVal = String(data.businessType || "").trim().toLowerCase();
+    const isDisallowedType = !!(btVal && !allowedWorkingTypes.has(btVal));
+
+    const isProhibitedOrRestricted = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowedType || data.isDisallowedBusinessType);
 
     // CRITICAL QC RULE Note 2 & "Notworking means all empty":
     // When Website Status is "Not Working" (or prohibited category detected), select "Not Working" and clear/leave empty ALL other fields!
@@ -846,7 +868,9 @@
       if (data.websiteStatus === "Not Working") {
         const msg = data.isShopCartSite
           ? `⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Status set to Not Working (auto-submitting...).`
-          : `⚠️ Website Status set to Not Working (all other fields cleared; auto-submitting...).`;
+          : (data.isDisallowedBusinessType
+              ? `⚠️ ${data.disallowedReason || "Business Type outside allowed scope (Manufacturer to Wholesaler only)"}. Status set to Not Working (auto-submitting...).`
+              : `⚠️ Website Status set to Not Working (all other fields cleared; auto-submitting...).`);
         updateStatus(msg, "warning");
       } else if (data.websiteStatus === "Redirect Site") {
         updateStatus(`🔄 Redirect Site detected! Website Status set to Redirect Site. Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
@@ -1070,11 +1094,12 @@
     previewSection.style.display = "block";
     previewList.innerHTML = "";
 
-    const isRestr = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site");
+    const isDisallowed = !!data.isDisallowedBusinessType;
+    const isRestr = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowed);
     const statusVal = isRestr 
-      ? `Not Working (Prohibited: ${data.restrictedReason || "Prohibited Category"})`
+      ? `Not Working (${data.disallowedReason || data.restrictedReason || "Prohibited Category"})`
       : (data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus);
-    const businessTypeVal = isRestr ? "-" : (data.businessType || "-");
+    const businessTypeVal = (isRestr || data.websiteStatus === "Not Working") ? "-" : (data.businessType || "-");
 
     const items = [
       { key: "Status", val: statusVal, isAlert: isRestr || data.websiteStatus === "Not Working" },

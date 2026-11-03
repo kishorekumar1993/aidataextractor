@@ -1942,8 +1942,25 @@ WEBSITE STATUS QC RULES (Rule 1):
 - If the domain is expired / parked, mark "Domain Expired".
 - If the website failed to load or has no content, mark "Not Working".
 
-BUSINESS TYPE & RESTRICTED SITE QC RULES (Rule 2):
-- Select one from: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Other".
+BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
+- CRITICAL WORK SCOPE INSTRUCTION ("Manufacture to Wholesale only we work, remaining status we do notworking"):
+  * ALLOWED BUSINESS TYPES WE WORK ON:
+    1. "Manufacturer"
+    2. "Industrial Services"
+    3. "Exporter"
+    4. "Trader"
+    5. "Distributer" (note: spelled "Distributer")
+    6. "Supplier"
+    7. "Wholesaler"
+  * DISALLOWED / NON-WORKING BUSINESS TYPES:
+    8. "Service Provider"
+    9. "Online Shopping"
+    10. "Restricted Site"
+    11. "Other"
+  * STRICT QC RULE:
+    If the website's business type is "Service Provider", "Online Shopping", "Restricted Site", "Other", or ANY business outside the Manufacturer to Wholesaler range:
+    - YOU MUST SET "websiteStatus": "Not Working"!
+    - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": "businessType": "", "companyProfile": "", "companyName": "", "countryName": "", "companyAddress": "", "state": "", "city": "", "emailId": "", "secondaryEmailId": "", "phoneNumber": "", "numberOfProducts": "", "productImages": "", "numberOfProductDescriptions": ""!
 - CRITICAL PROHIBITED / RESTRICTED WEBSITES QC RULE (Note 2):
   Instruction Note 2 Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
   If words or images related to ANY of these categories appear ANYWHERE on the site:
@@ -2684,7 +2701,56 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     return result;
   }
 
-  // 3. Company Profile: if a real business About / Profile page exists, mark Available
+  // 4. Business Type Scope Check: "Manufacture to Wholesale only we work remaining status we do notworking fix it"
+  // Allowed working business types: Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler.
+  // Remaining disallowed types: Service Provider, Online Shopping, Restricted Site, Other, or anything outside allowed range.
+  const btAliases = {
+    "manufacturer": "Manufacturer",
+    "manufacturing": "Manufacturer",
+    "manufacture": "Manufacturer",
+    "industrial services": "Industrial Services",
+    "industrial service": "Industrial Services",
+    "exporter": "Exporter",
+    "export": "Exporter",
+    "exporting": "Exporter",
+    "trader": "Trader",
+    "trading": "Trader",
+    "trade": "Trader",
+    "distributer": "Distributer",
+    "distributor": "Distributer",
+    "distribution": "Distributer",
+    "supplier": "Supplier",
+    "supplying": "Supplier",
+    "supplies": "Supplier",
+    "wholesaler": "Wholesaler",
+    "wholesale": "Wholesaler"
+  };
+
+  const rawBt = String(result.businessType || "").trim().toLowerCase();
+  if (btAliases[rawBt]) {
+    result.businessType = btAliases[rawBt];
+  } else {
+    // Business Type is Service Provider, Online Shopping, Restricted Site, Other, or unknown -> Mark Not Working!
+    result.websiteStatus = "Not Working";
+    result.isDisallowedBusinessType = true;
+    result.disallowedReason = `Business Type "${result.businessType || 'Disallowed'}" outside allowed scope (Manufacturer to Wholesaler only worked on)`;
+    result.businessType = "";
+    result.companyProfile = "";
+    result.companyName = "";
+    result.countryName = "";
+    result.companyAddress = "";
+    result.state = "";
+    result.city = "";
+    result.emailId = "";
+    result.secondaryEmailId = "";
+    result.phoneNumber = "";
+    result.numberOfProducts = "";
+    result.productImages = "";
+    result.numberOfProductDescriptions = "";
+    return result;
+  }
+
+  // 5. Company Profile: if a real business About / Profile page exists, mark Available
   const profileDetected = crawlData.hasCompanyProfile ||
     checkCompanyProfilePresence(crawlData.mainHtml, crawlData.bodyText, crawlData.profilePageText);
   const hasBusinessEvidence = !!(
