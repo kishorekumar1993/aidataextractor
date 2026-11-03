@@ -90,7 +90,7 @@ const RESTRICTED_PATTERNS = [
 const ALL_CAPITALS = [
   "taipei city", "taipei", "pretoria", "cape town", "bloemfontein", "london", "washington", "paris",
   "berlin", "tokyo", "beijing", "new delhi", "canberra", "ottawa", "seoul", "bangkok",
-  "singapore", "kuala lumpur", "jakarta", "manila", "hanoi", "rome", "madrid", "amsterdam",
+  "singapore", "kuala lumpur", "putrajaya", "jakarta", "dki jakarta", "nusantara", "manila", "hanoi", "rome", "madrid", "amsterdam",
   "brussels", "bern", "vienna", "stockholm", "oslo", "copenhagen", "helsinki", "dublin",
   "warsaw", "prague", "budapest", "athens", "lisbon", "ankara", "riyadh", "abu dhabi",
   "doha", "cairo", "nairobi", "buenos aires", "brasilia", "santiago", "bogota", "lima",
@@ -3289,10 +3289,19 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Ensure country is identified from address or domain before expanding abbreviations
       if (!country || country.length < 2) {
         country = detectCountryFromAddress(addr);
-        if (!country && crawlData && (/\.au(?:\/|$)/i.test(crawlData.originalUrl || "") || /\.au(?:\/|$)/i.test(crawlData.finalUrl || ""))) {
-          country = "Australia";
-        } else if (!country && crawlData && (/\.es(?:\/|$)/i.test(crawlData.originalUrl || "") || /\.es(?:\/|$)/i.test(crawlData.finalUrl || ""))) {
-          country = "Spain";
+        if (!country && crawlData) {
+          const urlStr = (crawlData.originalUrl || "") + " " + (crawlData.finalUrl || "");
+          if (/\.au(?:\/|$)/i.test(urlStr)) {
+            country = "Australia";
+          } else if (/\.es(?:\/|$)/i.test(urlStr)) {
+            country = "Spain";
+          } else if (/\.(?:my|com\.my)(?:\/|$)/i.test(urlStr)) {
+            country = "Malaysia";
+          } else if (/\.(?:id|co\.id)(?:\/|$)/i.test(urlStr)) {
+            country = "Indonesia";
+          } else if (/\.(?:nz|co\.nz)(?:\/|$)/i.test(urlStr)) {
+            country = "New Zealand";
+          }
         }
       }
 
@@ -3327,6 +3336,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
           addr = addr.replace(/\b(?:Spain|Espa[nñ]a)\b/gi, " ");
         } else if (/turk/i.test(country)) {
           addr = addr.replace(/\b(?:Turkiye|T[uü]rkiye|Turkey)\b/gi, " ");
+        } else if (/new\s*zealand/i.test(country)) {
+          addr = addr.replace(/\b(?:New\s*Zealand|Aotearoa)\b/gi, " ");
+        } else if (/malaysia/i.test(country)) {
+          addr = addr.replace(/\bMalaysia\b/gi, " ");
+        } else if (/indonesia/i.test(country)) {
+          addr = addr.replace(/\b(?:Indonesia|Republik\s*Indonesia)\b/gi, " ");
         } else {
           const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
           addr = addr.replace(countryRegex, " ");
@@ -3365,12 +3380,26 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // Infer country strictly from physical address evidence if missing
   if (!country || country.length < 2) {
     country = detectCountryFromAddress(addr);
+    if (!country && crawlData) {
+      const urlStr = (crawlData.originalUrl || "") + " " + (crawlData.finalUrl || "");
+      if (/\.au(?:\/|$)/i.test(urlStr)) country = "Australia";
+      else if (/\.es(?:\/|$)/i.test(urlStr)) country = "Spain";
+      else if (/\.(?:my|com\.my)(?:\/|$)/i.test(urlStr)) country = "Malaysia";
+      else if (/\.(?:id|co\.id)(?:\/|$)/i.test(urlStr)) country = "Indonesia";
+      else if (/\.(?:nz|co\.nz)(?:\/|$)/i.test(urlStr)) country = "New Zealand";
+    }
   }
-  if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(country.trim())) {
+  const trimmedCountry = country.trim();
+  if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(trimmedCountry)) {
     country = "United States Of America";
-  }
-  if (/^(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)$/i.test(country.trim())) {
+  } else if (/^(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)$/i.test(trimmedCountry)) {
     country = "Turkiye";
+  } else if (/^(?:new\s*zealand|aotearoa)$/i.test(trimmedCountry)) {
+    country = "New Zealand";
+  } else if (/^malaysia$/i.test(trimmedCountry)) {
+    country = "Malaysia";
+  } else if (/^(?:indonesia|republic\s*of\s*indonesia)$/i.test(trimmedCountry)) {
+    country = "Indonesia";
   }
   result.countryName = toTitleCase(country.trim());
 
@@ -3956,6 +3985,62 @@ const NEW_ZEALAND_CITIES_AND_TOWNS = [
   "milton", "ranfurly", "roxburgh", "riverton", "te anau", "bluff"
 ];
 
+function isMalaysianLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:malaysia|my)\b/i.test(c)) return true;
+  if (c && !/\b(?:malaysia|my)\b/i.test(c) && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|spain)\b/i.test(c)) {
+    return false;
+  }
+  const a = (address || "").toLowerCase();
+  if (/\b(?:malaysia)\b/i.test(a)) return true;
+  if (/\b(?:selangor|kuala\s*lumpur|johor|penang|pulau\s*pinang|perak|kedah|pahang|negeri\s*sembilan|melaka|terengganu|kelantan|sabah|sarawak|perlis|putrajaya|labuan|wilayah\s*persekutuan)\b/i.test(a)) return true;
+  if (/\b(?:subang\s*jaya|petaling\s*jaya|shah\s*alam|johor\s*bahru|george\s*town|kota\s*kinabalu|kuching|seremban|batu\s*pahat|pasir\s*gudang|iskandar\s*puteri|sungai\s*petani|bintulu|sandakan)\b/i.test(a)) return true;
+  return false;
+}
+
+const MALAYSIAN_CITIES_AND_TOWNS = [
+  "kuala lumpur", "putrajaya", "subang jaya", "petaling jaya", "shah alam", "klang", "johor bahru",
+  "george town", "ipoh", "kuching", "kota kinabalu", "seremban", "malacca", "melaka", "kuantan",
+  "alor setar", "batu pahat", "muar", "kluang", "kulai", "pasir gudang", "skudai", "iskandar puteri",
+  "taiping", "sungai petani", "bintulu", "miri", "sibu", "sandakan", "tawau", "puchong", "cheras",
+  "rawang", "kajang", "banting", "sepang", "cyberjaya", "kangar", "labuan", "seberang perai",
+  "butterworth", "bukit mertajam", "kulim", "port dickson", "teluk intan", "manjung", "seri kembangan",
+  "ampang", "selayang", "temerloh", "lahad datu", "semenyih", "nilai", "cukai", "kemaman", "dungun",
+  "kota bharu", "kuala terengganu", "pontian", "segamat", "tangkak", "mersing", "kota tinggi"
+];
+
+function isIndonesianLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:indonesia|id)\b/i.test(c)) return true;
+  if (c && !/\b(?:indonesia|id)\b/i.test(c) && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|spain|malaysia)\b/i.test(c)) {
+    return false;
+  }
+  const a = (address || "").toLowerCase();
+  if (/\b(?:indonesia|republik\s*indonesia)\b/i.test(a)) return true;
+  if (/\b(?:jakarta|dki\s*jakarta|jawa\s*barat|jawa\s*tengah|jawa\s*timur|banten|di\s*yogyakarta|yogyakarta|bali|sumatera|kalimantan|sulawesi|papua|maluku|riau|lampung|aceh|nusantara)\b/i.test(a)) return true;
+  if (/\b(?:surabaya|bandung|medan|semarang|makassar|palembang|tangerang|depok|bekasi|batam|bogor|pekanbaru|bandar\s*lampung|malang|padang|denpasar|samarinda|banjarmasin|balikpapan)\b/i.test(a)) return true;
+  return false;
+}
+
+const INDONESIAN_CITIES_AND_TOWNS = [
+  "jakarta", "dki jakarta", "nusantara", "surabaya", "bandung", "medan", "semarang", "makassar",
+  "palembang", "tangerang", "tangerang selatan", "depok", "bekasi", "batam", "bogor", "pekanbaru",
+  "bandar lampung", "malang", "padang", "denpasar", "samarinda", "banjarmasin", "serang", "cimahi",
+  "pontianak", "balikpapan", "surakarta", "solo", "mataram", "manado", "yogyakarta", "cilegon",
+  "kupang", "palu", "ambon", "tarakan", "sukabumi", "cirebon", "karawang", "sidoarjo", "gresik",
+  "cikarang", "pasuruan", "mojokerto", "magelang", "pekalongan", "tegal", "kediri", "blitar",
+  "probolinggo", "batu", "madiun", "salatiga", "kudus", "jepara", "purwokerto", "cilacap",
+  "banyuwangi", "jember", "kuta", "sanur", "ubud", "jimbaran", "gianyar", "badung", "tabanan",
+  "bima", "gorontalo", "kendari", "palangkaraya", "banjarbaru", "singkawang", "bitung", "kotamobagu",
+  "baubau", "tual", "tidore", "ternate", "sorong", "jayapura", "purwakarta", "subang", "garut",
+  "tasikmalaya", "ciamis", "kuningan", "majalengka", "sumedang", "indramayu", "brebes", "pemalang",
+  "batang", "kendal", "demak", "grobogan", "blora", "rembang", "pati", "boyolali", "klaten",
+  "sukoharjo", "wonogiri", "karanganyar", "sragen", "purworejo", "kebumen", "wonosobo", "temanggung",
+  "banjarnegara", "purbalingga", "banyumas", "lamongan", "tuban", "bojonegoro", "ngawi", "magetan",
+  "ponorogo", "pacitan", "trenggalek", "tulungagung", "nganjuk", "jombang", "lumajang", "bondowoso",
+  "situbondo", "bangka", "belitung", "pangkalpinang", "tanjung pinang"
+];
+
 function hasUkCityOrTown(cleanAddr) {
   const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
   const streetPrefixPattern = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park)\\s+";
@@ -4266,6 +4351,58 @@ function evaluateCityQC(address, country) {
       return "Available";
     }
     // Suburbs alone (Penrose, Albany, Rosedale, Mount Wellington, etc.) or regions alone (Canterbury, Waikato, etc.) -> Not Available
+    return "Not Available";
+  }
+
+  // Malaysia City Evaluation (Strict QC Rule):
+  // Note: (Town, District, Municipality) should be considered as City.
+  // (If a country’s capital is mentioned in the address, then both City and State are considered available.)
+  if (isMalaysianLocation(cleanAddr, country)) {
+    // 1. Capital Rule: Kuala Lumpur / Putrajaya in address -> City: Available
+    if (/\b(?:kuala\s*lumpur|putrajaya)\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    // 2. Official Malaysian Cities & Towns
+    for (const place of MALAYSIAN_CITIES_AND_TOWNS) {
+      if (isPlaceUsedAsStreetName(cleanAddr, place)) continue;
+      const escaped = place.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(cleanAddr)) {
+        return "Available";
+      }
+    }
+    // 3. Explicit qualifiers: Bandar, Daerah, Mukim, Pekan, Majlis Perbandaran, City, Town, District, Municipality
+    const strippedMY = cleanAddr.replace(/\b(?:kawasan|taman|zon)?\s*perindustrian(?:\s+[A-Za-z0-9]+)?/gi, " ")
+      .replace(/\b(?:industrial|business|technology)\s+(?:park|estate|area|zone|district)\b/gi, " ");
+    if (hasExplicitCityWord(strippedMY) || /\b(?:bandar|daerah|mukim|pekan|majlis\s*perbandaran|town|township|district|municipality)\b/i.test(strippedMY)) {
+      return "Available";
+    }
+    // Industrial park alone without a town/city -> Not Available
+    return "Not Available";
+  }
+
+  // Indonesia City Evaluation (Strict QC Rule):
+  // Note: (Town, District, Municipality) should be considered as City.
+  // (If a country’s capital is mentioned in the address, then both City and State are considered available.)
+  if (isIndonesianLocation(cleanAddr, country)) {
+    // 1. Capital Rule: Jakarta / DKI Jakarta / Nusantara in address -> City: Available
+    if (/\b(?:jakarta|dki\s*jakarta|nusantara)\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    // 2. Official Indonesian Cities, Regencies & Municipalities
+    for (const place of INDONESIAN_CITIES_AND_TOWNS) {
+      if (isPlaceUsedAsStreetName(cleanAddr, place)) continue;
+      const escaped = place.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(cleanAddr)) {
+        return "Available";
+      }
+    }
+    // 3. Explicit qualifiers: Kota, Kabupaten, Kecamatan, Kotamadya, City, Regency, Town, District, Municipality
+    const strippedID = cleanAddr.replace(/\bkawasan\s+(?:industri|berikat)(?:\s+[A-Za-z0-9]+)?/gi, " ")
+      .replace(/\b(?:industrial|business|technology)\s+(?:park|estate|area|zone|district)\b/gi, " ");
+    if (hasExplicitCityWord(strippedID) || /\b(?:kota|kabupaten|kecamatan|kotamadya|regency|town|township|district|municipality)\b/i.test(strippedID)) {
+      return "Available";
+    }
+    // Industrial estate alone without a city -> Not Available
     return "Not Available";
   }
 
@@ -5133,8 +5270,8 @@ function ensureCommaBeforeState(addr) {
   if (!addr) return "";
   let a = addr;
 
-  // 1. Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block)
-  const premiseRegex = /(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory)\s+([A-Za-z0-9\-\/]+)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi;
+  // 1. Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
+  const premiseRegex = /(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+((?:pt\s*)?[A-Za-z0-9\-\/]+(?:\s*(?:&|and|,)\s*(?:pt\s*)?[A-Za-z0-9\-\/]+)*)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi;
   a = a.replace(premiseRegex, (match, p1, type, val) => {
     return `${p1}${type} ${val}, `;
   });
@@ -5147,11 +5284,17 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(streetSepRegex, "$1, $2");
 
   // 3. Ensure comma after Industrial / Business parks & zones
-  const indParkRegex = /\b((?:industrial|technology|business|science|tech)\s+(?:park|estate|area|zone|district)|kawasan\s+perindustrian(?:\s+[A-Za-z0-9]+)?|taman\s+perindustrian(?:\s+[A-Za-z0-9]+)?|poligono\s+industrial(?:\s+[A-Za-z0-9]+)?|zona\s+industriale(?:\s+[A-Za-z0-9]+)?|gewerbegebiet(?:\s+[A-Za-z0-9]+)?)\s+(?=[A-Z][a-z])/gi;
+  const indParkRegex = /\b((?:industrial|technology|business|science|tech)\s+(?:park|estate|area|zone|district)|kawasan\s+(?:perindustrian|industri|berikat)(?:\s+[A-Za-z0-9]+)?|taman\s+perindustrian(?:\s+[A-Za-z0-9]+)?|poligono\s+industrial(?:\s+[A-Za-z0-9]+)?|zona\s+industriale(?:\s+[A-Za-z0-9]+)?|gewerbegebiet(?:\s+[A-Za-z0-9]+)?)\s+(?=[A-Z][a-z])/gi;
   a = a.replace(indParkRegex, "$1, ");
 
   // 4. Malaysian / Singapore recognized city hubs
-  a = a.replace(/(?<!,\s*)\b(Subang Jaya|Petaling Jaya|Shah Alam|Klang|Kuala Lumpur|Puchong|Cheras|George Town|Johor Bahru|Ipoh)\b/gi, ", $1");
+  a = a.replace(/(?<!,\s*)\b(Subang Jaya|Petaling Jaya|Shah Alam|Klang|Kuala Lumpur|Puchong|Cheras|George Town|Johor Bahru|Ipoh|Kota Kinabalu|Kuching|Seremban|Batu Pahat|Pasir Gudang|Iskandar Puteri)\b/gi, ", $1");
+
+  // 4b. Indonesian recognized city hubs
+  a = a.replace(/(?<!,\s*)\b(Jakarta|DKI Jakarta|Surabaya|Bandung|Medan|Semarang|Makassar|Palembang|Tangerang|Bekasi|Depok|Bogor|Batam|Pekanbaru|Bandar Lampung|Malang|Padang|Denpasar|Samarinda|Banjarmasin|Balikpapan|Cikarang|Karawang|Sidoarjo|Gresik)\b/gi, ", $1");
+
+  // 4c. New Zealand recognized cities
+  a = a.replace(/(?<!,\s*)\b(Auckland|Christchurch|Hamilton|Tauranga|Dunedin|Lower Hutt|Upper Hutt|Palmerston North|Napier|Porirua|New Plymouth|Rotorua|Whangarei|Invercargill|Nelson|Whanganui|Hastings|Gisborne|Blenheim|Timaru|Taupo|Queenstown|Cambridge)\b/gi, ", $1");
 
   // 5. Ensure comma before East Asian administrative regions (Township, District, County, Hsien)
   a = a.replace(/(?<!,\s*)\b([A-Z][a-z0-9\u00C0-\u024F]+\s+(?:Township|District|County|Hsien))\b/g, ", $1");
@@ -5177,6 +5320,8 @@ function ensureCommaBeforeState(addr) {
     "Maharashtra", "Karnataka", "Tamil Nadu", "Gujarat", "Uttar Pradesh", "Telangana", "Andhra Pradesh", "Punjab", "Haryana", "Rajasthan", "Madhya Pradesh", "West Bengal", "Bihar", "Kerala", "Odisha", "Jharkhand", "Assam", "Delhi",
     // Malaysia States
     "Selangor", "Johor", "Penang", "Perak", "Kedah", "Pahang", "Negeri Sembilan", "Melaka", "Terengganu", "Kelantan", "Sarawak", "Sabah", "Perlis", "Kuala Lumpur", "Putrajaya",
+    // Indonesia Provinces
+    "Jawa Barat", "Jawa Tengah", "Jawa Timur", "Banten", "DKI Jakarta", "DI Yogyakarta", "Bali", "Sumatera Utara", "Sumatera Barat", "Sumatera Selatan", "Riau", "Kepulauan Riau", "Lampung", "Jambi", "Bengkulu", "Bangka Belitung", "Kalimantan Timur", "Kalimantan Barat", "Kalimantan Selatan", "Kalimantan Tengah", "Kalimantan Utara", "Sulawesi Selatan", "Sulawesi Utara", "Sulawesi Tengah", "Sulawesi Tenggara", "Sulawesi Barat", "Nusa Tenggara Barat", "Nusa Tenggara Timur", "Papua", "Maluku", "Aceh",
     // South Africa
     "Gauteng", "Western Cape", "Eastern Cape", "KwaZulu-Natal", "Mpumalanga", "Free State", "Limpopo", "North West", "Northern Cape",
     // Turkey Provinces
@@ -5325,59 +5470,77 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
   let c = cleanAddr.trim();
 
   // If cleanAddr already starts with a number, premise indicator, or PO Box, no need to restore
-  if (/^(?:\d+|no\.?|nos\.?|nº|#|unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|p\.?o\.?\s*box)\b/i.test(c)) {
+  if (/^(?:\d+|no\.?|nos\.?|nº|#|unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk|kav|kavling|p\.?o\.?\s*box)\b/i.test(c)) {
     return cleanAddr;
   }
+
+  const premiseWords = "unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk|kav|kavling";
+  const premiseId = "(?:pt\\s*)?[A-Za-z0-9\\-\\/]*\\d+[A-Za-z0-9\\-\\/]*";
 
   // Extract the first meaningful thoroughfare or street name chunk from cleanAddr
   // E.g. from "Best Place, Cincinnati, Ohio", chunk is "Best Place"
   const firstCommaIdx = c.indexOf(",");
   let firstSegment = (firstCommaIdx > 0 ? c.slice(0, firstCommaIdx) : c).trim();
-  if (firstSegment.length < 3) return cleanAddr;
+  if (firstSegment.length >= 3) {
+    // Make common street suffixes flexible between full and abbreviated forms
+    const suffixMap = [
+      [/\bStreet\b/i, "(?:Street|St\\b\\.?)"],
+      [/\bRoad\b/i, "(?:Road|Rd\\b\\.?)"],
+      [/\bPlace\b/i, "(?:Place|Pl\\b\\.?)"],
+      [/\bAvenue\b/i, "(?:Avenue|Ave\\b\\.?)"],
+      [/\bDrive\b/i, "(?:Drive|Dr\\b\\.?)"],
+      [/\bLane\b/i, "(?:Lane|Ln\\b\\.?)"],
+      [/\bBoulevard\b/i, "(?:Boulevard|Blvd\\b\\.?)"],
+      [/\bCourt\b/i, "(?:Court|Ct\\b\\.?)"],
+      [/\bTerrace\b/i, "(?:Terrace|Tce\\b|Ter\\b\\.?)"],
+      [/\bHighway\b/i, "(?:Highway|Hwy\\b\\.?)"],
+      [/\bParkway\b/i, "(?:Parkway|Pkwy\\b\\.?)"],
+      [/\bCrescent\b/i, "(?:Crescent|Cres\\b\\.?)"],
+      [/\bSquare\b/i, "(?:Square|Sq\\b\\.?)"]
+    ];
 
-  // Make common street suffixes flexible between full and abbreviated forms
-  const suffixMap = [
-    [/\bStreet\b/i, "(?:Street|St\\b\\.?)"],
-    [/\bRoad\b/i, "(?:Road|Rd\\b\\.?)"],
-    [/\bPlace\b/i, "(?:Place|Pl\\b\\.?)"],
-    [/\bAvenue\b/i, "(?:Avenue|Ave\\b\\.?)"],
-    [/\bDrive\b/i, "(?:Drive|Dr\\b\\.?)"],
-    [/\bLane\b/i, "(?:Lane|Ln\\b\\.?)"],
-    [/\bBoulevard\b/i, "(?:Boulevard|Blvd\\b\\.?)"],
-    [/\bCourt\b/i, "(?:Court|Ct\\b\\.?)"],
-    [/\bTerrace\b/i, "(?:Terrace|Tce\\b|Ter\\b\\.?)"],
-    [/\bHighway\b/i, "(?:Highway|Hwy\\b\\.?)"],
-    [/\bParkway\b/i, "(?:Parkway|Pkwy\\b\\.?)"],
-    [/\bCrescent\b/i, "(?:Crescent|Cres\\b\\.?)"],
-    [/\bSquare\b/i, "(?:Square|Sq\\b\\.?)"]
-  ];
+    let escapedSeg = firstSegment.replace(/[-\[\]{}()*+?.,\\^$|#]/g, "\\$&");
+    for (const [sufRegex, flexRep] of suffixMap) {
+      if (sufRegex.test(escapedSeg)) {
+        escapedSeg = escapedSeg.replace(sufRegex, flexRep);
+        break;
+      }
+    }
+    escapedSeg = escapedSeg.replace(/\s+/g, "\\s+");
 
-  let escapedSeg = firstSegment.replace(/[-\[\]{}()*+?.,\\^$|#]/g, "\\$&");
-  for (const [sufRegex, flexRep] of suffixMap) {
-    if (sufRegex.test(escapedSeg)) {
-      escapedSeg = escapedSeg.replace(sufRegex, flexRep);
-      break;
+    // Regex in rawAddr looking for premise / building / street number immediately preceding this segment
+    // Supports: "Lot 45", "Plot 12", "Lot 12 & 13", "Lot PT 1234", "Plot 18-A", "Unit 4, 12", "Suite 200, 12110", "12110", "No. 18", "Building 5", etc.
+    const prefixRegex = new RegExp(
+      '(?:^|[\\s,#;:])((?:(?:' + premiseWords + ')\\s*(?:no\\.?|nos\\.?|number|#)?\\s*' + premiseId + '(?:\\s*(?:&|and|,)\\s*(?:(?:' + premiseWords + '|pt)\\s*)?(?:no\\.?|nos\\.?|#)?\\s*' + premiseId + ')*(?:[\\s,]+(?:no\\.?|nos\\.?|number|#)?\\s*\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?)?|(?:(?:no\\.?|nos\\.?|nº|#)\\s*)?\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?))[\\s,]+' + escapedSeg,
+      'i'
+    );
+
+    const m = rawAddr.match(prefixRegex);
+    if (m && m[1]) {
+      let leadingNum = m[1].trim();
+      leadingNum = leadingNum.replace(/[,;]+$/, "").trim();
+      if (leadingNum) {
+        if (new RegExp('^(?:' + premiseWords + ')\\b', 'i').test(leadingNum) && !leadingNum.includes(",")) {
+          return `${leadingNum}, ${c}`;
+        }
+        return `${leadingNum} ${c}`;
+      }
     }
   }
-  escapedSeg = escapedSeg.replace(/\s+/g, "\\s+");
 
-  // Regex in rawAddr looking for premise / building / street number immediately preceding this segment
-  // Supports: "Lot 45", "Plot 12", "Unit 4, 12", "Suite 200, 12110", "12110", "No. 18", "Building 5", etc.
-  const prefixRegex = new RegExp(
-    '(?:^|[\\s,#;:])((?:(?:unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk)\\s*(?:no\\.?|nos\\.?|number|#)?\\s*\\w+(?:[\\s,]+(?:no\\.?|nos\\.?|number|#)?\\s*\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?)?|(?:(?:no\\.?|nos\\.?|nº|#)\\s*)?\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?))[\\s,]+' + escapedSeg,
+  // Fallback: Check if rawAddr begins with a premise or street number that got stripped from cleanAddr
+  const startRegex = new RegExp(
+    '^[\\s,#;:]*((?:(?:' + premiseWords + ')\\s*(?:no\\.?|nos\\.?|number|#)?\\s*' + premiseId + '(?:\\s*(?:&|and|,)\\s*(?:(?:' + premiseWords + '|pt)\\s*)?(?:no\\.?|nos\\.?|#)?\\s*' + premiseId + ')*(?:[\\s,]+(?:no\\.?|nos\\.?|number|#)?\\s*\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?)?|(?:(?:no\\.?|nos\\.?|nº|#)\\s*)?\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?))(?=[\\s,]+)',
     'i'
   );
-
-  const m = rawAddr.match(prefixRegex);
-  if (m && m[1]) {
-    let leadingNum = m[1].trim();
-    // Clean trailing comma if any
-    leadingNum = leadingNum.replace(/[,;]+$/, "").trim();
-    if (leadingNum) {
-      if (/^(?:lot|plot|unit|suite|ste|bldg|building|floor|fl|level|block|blk)\b/i.test(leadingNum) && !leadingNum.includes(",")) {
-        return `${leadingNum}, ${c}`;
+  const mStart = rawAddr.trim().match(startRegex);
+  if (mStart && mStart[1]) {
+    const lead = mStart[1].trim().replace(/[,;]+$/, "");
+    if (!new RegExp('\\b' + lead.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\b', 'i').test(c)) {
+      if (new RegExp('^(?:' + premiseWords + ')\\b', 'i').test(lead) && !lead.includes(",")) {
+        return `${lead}, ${c}`;
       }
-      return `${leadingNum} ${c}`;
+      return `${lead} ${c}`;
     }
   }
 
@@ -5542,6 +5705,10 @@ function cleanPhoneNumber(rawPhone, country) {
     if (len !== 9) return "";
   } else if (cLower.includes("malaysia")) {
     if (len < 8 || len > 10) return "";
+  } else if (cLower.includes("new zealand")) {
+    if (len < 8 || len > 10) return "";
+  } else if (cLower.includes("indonesia")) {
+    if (len < 8 || len > 11) return "";
   } else if (cLower.includes("singapore")) {
     if (len !== 8) return "";
   } else if (cLower.includes("spain") || cLower.includes("espana")) {
@@ -5617,7 +5784,9 @@ function detectCountryFromAddress(address) {
   if (/\b(south\s*korea|korea)\b/i.test(lower)) return "South Korea";
   if (/\b(singapore)\b/i.test(lower)) return "Singapore";
   if (/\b(netherlands|holland)\b/i.test(lower)) return "Netherlands";
-  if (/\b(new\s*zealand)\b/i.test(lower)) return "New Zealand";
+  if (/\b(new\s*zealand|aotearoa)\b/i.test(lower)) return "New Zealand";
+  if (/\b(malaysia)\b/i.test(lower)) return "Malaysia";
+  if (/\b(indonesia|republik\s*indonesia)\b/i.test(lower)) return "Indonesia";
   if (/\b(united\s*arab\s*emirates|uae)\b/i.test(lower)) return "United Arab Emirates";
   if (/\b(italy|italia)\b/i.test(lower)) return "Italy";
   if (/\b(spain|espana)\b/i.test(lower)) return "Spain";
@@ -5633,9 +5802,8 @@ function detectCountryFromAddress(address) {
   if (/\b(switzerland)\b/i.test(lower)) return "Switzerland";
   if (/\b(ireland)\b/i.test(lower)) return "Ireland";
   if (/\b(thailand)\b/i.test(lower)) return "Thailand";
-  if (/\b(malaysia)\b/i.test(lower)) return "Malaysia";
 
-  // 2. Verified State / Province / County / Hsien in the physical address text
+  // 2. Verified State / Province / County / Region in the physical address text
   if (/\b(gauteng|western\s*cape|eastern\s*cape|kwazulu|natal|mpumalanga|free\s*state|limpopo|north\s*west|northern\s*cape)\b/i.test(lower)) return "South Africa";
   if (/\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s*hampshire|new\s*jersey|new\s*mexico|new\s*york|north\s*carolina|north\s*dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s*island|south\s*carolina|south\s*dakota|tennessee|texas|utah|vermont|virginia|washington|west\s*virginia|wisconsin|wyoming|district\s*of\s*columbia)\b/i.test(lower)) return "United States Of America";
   if (/\b(ontario|quebec|british\s*columbia|alberta|manitoba|nova\s*scotia)\b/i.test(lower)) return "Canada";
@@ -5647,6 +5815,13 @@ function detectCountryFromAddress(address) {
   if (/\b(maharashtra|karnataka|tamil\s*nadu|gujarat|uttar\s*pradesh|telangana|delhi)\b/i.test(lower)) return "India";
   if (/\b(taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung)\s*(hsien|county)\b/i.test(lower)) return "Taiwan";
   if (/\b(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eski[sş]ehir|sanliurfa|şanlıurfa|samsun|denizli|sakarya|mu[gğ]la|trabzon)\b/i.test(lower)) return "Turkiye";
+  // Malaysia states & major cities
+  if (/\b(selangor|johor|perak|kedah|pahang|negeri\s*sembilan|melaka|terengganu|kelantan|sabah|sarawak|perlis|wilayah\s*persekutuan|labuan|subang\s*jaya|petaling\s*jaya|shah\s*alam|johor\s*bahru|george\s*town|kota\s*kinabalu|kuching|seremban|batu\s*pahat|pasir\s*gudang|iskandar\s*puteri)\b/i.test(lower)) return "Malaysia";
+  if (/\b(penang|pulau\s*pinang)\b/i.test(lower) && !/\b(?:penang\s+road|penang\s+street|penang\s+lane)\b/i.test(lower)) return "Malaysia";
+  // Indonesia provinces & major cities
+  if (/\b(jawa\s*barat|jawa\s*tengah|jawa\s*timur|west\s*java|central\s*java|east\s*java|banten|sumatera\s*utara|sumatera\s*barat|sumatera\s*selatan|north\s*sumatra|west\s*sumatra|south\s*sumatra|kalimantan\s*(?:timur|barat|selatan|tengah|utara)|sulawesi\s*(?:selatan|utara|tengah|tenggara|barat)|kepulauan\s*riau|bangka\s*belitung|nusa\s*tenggara\s*(?:barat|timur)|dki\s*jakarta|di\s*yogyakarta|surabaya|bandung|medan|semarang|makassar|palembang|tangerang|bekasi|depok|bogor|pekanbaru|bandar\s*lampung|balikpapan|denpasar|samarinda)\b/i.test(lower)) return "Indonesia";
+  // New Zealand regions & major cities
+  if (/\b(canterbury|waikato|bay\s*of\s*plenty|otago|hawke's\s*bay|hawkes\s*bay|taranaki|manawatu|southland|northland|marlborough|tasman|west\s*coast|auckland|christchurch|hamilton|tauranga|dunedin|lower\s*hutt|upper\s*hutt|palmerston\s*north|invercargill|rotorua|whangarei|napier|porirua|new\s*plymouth|queenstown)\b/i.test(lower)) return "New Zealand";
 
   // 3. National Capital mentioned in the physical address text
   if (isNewTaipeiCity(lower)) return "Taiwan";
@@ -5668,6 +5843,9 @@ function detectCountryFromAddress(address) {
   if (/\b(new\s*delhi)\b/i.test(lower)) return "India";
   if (/\b(seoul)\b/i.test(lower)) return "South Korea";
   if (/\b(ankara)\b/i.test(lower)) return "Turkiye";
+  if (/\b(wellington)\b/i.test(lower) && !/\b(?:mount|mt\.?)\s+wellington\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "wellington")) return "New Zealand";
+  if (/\b(kuala\s*lumpur|putrajaya)\b/i.test(lower)) return "Malaysia";
+  if (/\b(jakarta|dki\s*jakarta|nusantara)\b/i.test(lower)) return "Indonesia";
 
   return "";
 }

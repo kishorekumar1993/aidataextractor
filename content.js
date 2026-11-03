@@ -397,7 +397,7 @@
         }
       }
 
-      // 4. Country alias fallbacks (Turkiye <-> Turkey)
+      // 4. Country alias fallbacks (Turkiye <-> Turkey, NZ <-> New Zealand, MY <-> Malaysia, ID <-> Indonesia, USA <-> United States)
       if (matchedIndex === -1) {
         if (targetClean === "turkiye" || targetClean === "türkiye") {
           for (let i = 0; i < element.options.length; i++) {
@@ -415,6 +415,46 @@
             const val = (opt.value || "").trim().toLowerCase();
             const txt = (opt.text || "").trim().toLowerCase();
             if (val === "turkiye" || txt === "turkiye" || val === "türkiye" || txt === "türkiye") {
+              matchedIndex = i;
+              break;
+            }
+          }
+        } else if (targetClean === "new zealand") {
+          for (let i = 0; i < element.options.length; i++) {
+            const opt = element.options[i];
+            const val = (opt.value || "").trim().toLowerCase();
+            const txt = (opt.text || "").trim().toLowerCase();
+            if (val === "nz" || txt === "nz" || val === "new zealand" || txt === "new zealand" || val.includes("new zealand") || txt.includes("new zealand")) {
+              matchedIndex = i;
+              break;
+            }
+          }
+        } else if (targetClean === "malaysia") {
+          for (let i = 0; i < element.options.length; i++) {
+            const opt = element.options[i];
+            const val = (opt.value || "").trim().toLowerCase();
+            const txt = (opt.text || "").trim().toLowerCase();
+            if (val === "my" || txt === "my" || val === "malaysia" || txt === "malaysia" || val.includes("malaysia") || txt.includes("malaysia")) {
+              matchedIndex = i;
+              break;
+            }
+          }
+        } else if (targetClean === "indonesia") {
+          for (let i = 0; i < element.options.length; i++) {
+            const opt = element.options[i];
+            const val = (opt.value || "").trim().toLowerCase();
+            const txt = (opt.text || "").trim().toLowerCase();
+            if (val === "id" || txt === "id" || val === "indonesia" || txt === "indonesia" || val.includes("indonesia") || txt.includes("indonesia")) {
+              matchedIndex = i;
+              break;
+            }
+          }
+        } else if (targetClean === "united states of america" || targetClean === "united states") {
+          for (let i = 0; i < element.options.length; i++) {
+            const opt = element.options[i];
+            const val = (opt.value || "").trim().toLowerCase();
+            const txt = (opt.text || "").trim().toLowerCase();
+            if (val === "usa" || txt === "usa" || val === "us" || txt === "us" || val === "united states" || txt === "united states" || val === "united states of america" || txt === "united states of america") {
               matchedIndex = i;
               break;
             }
@@ -646,6 +686,15 @@
       if (/^(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)$/i.test(formattedCountry)) {
         formattedCountry = "Turkiye";
       }
+      if (/^malaysia$/i.test(formattedCountry)) {
+        formattedCountry = "Malaysia";
+      }
+      if (/^(?:indonesia|republic\s*of\s*indonesia)$/i.test(formattedCountry)) {
+        formattedCountry = "Indonesia";
+      }
+      if (/^(?:new\s*zealand|aotearoa)$/i.test(formattedCountry)) {
+        formattedCountry = "New Zealand";
+      }
       const isSelect = elements.countryName.tagName && elements.countryName.tagName.toLowerCase() === "select";
       const success = isSelect ? setSelectValue(elements.countryName, formattedCountry) : setInputValue(elements.countryName, formattedCountry);
       if (success) {
@@ -657,8 +706,8 @@
     // 6. Company Address (Ensure comma before state, address ending must not have comma or point, and all words start with Capital)
     if (elements.companyAddress && data.companyAddress) {
       let cleanAddress = String(data.companyAddress).trim();
-      // Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block)
-      cleanAddress = cleanAddress.replace(/(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory)\s+([A-Za-z0-9\-\/]+)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi, "$1$2 $3, ");
+      // Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
+      cleanAddress = cleanAddress.replace(/(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+((?:pt\s*)?[A-Za-z0-9\-\/]+(?:\s*(?:&|and|,)\s*(?:pt\s*)?[A-Za-z0-9\-\/]+)*)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi, "$1$2 $3, ");
       // Ensure comma after street types when followed by word
       const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)";
       const nonStreetLookahead = "(?!\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext|Road|Street|Avenue|Lane|Drive|Place|Close|Court|Terrace|Cres|Dr|Rd|St|Ave|Ln|Blvd|Hwy|Ct|Pl)\\b)";
