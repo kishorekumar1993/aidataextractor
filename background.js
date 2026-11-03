@@ -142,7 +142,26 @@ const NON_CITY_SUBURBS = [
   "prospect", "glynde", "glenorchy", "derwent park", "moonah", "cambridge", "sorell",
   "kingston", "invermay", "mowbray", "kings meadows", "devonport", "burnie",
   "fyshwick", "hume", "mitchell", "belconnen", "woden", "tuggeranong", "gungahlin",
-  "winnellie", "pinelands", "berrimah", "yarrawonga", "palmerston", "alice springs"
+  "winnellie", "pinelands", "berrimah", "yarrawonga", "palmerston", "alice springs",
+  // New Zealand Suburbs & Localities (MUST NOT be classified as City)
+  "penrose", "rosedale", "albany", "east tamaki", "mount wellington", "mt wellington", "mt. wellington",
+  "avondale", "henderson", "onehunga", "newmarket", "parnell", "grey lynn", "ponsonby", "takapuna",
+  "manukau", "papatoetoe", "otahuhu", "mangere", "takanini", "wiri", "rosebank", "ellerslie",
+  "greenlane", "epsom", "remuera", "glenfield", "northcote", "birkenhead", "devonport", "browns bay",
+  "silverdale", "kumeu", "highbrook", "half moon bay", "botany downs", "flat bush", "pakuranga",
+  "howick", "st lukes", "mount albert", "mt albert", "mount eden", "mt eden", "mount roskill", "mt roskill",
+  "blockhouse bay", "new lynn", "kelston", "glendene", "te atatu", "te atatu peninsula", "te atatu south",
+  "westgate", "hobsonville", "whenuapai", "glen eden", "titirangi", "kingsland", "morningside",
+  "point chevalier", "pt chevalier", "freemans bay", "herne bay", "westmere", "orakei", "mission bay",
+  "kohimarama", "st heliers", "panmure", "glen innes", "royal oak", "hillsborough", "three kings",
+  "sandringham", "waterview", "lynfield", "favona", "otara", "clendon park", "manurewa", "alfriston",
+  "drury", "milford", "mairangi bay", "torbay", "castor bay", "forrest hill", "sunnynook",
+  "riccarton", "hornby", "papanui", "addington", "sydenham", "burnside", "fendalton", "merivale",
+  "harewood", "woolston", "bromley", "belfast", "linwood", "halswell", "wigram", "sockburn",
+  "islington", "middleton", "shirley", "mairehau", "st albans", "edgeware", "spreydon", "cashmere",
+  "petone", "miramar", "thorndon", "te aro", "kilbirnie", "newtown", "johnsonville", "tawa",
+  "ngaio", "khandallah", "karori", "island bay", "lyall bay", "rongotai", "kelburn", "wadestown",
+  "frankton", "te rapa", "hamilton east", "claudelands", "chartwell", "rototuna", "dinsdale"
 ];
 
 // International Recognized Towns, Districts, Municipalities
@@ -215,7 +234,13 @@ const RECOGNIZED_TOWNS = [
   "lisbon", "porto", "barcelona", "madrid", "milan", "rome", "naples", "turin",
   "moscow", "saint petersburg", "kiev", "kyiv", "bucharest", "sofia", "zagreb",
   "toronto", "montreal", "vancouver", "calgary", "edmonton",
-  "auckland", "wellington", "christchurch",
+  // New Zealand cities & major towns
+  "auckland", "wellington", "christchurch", "hamilton", "tauranga", "dunedin",
+  "lower hutt", "upper hutt", "palmerston north", "napier", "porirua",
+  "new plymouth", "rotorua", "whangarei", "invercargill", "nelson",
+  "whanganui", "wanganui", "hastings", "gisborne", "blenheim", "timaru",
+  "taupo", "pukekohe", "masterton", "levin", "ashburton", "cambridge",
+  "queenstown", "rangiora", "rolleston", "feilding", "tokoroa", "oamaru",
   "johannesburg", "cape town", "pretoria", "durban", "bloemfontein", "port elizabeth",
   "nairobi", "lagos", "accra", "dar es salaam", "addis ababa", "casablanca",
   "buenos aires", "sao paulo", "rio de janeiro", "santiago", "bogota", "lima", "caracas",
@@ -346,9 +371,13 @@ const RECOGNIZED_TOWNS = [
   "nairobi", "mombasa", "kisumu", "nakuru",
   "kampala", "kigali", "lusaka", "harare", "gaborone", "windhoek", "maputo",
   "dar es salaam", "dodoma", "addis ababa", "djibouti",
-  "auckland", "wellington", "christchurch", "hamilton nz", "tauranga", "dunedin",
-  "palmerston north", "napier", "nelson", "rotorua", "new plymouth", "whangarei",
-  "invercargill",
+  // New Zealand cities & major towns
+  "auckland", "wellington", "christchurch", "hamilton", "tauranga", "dunedin",
+  "lower hutt", "upper hutt", "palmerston north", "napier", "porirua",
+  "new plymouth", "rotorua", "whangarei", "invercargill", "nelson",
+  "whanganui", "wanganui", "hastings", "gisborne", "blenheim", "timaru",
+  "taupo", "pukekohe", "masterton", "levin", "ashburton", "cambridge",
+  "queenstown", "rangiora", "rolleston", "feilding", "tokoroa", "oamaru",
   "gold coast", "newcastle au", "wollongong", "geelong", "hobart", "townsville",
   "cairns", "toowoomba", "ballarat", "bendigo", "albury", "launceston", "mackay",
   "rockhampton", "bunbury", "bundaberg", "coffs harbour", "wagga wagga", "hervey bay",
@@ -2099,6 +2128,13 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
      * Districts (e.g. Nantun District, Banqiao District, Xitun District) in address → State: NOT Available (districts are city subdivisions, NOT states)
      * Explicit County / Hsien (e.g. Changhua County, Miaoli County) or Capital (Taipei City) in address → State: Available
      * Otherwise → State: NOT Available
+   - New Zealand – State Validation Rule:
+     * Wellington (capital) in address → State: Available (If country's capital is in address, both City and State are Available)
+     * True New Zealand Regions (e.g. Canterbury, Waikato, Bay of Plenty, Otago, Hawke's Bay, Taranaki, Manawatu, Southland, Northland, Marlborough, Tasman, West Coast) or explicit "Region" / "Regional Council" / "Province" / "County" (e.g. "Auckland Region", "Canterbury Province") in address → State: Available
+     * Bare "Auckland" in address → State: NOT Available (Auckland is the City, NOT a state)
+     * Bare cities / towns (e.g. Christchurch, Hamilton, Tauranga, Dunedin, Nelson, Napier, Palmerston North) in address → State: NOT Available
+     * Suburbs alone (e.g. Penrose, Albany, Rosedale, East Tamaki, Mount Wellington, Riccarton) → State: NOT Available
+     * Otherwise → State: NOT Available
    - Do not guess or infer. Only evaluate what is explicitly written in the address.
 
 2. CITY VALIDATION RULES – STRICT QC RULE:
@@ -2114,8 +2150,10 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
       - India: Taluk, Taluka, Tehsil, Tahsil, Mandal, Nagar Palika, Nagar Nigam
    c) The address contains a recognized city / town / municipal name (e.g. Chicago, Melbourne, Boston, San Francisco, Cape Town, Manchester, Johor Bahru, Shenzhen).
    d) UNITED KINGDOM: recognized UK cities, towns, and London boroughs evaluate as "Available".
+   e) NEW ZEALAND: Recognized NZ cities & towns (e.g. Auckland, Wellington, Christchurch, Hamilton, Tauranga, Dunedin, Lower Hutt, Upper Hutt, Palmerston North, Napier, Porirua, New Plymouth, Rotorua, Whangarei, Invercargill, Nelson, Whanganui, Hastings, Gisborne, Blenheim, Timaru, Taupo, Pukekohe, Cambridge, Queenstown) evaluate as "Available".
    STRICTLY MARK "Not Available" FOR:
    - Suburb / locality / neighborhood only (e.g. Sandton, Rosebank) with no city/town/district.
+   - New Zealand: Suburbs alone (e.g. Penrose, Albany, Rosedale, East Tamaki, Mount Wellington, Riccarton, Hornby) without a recognized city/town.
    - Industrial Area / Business Park only, with no city/town/district.
    - Street names containing the word "City" (e.g. "City Road", "City Street", "City Avenue") do NOT qualify as a city.
    - New Taipei City: Must remain "Not Available" unless a qualifying administrative area (e.g. Banqiao District) is separately identified in the address.
@@ -3056,23 +3094,41 @@ function isTaipeiCityCapital(address) {
   return /\btaipei(\s*city)?\b/i.test(address);
 }
 
+function isWellingtonCapital(address) {
+  if (!address) return false;
+  const lower = address.toLowerCase();
+  // Mount Wellington / Mt Wellington is a suburb of Auckland, NOT the capital Wellington!
+  if (/\b(?:mount|mt\.?)\s+wellington\b/i.test(lower)) {
+    const withoutMt = lower.replace(/\b(?:mount|mt\.?)\s+wellington\b/gi, " ");
+    return isWellingtonCapital(withoutMt);
+  }
+  if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, "wellington")) {
+    return false;
+  }
+  // Exclude "Wellington Point" (suburb in Queensland, Australia)
+  if (/\bwellington\s+point\b/i.test(lower)) {
+    return false;
+  }
+  return /\bwellington(\s+city)?\b/i.test(lower);
+}
+
 function hasCapitalInAddress(addr, country) {
   if (!addr) return false;
   const lower = addr.toLowerCase();
 
+  const matchCap = (cap) => {
+    if (cap === "wellington") return isWellingtonCapital(lower);
+    if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, cap)) return false;
+    return new RegExp(`\\b${cap}\\b`, "i").test(lower);
+  };
+
   // If New Taipei City is present, it does NOT qualify for the Taipei capital exception
   if (isNewTaipeiCity(lower)) {
     return ALL_CAPITALS.filter(c => c !== "taipei" && c !== "taipei city")
-      .some(cap => {
-        if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, cap)) return false;
-        return new RegExp(`\\b${cap}\\b`, "i").test(lower);
-      });
+      .some(matchCap);
   }
 
-  return ALL_CAPITALS.some(cap => {
-    if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, cap)) return false;
-    return new RegExp(`\\b${cap}\\b`, "i").test(lower);
-  });
+  return ALL_CAPITALS.some(matchCap);
 }
 
 /**
@@ -3175,10 +3231,10 @@ const STATE_AND_PROVINCE_NAMES = [
   "nordrhein westfalen", "north rhine westphalia", "rheinland pfalz", "rhineland palatinate",
   "saarland", "sachsen", "saxony", "sachsen anhalt", "saxony anhalt", "schleswig holstein",
   "thuringen", "thüringen", "thuringia",
-  // New Zealand
-  "auckland", "wellington", "canterbury", "otago", "waikato", "bay of plenty", "manawatu",
-  "hawke's bay", "taranaki", "southland", "northland", "marlborough", "tasman", "west coast",
-  "gisborne", "nelson",
+  // New Zealand (Regions / Provinces ONLY - Auckland, Wellington, Nelson, Gisborne are Cities!)
+  "canterbury", "otago", "waikato", "bay of plenty", "manawatu", "manawatū", "manawatu-whanganui", "manawatū-whanganui",
+  "hawke's bay", "hawkes bay", "taranaki", "southland", "northland", "marlborough", "tasman", "west coast",
+  "auckland region", "wellington region", "nelson region", "gisborne region",
   // Philippines
   "metro manila", "national capital region", "cebu", "davao", "laguna", "cavite", "bulacan",
   "rizal", "pampanga", "batangas", "pangasinan", "negros occidental", "iloilo", "leyte",
@@ -3254,6 +3310,40 @@ function hasStateInAddress(addr, country) {
     return false;
   }
 
+  // New Zealand strict rule:
+  // Note: (County, Province, Prefecture) should be considered as State.
+  // (If a country’s capital is mentioned in the address, then both City and State are considered available.)
+  // - Capital: Wellington -> State: Available
+  // - Explicit County, Province, Prefecture, Region, Regional Council -> State: Available
+  // - True New Zealand regions: Canterbury, Waikato, Bay of Plenty, Otago, Hawke's Bay, Taranaki, Manawatu, Southland, Northland, Marlborough, Tasman, West Coast
+  // - Cities (Auckland, Christchurch, Hamilton, Nelson, Gisborne, etc.) & Suburbs (Penrose, Albany, etc.) -> State: Not Available
+  const isNZ = isNewZealandLocation(lower, country);
+  if (isNZ) {
+    if (isWellingtonCapital(lower)) {
+      return true;
+    }
+    if (/\b(?:region|regional\s*council|province|county|prefecture)\b/i.test(lower)) {
+      return true;
+    }
+    const NZ_REGIONS = [
+      "canterbury", "waikato", "bay of plenty", "otago", "hawke's bay", "hawkes bay",
+      "taranaki", "manawatu", "manawatū", "manawatu-whanganui", "manawatū-whanganui",
+      "southland", "northland", "marlborough", "tasman", "west coast",
+      "auckland region", "wellington region", "nelson region", "gisborne region",
+      "canterbury region", "waikato region", "otago region", "southland region",
+      "northland region", "taranaki region", "marlborough region", "tasman region",
+      "west coast region", "bay of plenty region", "hawke's bay region", "hawkes bay region"
+    ];
+    for (const reg of NZ_REGIONS) {
+      if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, reg)) continue;
+      const escaped = reg.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&").replace(/\\s/g, "\\s+");
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(lower)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // Country official capital city exception
   if (hasCapitalInAddress(lower, country)) return true;
 
@@ -3264,6 +3354,9 @@ function hasStateInAddress(addr, country) {
 
   // County abbreviations (e.g. Co. Dublin, Co. Cork, Co. Kildare, Orange Co., Cook Co.)
   if (/\bco\.?\s+[a-z]{3,}\b/i.test(lower) || /\b[a-z]{3,}\s+co\.?\b(?=[,\s]|$)/i.test(lower)) return true;
+
+  // Australian state abbreviations with postcode or comma (e.g. NSW 2000, VIC 3000, QLD 4000)
+  if (/\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(lower) || /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower) || /\b(?:sydney|melbourne|brisbane|perth|adelaide|gold coast|hobart|canberra)\s+(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower)) return true;
 
   // Non-English state/province/prefecture/county markers across the 16 priority countries
   // Germany: Bundesland, Land, Landkreis, Kreis, Regierungsbezirk
@@ -3417,10 +3510,36 @@ function isNewZealandLocation(address, country) {
   const c = (country || "").toLowerCase();
   if (/\b(?:new\s*zealand|nz)\b/i.test(c)) return true;
   const a = (address || "").toLowerCase();
-  if (/\b(?:new\s*zealand)\b/i.test(a)) return true;
-  if (/\b(?:auckland|wellington|canterbury|waikato|bay\s*of\s*plenty|otago|manawatu|hawke's\s*bay|taranaki|southland|northland|marlborough|tasman|gisborne|nelson)\b/i.test(a)) return true;
+  if (/\b(?:new\s*zealand|\bnz\b)\b/i.test(a)) return true;
+  if (/\b(?:auckland|wellington|canterbury|waikato|bay\s*of\s*plenty|otago|manawatu|hawke's\s*bay|hawkes\s*bay|taranaki|southland|northland|marlborough|tasman|gisborne|nelson|christchurch|hamilton|tauranga|dunedin|palmerston\s*north|napier|whangarei|invercargill|rotorua|whanganui|hastings|blenheim|timaru|taupo|queenstown|cambridge)\b/i.test(a)) return true;
   return false;
 }
+
+// Official New Zealand Cities & Towns (Note: Suburbs and Regions excluded)
+const NEW_ZEALAND_CITIES_AND_TOWNS = [
+  // 1. Official Cities & Major Metropolitan Centres
+  "auckland", "wellington", "christchurch", "hamilton", "tauranga", "dunedin",
+  "lower hutt", "upper hutt", "palmerston north", "napier", "porirua",
+  "new plymouth", "rotorua", "whangarei", "invercargill", "nelson",
+  "whanganui", "wanganui", "hastings", "gisborne",
+
+  // 2. Secondary Cities & Major Regional Towns
+  "blenheim", "timaru", "taupo", "pukekohe", "masterton", "levin",
+  "ashburton", "cambridge", "te awamutu", "feilding", "rangiora",
+  "rolleston", "queenstown", "tokoroa", "oamaru", "hawera", "gore",
+  "waiuku", "greymouth", "wanaka", "motueka", "huntly", "matamata",
+  "morrinsville", "kerikeri", "stratford", "whakatane", "dargaville",
+  "marton", "foxton", "dannevirke", "carterton", "te puke", "kawerau",
+  "katikati", "opotiki", "picton", "kaikohe", "lincoln", "mosgiel",
+  "alexandra", "cromwell", "balclutha", "winton", "hokitika", "westport",
+  "kaitaia", "papakura", "waiheke island", "warkworth", "snells beach",
+  "helensville", "mangawhai", "wellsford", "whitianga", "thames",
+  "paeroa", "waihi", "te aroha", "taumarunui", "turangi", "waipukurau",
+  "wairoa", "woodville", "pahiatua", "bulls", "ohakune", "taihape",
+  "eltham", "waitara", "inglewood", "hanmer springs", "kaikoura",
+  "methven", "darfield", "geraldine", "temuka", "waimate", "arrowtown",
+  "milton", "ranfurly", "roxburgh", "riverton", "te anau", "bluff"
+];
 
 function hasUkCityOrTown(cleanAddr) {
   const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
@@ -3544,7 +3663,7 @@ function hasRecognizedPlaceName(cleanAddr, names) {
 // City qualifying administrative designations across all 16 priority countries
 const CITY_QUALIFIERS = [
   // English administrative designations
-  "town", "township", "district", "municipality", "metropolitan\\s*municipality",
+  "town", "township", "district", "dist\\.?", "municipality", "metropolitan\\s*municipality",
   "local\\s*municipality", "district\\s*municipality", "borough", "shire", "village",
   // Non-English administrative designations across the 16 priority countries
   // Germany / Austria / Switzerland
@@ -3578,7 +3697,7 @@ function hasCityDesignation(addr) {
   // Chinese / East Asian City, Town, Township, District characters: 市 (City), 鎮/镇 (Town), 鄉/乡 (Township), 區/区 (District)
   if (/[\u5e02\u93ae\u9547\u9109\u4e61\u5340\u533a]/.test(addr)) return true;
 
-  const stripped = addr.replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
+  const stripped = addr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+district\b/gi, " ").replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
   if (hasExplicitCityWord(stripped)) return true;
   const qualRegex = new RegExp(`\\b(?:${CITY_QUALIFIERS.join("|")})\\b`, "i");
   return qualRegex.test(stripped);
@@ -3591,7 +3710,7 @@ function addressLooksLikeSuburbOnly(cleanAddr) {
     const escaped = suburb.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
     if (new RegExp(`\\b${escaped}\\b`, "i").test(withoutDesignation)) {
       const rest = withoutDesignation.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ");
-      if (!hasRecognizedPlaceName(rest, RECOGNIZED_TOWNS) && !hasRecognizedPlaceName(rest, AUSTRALIAN_CITIES) && !hasRecognizedPlaceName(rest, UK_CITIES_AND_TOWNS) && !hasCityDesignation(rest)) {
+      if (!hasRecognizedPlaceName(rest, RECOGNIZED_TOWNS) && !hasRecognizedPlaceName(rest, AUSTRALIAN_CITIES) && !hasRecognizedPlaceName(rest, UK_CITIES_AND_TOWNS) && !hasRecognizedPlaceName(rest, NEW_ZEALAND_CITIES_AND_TOWNS) && !hasCityDesignation(rest)) {
         return true;
       }
     }
@@ -3700,9 +3819,36 @@ function evaluateCityQC(address, country) {
   // New Taipei City rule: Must remain Not Available unless a qualifying administrative area is separately identified
   if (isNewTaipeiCity(cleanAddr)) {
     const addrWithoutNTC = cleanAddr.replace(/\bnew\s*taipei(\s*city)?\b/gi, " ");
-    if (hasCityDesignation(addrWithoutNTC)) {
+    if (hasCityDesignation(addrWithoutNTC) || hasRecognizedPlaceName(addrWithoutNTC, RECOGNIZED_TOWNS)) {
       return "Available";
     }
+    return "Not Available";
+  }
+
+  // New Zealand City Evaluation (Strict QC Rule):
+  // Note: (Town, District, Municipality) should be considered as City.
+  // (If a country’s capital is mentioned in the address, then both City and State are considered available.)
+  if (isNewZealandLocation(cleanAddr, country)) {
+    // 1. Capital Rule: Wellington in address -> City: Available
+    if (isWellingtonCapital(cleanAddr)) {
+      return "Available";
+    }
+    // 2. Official New Zealand Cities & Towns (e.g. Auckland, Christchurch, Hamilton, Tauranga, Dunedin, Cambridge, etc.)
+    for (const place of NEW_ZEALAND_CITIES_AND_TOWNS) {
+      if (place === "wellington" && !isWellingtonCapital(cleanAddr)) continue;
+      if (isPlaceUsedAsStreetName(cleanAddr, place)) continue;
+      const escaped = place.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(cleanAddr)) {
+        return "Available";
+      }
+    }
+    // 3. Explicit City, Town, Township, District, Municipality designation
+    // (excluding industrial/business districts or street names like City Road)
+    const strippedNZ = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+district\b/gi, " ");
+    if (hasExplicitCityWord(strippedNZ) || /\b(?:town|township|district|municipality|borough|village)\b/i.test(strippedNZ)) {
+      return "Available";
+    }
+    // Suburbs alone (Penrose, Albany, Rosedale, Mount Wellington, etc.) or regions alone (Canterbury, Waikato, etc.) -> Not Available
     return "Not Available";
   }
 
@@ -3737,14 +3883,8 @@ function evaluateCityQC(address, country) {
     }
   }
 
-  // 5. South Africa & New Zealand: Suburbs preceding state/province MUST NOT be classified as cities!
+  // 5. South Africa: Suburbs preceding state/province MUST NOT be classified as cities!
   if (isSouthAfricanLocation(cleanAddr, country)) {
-    if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
-      return "Available";
-    }
-    return "Not Available";
-  }
-  if (isNewZealandLocation(cleanAddr, country)) {
     if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
       return "Available";
     }
