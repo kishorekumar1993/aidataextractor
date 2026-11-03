@@ -33,7 +33,7 @@ const RESTRICTED_PATTERNS = [
     label: "Defence & Military" 
   },
   { 
-    pattern: /\b(?:aircraft|aircrafts|airplane|airplanes|commercial\s*aviation|airlines?|air\s*charter|avionics|helicopters?|jet\s*aircraft|jets)\b/i, 
+    pattern: /\b(?:aircraft|aircrafts|airplane|airplanes|commercial\s*aviation|airlines?|air\s*charter|avionics|helicopters?|fighter\s*jets?|jet\s*aircraft)\b/i, 
     label: "Aircraft & Aviation" 
   },
   { 
@@ -41,15 +41,15 @@ const RESTRICTED_PATTERNS = [
     label: "Aerospace" 
   },
   { 
-    pattern: /\b(?:marine|maritime|naval|naval\s*vessels?|commercial\s*vessels?)\b/i, 
+    pattern: /\b(?:marine\s*vessels?|maritime\s*industry|naval\s*vessels?|commercial\s*vessels?)\b/i, 
     label: "Marine" 
   },
   { 
-    pattern: /\b(?:ship|ships|shipyard|shipyards|shipbuilding|ship\s*builder|boat\s*builder|boats?|yachts?)\b/i, 
+    pattern: /\b(?:shipyards?|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|naval\s*ships?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|vessels?\s*builder|commercial\s*vessels?|yachts?|motor\s*yachts?|sailing\s*yachts?|ferries|ferry\s*boats?|tugboats?|barges?)\b/i, 
     label: "Ships & Boats" 
   },
   { 
-    pattern: /\b(?:chemicals?|specialty\s*chemicals?|industrial\s*chemicals?|petrochemicals?|agrochemicals?|pesticides?|hazardous\s*chemicals?|chemical\s*synthesis|solvents?|toxic\s*chemicals?)\b/i, 
+    pattern: /\b(?:specialty\s*chemicals?|industrial\s*chemicals?|petrochemicals?|agrochemicals?|pesticides?|hazardous\s*chemicals?|chemical\s*synthesis|solvents?|toxic\s*chemicals?|raw\s*chemicals?|chemical\s*manufacturer|chemical\s*producer)\b/i, 
     label: "Chemicals & Petrochemicals" 
   },
   { 
@@ -57,12 +57,12 @@ const RESTRICTED_PATTERNS = [
     label: "Medicine, Medical & Hospital" 
   },
   { 
-    pattern: /\b(?:food|foods|beverages?|food\s*processing|bakery|bakeries|catering|restaurants?|bistros?|cafes?|eateries|snack|dairy|meat\s*processing|poultry\s*processing|seafood|edible\s*oils?|confectionery)\b/i, 
+    pattern: /\b(?:food\s*processing|bakery|bakeries|catering|restaurants?|bistros?|cafes?|eateries|snack\s*foods?|dairy\s*products?|meat\s*processing|poultry\s*processing|seafood\s*processing|edible\s*oils?|confectionery)\b/i, 
     label: "Food & Beverages" 
   },
   { 
-    pattern: /\b(?:alcohol|alcoholic|brewery|breweries|distillery|distilleries|liquor\s*store|liquor\s*shop|liquor|wine\s*producer|winery|wineries|vineyards?|wine|craft\s*beer|beer|whiskey|whisky|vodka|tequila|rum|gin|spirits)\b/i, 
-    label: "Alcohol & Breweries" 
+    pattern: /\b(?:alcohol|alcoholic|brewery|breweries|distillery|distilleries|liquor\s*store|liquor\s*shop|liquor|wine\s*producer|winery|wineries|vineyards?|craft\s*beer|beer|whiskey|whisky|vodka|tequila|rum|gin|spirits)\b/i, 
+    label: "Alcohol & Breweries"  
   },
   { 
     pattern: /\b(?:animals?|pets?|puppy|puppies|kitten|kittens|dogs?|canine|feline|pet\s*shop|pet\s*store|pet\s*food|pet\s*care|animal\s*breeding|livestock|cattle|poultry\s*farming|pig\s*farming|animal\s*feed|slaughterhouse|veterinary|vet\s*clinic|domestic\s*cats?|pet\s*cats?|cats?\s*(?:and|&)\s*dogs?|dogs?\s*(?:and|&)\s*cats?|cats?\s*(?:food|feed|litter|care|grooming|breed|breeds|adoption|rescue|supplies|accessories|bed|shelter|boarding))\b/i, 
@@ -441,8 +441,8 @@ async function handleCrawlAndExtract(rawUrl) {
   }
 
   // Step 2: PRE-AI STRICT CHECKS (Prohibited Category / Word & Online Shopping Cart)
-  // Check across target URL, final URL, page HTML, metadata, image tags, and crawled text
-  const siteContent = (crawlResult.combinedText || "") + " " + (crawlResult.mainHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
+  // Check across target URL, final URL, page text, metadata, image tags, and stripped body content
+  const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
   const restrictedCheck = detectRestrictedKeywords(siteContent, crawlResult.mainHtml || "");
 
   // PRE-AI CHECK 1: If Prohibited Category / Word appears anywhere on the site (text or images):
@@ -862,7 +862,7 @@ async function crawlWebsite(targetUrl) {
     // If homepage already shows this is an online shopping cart or restricted site,
     // skip crawling 15 subpages to respond instantly and preserve resources!
     const earlyCart = detectPurchaseOrShoppingCart(mainHtml);
-    const earlyRestricted = detectRestrictedKeywords(mainHtml + " " + targetUrl, mainHtml);
+    const earlyRestricted = detectRestrictedKeywords(stripHtml(mainHtml) + " " + targetUrl, mainHtml);
     const shouldSkipSubpages = (earlyCart && earlyCart.detected) || earlyRestricted.isRestricted;
 
     if (!shouldSkipSubpages) {
@@ -1818,14 +1818,34 @@ function detectRestrictedKeywords(text, html = "") {
   let combined = ((text || "") + " " + extractImageAttributes(html)).trim();
   if (!combined) return { isRestricted: false, matchedKeyword: null, reason: "" };
 
-  // Sanitize non-animal category/catalogue/cable/machinery expressions before matching
-  // (e.g. "Category", "Cat: ...", "Cat. No. ...", "Cat 5", "Cat 6", "Product Cat", "/cat/")
-  const sanitized = combined
+  // Strip HTML tags and attributes first so HTML tag/class/id attributes never create false tokens
+  const cleanText = combined.replace(/<[^>]+>/g, " ");
+
+  // Sanitize non-prohibited terms to prevent false positives:
+  // 1. Words ending in "-ship" (partnership, membership, dealership, craftsmanship, etc.)
+  // 2. Freight / parcel / order shipping (we ship, shipping policy, free shipping, drop shipping, etc.)
+  // 3. Category / cable / machinery "Cat"
+  // 4. Industrial tools (waterjet, inkjet, air knife, utility knife)
+  // 5. Material resistance (chemical resistant, food grade, marine grade, isopropyl alcohol)
+  const sanitized = cleanText
+    .replace(/\b(?:partner|member|dealer|owner|craftsman|workman|author|intern|sponsor|court|hard|champion|fellow|scholar|leader|relation|friend|apprentice|citizen)[\s\-_]?ships?\b/gi, " ")
+    .replace(/\b[\w]+[\-_]ships?\b/gi, " ")
+    .replace(/\b(?:we\s+ship|ship\s+(?:to|worldwide|nationwide|via|by|with|orders|daily|within|freight|internationally|domestically))\b/gi, " ")
+    .replace(/\b(?:drop\s*ship(?:ping)?|free\s*shipping|fast\s*shipping|freight\s*shipping|same\s*day\s*shipping|standard\s*shipping|express\s*shipping)\b/gi, " ")
+    .replace(/\bshipping\s*(?:policy|policies|cost|costs|info|information|method|methods|address|addresses|rate|rates|calculator|fee|fees|date|dates|label|labels|details|options|charge|charges|times?|carrier|carriers|weight|dimensions|terms|and\s+handling|and\s+returns)\b/gi, " ")
+    .replace(/\b(?:shipment|shipments|shipped|shipping)\b/gi, " ")
     .replace(/\b(?:category|categories|categorized|catalogue|catalog|subcat|sub-category)\b/gi, " ")
     .replace(/\b(?:prod(?:uct)?|item|sub|main|shop)?\s*cat\s*[:.\-–]/gi, " ")
     .replace(/\bcat\s*(?:[0-9]|no\.?|num\.?|number|#|code|part|id|class|rating|cable|cables|utp|stp|patch|loader|excavator|dozer|tractor|engine|diesel|machinery|equipment)\b/gi, " ")
     .replace(/\bcat\s+(?:5|5e|6|6a|7|7a|8)\b/gi, " ")
-    .replace(/[/\\_]cat[/\\_]/gi, " ");
+    .replace(/[/\\_]cat[/\\_]/gi, " ")
+    .replace(/\b(?:water|ink|hydro|sand)?\s*jets?\s*(?:cutting|cutter|cutters|machining|printing|printer|printers|pump|pumps|cleaning|cleaner|nozzle|nozzles)?\b/gi, " ")
+    .replace(/\b(?:waterjet|inkjet|hydrojet)\b/gi, " ")
+    .replace(/\b(?:air|utility|machine|slitter|guillotine|rotary|doctor)\s*knives?\b/gi, " ")
+    .replace(/\bair\s*knife\s*(?:system|systems|drying|nozzle|nozzles|blower|blowers)?\b/gi, " ")
+    .replace(/\b(?:chemical|chemically|marine|food)\s*(?:grade|resistance|resistant|proof|inert|inertness|compatibility|safe|approved)\b/gi, " ")
+    .replace(/\bresistant\s+to\s+chemicals?\b/gi, " ")
+    .replace(/\bisopropyl\s+alcohol\b/gi, " ");
 
   for (const item of RESTRICTED_PATTERNS) {
     const regex = item.pattern || item;
@@ -1965,16 +1985,25 @@ BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
   Instruction Note 2 Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
   If words or images related to ANY of these categories appear ANYWHERE on the site:
   1. Porn / Adult Content / Erotica / Onlyfans
-  2. Weapons / Firearms / Ammunition / Knives (combat, hunting, kitchen, pocket, sword, etc.)
+  2. Weapons / Firearms / Ammunition / Knives (combat, hunting, tactical, daggers, swords)
+      * EXCEPTION: Industrial machinery parts like "air knife systems" (drying blower nozzles) or "slitter/machine knives" are NOT weapons!
   3. Defence / Military / Armaments / Artillery / Defense contractors
-  4. Aircraft / Airplanes / Aviation / Helicopters / Jets
+  4. Aircraft / Airplanes / Commercial Aviation / Airlines / Helicopters / Fighter jets
+      * EXCEPTION: Industrial manufacturing processes like "Waterjet cutting", "Inkjet printing", or "Jet pumps" are NOT aircraft!
   5. Aerospace / Aerospace engineering / Aerospace parts
-  6. Marine / Maritime / Naval / Vessels
-  7. Ships / Boats / Shipyard / Shipbuilding / Yachts
-  8. Chemical / Petrochemicals / Agrochemicals / Pesticides / Solvents / Hazardous chemicals
+  6. Marine / Maritime / Naval / Marine Vessels (actual maritime naval industry)
+      * EXCEPTION: "Marine grade" material descriptors (e.g. marine grade stainless steel, marine plywood) are NOT marine vessel operations!
+  7. Ships / Boats / Shipyard / Shipbuilding / Yachts (actual maritime boat/ship building & shipyards)
+      * CRITICAL EXCEPTION FOR "SHIP":
+        - Words ending in "-ship" such as "Partnership", "Membership", "Dealership", "Craftsmanship", "Workmanship", "Ownership", "Leadership", "Relationship" are NOT ships!
+        - Freight, delivery, order, or parcel shipping (e.g. "We ship worldwide", "Shipping Policy", "Free shipping", "Fast shipping", "Shipping cost", "Shipment") is NOT the Ship category!
+        - ONLY classify as Ships/Boats if the company builds, manufactures, or repairs actual watercraft, boats, yachts, or operates a shipyard!
+  8. Chemical / Petrochemicals / Agrochemicals / Pesticides / Solvents / Hazardous chemicals (actual chemical manufacturing/synthesis)
+      * EXCEPTION: Material specifications like "chemical resistance", "chemically resistant", or "chemical compatibility" describing plastics, steel, or coatings are NOT chemical producers!
   9. Medicine / Medical / Pharmaceuticals / Prescription drugs / Hospitals / Clinics / Healthcare / Doctors / Dental / Surgery
   10. Food / Foods / Beverages / Food manufacturing / Restaurants / Cafes / Bakeries / Catering / Groceries / Meat / Dairy / Snack
   11. Alcohol / Breweries / Wineries / Distilleries / Liquor / Wine / Beer / Spirits
+      * EXCEPTION: "Isopropyl alcohol" used as an electronic cleaning solvent is NOT an alcoholic beverage/brewery!
   12. Animals / Pets / Dogs / Cats / Livestock / Cattle / Poultry / Animal feed / Veterinary
       * CRITICAL EXCEPTION FOR "CAT":
         - "Cat" or "Cat." as an abbreviation for "Category" (e.g. "Cat: Valves", "Product Cat", "Cat. No.", "Item Cat") or "Cat 5 / Cat 6" (network cabling) or "CAT" (Caterpillar machinery/equipment) is NOT an animal!
