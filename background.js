@@ -20,69 +20,69 @@ const DEFAULT_MODEL =
 // Primary prohibited core industries per Instruction Sheet Note 2
 // Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
 const RESTRICTED_PATTERNS = [
-  { 
-    pattern: /\b(?:porn(?:o|ography|ographic)?|xxx|erotic|adult|sex\s*shop|escort\s*service|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|sex\s*worker|sensual\s*massage|nude|nudity|onlyfans)\b/i, 
-    label: "Adult & Porn" 
+  {
+    pattern: /\b(?:porn(?:o|ography|ographic)?|xxx|erotic|adult|sex\s*shop|escort\s*service|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|sex\s*worker|sensual\s*massage|nude|nudity|onlyfans)\b/i,
+    label: "Adult & Porn"
   },
-  { 
-    pattern: /\b(?:weapons?|firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor|combat\s*knives|tactical\s*knives|hunting\s*knives|knives|knife|daggers?|swords?|machetes?|bayonets?|custom\s*knives|knife\s*maker)\b/i, 
-    label: "Weapons & Knives" 
+  {
+    pattern: /\b(?:weapons?|firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor|combat\s*knives|tactical\s*knives|hunting\s*knives|knives|knife|daggers?|swords?|machetes?|bayonets?|custom\s*knives|knife\s*maker)\b/i,
+    label: "Weapons & Knives"
   },
-  { 
-    pattern: /\b(?:defence|defense|military|armed\s*forces|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?|defence\s*contractor|defense\s*contractor)\b/i, 
-    label: "Defence & Military" 
+  {
+    pattern: /\b(?:defence|defense|military|armed\s*forces|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?|defence\s*contractor|defense\s*contractor)\b/i,
+    label: "Defence & Military"
   },
-  { 
-    pattern: /\b(?:aircraft|aircrafts|airplane|airplanes|commercial\s*aviation|airlines?|air\s*charter|avionics|helicopters?|fighter\s*jets?|jet\s*aircraft)\b/i, 
-    label: "Aircraft & Aviation" 
+  {
+    pattern: /\b(?:aircraft|aircrafts|airplane|airplanes|commercial\s*aviation|airlines?|air\s*charter|avionics|helicopters?|fighter\s*jets?|jet\s*aircraft)\b/i,
+    label: "Aircraft & Aviation"
   },
-  { 
-    pattern: /\b(?:aerospace|aerospace\s*engineering|aerospace\s*components?|aerospace\s*parts?)\b/i, 
-    label: "Aerospace" 
+  {
+    pattern: /\b(?:aerospace|aerospace\s*engineering|aerospace\s*components?|aerospace\s*parts?)\b/i,
+    label: "Aerospace"
   },
-  { 
-    pattern: /\b(?:marine\s*vessels?|maritime\s*industry|naval\s*vessels?|commercial\s*vessels?)\b/i, 
-    label: "Marine" 
+  {
+    pattern: /\b(?:marine\s*vessels?|maritime\s*industry|naval\s*vessels?|commercial\s*vessels?)\b/i,
+    label: "Marine"
   },
-  { 
-    pattern: /\b(?:shipyards?|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|naval\s*ships?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|vessels?\s*builder|commercial\s*vessels?|yachts?|motor\s*yachts?|sailing\s*yachts?|ferries|ferry\s*boats?|tugboats?|barges?)\b/i, 
-    label: "Ships & Boats" 
+  {
+    pattern: /\b(?:shipyards?|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|naval\s*ships?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|vessels?\s*builder|commercial\s*vessels?|yachts?|motor\s*yachts?|sailing\s*yachts?|ferries|ferry\s*boats?|tugboats?|barges?)\b/i,
+    label: "Ships & Boats"
   },
-  { 
-    pattern: /\b(?:specialty\s*chemicals?|industrial\s*chemicals?|petrochemicals?|agrochemicals?|pesticides?|hazardous\s*chemicals?|chemical\s*synthesis|solvents?|toxic\s*chemicals?|raw\s*chemicals?|chemical\s*manufacturer|chemical\s*producer)\b/i, 
-    label: "Chemicals & Petrochemicals" 
+  {
+    pattern: /\b(?:specialty\s*chemicals?|industrial\s*chemicals?|petrochemicals?|agrochemicals?|pesticides?|hazardous\s*chemicals?|chemical\s*synthesis|solvents?|toxic\s*chemicals?|raw\s*chemicals?|chemical\s*manufacturer|chemical\s*producer)\b/i,
+    label: "Chemicals & Petrochemicals"
   },
-  { 
-    pattern: /\b(?:medicine|medicines|medical|pharmaceuticals?|prescription\s*drugs?|online\s*pharmacy|hospital|hospitals|patient\s*care|dental\s*clinic|outpatient\s*clinic|surgery|veterinary\s*hospital|psychiatric\s*hospital|healthcare|health\s*clinic|diagnostic\s*center|clinic|clinics)\b/i, 
-    label: "Medicine, Medical & Hospital" 
+  {
+    pattern: /\b(?:medicine|medicines|medical|pharmaceuticals?|prescription\s*drugs?|online\s*pharmacy|hospital|hospitals|patient\s*care|dental\s*clinic|outpatient\s*clinic|surgery|veterinary\s*hospital|psychiatric\s*hospital|healthcare|health\s*clinic|diagnostic\s*center|clinic|clinics)\b/i,
+    label: "Medicine, Medical & Hospital"
   },
-  { 
-    pattern: /\b(?:food\s*processing|bakery|bakeries|catering|restaurants?|bistros?|cafes?|eateries|snack\s*foods?|dairy\s*products?|meat\s*processing|poultry\s*processing|seafood\s*processing|edible\s*oils?|confectionery)\b/i, 
-    label: "Food & Beverages" 
+  {
+    pattern: /\b(?:food\s*processing|bakery|bakeries|catering|restaurants?|bistros?|cafes?|eateries|snack\s*foods?|dairy\s*products?|meat\s*processing|poultry\s*processing|seafood\s*processing|edible\s*oils?|confectionery)\b/i,
+    label: "Food & Beverages"
   },
-  { 
-    pattern: /\b(?:alcohol|alcoholic|brewery|breweries|distillery|distilleries|liquor\s*store|liquor\s*shop|liquor|wine\s*producer|winery|wineries|vineyards?|craft\s*beer|beer|whiskey|whisky|vodka|tequila|rum|gin|spirits)\b/i, 
-    label: "Alcohol & Breweries"  
+  {
+    pattern: /\b(?:alcohol|alcoholic|brewery|breweries|distillery|distilleries|liquor\s*store|liquor\s*shop|liquor|wine\s*producer|winery|wineries|vineyards?|craft\s*beer|beer|whiskey|whisky|vodka|tequila|rum|gin|spirits)\b/i,
+    label: "Alcohol & Breweries"
   },
-  { 
-    pattern: /\b(?:animals?|pets?|puppy|puppies|kitten|kittens|dogs?|canine|feline|pet\s*shop|pet\s*store|pet\s*food|pet\s*care|animal\s*breeding|livestock|cattle|poultry\s*farming|pig\s*farming|animal\s*feed|slaughterhouse|veterinary|vet\s*clinic|domestic\s*cats?|pet\s*cats?|cats?\s*(?:and|&)\s*dogs?|dogs?\s*(?:and|&)\s*cats?|cats?\s*(?:food|feed|litter|care|grooming|breed|breeds|adoption|rescue|supplies|accessories|bed|shelter|boarding))\b/i, 
-    label: "Animals & Pets" 
+  {
+    pattern: /\b(?:animals?|pets?|puppy|puppies|kitten|kittens|dogs?|canine|feline|pet\s*shop|pet\s*store|pet\s*food|pet\s*care|animal\s*breeding|livestock|cattle|poultry\s*farming|pig\s*farming|animal\s*feed|slaughterhouse|veterinary|vet\s*clinic|domestic\s*cats?|pet\s*cats?|cats?\s*(?:and|&)\s*dogs?|dogs?\s*(?:and|&)\s*cats?|cats?\s*(?:food|feed|litter|care|grooming|breed|breeds|adoption|rescue|supplies|accessories|bed|shelter|boarding))\b/i,
+    label: "Animals & Pets"
   },
-  { 
-    pattern: /\b(?:gambling|online\s*casino|casinos?|sports\s*betting|betting\s*site|slot\s*machines?|video\s*slots|poker\s*room|roulette|blackjack|baccarat|bookmaker|sportsbook|lottery|lotto|sports\s*wagering|jackpot\s*betting)\b/i, 
-    label: "Gambling & Betting" 
+  {
+    pattern: /\b(?:gambling|online\s*casino|casinos?|sports\s*betting|betting\s*site|slot\s*machines?|video\s*slots|poker\s*room|roulette|blackjack|baccarat|bookmaker|sportsbook|lottery|lotto|sports\s*wagering|jackpot\s*betting)\b/i,
+    label: "Gambling & Betting"
   },
-  { 
-    pattern: /\b(?:tobacco|cigarettes?|cigars?|cigarillos|chewing\s*tobacco|hookah|shisha|snus|nicotine\s*pouches?|vape|vaping|e-?cigarette|vape\s*shop|e-?liquid|vape\s*juice|disposable\s*vape)\b/i, 
-    label: "Tobacco & Vaping" 
+  {
+    pattern: /\b(?:tobacco|cigarettes?|cigars?|cigarillos|chewing\s*tobacco|hookah|shisha|snus|nicotine\s*pouches?|vape|vaping|e-?cigarette|vape\s*shop|e-?liquid|vape\s*juice|disposable\s*vape)\b/i,
+    label: "Tobacco & Vaping"
   },
-  { 
-    pattern: /\b(?:cannabis|marijuana|weed|thc|cbd\s*oil|cbd\s*gummies|dispensary|recreational\s*weed|medical\s*cannabis|delta-?8|delta-?9|kratom|illicit\s*drugs|narcotics)\b/i, 
-    label: "Cannabis & Controlled Substances" 
+  {
+    pattern: /\b(?:cannabis|marijuana|weed|thc|cbd\s*oil|cbd\s*gummies|dispensary|recreational\s*weed|medical\s*cannabis|delta-?8|delta-?9|kratom|illicit\s*drugs|narcotics)\b/i,
+    label: "Cannabis & Controlled Substances"
   },
-  { 
-    pattern: /\b(?:counterfeit\s*goods|replica\s*watches?|fake\s*id|fake\s*passports?|hacking\s*services?|dark\s*web\s*market|payday\s*loans?|loan\s*shark)\b/i, 
-    label: "Counterfeits & Prohibited Financial Services" 
+  {
+    pattern: /\b(?:counterfeit\s*goods|replica\s*watches?|fake\s*id|fake\s*passports?|hacking\s*services?|dark\s*web\s*market|payday\s*loans?|loan\s*shark)\b/i,
+    label: "Counterfeits & Prohibited Financial Services"
   }
 ];
 
@@ -680,10 +680,10 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
 function extractLegalCandidatesFromHtml(html) {
   if (!html) return [];
   const text = html.replace(/<script[\s\S]*?<\/script>/gi, " ")
-                   .replace(/<style[\s\S]*?<\/style>/gi, " ")
-                   .replace(/<\/(?:p|div|h[1-6]|li|td|tr|th|header|footer|nav|section|article|aside|caption|blockquote|ul|ol|table|br\s*\/?)>/gi, "\n")
-                   .replace(/<[^>]+>/g, " ")
-                   .replace(/&nbsp;/gi, " ");
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<\/(?:p|div|h[1-6]|li|td|tr|th|header|footer|nav|section|article|aside|caption|blockquote|ul|ol|table|br\s*\/?)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ");
 
   const candidates = new Set();
 
@@ -719,8 +719,8 @@ function extractLegalCandidatesFromHtml(html) {
   while ((m = generalLegalRegex.exec(text)) !== null) {
     const cand = m[1].trim();
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
-        !/^(?:all|and|the|for|with|from|including|our|your|their)\b/i.test(cand) &&
-        cand.length >= 3 && cand.length <= 60) {
+      !/^(?:all|and|the|for|with|from|including|our|your|their)\b/i.test(cand) &&
+      cand.length >= 3 && cand.length <= 60) {
       addCleanCandidate(cand);
     }
   }
@@ -742,7 +742,7 @@ function extractSiteLogoText(html) {
 
   // 1. Meta og:site_name
   const ogMatch = html.match(/<meta[^>]+property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i) ||
-                  html.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
   if (ogMatch && ogMatch[1] && ogMatch[1].trim().length >= 2 && !/^(?:home|website|default)$/i.test(ogMatch[1].trim())) {
     return ogMatch[1].trim();
   }
@@ -753,7 +753,7 @@ function extractSiteLogoText(html) {
 
   // Look for logo class/id image
   const logoImgMatch = searchArea.match(/<img[^>]+(?:class|id)=["'][^"']*logo[^"']*["'][^>]+(?:alt|title)=["']([^"']+)["']/i) ||
-                       searchArea.match(/<img[^>]+(?:alt|title)=["']([^"']+)["'][^>]+(?:class|id)=["'][^"']*logo[^"']*["']/i);
+    searchArea.match(/<img[^>]+(?:alt|title)=["']([^"']+)["'][^>]+(?:class|id)=["'][^"']*logo[^"']*["']/i);
   if (logoImgMatch && logoImgMatch[1]) {
     const val = logoImgMatch[1].replace(/\blogo\b/gi, "").trim();
     if (val.length >= 2 && !/^(?:home|image|banner|site)$/i.test(val)) return val;
@@ -768,7 +768,7 @@ function extractSiteLogoText(html) {
 
   // 3. Header brand link (e.g. <a class="logo" ... title="..."> or <a class="brand">Brand</a>)
   const logoLinkMatch = searchArea.match(/<a[^>]+class=["'][^"']*(?:logo|brand|navbar-brand)[^"']*["'][^>]*title=["']([^"']+)["']/i) ||
-                        searchArea.match(/<a[^>]+class=["'][^"']*(?:logo|brand|navbar-brand)[^"']*["'][^>]*>([\s\S]*?)<\/a>/i);
+    searchArea.match(/<a[^>]+class=["'][^"']*(?:logo|brand|navbar-brand)[^"']*["'][^>]*>([\s\S]*?)<\/a>/i);
   if (logoLinkMatch && logoLinkMatch[1]) {
     const val = logoLinkMatch[1].replace(/<[^>]+>/g, "").trim();
     if (val.length >= 2 && val.length <= 60 && !/^(?:home|index|logo)$/i.test(val)) return val;
@@ -1023,7 +1023,7 @@ async function crawlWebsite(targetUrl) {
 
   const logoText = extractSiteLogoText(mainHtml);
   const ogSiteMatch = mainHtml.match(/<meta[^>]+property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i) ||
-                      mainHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
+    mainHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
   const ogSiteName = (ogSiteMatch && ogSiteMatch[1] && ogSiteMatch[1].trim()) || "";
 
   // Check for online purchase / shopping cart ("Shopchart")
@@ -1221,7 +1221,7 @@ function discoverContactLinks(html, baseUrl) {
     if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|impressum|imprint|mentions-legales)\b/i.test(rawLower)) score += 7;
     if (/\b(support|customer-support|service|customer-service|help|help-desk|faq)\b/i.test(rawLower)) score += 8;
     if (/\b(sales|inquiry|enquiry|inquiries|enquiries|quote|request-quote|request-a-quote|order|orders)\b/i.test(rawLower)) score += 8;
-    if (/\b(shop|store|online-store|cart|basket|products)\b/i.test(rawLower)) score += 8;
+    if (/\b(shop|store|online-store|cart|basket)\b/i.test(rawLower)) score += 8;
     if (/\b(team|our-team|staff|management|people|leadership)\b/i.test(rawLower)) score += 6;
     if (/\b(locations|branches|branch|offices|stores|dealers|distributors)\b/i.test(rawLower)) score += 6;
     if (/\b(feedback|complaints|careers|jobs|directory)\b/i.test(rawLower)) score += 5;
@@ -1379,7 +1379,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     const raw = stripHtml(pm[2]);
     if (raw.length >= 15 && raw.length <= 250 &&
       (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
-       /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja)\b/i.test(raw)) &&
+        /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja)\b/i.test(raw)) &&
       /\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|gpo\s*box)\b/i.test(raw)) {
       const ctx = getContext(pm[1], defaultSource);
       addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
@@ -1475,7 +1475,7 @@ function extractAddressComponents(addr) {
 function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
   if (!candidates || candidates.length === 0) {
     if (!geminiAddr || geminiAddr.length < 8 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim()) ||
-        /\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr)) {
+      /\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr)) {
       return { address: "Not Available", selectedCandidate: null };
     }
     return { address: geminiAddr, selectedCandidate: null };
@@ -1496,7 +1496,7 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
 
   // If Gemini provided invalid text, missing address, or Cloudflare protection, reject immediately
   if (!geminiAddr || geminiAddr.length < 5 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim()) ||
-      /\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr)) {
+    /\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr)) {
     return { address: topRaw, selectedCandidate: topCandidate };
   }
 
@@ -2328,10 +2328,10 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck) 
 
   const formattedAddressEvidence = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
     ? crawlData.addressCandidates.map((c, idx) => {
-        const typeLabel = c.isHeadquarters ? "HEADQUARTERS / HEAD OFFICE" : (c.locationType ? c.locationType.toUpperCase() : "LOCATION");
-        const langLabel = c.isEnglish ? "English" : "Local Language";
-        return `${idx + 1}. [${typeLabel} (${langLabel}, Source: ${c.source})]: ${c.raw}`;
-      }).join("\n")
+      const typeLabel = c.isHeadquarters ? "HEADQUARTERS / HEAD OFFICE" : (c.locationType ? c.locationType.toUpperCase() : "LOCATION");
+      const langLabel = c.isEnglish ? "English" : "Local Language";
+      return `${idx + 1}. [${typeLabel} (${langLabel}, Source: ${c.source})]: ${c.raw}`;
+    }).join("\n")
     : ((crawlData.detectedAddresses || []).join("\n") || "(No physical address candidates extracted from static HTML)");
 
   const prompt = `
@@ -2447,11 +2447,12 @@ ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
 4. Address Formatting (Rule 6) - COMPLETE PHYSICAL ADDRESS PRESERVATION:
    - TAKE THE COMPLETE PHYSICAL ADDRESS: Retain street address, locality/suburb, town/city, AND State / Province / Territory!
    - STRICTLY DO NOT DROP OR STRIP STATE / PROVINCE / REGION! (e.g. For "40 Sarah St, Campbellfield VIC 3061.", you MUST KEEP the state "Victoria": "40 Sarah Street, Campbellfield, Victoria").
+   - STRICT INITIAL STREET NUMBER PRESERVATION: NEVER drop or strip the leading building / street / premise number (e.g. "12110 Best Place" -> MUST KEEP "12110", "40 Sarah Street" -> MUST KEEP "40", "18 Kuang Fu North Road" -> MUST KEEP "18"). A standalone number at the beginning of an address followed by a street name is the STREET NUMBER, NOT a postal code! You MUST retain the initial building/street number!
    - COMMA SEPARATION QC RULE: Ensure a comma separates the major address components (Street, Suburb/Town/City, State/Province). For example: "40 Sarah Street, Campbellfield, Victoria" (MUST have a comma before the state "Victoria").
    - ADDRESS ENDING CRITICAL QC RULE: Address ending MUST NOT have a comma (,) or point/period (.). It should be empty of trailing punctuation (e.g. "40 Sarah Street, Campbellfield, Victoria", NEVER end with "." or ",").
    - REMOVE ONLY:
-     * Postal codes / ZIP codes (e.g. 3061, 90210, 1459, SW1A 1AA, M5V 2T6, 326).
-     * Country name (e.g. Australia, South Africa, United States, Taiwan, R.O.C.).
+     * Postal codes / ZIP codes that follow the city/state (e.g. "OH 45241" -> strip 45241, "VIC 3061" -> strip 3061). DO NOT strip the initial street number!
+     * Country name (e.g. Australia, South Africa, United States, Taiwan, R.O.C., Turkiye).
      * Company name.
    - EXPAND ALL ABBREVIATIONS TO FULL WORDS:
      * Compass / Directional prefixes & suffixes: E. / E -> East (e.g. "301 E. Marquardt Drive" -> "301 East Marquardt Drive"), W. / W -> West, N. / N -> North, S. / S -> South, NE / N.E. -> Northeast, NW / N.W. -> Northwest, SE / S.E. -> Southeast, SW / S.W. -> Southwest.
@@ -2496,8 +2497,9 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    - Mark "Available" if ANY of the following administrative divisions is written in the extracted address:
      * State, Province, County (or Co.), Prefecture, Hsien (Taiwan County), Bundesland / Land (Germany), Regione / Provincia (Italy), Provinsi / Propinsi (Indonesia), Negeri / Wilayah (Malaysia), Changwat (Thailand), Sheng / Xian / Zhou (China), Territory, Emirate, Canton, Region, Regional Council, Oblast, Voivodeship, Department, Governorate
      * Named examples across priority countries: Victoria, New South Wales, Queensland, Texas, California, Ontario, Quebec, Gauteng, Maharashtra, Karnataka, Tamil Nadu, Selangor, Penang, Johor, Guangdong, Jiangsu, Gyeonggi, Abu Dhabi, Dubai, Île-de-France, Bavaria, Yorkshire, Lancashire, Dublin, Cork, Kildare, Galway, Lombardia, Brescia, München, etc.
-   - ALSO Mark "Available" if a country's official capital city is in the address (e.g. Taipei City = capital of Taiwan, London = capital of England, Washington D.C. = capital of USA, Berlin = Germany, Rome = Italy, Madrid = Spain, Dublin = Ireland, Bangkok = Thailand, Jakarta = Indonesia, Beijing = China, Kuala Lumpur = Malaysia).
+   - ALSO Mark "Available" if a country's official capital city is in the address (e.g. Taipei City = capital of Taiwan, London = capital of England, Washington D.C. = capital of USA, Berlin = Germany, Rome = Italy, Madrid = Spain, Ankara = Turkiye, Dublin = Ireland, Bangkok = Thailand, Jakarta = Indonesia, Beijing = China, Kuala Lumpur = Malaysia).
    - Spain State Rule: Any of the 50 provinces (e.g. Madrid, Barcelona, Valencia, Sevilla, Zaragoza, Málaga, Murcia, Alicante, Córdoba, Valladolid, A Coruña, Asturias, Vizcaya, Guipúzcoa, Las Palmas, Santa Cruz de Tenerife, etc.) or 17 Autonomous Communities (e.g. Andalucía, Cataluña, Galicia, País Vasco, Castilla y León, Castilla-La Mancha, etc.) in address → State: Available.
+   - Turkey (Türkiye) State Rule: Any of Turkey's provinces (İl, e.g. Istanbul, Ankara, Izmir, Bursa, Antalya, Adana, Konya, Gaziantep, Kocaeli, Mersin, Diyarbakir, Kayseri, Eskisehir, Samsun, Denizli, Sakarya, Mugla, etc.) or explicit "İl" / "İli" / "Province" in address → State: Available. If Ankara (capital) is in address, both State and City are Available.
    - If the address only contains a street, suburb, locality, or industrial area — mark "Not Available".
    - Taiwan – State Validation Rule:
      * Taipei City (capital) in address → State: Available
@@ -2526,6 +2528,7 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
       - Thailand: Thesaban, Amphoe, Amphur, Khet, Mueang, Muang
       - Malaysia: Bandar, Daerah, Mukim, Pekan, Majlis Perbandaran
       - India: Taluk, Taluka, Tehsil, Tahsil, Mandal, Nagar Palika, Nagar Nigam
+      - Turkey: İlçe, İlcesi, Belediye, Belediyesi, Şehir, Sehir, Mahalle, Mahallesi
    c) The address contains a recognized city / town / municipal name (e.g. Chicago, Melbourne, Boston, San Francisco, Cape Town, Manchester, Johor Bahru, Shenzhen).
    d) UNITED KINGDOM: recognized UK cities, towns, and London boroughs evaluate as "Available".
    e) NEW ZEALAND: Recognized NZ cities & towns (e.g. Auckland, Wellington, Christchurch, Hamilton, Tauranga, Dunedin, Lower Hutt, Upper Hutt, Palmerston North, Napier, Porirua, New Plymouth, Rotorua, Whangarei, Invercargill, Nelson, Whanganui, Hastings, Gisborne, Blenheim, Timaru, Taupo, Pukekohe, Cambridge, Queenstown) evaluate as "Available".
@@ -2667,6 +2670,7 @@ COUNTRY NAME VALIDATION RULES:
 1. Country Name MUST be taken DIRECTLY from the physical address on the website. Expand "Taiwan, R.O.C." to "Taiwan".
 2. STRICTLY DO NOT guess or infer from domain name or URL extension (e.g. do NOT guess from .com.tw, .tw, .co.za).
 3. For the United States, you MUST return the full official name "United States Of America" (NEVER return just "United States" or "USA").
+4. For Turkey / Türkiye / Republic of Turkey / Republic of Turkiye, you MUST return "Turkiye" (spelled "Turkiye").
 
 EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE):
 1. Comprehensive Full-Website Email Analysis:
@@ -3073,9 +3077,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 1. Prohibited Category / Word Check (Highest Priority Rule Note 2)
   // "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
-  const isProhibited = (restrictedCheck && restrictedCheck.isRestricted) || 
-                       String(result.businessType || "").toLowerCase() === "restricted site" ||
-                       !!result.isProhibitedSite;
+  const isProhibited = (restrictedCheck && restrictedCheck.isRestricted) ||
+    String(result.businessType || "").toLowerCase() === "restricted site" ||
+    !!result.isProhibitedSite;
   if (isProhibited) {
     result.websiteStatus = "Not Working";
     result.businessType = "";
@@ -3296,6 +3300,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         addr = restoreStateIfOmitted(addr, rawSource, country);
       }
 
+      // CRITICAL GLOBAL FIX: Restore missing initial street / building / premise number if dropped
+      const candidateRawSources = [
+        rawSource,
+        ...(crawlData.addressCandidates || []).map(c => (typeof c === "object" ? c.raw : c))
+      ].filter(Boolean);
+      for (const src of candidateRawSources) {
+        const beforeNum = addr;
+        addr = restoreStreetNumberIfOmitted(addr, src);
+        if (addr !== beforeNum) break;
+      }
+
       if (country && country.length > 2) {
         if (/australia/i.test(country)) {
           addr = addr.replace(/,\s*\bAustralia\b\s*$/i, "");
@@ -3304,6 +3319,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
           addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.)\b/gi, " ");
         } else if (/spain/i.test(country)) {
           addr = addr.replace(/\b(?:Spain|Espa[nñ]a)\b/gi, " ");
+        } else if (/turk/i.test(country)) {
+          addr = addr.replace(/\b(?:Turkiye|T[uü]rkiye|Turkey)\b/gi, " ");
         } else {
           const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
           addr = addr.replace(countryRegex, " ");
@@ -3345,6 +3362,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
   if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(country.trim())) {
     country = "United States Of America";
+  }
+  if (/^(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)$/i.test(country.trim())) {
+    country = "Turkiye";
   }
   result.countryName = toTitleCase(country.trim());
 
@@ -3623,6 +3643,11 @@ const STATE_AND_PROVINCE_NAMES = [
   // Vietnam
   "ho chi minh", "hanoi", "dong nai", "binh duong", "hai phong", "can tho", "da nang",
   "ba ria vung tau", "long an", "tien giang",
+  // Turkey (Provinces / İl)
+  "istanbul", "ankara", "izmir", "bursa", "antalya", "adana", "konya", "gaziantep", "şanlıurfa", "sanliurfa",
+  "kocaeli", "mersin", "diyarbakır", "diyarbakir", "hatay", "manisa", "kayseri", "samsun", "balıkesir", "balikesir",
+  "kahramanmaraş", "kahramanmaras", "van", "aydın", "aydin", "denizli", "sakarya", "tekirdağ", "tekirdag", "muğla",
+  "mugla", "eskişehir", "eskisehir", "mardin", "malatya", "trabzon",
   // Netherlands / Belgium / Switzerland / Austria / Poland
   "north holland", "south holland", "noord holland", "zuid holland", "utrecht", "gelderland",
   "overijssel", "limburg", "noord brabant", "friesland", "groningen", "drenthe", "zeeland",
@@ -4065,7 +4090,9 @@ const CITY_QUALIFIERS = [
   // Malaysia
   "bandar", "daerah", "mukim", "pekan", "majlis\\s*perbandaran",
   // India
-  "taluk", "taluka", "tehsil", "tahsil", "mandal", "nagar\\s*palika", "nagar\\s*nigam"
+  "taluk", "taluka", "tehsil", "tahsil", "mandal", "nagar\\s*palika", "nagar\\s*nigam",
+  // Turkey
+  "ilçe", "ilcesi", "belediye", "belediyesi", "şehir", "sehir", "mahalle", "mahallesi"
 ];
 
 function hasExplicitCityWord(cleanAddr) {
@@ -4404,7 +4431,7 @@ function preferOfficialCompanyName(name, crawlData) {
   const allCandidates = [...legalCandidates, jsonLdName, copyrightName]
     .map(n => cleanCompanyPrefixesAndSuffixes(n))
     .filter(n => n && n.length >= 3 && n.length <= 160);
-  
+
   let bestOfficial = null;
   let bestScore = -1;
 
@@ -5249,6 +5276,70 @@ function restoreStateIfOmitted(cleanAddr, rawAddr, country = "") {
 }
 
 /**
+ * Restores initial street / building / premise number if AI dropped it.
+ * E.g. "Best Place, Cincinnati, Ohio" -> "12110 Best Place, Cincinnati, Ohio"
+ */
+function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
+  if (!cleanAddr || !rawAddr) return cleanAddr;
+  let c = cleanAddr.trim();
+
+  // If cleanAddr already starts with a number, premise indicator, or PO Box, no need to restore
+  if (/^(?:\d+|no\.?|nos\.?|nº|#|unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|p\.?o\.?\s*box)\b/i.test(c)) {
+    return cleanAddr;
+  }
+
+  // Extract the first meaningful thoroughfare or street name chunk from cleanAddr
+  // E.g. from "Best Place, Cincinnati, Ohio", chunk is "Best Place"
+  const firstCommaIdx = c.indexOf(",");
+  let firstSegment = (firstCommaIdx > 0 ? c.slice(0, firstCommaIdx) : c).trim();
+  if (firstSegment.length < 3) return cleanAddr;
+
+  // Make common street suffixes flexible between full and abbreviated forms
+  const suffixMap = [
+    [/\bStreet\b/i, "(?:Street|St\\b\\.?)"],
+    [/\bRoad\b/i, "(?:Road|Rd\\b\\.?)"],
+    [/\bPlace\b/i, "(?:Place|Pl\\b\\.?)"],
+    [/\bAvenue\b/i, "(?:Avenue|Ave\\b\\.?)"],
+    [/\bDrive\b/i, "(?:Drive|Dr\\b\\.?)"],
+    [/\bLane\b/i, "(?:Lane|Ln\\b\\.?)"],
+    [/\bBoulevard\b/i, "(?:Boulevard|Blvd\\b\\.?)"],
+    [/\bCourt\b/i, "(?:Court|Ct\\b\\.?)"],
+    [/\bTerrace\b/i, "(?:Terrace|Tce\\b|Ter\\b\\.?)"],
+    [/\bHighway\b/i, "(?:Highway|Hwy\\b\\.?)"],
+    [/\bParkway\b/i, "(?:Parkway|Pkwy\\b\\.?)"],
+    [/\bCrescent\b/i, "(?:Crescent|Cres\\b\\.?)"],
+    [/\bSquare\b/i, "(?:Square|Sq\\b\\.?)"]
+  ];
+
+  let escapedSeg = firstSegment.replace(/[-\[\]{}()*+?.,\\^$|#]/g, "\\$&");
+  for (const [sufRegex, flexRep] of suffixMap) {
+    if (sufRegex.test(escapedSeg)) {
+      escapedSeg = escapedSeg.replace(sufRegex, flexRep);
+      break;
+    }
+  }
+  escapedSeg = escapedSeg.replace(/\s+/g, "\\s+");
+
+  // Regex in rawAddr looking for a street/building number immediately preceding this segment
+  const prefixRegex = new RegExp(
+    '(?:^|[\\s,#;:])((?:(?:unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory)\\s*\\d+[A-Za-z]?[\\s,]+)?(?:(?:no\\.?|nos\\.?|nº|#)\\s*)?\\d+[A-Za-z]?(?:[-/]\\d+[A-Za-z]?)?)\\s+' + escapedSeg,
+    'i'
+  );
+
+  const m = rawAddr.match(prefixRegex);
+  if (m && m[1]) {
+    let leadingNum = m[1].trim();
+    // Clean trailing comma if any
+    leadingNum = leadingNum.replace(/[,;]+$/, "").trim();
+    if (leadingNum) {
+      return `${leadingNum} ${c}`;
+    }
+  }
+
+  return cleanAddr;
+}
+
+/**
  * Carefully strips postal codes while strictly preserving street numbers and states.
  */
 function removePostalCodesCarefully(addr) {
@@ -5485,6 +5576,7 @@ function detectCountryFromAddress(address) {
   if (/\b(united\s*arab\s*emirates|uae)\b/i.test(lower)) return "United Arab Emirates";
   if (/\b(italy|italia)\b/i.test(lower)) return "Italy";
   if (/\b(spain|espana)\b/i.test(lower)) return "Spain";
+  if (/\b(t[uü]rkiye|turkey|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)\b/i.test(lower)) return "Turkiye";
   //.
   // 2. Definitive administrative regions/towns explicitly appearing in physical address
   if (/\b(taoyuan\s*hsien|taoyuan|yangmei|taipei|new\s*taipei|kaohsiung|taichung|tainan|hsinchu)\b/i.test(lower)) {
@@ -5503,12 +5595,13 @@ function detectCountryFromAddress(address) {
   if (/\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s*hampshire|new\s*jersey|new\s*mexico|new\s*york|north\s*carolina|north\s*dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s*island|south\s*carolina|south\s*dakota|tennessee|texas|utah|vermont|virginia|washington|west\s*virginia|wisconsin|wyoming|district\s*of\s*columbia)\b/i.test(lower)) return "United States Of America";
   if (/\b(ontario|quebec|british\s*columbia|alberta|manitoba|nova\s*scotia)\b/i.test(lower)) return "Canada";
   if (/\b(?:new\s*south\s*wales|victoria|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|sydney|melbourne|brisbane|perth|adelaide|canberra|hobart|darwin|gold\s*coast|newcastle|wollongong|geelong|cairns|townsville)\b/i.test(lower) ||
-      /\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(lower) ||
-      /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower)) return "Australia";
+    /\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(lower) ||
+    /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower)) return "Australia";
   if (/\b(bavaria|bayern|baden-wurttemberg|nordrhein-westfalen|hessen|sachsen)\b/i.test(lower)) return "Germany";
   if (/\b(andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|navarra|rioja|barcelona|valencia|sevilla|zaragoza|málaga|malaga|murcia|alicante|córdoba|cordoba|valladolid|vigo|gijón|gijon|coruña|coruna|toledo|vizcaya|bizkaia)\b/i.test(lower)) return "Spain";
   if (/\b(maharashtra|karnataka|tamil\s*nadu|gujarat|uttar\s*pradesh|telangana|delhi)\b/i.test(lower)) return "India";
   if (/\b(taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung)\s*(hsien|county)\b/i.test(lower)) return "Taiwan";
+  if (/\b(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eski[sş]ehir|sanliurfa|şanlıurfa|samsun|denizli|sakarya|mu[gğ]la|trabzon)\b/i.test(lower)) return "Turkiye";
 
   // 3. National Capital mentioned in the physical address text
   if (isNewTaipeiCity(lower)) return "Taiwan";
@@ -5529,6 +5622,7 @@ function detectCountryFromAddress(address) {
   if (/\b(beijing)\b/i.test(lower)) return "China";
   if (/\b(new\s*delhi)\b/i.test(lower)) return "India";
   if (/\b(seoul)\b/i.test(lower)) return "South Korea";
+  if (/\b(ankara)\b/i.test(lower)) return "Turkiye";
 
   return "";
 }

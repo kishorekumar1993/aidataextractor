@@ -397,6 +397,31 @@
         }
       }
 
+      // 4. Country alias fallbacks (Turkiye <-> Turkey)
+      if (matchedIndex === -1) {
+        if (targetClean === "turkiye" || targetClean === "türkiye") {
+          for (let i = 0; i < element.options.length; i++) {
+            const opt = element.options[i];
+            const val = (opt.value || "").trim().toLowerCase();
+            const txt = (opt.text || "").trim().toLowerCase();
+            if (val === "turkey" || txt === "turkey" || val === "türkiye" || txt === "türkiye") {
+              matchedIndex = i;
+              break;
+            }
+          }
+        } else if (targetClean === "turkey") {
+          for (let i = 0; i < element.options.length; i++) {
+            const opt = element.options[i];
+            const val = (opt.value || "").trim().toLowerCase();
+            const txt = (opt.text || "").trim().toLowerCase();
+            if (val === "turkiye" || txt === "turkiye" || val === "türkiye" || txt === "türkiye") {
+              matchedIndex = i;
+              break;
+            }
+          }
+        }
+      }
+
       if (matchedIndex !== -1) {
         element.selectedIndex = matchedIndex;
         try {
@@ -618,7 +643,12 @@
       if (/^united\s*states\s*of\s*america$/i.test(formattedCountry)) {
         formattedCountry = "United States Of America";
       }
-      if (setInputValue(elements.countryName, formattedCountry)) {
+      if (/^(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)$/i.test(formattedCountry)) {
+        formattedCountry = "Turkiye";
+      }
+      const isSelect = elements.countryName.tagName && elements.countryName.tagName.toLowerCase() === "select";
+      const success = isSelect ? setSelectValue(elements.countryName, formattedCountry) : setInputValue(elements.countryName, formattedCountry);
+      if (success) {
         highlightField(elements.countryName);
         filledCount++;
       }
