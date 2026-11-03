@@ -888,11 +888,12 @@ async function crawlWebsite(targetUrl) {
     const fetchedUrls = new Set([finalUrl]);
 
     // PRE-AI CRAWL SHORT-CIRCUIT:
-    // If homepage already shows this is an online shopping cart or restricted site,
-    // skip crawling 15 subpages to respond instantly and preserve resources!
+    // Only skip crawling subpages if the homepage is confirmed with HIGH CONFIDENCE to be a verified retail store
+    // (with functional Add to Cart + Product Price + Online Checkout Gateway + Shipping Policy on homepage),
+    // or if a prohibited category is detected. Never skip subpages for catalog/quote sites or unconfirmed checkouts!
     const earlyCart = detectPurchaseOrShoppingCart(mainHtml);
     const earlyRestricted = detectRestrictedKeywords(stripHtml(mainHtml) + " " + targetUrl, mainHtml);
-    const shouldSkipSubpages = (earlyCart && earlyCart.detected) || earlyRestricted.isRestricted;
+    const shouldSkipSubpages = (earlyCart && earlyCart.detected && earlyCart.isHighConfidence) || earlyRestricted.isRestricted;
 
     if (!shouldSkipSubpages) {
       for (const cUrl of contactLinks.slice(0, 15)) {
@@ -1892,124 +1893,398 @@ function detectRestrictedKeywords(text, html = "") {
 }
 
 /**
- * 3-Tier Multi-Check E-Commerce Verification Rule (Rule 1 & Rule 2).
- * Rule: A website is E-COMMERCE (Online Shopping) IF AND ONLY IF:
- *   [Mandatory Core Rule: Direct Transaction Capability (Cart + Unit Price + Online Checkout Gateway)]
- *   AND
- *   [Secondary Operational Signal: Delivery / Fulfillment Logistics OR Structured Offer Schema]
- *
- * EXCLUSION: If the button/link says "Request a Quote", "Contact Us for Pricing", or "Find a Dealer",
- * it fails this rule and is classified as a B2B Catalog / Showcase site (NOT e-commerce)!
+ * Safely parses all JSON-LD script blocks in HTML and recursively inspects @graph / objects
+ * to find genuine Product entities with valid Offer schemas containing a verified positive price.
  */
-function detectPurchaseOrShoppingCart(html = "", text = "") {
-  if (!html && !text) return { detected: false, reason: "" };
+function extractJsonLdProductOffer(html) {
+  if (!html || typeof html !== "string") return { hasProductOffer: false };
+  const scriptRegex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = scriptRegex.exec(html)) !== null) {
+    try {
+      const data = JSON.parse(match[1]);
 
+      const checkEntity = (item) => {
+        if (!item || typeof item !== "object") return null;
+        const itemType = String(item["@type"] || "").toLowerCase();
+        const types = Array.isArray(item["@type"]) ? item["@type"].map(t => String(t).toLowerCase()) : [itemType];
+        const isProduct = types.some(t => t === "product" || t.endsWith("/product"));
+
+        if (isProduct && item.offers) {
+          const offersList = Array.isArray(item.offers) ? item.offers : [item.offers];
+          for (const off of offersList) {
+            if (!off || typeof off !== "object") continue;
+            const offType = String(off["@type"] || "").toLowerCase();
+            const offTypes = Array.isArray(off["@type"]) ? off["@type"].map(t => String(t).toLowerCase()) : [offType];
+            const isOffer = offTypes.some(t => t === "offer" || t === "aggregateoffer" || t.endsWith("/offer"));
+
+            const rawPrice = off.price !== undefined ? off.price : (off.lowPrice !== undefined ? off.lowPrice : off.highPrice);
+            const numPrice = parseFloat(rawPrice);
+            if (!isNaN(numPrice) && numPrice > 0) {
+              return {
+                hasProductOffer: true,
+                price: numPrice,
+                currency: off.priceCurrency || "",
+                name: item.name || ""
+              };
+            }
+          }
+        }
+        return null;
+      };
+
+      const traverse = (node) => {
+        if (!node) return null;
+        if (Array.isArray(node)) {
+          for (const el of node) {
+            const found = traverse(el);
+            if (found) return found;
+          }
+        } else if (typeof node === "object") {
+          const direct = checkEntity(node);
+          if (direct) return direct;
+          if (node["@graph"] && Array.isArray(node["@graph"])) {
+            for (const el of node["@graph"]) {
+              const found = traverse(el);
+              if (found) return found;
+            }
+          }
+        }
+        return null;
+      };
+
+      const found = traverse(data);
+      if (found) return found;
+    } catch (e) { }
+  }
+  return { hasProductOffer: false };
+}
+
+/**
+ * Extracts product-level unit price.
+ * Rejects unrelated prices appearing in footers, blogs, articles, or company revenue.
+ */
+function extractProductLevelPrice(html, text, jsonLdOffer) {
+  // 1. Valid JSON-LD Product Offer price
+  if (jsonLdOffer && jsonLdOffer.hasProductOffer && jsonLdOffer.price > 0) {
+    return {
+      hasPrice: true,
+      price: jsonLdOffer.price,
+      currency: jsonLdOffer.currency,
+      source: "JSON-LD Product Offer"
+    };
+  }
+
+  const rawHtml = String(html || "");
+
+  // 2. Microdata / OpenGraph / Meta product price
+  const metaPriceMatch = rawHtml.match(/<(?:meta|input)[^>]+(?:property|name|itemprop)=["'](?:product:price:amount|og:price:amount|price)["'][^>]+content=["']([0-9]+(?:\.[0-9]{2})?)["']/i) ||
+    rawHtml.match(/<(?:meta|input)[^>]+content=["']([0-9]+(?:\.[0-9]{2})?)["'][^>]+(?:property|name|itemprop)=["'](?:product:price:amount|og:price:amount|price)["']/i);
+  if (metaPriceMatch) {
+    const val = parseFloat(metaPriceMatch[1]);
+    if (!isNaN(val) && val > 0) {
+      return {
+        hasPrice: true,
+        price: val,
+        source: "Meta/Microdata Product Price"
+      };
+    }
+  }
+
+  // 3. Dedicated product price HTML classes / containers
+  const productPriceClassRegex = /(?:class|id)=["'][^"']*\b(?:product[-_]?price|single[-_]?price|offer[-_]?price|sale[-_]?price|current[-_]?price|regular[-_]?price|woocommerce-Price-amount|entry[-_]?price|price-box)\b[^"']*["'][^>]*>[\s\S]{0,100}?(?:[\$£€¥₹]|AU\$|CA\$|USD|EUR|GBP)\s*([0-9]+(?:\.[0-9]{2})?)/i;
+  const classMatch = rawHtml.match(productPriceClassRegex);
+  if (classMatch) {
+    const val = parseFloat(classMatch[1]);
+    if (!isNaN(val) && val > 0) {
+      return {
+        hasPrice: true,
+        price: val,
+        source: "Product Price Container"
+      };
+    }
+  }
+
+  // 4. Price in close proximity (within 150 chars) of an Add to Cart / Buy button
+  const proximityRegex = /(?:(?:[\$£€¥₹]|AU\$|CA\$|USD|EUR|GBP)\s*([0-9]+(?:\.[0-9]{2})?)[\s\S]{0,150}?\b(?:add\s+to\s+cart|add\s+to\s+bag|buy\s+now|add\s+to\s+basket)\b|\b(?:add\s+to\s+cart|add\s+to\s+bag|buy\s+now|add\s+to\s+basket)\b[\s\S]{0,150}?(?:[\$£€¥₹]|AU\$|CA\$|USD|EUR|GBP)\s*([0-9]+(?:\.[0-9]{2})?))/i;
+  const proxMatch = rawHtml.match(proximityRegex);
+  if (proxMatch) {
+    const val = parseFloat(proxMatch[1] || proxMatch[2]);
+    if (!isNaN(val) && val > 0) {
+      return {
+        hasPrice: true,
+        price: val,
+        source: "CTA Proximity Price"
+      };
+    }
+  }
+
+  return { hasPrice: false };
+}
+
+/**
+ * Extracts functional cart action.
+ * Requires a verified Add to Cart form, button, input, or verified cart endpoint.
+ * Cart quantity counters (e.g. Cart (0)) alone do NOT count as functional cart.
+ */
+function extractFunctionalCartAction(html) {
+  const rawHtml = String(html || "");
+
+  // 1. Form submitting to cart endpoint
+  const cartFormRegex = /<form[^>]+action=["'][^"']*(?:\/cart\/add|\/cart|\/basket|\/bag)[^"']*["']/i;
+  const formMatch = rawHtml.match(cartFormRegex);
+  if (formMatch) {
+    return { hasCart: true, signal: `Form action: ${formMatch[0].slice(0, 80)}` };
+  }
+
+  // 2. Buttons / inputs with explicit "Add to Cart" / "Buy Now" CTA text
+  const buttonTagRegex = /<button[^>]*>[\s\S]{0,120}?\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now|order\s+now|buy\s+online)\b[\s\S]{0,120}?<\/button>/i;
+  const btnTagMatch = rawHtml.match(buttonTagRegex);
+  if (btnTagMatch) {
+    return { hasCart: true, signal: `Button CTA: ${btnTagMatch[0].slice(0, 80)}` };
+  }
+
+  const inputSubmitRegex = /<input[^>]+(?:type=["'](?:submit|button)["'])[^>]+value=["'][^"']*\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now|order\s+now)\b[^"']*["']/i;
+  const inputSubmitMatch = rawHtml.match(inputSubmitRegex);
+  if (inputSubmitMatch) {
+    return { hasCart: true, signal: `Input submit: ${inputSubmitMatch[0].slice(0, 80)}` };
+  }
+
+  const inputSubmitRevRegex = /<input[^>]+value=["'][^"']*\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now|order\s+now)\b[^"']*["'][^>]+(?:type=["'](?:submit|button)["'])/i;
+  const inputSubmitRevMatch = rawHtml.match(inputSubmitRevRegex);
+  if (inputSubmitRevMatch) {
+    return { hasCart: true, signal: `Input submit: ${inputSubmitRevMatch[0].slice(0, 80)}` };
+  }
+
+  const ariaLabelRegex = /<(?:button|a|div|span)[^>]+aria-label=["'][^"']*\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now)\b[^"']*["']/i;
+  const ariaMatch = rawHtml.match(ariaLabelRegex);
+  if (ariaMatch) {
+    return { hasCart: true, signal: `Aria label: ${ariaMatch[0].slice(0, 80)}` };
+  }
+
+  // 3. Established e-commerce add to cart button classes / IDs
+  const cartBtnClassRegex = /\b(?:single_add_to_cart_button|add_to_cart_button|snipcart-add-item|shopify-payment-button)\b/i;
+  const classMatch = rawHtml.match(cartBtnClassRegex);
+  if (classMatch) {
+    return { hasCart: true, signal: `Cart button class: ${classMatch[0]}` };
+  }
+
+  return { hasCart: false };
+}
+
+/**
+ * Extracts online checkout gateway.
+ * Inspects checkout routes, checkout CTA buttons, void input tags, aria-labels,
+ * and payment gateway integrations.
+ */
+function extractCheckoutGateway(html) {
+  const rawHtml = String(html || "");
+
+  // 1. Direct standard checkout route links (href)
+  const checkoutRouteRegex = /<a[^>]+href=["'][^"']*(?:\/(?:checkout|express_checkout|onepagecheckout|cart\/checkout)\b)(?:\/|["'?#])/i;
+  const routeMatch = rawHtml.match(checkoutRouteRegex);
+  if (routeMatch) {
+    return { hasCheckout: true, signal: `Checkout route link: ${routeMatch[0].slice(0, 80)}` };
+  }
+
+  // 2. Checkout forms
+  const checkoutFormRegex = /<form[^>]+action=["'][^"']*(?:\/(?:checkout|express_checkout|onepagecheckout)\b)[^"']*["']/i;
+  const formMatch = rawHtml.match(checkoutFormRegex);
+  if (formMatch) {
+    return { hasCheckout: true, signal: `Checkout form: ${formMatch[0].slice(0, 80)}` };
+  }
+
+  // 3. Checkout CTA buttons or inputs (supports nested spans, void input tags, aria-labels)
+  const checkoutBtnRegex = /<button[^>]*>[\s\S]{0,120}?\b(?:proceed\s+to\s+checkout|checkout\s+now|place\s+order|pay\s+now|complete\s+order|pay\s+with\s+(?:paypal|stripe|apple\s+pay|google\s+pay|klarna|afterpay))\b[\s\S]{0,120}?<\/button>/i;
+  const btnMatch = rawHtml.match(checkoutBtnRegex);
+  if (btnMatch) {
+    return { hasCheckout: true, signal: `Checkout button: ${btnMatch[0].slice(0, 80)}` };
+  }
+
+  const checkoutInputRegex = /<input[^>]+(?:type=["'](?:submit|button|image)["'])[^>]+value=["'][^"']*\b(?:proceed\s+to\s+checkout|checkout\s+now|place\s+order|pay\s+now|checkout)\b[^"']*["']/i;
+  const inputMatch = rawHtml.match(checkoutInputRegex);
+  if (inputMatch) {
+    return { hasCheckout: true, signal: `Checkout input: ${inputMatch[0].slice(0, 80)}` };
+  }
+
+  const checkoutInputRevRegex = /<input[^>]+value=["'][^"']*\b(?:proceed\s+to\s+checkout|checkout\s+now|place\s+order|pay\s+now|checkout)\b[^"']*["'][^>]+(?:type=["'](?:submit|button|image)["'])/i;
+  const inputRevMatch = rawHtml.match(checkoutInputRevRegex);
+  if (inputRevMatch) {
+    return { hasCheckout: true, signal: `Checkout input: ${inputRevMatch[0].slice(0, 80)}` };
+  }
+
+  // 4. Data attributes or names indicating checkout
+  const dataActionRegex = /<(?:button|a|input|div)[^>]+(?:data-action|data-testid|aria-label|name)=["'][^"']*\b(?:checkout|proceed-to-checkout|place-order)\b[^"']*["']/i;
+  const dataMatch = rawHtml.match(dataActionRegex);
+  if (dataMatch) {
+    return { hasCheckout: true, signal: `Checkout attribute: ${dataMatch[0].slice(0, 80)}` };
+  }
+
+  // 5. Payment gateway integrations
+  const gatewayRegex = /\b(?:checkout\.stripe\.com|paypal\.com\/checkout|pay\.shopify\.com|snipcart\.com|checkout\.razorpay\.com)\b/i;
+  const gwMatch = rawHtml.match(gatewayRegex);
+  if (gwMatch) {
+    return { hasCheckout: true, signal: `Payment gateway: ${gwMatch[0]}` };
+  }
+
+  return { hasCheckout: false };
+}
+
+/**
+ * Extracts fulfillment & delivery logistics signals.
+ */
+function extractFulfillmentLogistics(html, text) {
+  const combined = String(html || "") + " " + String(text || "");
+
+  const shippingRegex = /\b(?:shipping\s+(?:policy|information|rates|charges|options|method)|delivery\s+(?:policy|timelines|charges)|free\s+shipping\s+on\s+orders|calculated\s+at\s+checkout|estimated\s+delivery|ships\s+in\s+\d+\s*(?:business\s+)?days|dispatch\s+within\s+\d+\s*(?:business\s+)?days|courier\s+delivery)\b/i;
+  const returnsRegex = /\b(?:return\s+policy|returns\s+(?:&|and)\s+exchanges|refund\s+policy|order\s+tracking|track\s+(?:your\s+)?order|track\s+shipment)\b/i;
+
+  const shipMatch = combined.match(shippingRegex);
+  const retMatch = combined.match(returnsRegex);
+
+  if (shipMatch || retMatch) {
+    return {
+      hasFulfillment: true,
+      signal: shipMatch ? shipMatch[0] : retMatch[0]
+    };
+  }
+
+  return { hasFulfillment: false };
+}
+
+/**
+ * Evaluates B2B Quote and Dealer purchasing actions.
+ * Distinguishes between purchasing actions on products vs unrelated footer text.
+ */
+function extractB2BExclusions(html, text) {
   const rawHtml = String(html || "");
   const rawText = String(text || "");
   const combined = rawHtml + " " + rawText;
 
-  // -------------------------------------------------------------
-  // TIER 0: B2B CATALOG & QUOTE EXCLUSIONS
-  // "Exclusion: If the button says 'Request a Quote', 'Contact Us for Pricing',
-  // or 'Find a Dealer', it fails this rule and is a Catalog / Showcase site, not e-commerce."
-  // -------------------------------------------------------------
-  const quoteExclusionRegex = /\b(?:request\s+(?:a\s+)?quote|get\s+(?:a\s+)?quote|ask\s+for\s+(?:a\s+)?quote|request\s+pricing|contact\s+(?:us\s+)?for\s+pric(?:e|ing)|call\s+for\s+pric(?:e|ing)|price\s+on\s+(?:application|request)|inquir(?:y|e)\s+(?:now|online|cart|basket|list)|send\s+inquiry|add\s+to\s+quote|quote\s+(?:cart|basket|list|request)|rfq|contact\s+sales|quote\s+only)\b/i;
-  const dealerExclusionRegex = /\b(?:find\s+(?:a\s+)?dealer|dealer\s+locator|where\s+to\s+buy|find\s+(?:a\s+)?distributor|distributor\s+locator|locate\s+(?:a\s+)?dealer|dealer\s+network|our\s+distributors)\b/i;
-  const catalogSpecRegex = /\b(?:download\s+catalog(?:ue)?|product\s+catalog(?:ue)?|spec\s+sheet|specification\s+sheet|datasheet|technical\s+specifications)\b/i;
+  // 1. Product-level / Purchasing CTA quote actions:
+  const productQuoteCtaRegex = /<(?:button|a|input)[^>]*>[\s\S]{0,100}?\b(?:request\s+(?:a\s+)?quote|get\s+(?:a\s+)?quote|ask\s+for\s+(?:a\s+)?quote|request\s+pricing|contact\s+(?:us\s+)?for\s+pric(?:e|ing)|call\s+for\s+pric(?:e|ing)|price\s+on\s+(?:application|request)|inquir(?:y|e)\s+(?:for\s+pric(?:e|ing)|about\s+pric(?:e|ing)|now|online|cart|basket|list)|send\s+inquiry|add\s+to\s+quote|quote\s+(?:cart|basket|list|request)|rfq)\b[\s\S]{0,100}?<\/(?:button|a)>/i;
+  const quoteCtaMatch = rawHtml.match(productQuoteCtaRegex);
 
-  const hasQuoteExclusion = quoteExclusionRegex.test(combined);
-  const hasDealerExclusion = dealerExclusionRegex.test(combined);
-  const hasCatalogSpec = catalogSpecRegex.test(combined);
-  const hasB2BExclusion = hasQuoteExclusion || hasDealerExclusion;
+  // 2. Dealer locator CTA:
+  const dealerCtaRegex = /<(?:button|a)[^>]*>[\s\S]{0,80}?\b(?:find\s+(?:a\s+)?dealer|dealer\s+locator|where\s+to\s+buy|find\s+(?:a\s+)?distributor|distributor\s+locator|locate\s+(?:a\s+)?dealer|our\s+distributors)\b[\s\S]{0,80}?<\/(?:button|a)>/i;
+  const dealerCtaMatch = rawHtml.match(dealerCtaRegex);
 
-  // -------------------------------------------------------------
-  // TIER 1: THE TRANSACTION TEST (Mandatory Core Rule)
-  // Must allow direct monetary exchange on-site without manual back-and-forth communication.
-  // Requires: (A) Functional Cart/Basket + (B) Defined Unit Price + (C) Online Checkout Gateway.
-  // -------------------------------------------------------------
+  // 3. General text occurrences (e.g. anywhere in text including footer/header)
+  const generalQuoteRegex = /\b(?:request\s+(?:a\s+)?quote|get\s+(?:a\s+)?quote|contact\s+sales|inquir(?:y|e)\s+(?:for\s+pric(?:e|ing)|about\s+pric(?:e|ing)|basket|cart)|add\s+to\s+quote)\b/i;
+  const generalDealerRegex = /\b(?:find\s+(?:a\s+)?dealer|dealer\s+locator|where\s+to\s+buy|distributor\s+locator)\b/i;
 
-  // 1A. Functional Cart / Basket Indicators
-  const cartCtaRegex = /<(?:button|a|input)[^>]*>[\s\S]{0,100}?\b(?:add\s+to\s+cart|add\s+to\s+bag|add\s+to\s+basket|buy\s+now|order\s+now|buy\s+online|purchase\s+online)\b[\s\S]{0,100}?<\/(?:button|a)>/i;
-  const cartFormRegex = /<form[^>]+action=["'][^"']*(?:\/cart\/add|\/cart|\/checkout|\/basket)[^"']*["']/i;
-  const cartButtonClassRegex = /\b(?:single_add_to_cart_button|add_to_cart_button|wc-block-cart|snipcart-add-item|shopify-payment-button)\b/i;
-  const cartWithQtyRegex = /(?:cart|basket|bag)\s*[\(\[]\s*\d+\s*[\)\]]|\b(?:items?\s+in\s+(?:your\s+)?cart)\b/i;
+  const hasProductQuoteCta = !!quoteCtaMatch;
+  const hasProductDealerCta = !!dealerCtaMatch;
+  const hasGeneralQuote = generalQuoteRegex.test(combined);
+  const hasGeneralDealer = generalDealerRegex.test(combined);
 
-  const hasCartAction = cartCtaRegex.test(rawHtml) || cartFormRegex.test(rawHtml) || cartButtonClassRegex.test(rawHtml) || cartWithQtyRegex.test(combined);
+  return {
+    hasProductQuoteCta,
+    hasProductDealerCta,
+    hasGeneralQuote,
+    hasGeneralDealer,
+    isQuoteOnlyPurchasing: hasProductQuoteCta || hasProductDealerCta,
+    signal: quoteCtaMatch ? quoteCtaMatch[0] : (dealerCtaMatch ? dealerCtaMatch[0] : "")
+  };
+}
 
-  // 1B. Defined Unit Price (must have real currency prices for products on the page)
-  const currencyPriceRegex = /(?:[\$£€¥₹]|AU\$|CA\$|USD|EUR|GBP)\s*\d+(?:\.\d{2})?\b/;
-  const priceSchemaRegex = /"(?:price|highPrice|lowPrice)"\s*:\s*"?\d+(?:\.\d{2})?"?|itemprop=["']price["'][^>]*content=["']\d+|<meta\s+property=["']product:price:amount["']/i;
+/**
+ * 3-Tier Multi-Check E-Commerce Verification Rule.
+ * Classifies a website as E-COMMERCE (Online Shopping) IF AND ONLY IF:
+ *   [Mandatory Core Rule: Direct Transaction Capability (Cart + Unit Price + Online Checkout Gateway)]
+ *   AND
+ *   [Secondary Operational Signal: Delivery / Fulfillment Logistics OR Structured Product-Offer Schema]
+ *
+ * NOTE: The checkout gateway is strictly MANDATORY and cannot be substituted by technical schema or footprints.
+ * Unrelated quotes in footers do NOT disqualify verified direct checkout.
+ */
+function detectPurchaseOrShoppingCart(html = "", text = "") {
+  if (!html && !text) return { detected: false, reason: "", isHighConfidence: false };
 
-  const hasDefinedPrice = currencyPriceRegex.test(combined) || priceSchemaRegex.test(rawHtml);
+  const rawHtml = String(html || "");
+  const rawText = String(text || "");
 
-  // 1C. Online Checkout Gateway
-  const checkoutRouteRegex = /<a[^>]+href=["'][^"']*(?:\/(?:checkout|express_checkout|onepagecheckout|cart\/checkout)\b)(?:\/|["'?#])/i;
-  const checkoutCtaRegex = /<(?:button|a|input)[^>]*>[\s\S]{0,80}?\b(?:proceed\s+to\s+checkout|checkout\s+now|place\s+order|pay\s+now|pay\s+with\s+(?:paypal|stripe|apple\s+pay|google\s+pay|klarna|afterpay))\b[\s\S]{0,80}?<\/(?:button|a)>/i;
-  const checkoutGatewayScriptRegex = /\b(?:checkout\.stripe\.com|paypal\.com\/checkout|pay\.shopify\.com|snipcart\.com|checkout\.razorpay\.com)\b/i;
+  // Step 1: JSON-LD Product Offer Parsing (strict JSON parse + graph traversal)
+  const jsonLdOffer = extractJsonLdProductOffer(rawHtml);
 
-  const hasCheckoutGateway = checkoutRouteRegex.test(rawHtml) || checkoutCtaRegex.test(rawHtml) || checkoutGatewayScriptRegex.test(combined);
+  // Step 2: Functional Cart Action (verified Add to Cart / cart endpoint; quantity counter alone rejected)
+  const cartRes = extractFunctionalCartAction(rawHtml);
 
-  // -------------------------------------------------------------
-  // TIER 2: FULFILLMENT & POLICY TEST (Secondary Operational Signal)
-  // Clear legal and logistical frameworks for delivering purchased items.
-  // -------------------------------------------------------------
-  const shippingPolicyRegex = /\b(?:shipping\s+(?:policy|information|rates|charges|options|method)|delivery\s+(?:policy|timelines|charges)|free\s+shipping\s+on\s+orders|calculated\s+at\s+checkout|estimated\s+delivery|ships\s+in\s+\d+\s*(?:business\s+)?days|dispatch\s+within\s+\d+\s*(?:business\s+)?days|courier\s+delivery)\b/i;
-  const returnsTrackingRegex = /\b(?:return\s+policy|returns\s+(?:&|and)\s+exchanges|refund\s+policy|order\s+tracking|track\s+(?:your\s+)?order|track\s+shipment)\b/i;
+  // Step 3: Product-Level Price Verification (rejects unrelated revenue or footer currency)
+  const priceRes = extractProductLevelPrice(rawHtml, rawText, jsonLdOffer);
 
-  const hasShippingPolicy = shippingPolicyRegex.test(combined);
-  const hasReturnsOrTracking = returnsTrackingRegex.test(combined);
-  const hasFulfillment = hasShippingPolicy || hasReturnsOrTracking;
+  // Step 4: Online Checkout Gateway Verification (routes, CTA buttons, void input tags, payment gateways)
+  const checkoutRes = extractCheckoutGateway(rawHtml);
 
-  // -------------------------------------------------------------
-  // TIER 3: TECHNICAL & DATA MARKERS (Verification)
-  // Structured Schema (Product + Offer with price) & Active Platform Endpoints
-  // -------------------------------------------------------------
-  const schemaProductOfferRegex = /(?:"@type"\s*:\s*"Product"[\s\S]{0,1200}?"@type"\s*:\s*"Offer"|"@type"\s*:\s*"Offer"[\s\S]{0,600}?"price"\s*:|itemtype=["']https?:\/\/schema\.org\/Product["'][\s\S]{0,1000}?itemtype=["']https?:\/\/schema\.org\/Offer["'])/i;
-  const ecommercePlatformActiveRegex = /\b(?:Shopify\.routes|cdn\.shopify\.com\/s\/files|woocommerce_params|wc-cart-fragments|ps[-_]?shoppingcart|snipcart\.js|bigcommerce|magento)\b/i;
+  // Step 5: Fulfillment & Delivery Logistics (Shipping / returns policy, order tracking)
+  const fulfillRes = extractFulfillmentLogistics(rawHtml, rawText);
 
-  const hasTechnicalSchema = schemaProductOfferRegex.test(rawHtml);
-  const hasActivePlatform = ecommercePlatformActiveRegex.test(combined);
-  const hasTechnicalMarkers = hasTechnicalSchema || (hasActivePlatform && hasDefinedPrice);
+  // Step 6: B2B Quote & Dealer Purchasing Exclusions (contextual analysis)
+  const b2bRes = extractB2BExclusions(rawHtml, rawText);
 
-  // -------------------------------------------------------------
-  // FINAL 3-TIER VERIFICATION EVALUATION
-  // -------------------------------------------------------------
-  // Mandatory Core Rule: Direct Transaction Capability requires Cart + Price + Checkout Gateway
-  const hasTransactionCapability = hasCartAction && hasDefinedPrice && (hasCheckoutGateway || hasTechnicalMarkers);
+  // MANDATORY CORE RULE: Direct Transaction Capability strictly requires ALL THREE:
+  // 1. Functional Cart Action AND
+  // 2. Defined Product Price AND
+  // 3. Online Checkout Gateway
+  // (Technical schema or platform footprints CANNOT substitute for the checkout gateway!)
+  const hasTransactionCapability = cartRes.hasCart && priceRes.hasPrice && checkoutRes.hasCheckout;
 
-  // If the site has B2B Quote / Dealer Exclusions and lacks a direct online checkout gateway,
-  // it is explicitly a B2B Catalog / Showcase site!
-  if (hasB2BExclusion && !hasCheckoutGateway) {
+  // Secondary Operational Signal: Delivery / Fulfillment Logistics OR Verified Structured Schema
+  const hasSecondarySignal = fulfillRes.hasFulfillment || jsonLdOffer.hasProductOffer;
+
+  const evidence = {
+    hasCartAction: cartRes.hasCart,
+    cartSignal: cartRes.signal || "",
+    hasProductPrice: priceRes.hasPrice,
+    priceSignal: priceRes.source ? `${priceRes.source} (${priceRes.currency || ''} ${priceRes.price || ''})` : "",
+    hasCheckoutGateway: checkoutRes.hasCheckout,
+    checkoutSignal: checkoutRes.signal || "",
+    hasFulfillment: fulfillRes.hasFulfillment,
+    fulfillmentSignal: fulfillRes.signal || "",
+    hasProductSchema: jsonLdOffer.hasProductOffer,
+    schemaSignal: jsonLdOffer.hasProductOffer ? `Product: ${jsonLdOffer.name || 'Yes'}, Price: ${jsonLdOffer.currency} ${jsonLdOffer.price}` : "",
+    hasB2BQuoteOrDealer: b2bRes.isQuoteOnlyPurchasing || b2bRes.hasGeneralQuote,
+    b2bSignal: b2bRes.signal || ""
+  };
+
+  // EVALUATION:
+  // 1. Direct Transaction Capability Verified (Cart + Product Price + Online Checkout Gateway)
+  if (hasTransactionCapability) {
+    // If quote actions exist ONLY in the footer/navigation (e.g. "Contact Sales") while direct
+    // purchasing is operational on products, direct retail purchasing is verified!
+    const reason = `E-Commerce Verified (Cart: ${cartRes.signal || 'Yes'} + Price: ${priceRes.source || 'Yes'} + Checkout: ${checkoutRes.signal || 'Yes'}${fulfillRes.hasFulfillment ? ' + Shipping: ' + fulfillRes.signal : ''})`;
+
+    return {
+      detected: true,
+      reason: reason,
+      isEcommerce: true,
+      isB2BCatalog: false,
+      isHighConfidence: hasSecondarySignal && !b2bRes.isQuoteOnlyPurchasing,
+      evidence: evidence
+    };
+  }
+
+  // 2. Not Direct Transaction: B2B Catalog / Quote-Only / Dealer Locator
+  if (b2bRes.isQuoteOnlyPurchasing || b2bRes.hasGeneralQuote || b2bRes.hasGeneralDealer) {
     return {
       detected: false,
       reason: "",
+      isEcommerce: false,
       isB2BCatalog: true,
-      b2bSignal: hasQuoteExclusion ? "Request a Quote / Inquire for Price" : "Dealer Locator / Find a Dealer"
+      isHighConfidence: false,
+      b2bSignal: b2bRes.signal || "Quote / Dealer Catalog",
+      evidence: evidence
     };
   }
 
-  // If site meets Mandatory Core Rule (Cart + Price + Checkout) AND at least one Secondary Signal
-  // (Fulfillment Logistics OR Verified Technical Schema):
-  if (hasTransactionCapability && (hasFulfillment || hasTechnicalMarkers)) {
-    // If it also has quote exclusion (rare hybrid), direct checkout + fulfillment still wins only if real checkout exists
-    if (hasB2BExclusion && (!hasCheckoutGateway || !hasFulfillment)) {
-      return { detected: false, reason: "", isB2BCatalog: true };
-    }
-    return {
-      detected: true,
-      reason: `E-Commerce Verified (Cart + Price + Checkout Gateway + ${hasFulfillment ? 'Shipping/Fulfillment Logistics' : 'Technical Offer Schema'})`
-    };
-  }
-
-  // Direct retail purchase with cart, defined price, and checkout route
-  if (hasCartAction && hasCheckoutGateway && hasDefinedPrice) {
-    return {
-      detected: true,
-      reason: "E-Commerce Verified (Direct Transaction Capability: Cart + Price + Checkout Gateway)"
-    };
-  }
-
-  return { detected: false, reason: "" };
+  return {
+    detected: false,
+    reason: "",
+    isEcommerce: false,
+    isB2BCatalog: false,
+    isHighConfidence: false,
+    evidence: evidence
+  };
 }
 
 /**

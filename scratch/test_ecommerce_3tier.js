@@ -1,206 +1,225 @@
 const fs = require('fs');
 
-// Extract detectPurchaseOrShoppingCart from background.js
+// Read background.js
 const bgCode = fs.readFileSync('d:/SoftwareWork/extension/aiextension/background.js', 'utf8');
 
-// Isolate detectPurchaseOrShoppingCart function
-const fnMatch = bgCode.match(/function detectPurchaseOrShoppingCart[\s\S]*?\n\}/);
-if (!fnMatch) {
-  console.error("Could not find detectPurchaseOrShoppingCart in background.js");
-  process.exit(1);
-}
+// Isolate all relevant helper functions from background.js
+const extractJsonLdProductOffer = eval(`(${bgCode.match(/function extractJsonLdProductOffer[\s\S]*?\n\}/)[0]})`);
+const extractProductLevelPrice = eval(`(${bgCode.match(/function extractProductLevelPrice[\s\S]*?\n\}/)[0]})`);
+const extractFunctionalCartAction = eval(`(${bgCode.match(/function extractFunctionalCartAction[\s\S]*?\n\}/)[0]})`);
+const extractCheckoutGateway = eval(`(${bgCode.match(/function extractCheckoutGateway[\s\S]*?\n\}/)[0]})`);
+const extractFulfillmentLogistics = eval(`(${bgCode.match(/function extractFulfillmentLogistics[\s\S]*?\n\}/)[0]})`);
+const extractB2BExclusions = eval(`(${bgCode.match(/function extractB2BExclusions[\s\S]*?\n\}/)[0]})`);
+const detectPurchaseOrShoppingCart = eval(`(${bgCode.match(/function detectPurchaseOrShoppingCart[\s\S]*?\n\}/)[0]})`);
 
-const detectPurchaseOrShoppingCart = eval(`(${fnMatch[0]})`);
-
-const testCases = [
+const userTestCases = [
   {
-    name: "Case 1: B2B Manufacturer Showcase (Request a Quote)",
+    name: "1. Product + Add to Cart + Price + Checkout",
     html: `
       <html>
         <body>
-          <h1>Industrial Hydraulic Valves</h1>
-          <p>We manufacture high-precision valves for industrial machinery.</p>
-          <a href="/quote" class="btn">Request a Quote</a>
-          <a href="/catalog.pdf">Download Catalog</a>
+          <h1>Performance Cycling Jersey</h1>
+          <div class="product-price">$89.00</div>
+          <button class="btn single_add_to_cart_button">Add to Cart</button>
+          <a href="/checkout" class="checkout-btn">Proceed to Checkout</a>
+          <p>Free standard shipping on orders over $50.</p>
         </body>
       </html>
     `,
-    text: "Industrial Hydraulic Valves. We manufacture high-precision valves. Request a Quote. Download Catalog.",
+    text: "Performance Cycling Jersey. $89.00. Add to Cart. Proceed to Checkout. Free standard shipping.",
+    expectedDetected: true,
+    expectedB2B: false
+  },
+  {
+    name: "2. Product + Request a Quote only",
+    html: `
+      <html>
+        <body>
+          <h1>Industrial Heavy Duty CNC Lathe</h1>
+          <p>High precision machinery for automotive manufacturing.</p>
+          <button class="quote-btn">Request a Quote</button>
+          <a href="/specifications">Technical Specifications</a>
+        </body>
+      </html>
+    `,
+    text: "Industrial Heavy Duty CNC Lathe. Request a Quote. Technical Specifications.",
     expectedDetected: false,
     expectedB2B: true
   },
   {
-    name: "Case 2: B2B Manufacturer with Find a Dealer & Specs",
+    name: "3. Product + Find a Dealer",
     html: `
       <html>
         <body>
-          <h1>Venco Venturo Service Cranes</h1>
-          <p>Leading manufacturer of truck mounted telescopic service cranes.</p>
-          <a href="/dealers">Find a Dealer</a>
-          <a href="/specs">Technical Specifications</a>
-          <p>Sales: info@venturo.com | Parts: parts@venturo.com</p>
+          <h1>Venco Venturo Truck Cranes</h1>
+          <p>Leading manufacturer of service cranes and hoists.</p>
+          <a href="/dealer-locator">Find a Dealer</a>
+          <a href="/dealers">Locate a Dealer</a>
         </body>
       </html>
     `,
-    text: "Venco Venturo Service Cranes. Find a Dealer. Technical Specifications. Sales: info@venturo.com",
+    text: "Venco Venturo Truck Cranes. Find a Dealer. Locate a Dealer.",
     expectedDetected: false,
     expectedB2B: true
   },
   {
-    name: "Case 3: B2B Manufacturer with Inquiry Basket (Add to Quote)",
+    name: "4. Product + $100 mentioned in footer (Not sufficient)",
     html: `
       <html>
         <body>
-          <h1>Precision Gears & Motors</h1>
-          <div class="product-item">
-            <h2>Helical Gearbox Model HG-500</h2>
-            <button class="btn-inquiry">Add to Quote</button>
-          </div>
-          <a href="/inquiry-cart">Inquiry Basket (3 items)</a>
-          <button onclick="sendInquiry()">Send Inquiry</button>
+          <h1>Custom Metal Stamping & Fabrication</h1>
+          <p>We manufacture custom parts for engineering clients.</p>
         </body>
+        <footer>
+          <p>Annual donations to community fund exceed $100 every year.</p>
+          <p>Contact Sales: sales@example.com</p>
+        </footer>
       </html>
     `,
-    text: "Precision Gears & Motors. Helical Gearbox Model HG-500. Add to Quote. Inquiry Basket (3 items). Send Inquiry.",
+    text: "Custom Metal Stamping & Fabrication. Annual donations exceed $100 every year. Contact Sales.",
     expectedDetected: false,
     expectedB2B: true
   },
   {
-    name: "Case 4: Site with template theme cart icon but Contact Us for Pricing",
+    name: "5. Basket icon only (Not sufficient)",
     html: `
       <html>
         <header>
-          <div class="site-header__cart"><i class="fa fa-shopping-cart"></i> Cart (0)</div>
+          <div class="header-cart-icon"><i class="fa fa-shopping-basket"></i> Basket (0)</div>
         </header>
         <body>
-          <h1>Custom Metal Stamping & Fabrication</h1>
-          <p>Contact Us for Pricing on custom production runs.</p>
-          <a href="/contact">Request Pricing</a>
+          <h1>Precision Gear Systems</h1>
+          <p>Custom gears manufactured to DIN standards.</p>
+          <a href="/contact">Inquire for Price</a>
         </body>
       </html>
     `,
-    text: "Custom Metal Stamping & Fabrication. Contact Us for Pricing on custom production runs. Request Pricing.",
+    text: "Basket (0). Precision Gear Systems. Inquire for Price.",
     expectedDetected: false,
     expectedB2B: true
   },
   {
-    name: "Case 5: Dominion Doors and Windows (from user screenshot)",
-    html: `
-      <html>
-        <body>
-          <h1>Dominion Doors and Windows Limited</h1>
-          <p>Vinyl windows and entrance systems manufacturer in Ontario, Canada.</p>
-          <button>Request a Quote</button>
-          <a href="/specs">Product Specifications</a>
-          <p>Contact: admin@dominiondw.com</p>
-        </body>
-      </html>
-    `,
-    text: "Dominion Doors and Windows Limited. Request a Quote. Product Specifications. admin@dominiondw.com",
-    expectedDetected: false,
-    expectedB2B: true
-  },
-  {
-    name: "Case 6: True Retail E-Commerce Store (Shopify)",
+    name: "6. Shopify technology detected only (Not sufficient)",
     html: `
       <html>
         <head>
           <script src="https://cdn.shopify.com/s/files/1/theme.js"></script>
+          <script>window.Shopify = { routes: {} };</script>
         </head>
         <body>
-          <h1>Organic Cotton Hoodie</h1>
-          <div class="price">$59.99</div>
-          <button class="btn add-to-cart">Add to Cart</button>
-          <a href="/checkout" class="btn-checkout">Proceed to Checkout</a>
-          <p>Free shipping on orders over $50. Estimated delivery: 3-5 business days. 30-day Return Policy.</p>
+          <h1>Wholesale Industrial Packaging</h1>
+          <p>We manufacture corrugated cardboard boxes in bulk.</p>
+          <a href="/contact">Contact Us for Pricing</a>
         </body>
       </html>
     `,
-    text: "Organic Cotton Hoodie. $59.99. Add to Cart. Proceed to Checkout. Free shipping on orders over $50. Estimated delivery 3-5 business days. 30-day Return Policy.",
-    expectedDetected: true
+    text: "Wholesale Industrial Packaging. Contact Us for Pricing.",
+    expectedDetected: false,
+    expectedB2B: true
   },
   {
-    name: "Case 7: True Retail E-Commerce Store (WooCommerce with Product Schema)",
+    name: "7. Product schema without checkout (Not sufficient)",
     html: `
       <html>
-        <script type="application/ld+json">
-        {
-          "@context": "https://schema.org/",
-          "@type": "Product",
-          "name": "Leather Chelsea Boots",
-          "offers": {
-            "@type": "Offer",
-            "price": "145.00",
-            "priceCurrency": "USD"
+        <head>
+          <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "Product",
+                "name": "Commercial Boiler System",
+                "offers": {
+                  "@type": "Offer",
+                  "price": "4500.00",
+                  "priceCurrency": "USD"
+                }
+              }
+            ]
           }
-        }
-        </script>
+          </script>
+        </head>
         <body>
-          <h1>Leather Chelsea Boots</h1>
-          <span class="price">$145.00</span>
-          <button class="single_add_to_cart_button">Add to Basket</button>
-          <a href="/checkout/">Checkout Now</a>
-          <div class="shipping-info">Shipping Policy: Standard courier delivery $9.99. Order tracking available.</div>
+          <h1>Commercial Boiler System</h1>
+          <p>Call our engineers for installation consultation.</p>
+          <a href="/quote">Request a Quote</a>
         </body>
       </html>
     `,
-    text: "Leather Chelsea Boots. $145.00. Add to Basket. Checkout Now. Shipping Policy: Standard courier delivery $9.99. Order tracking available.",
-    expectedDetected: true
+    text: "Commercial Boiler System. Call our engineers for installation consultation. Request a Quote.",
+    expectedDetected: false,
+    expectedB2B: true
   },
   {
-    name: "Case 8: Service / Booking Platform with Calendar",
+    name: "8. Checkout + actual cart + price",
     html: `
       <html>
         <body>
-          <h1>Legal Consultation & Advisory</h1>
-          <div class="price">$250 per hour</div>
-          <button>Book an Appointment</button>
-          <div class="calendar-picker">Select date & time</div>
+          <h1>Ergonomic Office Chair</h1>
+          <div class="product-price">$249.99</div>
+          <button class="add-to-cart">Add to Cart</button>
+          <form action="/checkout" method="POST">
+            <input type="submit" value="Proceed to Checkout" />
+          </form>
+          <p>Shipping Policy: Orders ship in 2-3 business days. 30-day return policy.</p>
         </body>
       </html>
     `,
-    text: "Legal Consultation & Advisory. $250 per hour. Book an Appointment. Select date & time.",
-    expectedDetected: false
+    text: "Ergonomic Office Chair. $249.99. Add to Cart. Proceed to Checkout. Shipping Policy: Orders ship in 2-3 business days. 30-day return policy.",
+    expectedDetected: true,
+    expectedB2B: false
   },
   {
-    name: "Case 9: SaaS Subscription Platform",
+    name: "9. Quote button in footer + genuine retail checkout (Online Shopping)",
     html: `
       <html>
         <body>
-          <h1>Cloud Analytics Platform</h1>
-          <div class="tier">$49 / month</div>
-          <a href="/signup">Start Free Trial</a>
+          <h1>Wireless Noise-Canceling Headphones</h1>
+          <div class="product-price">$199.99</div>
+          <button class="btn single_add_to_cart_button">Add to Bag</button>
+          <a href="/checkout" class="btn">Checkout Now</a>
+          <p>Delivery timelines: 3-5 days delivery. Order tracking provided.</p>
         </body>
+        <footer>
+          <div class="b2b-links">
+            <p>Looking for corporate bulk orders (1000+ units)?</p>
+            <a href="/enterprise">Contact Sales</a>
+            <a href="/bulk-quote">Request Bulk Quote</a>
+          </div>
+        </footer>
       </html>
     `,
-    text: "Cloud Analytics Platform. $49 / month. Start Free Trial.",
-    expectedDetected: false
+    text: "Wireless Noise-Canceling Headphones. $199.99. Add to Bag. Checkout Now. Delivery timelines: 3-5 days. Contact Sales. Request Bulk Quote.",
+    expectedDetected: true,
+    expectedB2B: false
   }
 ];
 
-console.log("=== RUNNING 3-TIER E-COMMERCE VERIFICATION TESTS ===");
+console.log("=== RUNNING MANDATED E-COMMERCE TESTS ===");
 let passed = 0;
 let failed = 0;
 
-testCases.forEach((tc, idx) => {
+userTestCases.forEach((tc, idx) => {
   const res = detectPurchaseOrShoppingCart(tc.html, tc.text);
   const detectedOk = res.detected === tc.expectedDetected;
   let b2bOk = true;
-  if (tc.expectedB2B) {
-    b2bOk = res.isB2BCatalog === true;
+  if (tc.expectedB2B !== undefined) {
+    b2bOk = res.isB2BCatalog === tc.expectedB2B;
   }
 
   if (detectedOk && b2bOk) {
     console.log(`[PASS] Case ${idx + 1}: ${tc.name}`);
-    console.log(`       -> Result: detected=${res.detected}, reason="${res.reason || ''}", isB2BCatalog=${!!res.isB2BCatalog}`);
+    console.log(`       -> Result: detected=${res.detected}, isB2BCatalog=${res.isB2BCatalog}, isHighConfidence=${res.isHighConfidence}`);
+    console.log(`       -> Evidence:`, res.evidence);
     passed++;
   } else {
     console.error(`[FAIL] Case ${idx + 1}: ${tc.name}`);
-    console.error(`       -> Expected detected=${tc.expectedDetected}, got detected=${res.detected}`);
-    console.error(`       -> Full result:`, res);
+    console.error(`       -> Expected detected=${tc.expectedDetected}, isB2B=${tc.expectedB2B}`);
+    console.error(`       -> Got detected=${res.detected}, isB2B=${res.isB2BCatalog}`);
+    console.error(`       -> Evidence:`, res.evidence);
     failed++;
   }
 });
 
-console.log(`\nResults: ${passed} passed, ${failed} failed out of ${testCases.length} total tests.`);
+console.log(`\nResults: ${passed} passed, ${failed} failed out of ${userTestCases.length} tests.`);
 if (failed > 0) process.exit(1);
