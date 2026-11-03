@@ -2,11 +2,7 @@
 // Production-Grade Implementation strictly conforming to 14 QC Rules
 
 // Load environment configuration from env.js (synced from .env)
-try {
-  importScripts("env.js");
-} catch (e) {
-  // Service worker will fall back to chrome.storage.sync
-}
+try { importScripts("env.js"); } catch (e) { }
 
 const DEFAULT_API_KEY =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.GEMINI_API_KEY) ||
@@ -29,7 +25,7 @@ const RESTRICTED_PATTERNS = [
     label: "Weapons & Knives"
   },
   {
-    pattern: /\b(?:defence|defense|military|armed\s*forces|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?|defence\s*contractor|defense\s*contractor)\b/i,
+    pattern: /\b(?:military|armed\s*forces|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?|defence\s*contractors?|defense\s*contractors?|military\s*defence|military\s*defense|ministry\s*of\s*defence|department\s*of\s*defense|defence\s*forces?|defense\s*forces?|national\s*defence|national\s*defense|homeland\s*defence|homeland\s*defense|air\s*defence|air\s*defense|naval\s*defence|naval\s*defense|aerospace\s*(?:and|&)\s*defence|aerospace\s*(?:and|&)\s*defense|defence\s*equipment|defense\s*equipment|defence\s*systems?|defense\s*systems?|defence\s*industry|defense\s*industry|munitions?)\b/i,
     label: "Defence & Military"
   },
   {
@@ -45,7 +41,7 @@ const RESTRICTED_PATTERNS = [
     label: "Marine"
   },
   {
-    pattern: /\b(?:shipyards?|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|naval\s*ships?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|vessels?\s*builder|commercial\s*vessels?|yachts?|motor\s*yachts?|sailing\s*yachts?|ferries|ferry\s*boats?|tugboats?|barges?)\b/i,
+    pattern: /\b(?:shipyards?|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|naval\s*ships?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|vessels?\s*builder|commercial\s*vessels?|yachts?|motor\s*yachts?|sailing\s*yachts?|ferries|ferry\s*boats?|tugboats?|barges?|watercraft)\b/i,
     label: "Ships & Boats"
   },
   {
@@ -65,7 +61,7 @@ const RESTRICTED_PATTERNS = [
     label: "Alcohol & Breweries"
   },
   {
-    pattern: /\b(?:animals?|pets?|puppy|puppies|kitten|kittens|dogs?|canine|feline|pet\s*shop|pet\s*store|pet\s*food|pet\s*care|animal\s*breeding|livestock|cattle|poultry\s*farming|pig\s*farming|animal\s*feed|slaughterhouse|veterinary|vet\s*clinic|domestic\s*cats?|pet\s*cats?|cats?\s*(?:and|&)\s*dogs?|dogs?\s*(?:and|&)\s*cats?|cats?\s*(?:food|feed|litter|care|grooming|breed|breeds|adoption|rescue|supplies|accessories|bed|shelter|boarding))\b/i,
+    pattern: /\b(?:animals?|pets?|puppy|puppies|kitten|kittens|dogs?|canine|feline|pet\s*shop|pet\s*store|pet\s*food|pet\s*care|animal\s*breeding|livestock|cattle|poultry\s*farming|pig\s*farming|animal\s*feed|slaughterhouse|veterinary|vet\s*clinic|domestic\s*cats?|pet\s*cats?|cats?\s*(?:and|&)\s*dogs?|dogs?\s*(?:and|&)\s*cats?|cats?\s*(?:food|feed|litter|care|grooming|breed|breeds|adoption|rescue|supplies|accessories|bed|shelter|boarding|neutering|vaccination))\b/i,
     label: "Animals & Pets"
   },
   {
@@ -1851,26 +1847,64 @@ function detectRestrictedKeywords(text, html = "") {
   if (!combined) return { isRestricted: false, matchedKeyword: null, reason: "" };
 
   // Strip HTML tags and attributes first so HTML tag/class/id attributes never create false tokens
-  const cleanText = combined.replace(/<[^>]+>/g, " ");
+  let cleanText = combined.replace(/<[^>]+>/g, " ");
 
-  // Sanitize non-prohibited terms to prevent false positives:
-  // 1. Words ending in "-ship" (partnership, membership, dealership, craftsmanship, etc.)
-  // 2. Freight / parcel / order shipping (we ship, shipping policy, free shipping, drop shipping, etc.)
-  // 3. Category / cable / machinery "Cat"
-  // 4. Industrial tools (waterjet, inkjet, air knife, utility knife)
-  // 5. Material resistance (chemical resistant, food grade, marine grade, isopropyl alcohol)
-  const sanitized = cleanText
-    .replace(/\b(?:partner|member|dealer|owner|craftsman|workman|author|intern|sponsor|court|hard|champion|fellow|scholar|leader|relation|friend|apprentice|citizen)[\s\-_]?ships?\b/gi, " ")
-    .replace(/\b[\w]+[\-_]ships?\b/gi, " ")
-    .replace(/\b(?:we\s+ship|ship\s+(?:to|worldwide|nationwide|via|by|with|orders|daily|within|freight|internationally|domestically))\b/gi, " ")
-    .replace(/\b(?:drop\s*ship(?:ping)?|free\s*shipping|fast\s*shipping|freight\s*shipping|same\s*day\s*shipping|standard\s*shipping|express\s*shipping)\b/gi, " ")
-    .replace(/\bshipping\s*(?:policy|policies|cost|costs|info|information|method|methods|address|addresses|rate|rates|calculator|fee|fees|date|dates|label|labels|details|options|charge|charges|times?|carrier|carriers|weight|dimensions|terms|and\s+handling|and\s+returns)\b/gi, " ")
-    .replace(/\b(?:shipment|shipments|shipped|shipping)\b/gi, " ")
-    .replace(/\b(?:category|categories|categorized|catalogue|catalog|subcat|sub-category)\b/gi, " ")
-    .replace(/\b(?:prod(?:uct)?|item|sub|main|shop)?\s*cat\s*[:.\-–]/gi, " ")
-    .replace(/\bcat\s*(?:[0-9]|no\.?|num\.?|number|#|code|part|id|class|rating|cable|cables|utp|stp|patch|loader|excavator|dozer|tractor|engine|diesel|machinery|equipment)\b/gi, " ")
-    .replace(/\bcat\s+(?:5|5e|6|6a|7|7a|8)\b/gi, " ")
+  // 1. Strip URLs containing /cat/, ?cat=, etc.
+  cleanText = cleanText
+    .replace(/(?:https?:\/\/[^\s]+|\bwww\.[^\s]+)/gi, (url) => {
+      return url
+        .replace(/[/\\_]cat[/\\_]/gi, "/ ")
+        .replace(/[?&]cat=[^&\s]*/gi, " ")
+        .replace(/[/\\_](?:category|categories|catalogue|catalog|product-cat|shop-cat)[/\\_]/gi, "/ ")
+        .replace(/[/\\_](?:shipping|shipping-policy|shipment|ship)[/\\_]/gi, "/ ");
+    })
     .replace(/[/\\_]cat[/\\_]/gi, " ")
+    .replace(/[?&]cat=[^&\s]*/gi, " ");
+
+  // 2. Sanitize "Cat" false positives (Category, Cat. No., Cat #, Cat 5/6 cabling, CAT/Caterpillar machinery, etc.)
+  cleanText = cleanText
+    .replace(/\b(?:category|categories|categorized|categorization|catalogue|catalog|catalogues|catalogs|subcat|sub-category|sub-categories)\b/gi, " ")
+    .replace(/\b(?:prod(?:uct)?|item|sub|main|shop|article|model|part)?\s*cat\b\.?\s*[:.\-–#]?\s*(?=[A-Za-z0-9])/gi, " ")
+    .replace(/\bcat\b\.?\s*(?:no\.?|nos\.?|num\.?|number|#|code|part|id|class|rating|group|ref|item|type|section)\b\.?\s*[:.\-–]?\s*[A-Za-z0-9\-_]*/gi, " ")
+    .replace(/\bcat\b\.?\s*[:.\-–#]\s*[A-Za-z0-9\-_]+/gi, " ")
+    .replace(/\[\s*cat\b\.?[^\]]*\]|\(\s*cat\b\.?[^\)]*\)/gi, " ")
+    .replace(/\bcat\s*[-_]?\s*(?:3|5|5e|6|6a|7|7a|8)\b(?:\s*(?:cabling|cables?|ethernet|patch|cord|cords|utp|stp|ftp|sftp|connector|wire|wiring|network))?/gi, " ")
+    .replace(/\bcat\s+(?:cables?|cabling|patch|wire|utp|stp)\b/gi, " ")
+    .replace(/\bcat\b\s+(?:equipment|machinery|machines?|loaders?|excavators?|dozers?|bulldozers?|tractors?|engines?|diesel|generators?|forklifts?|parts?|dealers?|dealerships?|power|heavy|mining|construction|tools?|filters?)\b/gi, " ")
+    .replace(/\b(?:caterpillar|heavy\s*cat|cat\s*caterpillar)\b/gi, " ")
+    .replace(/\bcat(?:alyst|alytic|alysis|alyze|alyzer|alyzers|alysts)\b/gi, " ")
+    .replace(/\bcat(?:ering|erer|erers|ered)\b/gi, " ")
+    .replace(/\bcat(?:ch|cher|chers|ching|ches|chment)\b/gi, " ")
+    .replace(/\bcat(?:hode|hodic|hodes)\b/gi, " ");
+
+  // 3. Sanitize "Ship" false positives (words ending in "-ship", parcel/freight logistics)
+  cleanText = cleanText
+    .replace(/\b[a-zA-Z]+(?:ship|ships)\b/gi, (word) => {
+      if (/^(?:steamship|warship|battleship|flagship|spaceship|starship)s?$/i.test(word)) {
+        return word;
+      }
+      return " ";
+    })
+    .replace(/\b(?:we\s+ship|ship\s+(?:to|worldwide|nationwide|internationally|domestically|via|by|with|orders|daily|within|freight|direct))\b/gi, " ")
+    .replace(/\b(?:ready\s+to\s+ship|ships\s+(?:in|today|within|to|worldwide|daily)|will\s+ship|how\s+we\s+ship)\b/gi, " ")
+    .replace(/\b(?:drop\s*ship(?:ping)?|dropship(?:ping)?)\b/gi, " ")
+    .replace(/\b(?:free|fast|freight|same\s*day|standard|express|flat\s*rate|overnight|international|domestic|priority|ground)\s*shipping\b/gi, " ")
+    .replace(/\bshipping\s*(?:policy|policies|cost|costs|info|information|method|methods|address|addresses|rate|rates|calculator|fee|fees|date|dates|label|labels|details|options|charge|charges|times?|carrier|carriers|weight|dimensions|terms|and\s+handling|and\s+returns|returns?)\b/gi, " ")
+    .replace(/\b(?:shipment|shipments|shipped|shipping)\b/gi, " ");
+
+  // 4. Sanitize "Defence" / "Defense" false positives (civilian, flood, legal, cyber, self, pest, corrosion defences)
+  cleanText = cleanText
+    .replace(/\b(?:flood|sea|coastal|storm|erosion|frost|weather|wind|sun|uv|heat|fire)\s*defen[cs]es?\b/gi, " ")
+    .replace(/\b(?:pest|bug|insect|weed|crop|plant|microbial|infection|immune|body)\s*defen[cs]es?\b/gi, " ")
+    .replace(/\b(?:cyber|data|network|it|cloud|endpoint|security)\s*defen[cs]es?\b/gi, " ")
+    .replace(/\bcyber\-?defen[cs]es?\b/gi, " ")
+    .replace(/\b(?:legal|self|criminal|patent|lawsuit|consumer)\s*defen[cs]es?\b/gi, " ")
+    .replace(/\bself\-?defen[cs]es?\b/gi, " ")
+    .replace(/\b(?:corrosion|wear|rust|abrasion|scratch|stain|damage)\s*defen[cs]es?\b/gi, " ")
+    .replace(/\b(?:line\s+of|first\s+line\s+of|in\s+defence\s+of|in\s+defense\s+of|defen[cs]e\s+against|defen[cs]e\s+mechanism)\b/gi, " ");
+
+  // 5. Sanitize industrial tools & material resistance
+  cleanText = cleanText
     .replace(/\b(?:water|ink|hydro|sand)?\s*jets?\s*(?:cutting|cutter|cutters|machining|printing|printer|printers|pump|pumps|cleaning|cleaner|nozzle|nozzles)?\b/gi, " ")
     .replace(/\b(?:waterjet|inkjet|hydrojet)\b/gi, " ")
     .replace(/\b(?:air|utility|machine|slitter|guillotine|rotary|doctor)\s*knives?\b/gi, " ")
@@ -1882,8 +1916,8 @@ function detectRestrictedKeywords(text, html = "") {
   for (const item of RESTRICTED_PATTERNS) {
     const regex = item.pattern || item;
     const label = item.label || "Prohibited Category";
-    if (regex.test(sanitized)) {
-      const m = sanitized.match(regex);
+    if (regex.test(cleanText)) {
+      const m = cleanText.match(regex);
       return {
         isRestricted: true,
         matchedKeyword: m ? m[0] : "",
@@ -5200,7 +5234,8 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // House / Building / Entrance / Floors
   a = a.replace(/(^|[,\s])nr\b\.?\s*(?=\d)/gi, '$1Nummer ');
   a = a.replace(/(^|[,\s])hs\b\.?\s*(?=\d)/gi, '$1Haus ');
-  a = a.replace(/(^|[,\s])geb\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Gebäude ');
+  a = a.replace(/(^|[,\s])geb\s*ude\b/gi, '$1Gebaeude');
+  a = a.replace(/(^|[,\s])geb\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Gebaeude ');
   a = a.replace(/(^|[,\s])aufg\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Aufgang ');
   a = a.replace(/(^|[,\s])whg\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Wohnung ');
   a = a.replace(/(\d+)\.?\s*\bOG\b/g, '$1. Obergeschoss');
