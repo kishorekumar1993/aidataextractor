@@ -4389,10 +4389,10 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // 7. Buildings, suites, floors
   a = a.replace(/\bbldg\b\.?/gi, "Building");
   a = a.replace(/\bflr\b\.?/gi, "Floor");
-  a = a.replace(/\bfl\.\s*(?=\d)/gi, "Floor ");
+  a = a.replace(/\bfl\.\s*(?=\d{1,2}(?:\b|[,\s]))/gi, "Floor ");
   a = a.replace(/(\d+(?:st|nd|rd|th)?)\s*\bfl\b\.?/gi, "$1 Floor");
   a = a.replace(/(\b\d+)\s*F\b(?=[,\s]|$)/gi, "$1 Floor");
-  a = a.replace(/(^|[,\s])Flr?\.?\s*(?=\d)/gi, "$1Floor ");
+  a = a.replace(/(^|[,\s])Flr?\.?\s*(?=\d{1,2}(?:\b|[,\s]))/gi, "$1Floor ");
   a = a.replace(/\bste\b\.?/gi, "Suite");
   a = a.replace(/\bapt\b\.?/gi, "Apartment");
   a = a.replace(/\bdept\b\.?/gi, "Department");
@@ -4871,30 +4871,54 @@ function removePostalCodesCarefully(addr) {
   if (!addr) return "";
   let a = addr;
 
-  // Leading postal code (e.g. "30543新竹縣..." or "504 Changhua...")
-  a = a.replace(/^\s*\b\d{4,6}\b[\s,]+/g, "");
+  // Common street suffixes across English and international addresses
+  const streetSuffixPattern = "\\b(?:street|road|avenue|lane|drive|way|place|court|terrace|boulevard|highway|parkway|crescent|close|walk|row|parade|circuit|square|esplanade|mews|alley|st|rd|ave|ln|dr|pl|ct|tce|blvd|hwy|pkwy|cres|cl|sq)\\b";
+
+  // Premise / Unit prefixes
+  const premisePrefixPattern = "\\b(?:suite|unit|bldg|building|floor|fl|rm|room|dept|apartment|apt|flat|lot|block|blk|level|shed|warehouse|factory|p\\.?o\\.?\\s*box)\\b";
+
+  // 1. Explicitly labeled postal codes at start (e.g. 'Zip 45241, 12110 Best Place' or 'Postal Code: 30543, No. 18...')
+  a = a.replace(/^\s*(?:zip(?:\s*code)?|postal(?:\s*code)?|postcode|pincode|pin|plz|cap|cp|cedex)\s*[:#\-]?\s*\d{3,6}[\s,]+/gi, "");
+
+  // 2. Leading postal code directly touching Chinese characters (e.g. '30543新竹縣...')
   a = a.replace(/^\s*(\d{3,6})(?=[\u4e00-\u9fa5])/g, "");
 
-  // 1. UK Postcodes (e.g. SW1A 1AA, EC1A 1BB, W1A 0AX, M1 1AE)
+  // 3. Leading postal code preceding an explicit street number indicator (e.g. '30543, No. 18 Kuang Fu North Road')
+  a = a.replace(/^\s*\d{4,6}[\s,]+(?=(?:no\.?|nos\.?|number|#|unit|suite|bldg|building|floor|level|lot|plot)\s*\d+)/gi, "");
+
+  // 4. Leading postal code preceding administrative region keyword (e.g. '504 Changhua County, Taiwan')
+  a = a.replace(/^\s*\d{3,6}[\s,]+(?=[A-Za-z]+(?:\s+[A-Za-z]+)?\s+(?:county|hsien|province|region|prefecture)\b)/gi, "");
+
+  // NOTE: A standalone number at the start of an address followed by a street name (e.g. '12110 Best Place',
+  // '1450 Broadway', '4500 Industrial Parkway', '100 Main Street') is 100% THE STREET / BUILDING NUMBER.
+  // It MUST NEVER be stripped!
+
+  // 5. UK Postcodes (e.g. SW1A 1AA, EC1A 1BB, W1A 0AX, M1 1AE)
   a = a.replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/gi, " ");
 
-  // Spanish & European prefixed postal codes (e.g. ES-28014, E-28014, ES 28014)
+  // 6. Spanish & European prefixed postal codes (e.g. ES-28014, E-28014, ES 28014)
   a = a.replace(/\b(?:ES|E|IT|FR|DE|NL|BE|AT|CH)[-\s]?\d{4,5}\b/gi, " ");
 
-  // 2. Canadian Postcodes (e.g. M5V 2T6, K1A 0B1)
+  // 7. Canadian Postcodes (e.g. M5V 2T6, K1A 0B1)
   a = a.replace(/\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/gi, " ");
 
-  // 3. US ZIP+4 (e.g. 90210-1234)
+  // 8. US ZIP+4 (e.g. 90210-1234)
   a = a.replace(/\b\d{5}-\d{4}\b/g, " ");
 
-  // 4. Postal code directly following State name / abbreviation (e.g. "VIC 3061", "Victoria 3061", "TX 78701", "Madrid 28001")
+  // 9. Postal code directly following State name / abbreviation (e.g. "VIC 3061", "Victoria 3061", "TX 78701", "Madrid 28001")
   a = a.replace(/(\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|California|Texas|New York|Florida|Illinois|Pennsylvania|Ohio|Ontario|Quebec|British Columbia|Alberta|Gauteng|CA|TX|NY|FL|IL|PA|OH|ON|QC|BC|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo)\b[\s,]*)\b\d{4,6}\b/gi, "$1");
 
-  // 5. Postal code before a city/town or after a comma (e.g. "... Taman Perindustrian Sri Plentong, 81750 Masai, Johor")
-  a = a.replace(/(,\s*)\b\d{4,6}\b\s*(?=,?\s+[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, "$1");
+  // 10. Postal code before a city/town after comma (e.g. "..., 81750 Masai, Johor")
+  // MUST NOT strip street numbers if preceded by Unit/Suite/Building or followed by a street suffix!
+  a = a.replace(/(,\s*)\b\d{4,6}\b\s*(?=,?\s+([A-Za-zÁÉÍÓÚáéíóúÑñ]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñ]+)*))/g, (match, comma, rest) => {
+    if (new RegExp(streetSuffixPattern, "i").test(rest)) return match;
+    const preComma = a.slice(0, a.indexOf(match));
+    if (new RegExp(premisePrefixPattern, "i").test(preComma)) return match;
+    return comma;
+  });
   a = a.replace(/(\b\d+\s+)\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b\s+(?=[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, "$1");
 
-  // 6. Postal code at the very end of the address string (e.g. "... Campbellfield 3061" or "... Taoyuan Hsien 326")
+  // 11. Postal code at the very end of the address string (e.g. "... Campbellfield 3061" or "... Cincinnati, Ohio 45241")
   a = a.replace(/[\s,]+\b\d{3,6}\b(?:\s*[.,]?\s*)$/g, "");
 
   return a;
