@@ -17,16 +17,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnTestKey = document.getElementById("btn-test-key");
   const statusMsg = document.getElementById("api-test-status");
   const toggleStrictFilter = document.getElementById("toggle-strict-filter");
+  const toggleFloatingWidget = document.getElementById("toggle-floating-widget");
+  const toggleInlineBtn = document.getElementById("toggle-inline-btn");
   const btnOpenTestPortal = document.getElementById("btn-open-test-portal");
 
   // Load existing settings or pre-configure defaults
-  chrome.storage.sync.get(["apiKey", "model", "strictFilter"], (res) => {
+  chrome.storage.sync.get(["apiKey", "model", "strictFilter", "showFloatingWidget", "showInlineBtn"], (res) => {
     apiKeyInput.value = res.apiKey || DEFAULT_API_KEY;
     modelSelect.value = res.model || DEFAULT_MODEL;
-    if (res.strictFilter !== undefined) {
-      toggleStrictFilter.checked = res.strictFilter;
-    } else {
-      toggleStrictFilter.checked = true;
+    toggleStrictFilter.checked = res.strictFilter !== undefined ? res.strictFilter : true;
+    if (toggleFloatingWidget) {
+      toggleFloatingWidget.checked = res.showFloatingWidget !== undefined ? res.showFloatingWidget : true;
+    }
+    if (toggleInlineBtn) {
+      toggleInlineBtn.checked = res.showInlineBtn !== undefined ? res.showInlineBtn : true;
     }
   });
 
@@ -46,15 +50,31 @@ document.addEventListener("DOMContentLoaded", () => {
     const key = apiKeyInput.value.trim();
     const model = modelSelect.value;
     const strict = toggleStrictFilter.checked;
+    const floating = toggleFloatingWidget ? toggleFloatingWidget.checked : true;
+    const inline = toggleInlineBtn ? toggleInlineBtn.checked : true;
 
     chrome.storage.sync.set({
       apiKey: key,
       model: model,
-      strictFilter: strict
+      strictFilter: strict,
+      showFloatingWidget: floating,
+      showInlineBtn: inline
     }, () => {
       showStatus("Settings saved successfully!", "success");
     });
   });
+
+  // Instant toggles without requiring Save button
+  if (toggleFloatingWidget) {
+    toggleFloatingWidget.addEventListener("change", () => {
+      chrome.storage.sync.set({ showFloatingWidget: toggleFloatingWidget.checked });
+    });
+  }
+  if (toggleInlineBtn) {
+    toggleInlineBtn.addEventListener("change", () => {
+      chrome.storage.sync.set({ showInlineBtn: toggleInlineBtn.checked });
+    });
+  }
 
   // Test Connection
   btnTestKey.addEventListener("click", () => {

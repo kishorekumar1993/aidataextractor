@@ -51,6 +51,29 @@
     });
   }
 
+  let showFloatingWidget = true;
+  let showInlineBtn = true;
+
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true }, (res) => {
+      showFloatingWidget = res.showFloatingWidget !== false;
+      showInlineBtn = res.showInlineBtn !== false;
+      ensureAiCrawlButtonsVisible();
+    });
+
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "sync") {
+        if (changes.showFloatingWidget) {
+          showFloatingWidget = changes.showFloatingWidget.newValue !== false;
+        }
+        if (changes.showInlineBtn) {
+          showInlineBtn = changes.showInlineBtn.newValue !== false;
+        }
+        ensureAiCrawlButtonsVisible();
+      }
+    });
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initAssistant);
   } else {
@@ -77,8 +100,24 @@
   }
 
   function ensureAiCrawlButtonsVisible() {
-    createFloatingWidget();
-    injectInlineQuickButton();
+    if (showFloatingWidget) {
+      createFloatingWidget();
+      const w = document.getElementById("ai-prefill-widget");
+      if (w) w.style.display = "";
+    } else {
+      const w = document.getElementById("ai-prefill-widget");
+      if (w) w.style.display = "none";
+    }
+
+    if (showInlineBtn) {
+      injectInlineQuickButton();
+      const b = document.getElementById("ai-quick-btn");
+      if (b) b.style.display = "inline-flex";
+    } else {
+      const b = document.getElementById("ai-quick-btn");
+      if (b) b.style.display = "none";
+    }
+
     updateDetectedUrlDisplay();
   }
 
@@ -480,7 +519,6 @@
               break;
             }
           }
-        }
         }
       }
 
@@ -1067,14 +1105,32 @@
     const minBtn = document.getElementById("ai-toggle-minimize");
     const bodyEl = document.getElementById("ai-prefill-body");
     if (minBtn && bodyEl) {
-      minBtn.addEventListener("click", () => {
+      minBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
         if (bodyEl.style.display === "none") {
           bodyEl.style.display = "block";
+          widget.classList.remove("ai-minimized");
           minBtn.textContent = "−";
         } else {
           bodyEl.style.display = "none";
+          widget.classList.add("ai-minimized");
           minBtn.textContent = "+";
         }
+      });
+    }
+
+    // Clicking anywhere on the minimized header expands it back
+    const headerEl = document.getElementById("ai-prefill-header");
+    if (headerEl && bodyEl) {
+      headerEl.addEventListener("click", (e) => {
+        if (e.target.closest("#ai-header-crawl-btn") || e.target.closest("#ai-toggle-minimize")) return;
+        if (bodyEl.style.display === "none") {
+          bodyEl.style.display = "block";
+          widget.classList.remove("ai-minimized");
+          if (minBtn) minBtn.textContent = "−";
+        }
+      });
+    }
       });
     }
 
