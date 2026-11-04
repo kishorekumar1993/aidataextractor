@@ -4223,6 +4223,25 @@ function hasNamedStateOrProvince(lower) {
   return false;
 }
 
+// The 13 official Counties of Taiwan (Republic of China):
+// Per strict QC rule: All 13 counties are considered as State (State: Available),
+// whether written with or without the word "County" / "Hsien" / "Country" / "縣"
+const TAIWAN_COUNTIES = [
+  "changhua", "changhwa",
+  "chiayi", "jiayi",
+  "hsinchu", "xinzhu",
+  "hualien", "hwalien",
+  "kinmen", "jinmen", "quemoy",
+  "lienchiang", "lianjiang", "matsu",
+  "miaoli",
+  "nantou",
+  "penghu", "pescadores",
+  "pingtung", "ping-tung", "ping tung",
+  "taitung", "taidong", "tai-tung", "tai tung",
+  "yilan", "ilan",
+  "yunlin", "yun-lin", "yun lin"
+];
+
 function hasStateInAddress(addr, country) {
   if (!addr) return false;
   const lower = addr.toLowerCase();
@@ -4230,9 +4249,16 @@ function hasStateInAddress(addr, country) {
   // Taiwan strict rule:
   // - Capital: Taipei City / Taipei -> State: Available
   // - Explicit County / Hsien / Province / 縣 / 省 (e.g. Changhua County) -> State: Available
-  // - Other cities (Taichung City, New Taipei City, Tainan City, Kaohsiung City, Taoyuan City, Keelung City, Hsinchu City, Chiayi City)
+  // - All 13 official Taiwan Counties (whether written with or without "County" / "Hsien" / "Country" / "縣"):
+  //   Changhua, Chiayi, Hsinchu, Hualien, Kinmen, Lienchiang (Matsu), Miaoli,
+  //   Nantou, Penghu, Pingtung, Taitung, Yilan, Yunlin -> State: Available
+  // - Special Municipalities (Taichung City, New Taipei City, Tainan City, Kaohsiung City, Taoyuan City, Keelung City)
   //   and Districts (Nantun District, Banqiao District, etc.) without County -> State: Not Available!
-  const isTaiwan = (country && /taiwan/i.test(country)) || /\b(taiwan|r\.?o\.?c\.?)\b/i.test(lower);
+  const isTaiwan = (country && /taiwan/i.test(country)) || 
+    /\b(taiwan|r\.?o\.?c\.?)\b/i.test(lower) ||
+    /\b(changhua|chiayi|hsinchu|hualien|kinmen|lienchiang|matsu|miaoli|nantou|penghu|pingtung|taitung|yilan|yunlin)\s*(?:county|hsien|country)?\b/i.test(lower) ||
+    /[\u5f70\u5316\u5609\u7fa9\u65b0\u7af9\u82b1\u84ee\u91d1\u9580\u9023\u6c5f\u99ac\u7956\u82d7\u6817\u5357\u6295\u6f8e\u6e56\u5c4f\u6771\u53f0\u6771\u81fa\u6771\u5b9c\u862d\u96f2\u6797]/.test(addr);
+
   if (isTaiwan) {
     if (isNewTaipeiCity(lower)) {
       return /\b(county|hsien|province)\b/i.test(lower) || /[\u7701\u7e23\u53bf]/.test(addr);
@@ -4241,6 +4267,18 @@ function hasStateInAddress(addr, country) {
       return true;
     }
     if (/\b(county|hsien|province)\b/i.test(lower) || /[\u7701\u7e23\u53bf]/.test(addr)) {
+      return true;
+    }
+    // All 13 official Taiwan Counties (with or without "County" / "Hsien"):
+    for (const county of TAIWAN_COUNTIES) {
+      if (isPlaceUsedAsStreetName(lower, county)) continue;
+      const escaped = county.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(lower)) {
+        return true;
+      }
+    }
+    // Chinese county names
+    if (/(?:彰化|嘉義|新竹|花蓮|金門|連江|馬祖|苗栗|南投|澎湖|屏東|台東|臺東|宜蘭|雲林)(?:縣|县)?/.test(addr)) {
       return true;
     }
     return false;
@@ -5444,7 +5482,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bplot\s+no\.?\s*(?=\d)/gi, 'Plot Number ');
   a = a.replace(/(^|[,\s])Sec\.\s*(?=[A-Za-z0-9])/gi, '$1Section ');
   a = a.replace(/(^|[,\s])Sec\b\s*(?=[A-Za-z0-9])/gi, '$1Section ');
-  a = a.replace(/\b(Hsinchu|Changhua|Miaoli|Yunlin|Chiayi|Pingtung|Taitung|Hualien|Yilan|Nantou|Kinmen|Penghu)\s+Country\b/gi, "$1 County");
+  a = a.replace(/\b(Hsinchu|Changhua|Miaoli|Yunlin|Chiayi|Pingtung|Taitung|Hualien|Yilan|Nantou|Kinmen|Penghu|Lienchiang|Matsu)\s+Country\b/gi, "$1 County");
   a = a.replace(/(^|[,\s])Ln\.\s*(?=\d)/gi, '$1Lane ');
   a = a.replace(/(^|[,\s])Ln\b\s*(?=\d)/gi, '$1Lane ');
   a = a.replace(/(^|[,\s])Aly\.\s*(?=\d)/gi, '$1Alley ');
