@@ -189,6 +189,26 @@ const RECOGNIZED_TOWNS = [
   "san francisco", "charlotte", "indianapolis", "seattle", "denver", "boston", "detroit",
   "nashville", "portland", "las vegas", "memphis", "baltimore", "milwaukee", "albuquerque",
   "atlanta", "miami", "cleveland", "minneapolis", "tampa", "pittsburgh", "cincinnati",
+  "st. louis", "saint louis", "kansas city", "orlando", "sacramento", "raleigh", "virginia beach",
+  "omaha", "oakland", "tulsa", "wichita", "new orleans", "arlington", "bakersfield", "aurora",
+  "anaheim", "honolulu", "santa ana", "riverside", "corpus christi", "lexington", "stockton",
+  "st. paul", "saint paul", "newark", "greensboro", "buffalo", "plano", "lincoln", "toledo",
+  "irvine", "lubbock", "fort wayne", "laredo", "madison", "chandler", "scottsdale", "reno",
+  "glendale", "gilbert", "winston-salem", "north las vegas", "norfolk", "chesapeake", "garland",
+  "irving", "hialeah", "fremont", "boise", "richmond", "baton rouge", "spokane", "des moines",
+  "tacoma", "san bernardino", "modesto", "fontana", "santa clarita", "birmingham", "fayetteville",
+  "rochester", "oxnard", "moreno valley", "huntington beach", "salt lake city", "grand rapids",
+  "amarillo", "yonkers", "montgomery", "akron", "little rock", "huntsville", "augusta",
+  "port st. lucie", "grand prairie", "knoxville", "worcester", "newport news", "brownsville",
+  "overland park", "santa rosa", "tallahassee", "chattanooga", "oceanside", "garden grove",
+  "vancouver", "tempe", "ontario", "eugene", "pembroke pines", "salem", "cape coral",
+  "peoria", "sioux falls", "springfield", "elk grove", "rockford", "lancaster", "corona",
+  "salinas", "palmdale", "hayward", "fort collins", "pomona", "cary", "alexandria", "escondido",
+  "mckinney", "joliet", "sunnyvale", "torrance", "bridgeport", "lakewood", "hollywood",
+  "paterson", "naperville", "syracuse", "mesquite", "dayton", "savannah", "clarksville",
+  "orange", "pasadena", "fullerton", "killeen", "frisco", "hampton", "mchenry", "oshkosh",
+  "mundelein", "merced", "somerville", "allenton", "westford", "hamden", "palmetto",
+  "saegertown", "wheeling", "watertown", "avon", "blomkest", "kutztown", "north hollywood",
   // Australia
   "sydney", "melbourne", "brisbane", "perth", "adelaide", "gold coast", "newcastle", "canberra",
   "sunshine coast", "wollongong", "hobart", "geelong", "townsville", "cairns", "darwin",
@@ -2836,7 +2856,7 @@ ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
        - Regions: DKI Jakarta, DI Yogyakarta.
      * State & Province abbreviations GLOBALLY:
        - Australia: VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland, WA -> Western Australia, SA -> South Australia, TAS -> Tasmania, ACT -> Australian Capital Territory, NT -> Northern Territory.
-       - United States: CA -> California, TX -> Texas, NY -> New York, FL -> Florida, IL -> Illinois, PA -> Pennsylvania, OH -> Ohio, GA -> Georgia, NC -> North Carolina, MI -> Michigan, NJ -> New Jersey, VA -> Virginia, WA -> Washington, etc.
+       - United States: Expand all 2-letter state codes to full state names (e.g. CA -> California, TX -> Texas, NY -> New York, FL -> Florida, IL -> Illinois, PA -> Pennsylvania, OH -> Ohio, GA -> Georgia, NC -> North Carolina, MI -> Michigan, NJ -> New Jersey, VA -> Virginia, WA -> Washington, MA -> Massachusetts, WI -> Wisconsin, MO -> Missouri, MN -> Minnesota, CT -> Connecticut, etc.). Strip 5-digit ZIP codes (e.g. "60060", "78731-1234") and country name ("USA", "United States"). Format cleanly as "[Street Address], [City], [Full State Name]".
        - Canada: ON -> Ontario, QC -> Quebec, BC -> British Columbia, AB -> Alberta, MB -> Manitoba, SK -> Saskatchewan, etc.
    - Capitalize first letter of every word (Title Case) and format with clean punctuation.
 
@@ -2850,6 +2870,9 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    - ALSO Mark "Available" if a country's official capital city is in the address (e.g. Taipei City = capital of Taiwan, London = capital of England, Washington D.C. = capital of USA, Berlin = Germany, Rome = Italy, Madrid = Spain, Ankara = Turkiye, Dublin = Ireland, Bangkok = Thailand, Jakarta = Indonesia, Beijing = China, Kuala Lumpur = Malaysia).
    - Spain State Rule: Any of the 50 provinces (e.g. Madrid, Barcelona, Valencia, Sevilla, Zaragoza, Málaga, Murcia, Alicante, Córdoba, Valladolid, A Coruña, Asturias, Vizcaya, Guipúzcoa, Las Palmas, Santa Cruz de Tenerife, etc.) or 17 Autonomous Communities (e.g. Andalucía, Cataluña, Galicia, País Vasco, Castilla y León, Castilla-La Mancha, etc.) in address → State: Available.
    - Turkey (Türkiye) State Rule: Any of Turkey's provinces (İl, e.g. Istanbul, Ankara, Izmir, Bursa, Antalya, Adana, Konya, Gaziantep, Kocaeli, Mersin, Diyarbakir, Kayseri, Eskisehir, Samsun, Denizli, Sakarya, Mugla, etc.) or explicit "İl" / "İli" / "Province" in address → State: Available. If Ankara (capital) is in address, both State and City are Available.
+   - United States – State Validation Rule:
+     * Any US state (full name e.g. Illinois, Texas, California, Pennsylvania, Wisconsin, Massachusetts, Missouri, Minnesota, Connecticut, Florida, etc., or 2-letter postal abbreviation e.g. IL, TX, CA, PA, WI, MA, MO, MN, CT, FL) in address → State: Available.
+     * Washington D.C. (capital) in address → State: Available.
    - If the address only contains a street, suburb, locality, or industrial area — mark "Not Available".
    - Taiwan – State Validation Rule:
      * Taipei City (capital) in address → State: Available
@@ -2882,6 +2905,7 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    c) The address contains a recognized city / town / municipal name (e.g. Chicago, Melbourne, Boston, San Francisco, Cape Town, Manchester, Johor Bahru, Shenzhen).
    d) UNITED KINGDOM: recognized UK cities, towns, and London boroughs evaluate as "Available".
    e) NEW ZEALAND: Recognized NZ cities & towns (e.g. Auckland, Wellington, Christchurch, Hamilton, Tauranga, Dunedin, Lower Hutt, Upper Hutt, Palmerston North, Napier, Porirua, New Plymouth, Rotorua, Whangarei, Invercargill, Nelson, Whanganui, Hastings, Gisborne, Blenheim, Timaru, Taupo, Pukekohe, Cambridge, Queenstown) evaluate as "Available".
+   f) UNITED STATES: Standard US addresses follow the format "[Street Address], [City], [State] [ZIP]". The locality preceding the State and ZIP is the official City/Town/Municipality (e.g. Mundelein, Austin, Houston, Kutztown, Merced, North Hollywood, Oshkosh, Somerville, Allenton, Westford, Washington, Chicago, Hamden, Blomkest, Palmetto, Saegertown, Wheeling, Watertown, etc.) and MUST evaluate as "Available".
    STRICTLY MARK "Not Available" FOR:
    - Suburb / locality / neighborhood only (e.g. Sandton, Rosebank) with no city/town/district.
    - New Zealand: Suburbs alone (e.g. Penrose, Albany, Rosedale, East Tamaki, Mount Wellington, Riccarton, Hornby) without a recognized city/town.
@@ -4253,6 +4277,13 @@ function hasStateInAddress(addr, country) {
   // Australian state abbreviations with postcode or comma (e.g. NSW 2000, VIC 3000, QLD 4000)
   if (/\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(lower) || /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower) || /\b(?:sydney|melbourne|brisbane|perth|adelaide|gold coast|hobart|canberra)\s+(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower)) return true;
 
+  // United States state abbreviations with 5-digit ZIP or comma (e.g. IL 60060, TX 78731, Allenton, WI)
+  const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
+  const isUSState = !country || /^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?|america)$/i.test(country) || /\b(usa|united\s*states)\b/i.test(lower);
+  if (new RegExp(`\\b(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return true;
+  if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})(?:\\s*,|\\s*\\d{5}|\\s*$)`, "i").test(lower)) return true;
+  if (isUSState && new RegExp(`^(?:${US_STATE_CODES_STR})(?:\\s+\\d{5}(?:-\\d{4})?)?$`, "i").test(lower.trim())) return true;
+
   // Non-English state/province/prefecture/county markers across the 16 priority countries
   // Germany: Bundesland, Land, Landkreis, Kreis, Regierungsbezirk
   if (/\b(bundesland|landkreis|kreis|regierungsbezirk)\b/i.test(lower)) return true;
@@ -4349,6 +4380,32 @@ const UK_CITIES_AND_TOWNS = [
   "kingston upon thames", "lambeth", "lewisham", "merton", "newham", "redbridge", "richmond upon thames",
   "southwark", "sutton", "tower hamlets", "waltham forest", "wandsworth"
 ];
+
+function isUnitedStatesLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:united\s*states|usa|u\.s\.a\.|america)\b/i.test(c)) return true;
+  if (c && !/\b(?:united\s*states|usa|u\.s\.a\.|america)\b/i.test(c) && /\b(?:canada|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|spain|malaysia|indonesia|new\s+zealand)\b/i.test(c)) {
+    return false;
+  }
+  const a = (address || "").toLowerCase();
+  if (/\b(?:united\s*states|usa|u\.s\.a\.)\b/i.test(a)) return true;
+  const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
+  if (new RegExp(`(?:^|[,\\s])(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(a)) return true;
+  if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})\\s*$`, "i").test(a)) return true;
+  for (const st of [
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut",
+    "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa",
+    "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan",
+    "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire",
+    "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio",
+    "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota",
+    "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia",
+    "wisconsin", "wyoming", "district of columbia"
+  ]) {
+    if (new RegExp(`\\b${st}\\b`, "i").test(a)) return true;
+  }
+  return false;
+}
 
 function isUkLocation(address, country) {
   const c = (country || "").toLowerCase();
@@ -4597,7 +4654,7 @@ function hasSpanishCityOrTown(cleanAddr) {
 function isPlaceUsedAsStreetName(cleanAddr, name) {
   const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
   const streetSuffix = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
-  const streetPrefix = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|calle|c\\/|avenida|avda?|paseo|p\\.[ºo]|pso|plaza|pza|plza|rambla|rbla|carretera|ctra|camino|cno|pasaje|p(?:t)?je|ronda|rda|traves[ií]a|trav)\\s+";
+  const streetPrefix = "\\b(?:calle|c\\/|c\\.|avenida|avda?|paseo|p\\.[ºo]|pso|plaza|pza|plza|rambla|rbla|carretera|ctra|camino|cno|pasaje|p(?:t)?je|ronda|rda|traves[ií]a|trav|via|corso|viale|piazza|rue|strada)\\s+";
   return new RegExp(`(?:${streetPrefix})\\b${escaped}\\b|\\b${escaped}\\b(?:${streetSuffix})`, "i").test(cleanAddr);
 }
 
@@ -4732,6 +4789,10 @@ function detectCityFromStructure(addr, country = "") {
   clean = clean.replace(/,\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/gi, "").trim();
   clean = clean.replace(/,\s*\b\d{5}(?:-\d{4})?\b/g, "").trim();
   clean = clean.replace(/,\s*\b\d{4,6}\b/g, "").trim();
+  clean = clean.replace(/\s+\b\d{5}(?:-\d{4})?\b\s*$/g, "").trim();
+  if (typeof ensureCommaBeforeState === "function") {
+    clean = ensureCommaBeforeState(clean);
+  }
 
   const parts = clean.split(",").map(p => p.trim()).filter(Boolean);
   if (parts.length < 2) return null;
@@ -4745,13 +4806,15 @@ function detectCityFromStructure(addr, country = "") {
   }
 
   if (stateIdx > 0) {
-    const candidate = parts[stateIdx - 1];
-    if (!isNotCitySegment(candidate)) {
-      return candidate;
-    }
-    const cleanCand = candidate.replace(/\b(?:industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park)\b/gi, "").trim();
-    if (cleanCand.length >= 3 && !isNotCitySegment(cleanCand)) {
-      return cleanCand;
+    for (let j = stateIdx - 1; j >= 0; j--) {
+      const candidate = parts[j];
+      if (!isNotCitySegment(candidate)) {
+        return candidate;
+      }
+      const cleanCand = candidate.replace(/\b(?:industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park)\b/gi, "").trim();
+      if (cleanCand.length >= 3 && !isNotCitySegment(cleanCand)) {
+        return cleanCand;
+      }
     }
   }
 
@@ -4773,7 +4836,10 @@ function evaluateCityQC(address, country) {
   if (!address || typeof address !== "string" || address.trim().length < 3) {
     return "Not Available";
   }
-  const cleanAddr = address.trim().toLowerCase();
+  let cleanAddr = address.trim().toLowerCase();
+  if (typeof ensureCommaBeforeState === "function") {
+    cleanAddr = ensureCommaBeforeState(cleanAddr);
+  }
 
   // New Taipei City rule: Must remain Not Available unless a qualifying administrative area is separately identified
   if (isNewTaipeiCity(cleanAddr)) {
@@ -4861,6 +4927,29 @@ function evaluateCityQC(address, country) {
     }
     // Industrial estate alone without a city -> Not Available
     return "Not Available";
+  }
+
+  // United States City Evaluation (Strict QC Rule):
+  // Note: (Town, Township, Borough, Municipality) should be considered as City.
+  // Standard US address format: [Street Address], [City/Town], [State] [ZIP]
+  if (isUnitedStatesLocation(cleanAddr, country)) {
+    // 1. Capital Rule: Washington D.C. in address -> City: Available
+    if (/\b(?:washington\s*d\.?c\.?|district\s*of\s*columbia)\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    // 2. Explicit City, Town, Township, Borough, Municipality designation
+    if (hasExplicitCityWord(cleanAddr) || /\b(?:town|township|borough|municipality|village)\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    // 3. Recognized US Cities / Towns
+    if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+      return "Available";
+    }
+    // 4. Structural detection: Locality preceding State/ZIP
+    const structCity = detectCityFromStructure(cleanAddr, country);
+    if (structCity && !isNotCitySegment(structCity)) {
+      return "Available";
+    }
   }
 
   // 1. Explicit qualifying City, Town, Township, District, Municipality, or local language designation
@@ -5382,7 +5471,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\brte\b\.?/gi, "Route");
   a = a.replace(/\bctr\b\.?/gi, "Centre");
   a = a.replace(/\bcl\b\.?/gi, "Close");
-  a = a.replace(/\bct\b\.?/gi, "Court");
+  a = a.replace(/(?<!,\s*)\bct\b\.?(?!\s*\d{5})/gi, "Court");
   a = a.replace(/\bpl\b\.?/gi, "Place");
   a = a.replace(/\bsq\b\.?/gi, "Square");
   a = a.replace(/\bst\b\.?/gi, "Street");
@@ -5460,7 +5549,8 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   }
 
   // United States - Only when country is United States or has US zip or explicit US context
-  const isUsAddress = cLower.includes("united states") || cLower.includes("usa") || cLower.includes("america") ||
+  const isUsAddress = (typeof isUnitedStatesLocation === "function" && isUnitedStatesLocation(a, country)) ||
+    cLower.includes("united states") || cLower.includes("usa") || cLower.includes("america") ||
     /\b\d{5}(?:-\d{4})?\b/.test(a) || (!country && /,\s*[A-Z]{2}\b/.test(a));
 
   if (isUsAddress && !["australia", "canada", "united kingdom", "india", "south africa", "malaysia", "spain", "espana", "italy", "italia", "germany", "deutschland", "france"].includes(cLower)) {
@@ -5481,10 +5571,13 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     ];
 
     for (const [abbr, full] of usAbbreviations) {
-      // Must be preceded by comma and space, or space, and followed by comma, space, end of string, or 5-digit zip:
+      // Must be preceded by comma and space, or space and directly followed by 5-digit zip:
       // e.g. ", IL" or ", IL 60090" or " IL 60090"
-      const regComma = new RegExp(`(,\\s*|\\s+)\\b${abbr}\\b\\.?(?=[,\\s]|$|\\s*\\d{5})`, "i");
-      a = a.replace(regComma, `, ${full} `);
+      const regComma = new RegExp(`(,\\s*)\\b${abbr}\\b\\.?(?=[,\\s]|$|\\s*\\d{5})|(\\s+)\\b${abbr}\\b\\.?(?=\\s*\\d{5})`, "i");
+      a = a.replace(regComma, (match, p1, p2) => {
+        if (p1) return `, ${full} `;
+        return ` ${full} `;
+      });
     }
   }
 
@@ -5784,7 +5877,8 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(/(?<![A-Za-z0-9\-,/]\s*)\b((?:[A-Z][a-z0-9\u00C0-\u024F]+(?:[- ][A-Z][a-z0-9\u00C0-\u024F]+)?)\s+(?:Township|District|County|Hsien))\b/g, ", $1");
 
   // 5b. Ensure comma after District / Township / County / Hsien when followed by City / Town / County / State
-  a = a.replace(/\b((?:Township|District|County|Hsien|Borough|Parish))\s+([A-Z][a-z0-9\u00C0-\u024F]+)/g, "$1, $2");
+  // Exclude "County Road", "County Highway", "County Route", "County Line" in US addresses
+  a = a.replace(/\b((?:Township|District|County|Hsien|Borough|Parish))\s+(?!(?:Road|Highway|Route|Line)\b)([A-Z][a-z0-9\u00C0-\u024F]+)/g, "$1, $2");
 
   // 5c. Ensure comma before "X City" (handling multi-word cities like "New York City", "New Taipei City", "Salt Lake City")
   a = a.replace(/(?<=[A-Za-z0-9\)])\s+(?<!,\s*)(?<!\b(?:New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|Salt|Lake|Ho|Chi|Minh|Kuala|Hong|San|Santa|Los|Las|El|La)\s+)\b([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)?\s+City)\b(?![\s\-]*(?:Road|Street|Avenue|Lane|Drive|Way|Place|Highway))/g, ", $1");
@@ -5801,7 +5895,8 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
 
   // Repair accidental commas splitting multi-word prefixes: "New, York" -> "New York", "New, Zealand" -> "New Zealand"
-  a = a.replace(/\b(New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La)[,\s]+([A-Z][a-z]+)/g, "$1 $2");
+  // Do NOT merge if the directional word is a street suffix (e.g. "Main Street East, City", "County Road West, City")
+  a = a.replace(/(?<!\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard)\s+)\b(New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La)[,\s]+([A-Z][a-z]+)/g, "$1 $2");
 
   // 6. Comprehensive global states, provinces, regions, and counties
   const states = [
@@ -6101,7 +6196,8 @@ function removePostalCodesCarefully(addr) {
   a = a.replace(/\b\d{5}-\d{4}\b/g, " ");
 
   // 9. Postal code directly following State name / abbreviation (e.g. "VIC 3061", "Victoria 3061", "TX 78701", "Madrid 28001")
-  a = a.replace(/(\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|California|Texas|New York|Florida|Illinois|Pennsylvania|Ohio|Ontario|Quebec|British Columbia|Alberta|Gauteng|CA|TX|NY|FL|IL|PA|OH|ON|QC|BC|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo)\b[\s,]*)\b\d{4,6}\b/gi, "$1");
+  const allStatesPostalRegex = "\\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New\\s*Hampshire|New\\s*Jersey|New\\s*Mexico|New\\s*York|North\\s*Carolina|North\\s*Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\\s*Island|South\\s*Carolina|South\\s*Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West\\s*Virginia|Wisconsin|Wyoming|District\\s*Of\\s*Columbia|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC|Ontario|Quebec|British Columbia|Alberta|Gauteng|ON|QC|BC|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo)\\b[\\s,]*";
+  a = a.replace(new RegExp(`(${allStatesPostalRegex})\\b\\d{4,6}\\b`, "gi"), "$1");
 
   // 10. Postal code before a city/town after comma (e.g. "..., 81750 Masai, Johor")
   // MUST NOT strip street numbers if preceded by Unit/Suite/Building or followed by a street suffix!
@@ -6316,7 +6412,9 @@ function detectCountryFromAddress(address) {
   if (/\b(thailand)\b/i.test(lower)) return "Thailand";
 
   // 2. Verified State / Province / County / Region in the physical address text
-  if (/\b(gauteng|western\s*cape|eastern\s*cape|kwazulu|natal|mpumalanga|free\s*state|limpopo|north\s*west|northern\s*cape)\b/i.test(lower)) return "South Africa";
+  const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
+  if (new RegExp(`(?:^|[,\\s])(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return "United States Of America";
+  if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})\\s*$`, "i").test(lower)) return "United States Of America";
   if (/\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s*hampshire|new\s*jersey|new\s*mexico|new\s*york|north\s*carolina|north\s*dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s*island|south\s*carolina|south\s*dakota|tennessee|texas|utah|vermont|virginia|washington|west\s*virginia|wisconsin|wyoming|district\s*of\s*columbia)\b/i.test(lower)) return "United States Of America";
   if (/\b(ontario|quebec|british\s*columbia|alberta|manitoba|nova\s*scotia)\b/i.test(lower)) return "Canada";
   if (/\b(?:new\s*south\s*wales|victoria|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|sydney|melbourne|brisbane|perth|adelaide|canberra|hobart|darwin|gold\s*coast|newcastle|wollongong|geelong|cairns|townsville)\b/i.test(lower) ||
