@@ -989,9 +989,27 @@
 
       if (!response || !response.success) {
         const errorMsg = response?.error || "Unable to fetch or crawl website";
-        updateStatus(`❌ Crawl Error: ${errorMsg}`, "error");
-        const previewSection = document.getElementById("ai-preview-section");
-        if (previewSection) previewSection.style.display = "none";
+        console.warn("[AI Assistant] Website unreachable / failed to fetch. Marking as Not Working as instructed:", errorMsg);
+        const notWorkingData = {
+          websiteStatus: "Not Working",
+          businessType: "",
+          companyProfile: "",
+          companyName: "",
+          countryName: "",
+          companyAddress: "",
+          state: "",
+          city: "",
+          emailId: "",
+          secondaryEmailId: "",
+          phoneNumber: "",
+          numberOfProducts: "",
+          productImages: "",
+          numberOfProductDescriptions: "",
+          _note: `Unreachable / Failed to fetch: ${errorMsg}`
+        };
+        fillFormFields(notWorkingData);
+        renderPreview(notWorkingData);
+        updateStatus(`⚠️ Website unreachable (${errorMsg}). Status set to Not Working (auto-submitting...).`, "warning");
         return;
       }
 
@@ -1047,7 +1065,27 @@
         showReloadBanner();
         updateStatus("Please refresh page (F5)", "warning");
       } else {
-        updateStatus(`❌ Crawl Error: ${err.message}. Form was not modified.`, "error");
+        console.warn("[AI Assistant] Crawl exception occurred. Marking as Not Working as instructed:", err.message);
+        const notWorkingData = {
+          websiteStatus: "Not Working",
+          businessType: "",
+          companyProfile: "",
+          companyName: "",
+          countryName: "",
+          companyAddress: "",
+          state: "",
+          city: "",
+          emailId: "",
+          secondaryEmailId: "",
+          phoneNumber: "",
+          numberOfProducts: "",
+          productImages: "",
+          numberOfProductDescriptions: "",
+          _note: `Failed to fetch: ${err.message}`
+        };
+        fillFormFields(notWorkingData);
+        renderPreview(notWorkingData);
+        updateStatus(`⚠️ Failed to fetch website (${err.message}). Status set to Not Working (auto-submitting...).`, "warning");
       }
     }
   }

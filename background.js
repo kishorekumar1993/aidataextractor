@@ -454,6 +454,7 @@ async function handleCrawlAndExtract(rawUrl) {
   const crawlResult = await crawlWebsite(targetUrl);
 
   // If website fetch failed (network timeout, connection error, DNS failure, empty response):
+  // INSTRUCTION: "IF FAILED TO FETCH MEANS MAKE IT NOTWORKING"
   if (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0) {
     if (crawlResult.status === "Domain Expired" || crawlResult.httpStatus === 404) {
       return {
@@ -473,8 +474,26 @@ async function handleCrawlAndExtract(rawUrl) {
         numberOfProductDescriptions: ""
       };
     }
+
     const reason = crawlResult.fetchError || "Site unreachable or returned empty HTML";
-    throw new Error(`Unable to crawl ${targetUrl}: ${reason}. Form was not modified.`);
+    console.warn(`[AI Assistant] Failed to fetch ${targetUrl}: ${reason}. Marking as Not Working.`);
+    return {
+      websiteStatus: "Not Working",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      _note: `Website Unreachable / Failed to Fetch (${reason}) - Marked as Not Working`
+    };
   }
 
   // Step 2: PRE-AI STRICT CHECKS (Prohibited Categories, Free Platforms, Subdomains, Flash & Non-English)
