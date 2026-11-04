@@ -551,6 +551,31 @@
 
   let isAutoQueuePipelineActive = false;
   let autoQueuePollTimer = null;
+  let autoQueueEnabled = true;
+
+  // Initialize and keep autoQueueEnabled synchronized with storage
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+    chrome.storage.sync.get(["autoQueueEnabled"], (res) => {
+      if (res && res.autoQueueEnabled !== undefined) {
+        autoQueueEnabled = !!res.autoQueueEnabled;
+      }
+      const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
+      if (widgetToggle) widgetToggle.checked = autoQueueEnabled;
+    });
+
+    if (chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === "sync" && changes.autoQueueEnabled !== undefined) {
+          autoQueueEnabled = !!changes.autoQueueEnabled.newValue;
+          const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
+          if (widgetToggle) widgetToggle.checked = autoQueueEnabled;
+          if (!autoQueueEnabled) {
+            stopAutoQueuePipeline("Auto-queue disabled");
+          }
+        }
+      });
+    }
+  }
 
   function stopAutoQueuePipeline(reason = "") {
     isAutoQueuePipelineActive = false;
@@ -569,62 +594,83 @@
       autoQueuePollTimer = null;
     }
 
-    chrome.storage.sync.get(["autoQueueEnabled"], (res) => {
-      const isEnabled = res.autoQueueEnabled !== undefined ? res.autoQueueEnabled : true;
-      if (!isEnabled) {
-        console.log("[AI Assistant] Auto-queue advance is disabled in settings.");
-        stopAutoQueuePipeline("Feature disabled in settings");
+    if (!autoQueueEnabled) {
+      console.log("[AI Assistant] Auto-queue advance is disabled in settings.");
+      stopAutoQueuePipeline("Feature disabled in settings");
+      return;
+    }
+
+    isAutoQueuePipelineActive = true;
+    const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+    if (pauseBtn) pauseBtn.style.display = "inline-flex";
+
+    let attempts = 0;
+    const maxAttempts = 60; // 60 * 150ms = 9 seconds
+    const normSubmitted = (submittedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+
+    console.log(`[AI Assistant] Auto-queue pipeline listening for next record after "${normSubmitted}"...`);
+    updateStatus("⏳ Advancing to next queue record...", "loading");
+
+    // Helper to ensure next pending URL is loaded from queue
+    const loadNextFromQueue = () => {
+      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") || 
+        Array.from(document.querySelectorAll("button, a")).find(b => (b.textContent || "").toLowerCase().includes("from queue"));
+      if (fromQueueBtn) {
+        console.log("[AI Assistant] Triggering 'From Queue' to load next pending URL...");
+        fromQueueBtn.click();
+      }
+    };
+
+    // If the input was cleared or in manual URL mode, click 'From Queue' at 350ms
+    setTimeout(() => {
+      const cur = getTargetUrl();
+      if (!cur || cur.trim().toLowerCase().replace(/\/+$/, "") === normSubmitted) {
+        loadNextFromQueue();
+      }
+    }, 350);
+
+    autoQueuePollTimer = setInterval(() => {
+      attempts++;
+      if (!isAutoQueuePipelineActive || !autoQueueEnabled) {
+        clearInterval(autoQueuePollTimer);
+        autoQueuePollTimer = null;
         return;
       }
 
-      isAutoQueuePipelineActive = true;
-      const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
-      if (pauseBtn) pauseBtn.style.display = "inline-flex";
+      let nextUrl = getTargetUrl();
 
-      let attempts = 0;
-      const maxAttempts = 60; // 60 * 150ms = 9 seconds
+      // If still empty after several attempts, trigger 'From Queue'
+      if (!nextUrl && attempts % 5 === 0) {
+        loadNextFromQueue();
+        nextUrl = getTargetUrl();
+      }
 
-      console.log(`[AI Assistant] Auto-queue pipeline listening for next record after "${submittedUrl}"...`);
-      updateStatus("⏳ Advancing to next queue record...", "loading");
+      const normNext = (nextUrl || "").trim().toLowerCase().replace(/\/+$/, "");
 
-      const normSubmitted = (submittedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+      // Check if a new valid URL has been loaded into the input
+      if (normNext && normNext !== normSubmitted && normNext.length > 3) {
+        clearInterval(autoQueuePollTimer);
+        autoQueuePollTimer = null;
+        console.log(`[AI Assistant] Next queue URL detected: ${nextUrl}. Auto-crawling in 350ms...`);
+        updateStatus(`⚡ Auto-Queue: Next site detected (${nextUrl}). Crawling...`, "loading");
 
-      autoQueuePollTimer = setInterval(() => {
-        attempts++;
-        if (!isAutoQueuePipelineActive) {
-          clearInterval(autoQueuePollTimer);
-          autoQueuePollTimer = null;
-          return;
-        }
+        setTimeout(() => {
+          if (isAutoQueuePipelineActive && autoQueueEnabled) {
+            triggerCrawlAndFill();
+          }
+        }, 350);
+        return;
+      }
 
-        const nextUrl = getTargetUrl();
-        const normNext = (nextUrl || "").trim().toLowerCase().replace(/\/+$/, "");
-
-        // Check if a new valid URL has been loaded into the input
-        if (normNext && normNext !== normSubmitted && normNext.length > 3) {
-          clearInterval(autoQueuePollTimer);
-          autoQueuePollTimer = null;
-          console.log(`[AI Assistant] Next queue URL detected: ${nextUrl}. Auto-crawling in 350ms...`);
-          updateStatus(`⚡ Auto-Queue: Next site detected (${nextUrl}). Crawling...`, "loading");
-
-          setTimeout(() => {
-            if (isAutoQueuePipelineActive) {
-              triggerCrawlAndFill();
-            }
-          }, 350);
-          return;
-        }
-
-        if (attempts >= maxAttempts) {
-          clearInterval(autoQueuePollTimer);
-          autoQueuePollTimer = null;
-          isAutoQueuePipelineActive = false;
-          if (pauseBtn) pauseBtn.style.display = "none";
-          console.log("[AI Assistant] Queue advance polling completed (no further pending URL found).");
-          updateStatus("Ready (Queue idle)", "idle");
-        }
-      }, 150);
-    });
+      if (attempts >= maxAttempts) {
+        clearInterval(autoQueuePollTimer);
+        autoQueuePollTimer = null;
+        isAutoQueuePipelineActive = false;
+        if (pauseBtn) pauseBtn.style.display = "none";
+        console.log("[AI Assistant] Queue advance polling completed.");
+        updateStatus("Ready (Queue idle)", "idle");
+      }
+    }, 150);
   }
 
   /**
@@ -1049,9 +1095,19 @@
     }
 
     isAutoQueuePipelineActive = true;
-    const targetUrl = getTargetUrl();
+    let targetUrl = getTargetUrl();
     if (!targetUrl) {
-      updateStatus("⚠️ Website Name URL not found. Please enter a URL.", "error");
+      // Try to load pending URL from queue if input is empty
+      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") || 
+        Array.from(document.querySelectorAll("button, a")).find(b => (b.textContent || "").toLowerCase().includes("from queue"));
+      if (fromQueueBtn) {
+        fromQueueBtn.click();
+        targetUrl = getTargetUrl();
+      }
+    }
+
+    if (!targetUrl) {
+      updateStatus("⚠️ Website Name URL not found. Click 'From Queue' or enter a URL.", "error");
       return;
     }
 
@@ -1166,6 +1222,12 @@
 
           submitBtn.addEventListener("click", () => {
             submitBtn.classList.remove("ai-submit-ready-highlight");
+            if (autoQueueEnabled) {
+              const currentSubmitted = getTargetUrl();
+              setTimeout(() => {
+                scheduleNextQueueAutoCrawl(currentSubmitted);
+              }, 400);
+            }
           }, { once: true });
         }
 
@@ -1243,6 +1305,14 @@
           <span>⚡ Auto-Crawl & Pre-Fill</span>
         </button>
 
+        <div class="ai-widget-auto-row">
+          <span>⚡ Auto-crawl till Working site:</span>
+          <label class="ai-widget-switch" title="Automatically advance through Not Working sites until a Working site is found">
+            <input type="checkbox" id="ai-widget-auto-queue-toggle" ${autoQueueEnabled ? "checked" : ""}>
+            <span class="ai-widget-slider"></span>
+          </label>
+        </div>
+
         <div class="ai-secondary-actions">
           <button class="ai-btn-secondary" id="ai-pause-pipeline-btn" style="display: none; color: #dc2626; border-color: #fca5a5; background-color: #fef2f2; font-weight: 600;" title="Pause Auto-Queue Pipeline">⏸️ Stop Auto-Queue</button>
           <button class="ai-btn-secondary" id="ai-fill-cached-btn" title="Re-apply prefilled values">Fill Form</button>
@@ -1298,6 +1368,23 @@
       pausePipelineBtn.addEventListener("click", () => {
         stopAutoQueuePipeline("User paused auto-queue");
         updateStatus("⏸️ Auto-Queue paused by user.", "idle");
+      });
+    }
+
+    const widgetAutoToggle = document.getElementById("ai-widget-auto-queue-toggle");
+    if (widgetAutoToggle) {
+      widgetAutoToggle.checked = autoQueueEnabled;
+      widgetAutoToggle.addEventListener("change", () => {
+        autoQueueEnabled = widgetAutoToggle.checked;
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+          chrome.storage.sync.set({ autoQueueEnabled: widgetAutoToggle.checked });
+        }
+        if (!autoQueueEnabled) {
+          stopAutoQueuePipeline("User disabled auto-queue in widget");
+          updateStatus("Auto-Queue turned OFF", "idle");
+        } else {
+          updateStatus("⚡ Auto-Queue enabled: Will crawl till Working site", "idle");
+        }
       });
     }
 
