@@ -150,6 +150,46 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Batch Not Working Actions from Popup
+  const btnPopupBatch10 = document.getElementById("btn-popup-batch-10");
+  if (btnPopupBatch10) {
+    btnPopupBatch10.addEventListener("click", () => {
+      showPopupCrawlStatus("⚡ Triggering Auto Submit 10 Sites as Not Working...", "loading");
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || tabs.length === 0) return;
+        chrome.tabs.sendMessage(tabs[0].id, { action: "START_BATCH_10_NOTWORKING" }, () => {
+          showPopupCrawlStatus("🚀 Started Auto-Submitting 10 as Not Working!", "success");
+        });
+      });
+    });
+  }
+
+  const btnPopupSubmitNotWorking = document.getElementById("btn-popup-submit-notworking");
+  if (btnPopupSubmitNotWorking) {
+    btnPopupSubmitNotWorking.addEventListener("click", () => {
+      showPopupCrawlStatus("🚫 Submitting current site as Not Working...", "loading");
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || tabs.length === 0) return;
+        chrome.tabs.sendMessage(tabs[0].id, { action: "SUBMIT_1_NOTWORKING" }, () => {
+          showPopupCrawlStatus("✓ Submitted as Not Working and advancing!", "success");
+        });
+      });
+    });
+  }
+
+  const btnPopupBatchAll = document.getElementById("btn-popup-batch-all");
+  if (btnPopupBatchAll) {
+    btnPopupBatchAll.addEventListener("click", () => {
+      showPopupCrawlStatus("⚡ Starting continuous auto-submit ALL as Not Working...", "loading");
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || tabs.length === 0) return;
+        chrome.tabs.sendMessage(tabs[0].id, { action: "START_BATCH_ALL_NOTWORKING" }, () => {
+          showPopupCrawlStatus("🚀 Started Auto-Submitting ALL as Not Working!", "success");
+        });
+      });
+    });
+  }
+
   function showPopupCrawlStatus(msg, type) {
     if (!popupCrawlStatus) return;
     popupCrawlStatus.className = `status-msg ${type}`;

@@ -422,4 +422,27 @@
   transform: translateX(14px);
 }
 
+.ai-btn-danger-light {
+  background-color: #fef2f2 !important;
+  color: #b91c1c !important;
+  border: 1px solid #fca5a5 !important;
+}
+
+.ai-btn-danger-light:hover {
+  background-color: #fee2e2 !important;
+  border-color: #f87171 !important;
+}
+
+.ai-btn-danger-dark {
+  background-color: #fff1f2 !important;
+  color: #881337 !important;
+  border: 1px solid #fda4af !important;
+}
+
+.ai-btn-danger-dark:hover {
+  background-color: #ffe4e6 !important;
+  border-color: #fb7185 !important;
+}
+
+
 

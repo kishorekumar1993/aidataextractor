@@ -577,6 +577,210 @@
     }
   }
 
+  function resetCrawlButtons() {
+    const crawlBtn = document.getElementById("ai-crawl-btn");
+    const headerCrawlBtn = document.getElementById("ai-header-crawl-btn");
+    const quickBtn = document.getElementById("ai-quick-btn");
+    if (crawlBtn) {
+      crawlBtn.disabled = false;
+      crawlBtn.innerHTML = "<span>⚡ Auto-Crawl & Pre-Fill</span>";
+    }
+    if (headerCrawlBtn) {
+      headerCrawlBtn.disabled = false;
+      headerCrawlBtn.innerHTML = "⚡ AI Crawl";
+    }
+    if (quickBtn) {
+      quickBtn.disabled = false;
+      quickBtn.style.backgroundColor = "";
+      quickBtn.style.borderColor = "";
+      quickBtn.innerHTML = "🤖 AI Crawl & Fill";
+    }
+  }
+
+  // =========================================================================
+  // BATCH NOT WORKING PIPELINE (Separate options requested by user)
+  // =========================================================================
+  let isBatchNotWorkingActive = false;
+  let batchNotWorkingRemaining = 0; // -1 for ALL, or positive count like 10
+
+  function startBatchNotWorking(count = 10) {
+    if (isBatchNotWorkingActive) {
+      stopBatchNotWorking("Batch stopped by user.");
+      return;
+    }
+
+    isBatchNotWorkingActive = true;
+    batchNotWorkingRemaining = count;
+    isAutoQueuePipelineActive = false; // separate pipeline
+
+    const label = count === -1 ? "ALL" : count;
+    console.log(`[AI Assistant] Starting Batch Not Working for ${label} sites...`);
+    updateStatus(`🚀 Auto-Submitting ${label} queue sites as Not Working...`, "loading");
+    updateBatchButtonsState();
+
+    processNextBatchNotWorkingItem();
+  }
+
+  function stopBatchNotWorking(msg = "") {
+    isBatchNotWorkingActive = false;
+    batchNotWorkingRemaining = 0;
+    updateBatchButtonsState();
+    updateStatus(msg || "Batch Not Working stopped.", "idle");
+  }
+
+  function updateBatchButtonsState() {
+    const b10 = document.getElementById("ai-batch-10-btn");
+    const bAll = document.getElementById("ai-batch-all-btn");
+
+    if (b10) {
+      if (isBatchNotWorkingActive && batchNotWorkingRemaining > 0) {
+        b10.textContent = `⏹️ Stop (${batchNotWorkingRemaining} left)`;
+        b10.style.backgroundColor = "#dc2626";
+        b10.style.color = "#ffffff";
+      } else {
+        b10.textContent = "⚡ Auto 10 Not Working";
+        b10.style.backgroundColor = "";
+        b10.style.color = "#b91c1c";
+      }
+    }
+    if (bAll) {
+      if (isBatchNotWorkingActive && batchNotWorkingRemaining === -1) {
+        bAll.textContent = "⏹️ Stop Submitting ALL";
+        bAll.style.backgroundColor = "#dc2626";
+        bAll.style.color = "#ffffff";
+      } else {
+        bAll.textContent = "⚡ Submit ALL Not Working";
+        bAll.style.backgroundColor = "";
+        bAll.style.color = "#7f1d1d";
+      }
+    }
+  }
+
+  function processNextBatchNotWorkingItem() {
+    if (!isBatchNotWorkingActive) return;
+
+    if (batchNotWorkingRemaining !== -1 && batchNotWorkingRemaining <= 0) {
+      stopBatchNotWorking("🎉 Successfully auto-submitted 10 sites as Not Working!");
+      return;
+    }
+
+    let currentUrl = getTargetUrl();
+    if (!currentUrl) {
+      // Click 'From Queue' button if empty
+      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") || 
+        Array.from(document.querySelectorAll("button, a")).find(b => (b.textContent || "").toLowerCase().includes("from queue"));
+      if (fromQueueBtn) fromQueueBtn.click();
+      currentUrl = getTargetUrl();
+    }
+
+    const normSubmitted = (currentUrl || `item-${Date.now()}`).trim().toLowerCase().replace(/\/+$/, "");
+    const remainingText = batchNotWorkingRemaining === -1 ? "ALL" : `${batchNotWorkingRemaining} left`;
+    updateStatus(`⚡ Batch Not Working [${remainingText}]: Submitting ${currentUrl || "queue item"}...`, "loading");
+
+    // Pre-fill as Not Working and submit
+    const notWorkingData = {
+      websiteStatus: "Not Working",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      _note: "Batch Auto-Submit as Not Working"
+    };
+
+    fillFormFields(notWorkingData);
+
+    if (batchNotWorkingRemaining > 0) {
+      batchNotWorkingRemaining--;
+    }
+    updateBatchButtonsState();
+
+    if (batchNotWorkingRemaining === 0) {
+      setTimeout(() => {
+        stopBatchNotWorking("🎉 Successfully auto-submitted 10 sites as Not Working!");
+      }, 800);
+      return;
+    }
+
+    // Wait for submission, advance queue, and process next item
+    setTimeout(() => {
+      if (!isBatchNotWorkingActive) return;
+
+      let pollAttempts = 0;
+      const pollTimer = setInterval(() => {
+        pollAttempts++;
+        if (!isBatchNotWorkingActive) {
+          clearInterval(pollTimer);
+          return;
+        }
+
+        let nextUrl = getTargetUrl();
+        if (!nextUrl && pollAttempts % 3 === 0) {
+          const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl");
+          if (fromQueueBtn) fromQueueBtn.click();
+          nextUrl = getTargetUrl();
+        }
+
+        const normNext = (nextUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+        if (normNext && normNext !== normSubmitted && normNext.length > 3) {
+          clearInterval(pollTimer);
+          setTimeout(() => {
+            if (isBatchNotWorkingActive) {
+              processNextBatchNotWorkingItem();
+            }
+          }, 300);
+          return;
+        }
+
+        if (pollAttempts >= 35) { // ~5 seconds max per item
+          clearInterval(pollTimer);
+          if (isBatchNotWorkingActive) {
+            // Force load next from queue
+            const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl");
+            if (fromQueueBtn) fromQueueBtn.click();
+            setTimeout(() => {
+              if (isBatchNotWorkingActive) {
+                processNextBatchNotWorkingItem();
+              }
+            }, 300);
+          }
+        }
+      }, 150);
+    }, 450);
+  }
+
+  function markAndSubmitCurrentAsNotWorking(reason = "Manual 1-click Not Working") {
+    const currentUrl = getTargetUrl();
+    const notWorkingData = {
+      websiteStatus: "Not Working",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      _note: reason
+    };
+    fillFormFields(notWorkingData);
+    renderPreview(notWorkingData);
+    updateStatus(`🚫 Marked as Not Working (${reason}) - Submitting...`, "warning");
+  }
+
   function stopAutoQueuePipeline(reason = "") {
     isAutoQueuePipelineActive = false;
     if (autoQueuePollTimer) {
@@ -1108,6 +1312,7 @@
 
     if (!targetUrl) {
       updateStatus("⚠️ Website Name URL not found. Click 'From Queue' or enter a URL.", "error");
+      resetCrawlButtons();
       return;
     }
 
@@ -1127,18 +1332,12 @@
       quickBtn.innerHTML = "⏳ Crawling...";
     }
 
+    // Safety timeout: ensure buttons are NEVER permanently disabled
+    const safetyTimer = setTimeout(resetCrawlButtons, 12000);
+
     try {
       const response = await sendRuntimeMessage({ action: "CRAWL_AND_EXTRACT", url: targetUrl });
-
-      if (crawlBtn) crawlBtn.disabled = false;
-      if (headerCrawlBtn) {
-        headerCrawlBtn.disabled = false;
-        headerCrawlBtn.innerHTML = "⚡ AI Crawl";
-      }
-      if (quickBtn) {
-        quickBtn.disabled = false;
-        quickBtn.innerHTML = "⚡ AI Crawl & Fill";
-      }
+      resetCrawlButtons();
 
       if (!response || !response.success) {
         const errorMsg = response?.error || "Unable to fetch or crawl website";
@@ -1176,17 +1375,6 @@
         renderPreview(data);
         updateStatus(`⛔ PROHIBITED CATEGORY / WORD DETECTED: ${reason}. Website Status set to Not Working (all fields cleared).`, "error");
         showRestrictedBanner(reason);
-        if (quickBtn) {
-          quickBtn.disabled = false;
-          quickBtn.style.backgroundColor = "#dc2626";
-          quickBtn.style.borderColor = "#991b1b";
-          quickBtn.innerHTML = `⛔ Not Working (Prohibited Word)`;
-          setTimeout(() => {
-            quickBtn.style.backgroundColor = "#059669";
-            quickBtn.style.borderColor = "#047857";
-            quickBtn.innerHTML = "🤖 AI Crawl & Fill";
-          }, 7000);
-        }
         return;
       }
 
@@ -1236,15 +1424,7 @@
         updateStatus(`✅ Working site found! Pre-filled ${fillReport.filledCount} fields${redirectTag} (${note}). Stopped at Submit button for manual review.`, "success");
       }
     } catch (err) {
-      if (crawlBtn) crawlBtn.disabled = false;
-      if (headerCrawlBtn) {
-        headerCrawlBtn.disabled = false;
-        headerCrawlBtn.innerHTML = "⚡ AI Crawl";
-      }
-      if (quickBtn) {
-        quickBtn.disabled = false;
-        quickBtn.innerHTML = "⚡ AI Crawl & Fill";
-      }
+      resetCrawlButtons();
       if (err.message && err.message.includes("Extension context invalidated")) {
         showReloadBanner();
         updateStatus("Please refresh page (F5)", "warning");
@@ -1271,6 +1451,9 @@
         renderPreview(notWorkingData);
         updateStatus(`⚠️ Failed to fetch website (${err.message}). Status set to Not Working (auto-submitting...).`, "warning");
       }
+    } finally {
+      clearTimeout(safetyTimer);
+      resetCrawlButtons();
     }
   }
 
@@ -1313,8 +1496,15 @@
           </label>
         </div>
 
-        <div class="ai-secondary-actions">
-          <button class="ai-btn-secondary" id="ai-pause-pipeline-btn" style="display: none; color: #dc2626; border-color: #fca5a5; background-color: #fef2f2; font-weight: 600;" title="Pause Auto-Queue Pipeline">⏸️ Stop Auto-Queue</button>
+        <!-- Separate options requested by user -->
+        <div class="ai-secondary-actions" style="margin-top: 5px;">
+          <button class="ai-btn-secondary ai-btn-danger-light" id="ai-batch-10-btn" title="Automatically mark 10 queue sites as Not Working and auto-submit">⚡ Auto 10 Not Working</button>
+          <button class="ai-btn-secondary ai-btn-danger-light" id="ai-submit-notworking-btn" title="Immediately mark current site as Not Working and submit">🚫 Submit 1 Not Working</button>
+        </div>
+
+        <div class="ai-secondary-actions" style="margin-top: 3px;">
+          <button class="ai-btn-secondary ai-btn-danger-dark" id="ai-batch-all-btn" title="Automatically submit ALL pending sites in queue as Not Working">⚡ Submit ALL Not Working</button>
+          <button class="ai-btn-secondary" id="ai-pause-pipeline-btn" style="display: none; color: #dc2626; border-color: #fca5a5; background-color: #fef2f2; font-weight: 600;" title="Pause Auto-Queue Pipeline">⏸️ Stop</button>
           <button class="ai-btn-secondary" id="ai-fill-cached-btn" title="Re-apply prefilled values">Fill Form</button>
           <button class="ai-btn-secondary" id="ai-clear-btn" title="Clear highlighted fields">Reset Form</button>
         </div>
@@ -1367,7 +1557,29 @@
     if (pausePipelineBtn) {
       pausePipelineBtn.addEventListener("click", () => {
         stopAutoQueuePipeline("User paused auto-queue");
-        updateStatus("⏸️ Auto-Queue paused by user.", "idle");
+        stopBatchNotWorking("User paused batch");
+        updateStatus("⏸️ Process paused by user.", "idle");
+      });
+    }
+
+    const batch10Btn = document.getElementById("ai-batch-10-btn");
+    if (batch10Btn) {
+      batch10Btn.addEventListener("click", () => {
+        startBatchNotWorking(10);
+      });
+    }
+
+    const submitNotWorkingBtn = document.getElementById("ai-submit-notworking-btn");
+    if (submitNotWorkingBtn) {
+      submitNotWorkingBtn.addEventListener("click", () => {
+        markAndSubmitCurrentAsNotWorking("Manual 1-click Not Working");
+      });
+    }
+
+    const batchAllBtn = document.getElementById("ai-batch-all-btn");
+    if (batchAllBtn) {
+      batchAllBtn.addEventListener("click", () => {
+        startBatchNotWorking(-1);
       });
     }
 
@@ -1655,10 +1867,36 @@
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message && message.action === "TRIGGER_CRAWL") {
+        resetCrawlButtons();
         triggerCrawlAndFill()
           .then(() => sendResponse({ success: true }))
           .catch((err) => sendResponse({ success: false, error: err?.message || String(err) }));
         return true; // Keep message channel open for async response
+      }
+      if (message && message.action === "START_BATCH_10_NOTWORKING") {
+        startBatchNotWorking(10);
+        sendResponse({ success: true });
+        return true;
+      }
+      if (message && message.action === "SUBMIT_1_NOTWORKING") {
+        markAndSubmitCurrentAsNotWorking("Popup 1-click Not Working");
+        sendResponse({ success: true });
+        return true;
+      }
+      if (message && message.action === "START_BATCH_ALL_NOTWORKING") {
+        startBatchNotWorking(-1);
+        sendResponse({ success: true });
+        return true;
+      }
+      if (message && message.action === "STOP_BATCH_NOTWORKING") {
+        stopBatchNotWorking("Stopped from popup");
+        sendResponse({ success: true });
+        return true;
+      }
+      if (message && message.action === "RESET_CRAWL_BUTTONS") {
+        resetCrawlButtons();
+        sendResponse({ success: true });
+        return true;
       }
       if (message && message.action === "GET_STATUS") {
         sendResponse({
