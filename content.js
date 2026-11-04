@@ -582,10 +582,12 @@
       if (pauseBtn) pauseBtn.style.display = "inline-flex";
 
       let attempts = 0;
-      const maxAttempts = 60; // 60 * 200ms = 12 seconds
+      const maxAttempts = 60; // 60 * 150ms = 9 seconds
 
       console.log(`[AI Assistant] Auto-queue pipeline listening for next record after "${submittedUrl}"...`);
       updateStatus("⏳ Advancing to next queue record...", "loading");
+
+      const normSubmitted = (submittedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
 
       autoQueuePollTimer = setInterval(() => {
         attempts++;
@@ -596,19 +598,20 @@
         }
 
         const nextUrl = getTargetUrl();
+        const normNext = (nextUrl || "").trim().toLowerCase().replace(/\/+$/, "");
 
         // Check if a new valid URL has been loaded into the input
-        if (nextUrl && nextUrl !== submittedUrl && nextUrl.trim().length > 3) {
+        if (normNext && normNext !== normSubmitted && normNext.length > 3) {
           clearInterval(autoQueuePollTimer);
           autoQueuePollTimer = null;
-          console.log(`[AI Assistant] Next queue URL detected: ${nextUrl}. Auto-crawling in 500ms...`);
+          console.log(`[AI Assistant] Next queue URL detected: ${nextUrl}. Auto-crawling in 350ms...`);
           updateStatus(`⚡ Auto-Queue: Next site detected (${nextUrl}). Crawling...`, "loading");
 
           setTimeout(() => {
             if (isAutoQueuePipelineActive) {
               triggerCrawlAndFill();
             }
-          }, 500);
+          }, 350);
           return;
         }
 
@@ -620,7 +623,7 @@
           console.log("[AI Assistant] Queue advance polling completed (no further pending URL found).");
           updateStatus("Ready (Queue idle)", "idle");
         }
-      }, 200);
+      }, 150);
     });
   }
 
@@ -636,10 +639,32 @@
     const submittedUrl = specificUrl || getTargetUrl();
     console.log(`[AI Assistant] Auto-submitting 'Not Working' record for: ${submittedUrl}...`);
 
+    let hasSubmitted = false;
+
+    // Helper to click Submit button once
+    const doSubmit = () => {
+      if (hasSubmitted) return;
+      const submitBtn = document.getElementById("btnSubmitForm") || 
+        document.getElementById("btnSubmit") || 
+        document.getElementById("submitForm") || 
+        document.querySelector('button[type="submit"], input[type="submit"]') ||
+        Array.from(document.querySelectorAll('button, input[type="button"]')).find(b => {
+          const t = (b.textContent || b.value || "").trim().toLowerCase();
+          return t === "submit" || (t.includes("submit") && !t.includes("reset") && !t.includes("cancel"));
+        });
+
+      if (submitBtn) {
+        hasSubmitted = true;
+        console.log("[AI Assistant] Auto-clicked Submit button for 'Not Working' status");
+        submitBtn.click();
+      }
+    };
+
     // 1. Confirm any confirmation dialog/modal (e.g. "Are You Sure? You are about to mark this website as 'Not Working'.")
-    const checkIntervals = [80, 200, 450, 800, 1400, 2200];
+    const checkIntervals = [50, 120, 250, 500, 900];
     checkIntervals.forEach(delay => {
       setTimeout(() => {
+        if (hasSubmitted) return;
         // Find visible modal or dialog elements
         const modals = Array.from(document.querySelectorAll('.modal, .swal2-container, .swal-overlay, div[role="dialog"], .confirmation-modal, .popup, div[class*="modal"], div[class*="dialog"], div[class*="confirm"], div[class*="alert"]'));
         for (const modal of modals) {
@@ -652,6 +677,7 @@
             });
             if (okBtn) {
               console.log("[AI Assistant] Auto-confirmed 'Not Working' confirmation modal");
+              hasSubmitted = true;
               okBtn.click();
               return;
             }
@@ -667,40 +693,27 @@
         });
         if (okBtn) {
           console.log("[AI Assistant] Auto-confirmed 'Not Working' OK button");
+          hasSubmitted = true;
           okBtn.click();
         }
       }, delay);
     });
 
-    // 2. Click the form's Submit button if the modal did not already submit the record
-    const submitDelays = [400, 900, 1600];
+    // 2. Click the form's Submit button if modal did not already submit the record
+    const submitDelays = [200, 450, 800];
     submitDelays.forEach(delay => {
       setTimeout(() => {
+        if (hasSubmitted) return;
         // If confirmation modal is still open, let modal confirmation handle it first
         const openModal = document.querySelector('.modal.show, .swal2-container, div[role="dialog"]');
         if (openModal && openModal.offsetParent !== null) return;
-
-        const submitBtn = document.getElementById("btnSubmitForm") || 
-          document.getElementById("btnSubmit") || 
-          document.getElementById("submitForm") || 
-          document.querySelector('button[type="submit"], input[type="submit"]') ||
-          Array.from(document.querySelectorAll('button, input[type="button"]')).find(b => {
-            const t = (b.textContent || b.value || "").trim().toLowerCase();
-            return t === "submit" || (t.includes("submit") && !t.includes("reset") && !t.includes("cancel"));
-          });
-
-        if (submitBtn) {
-          console.log("[AI Assistant] Auto-clicked Submit button for 'Not Working' status");
-          submitBtn.click();
-        }
+        doSubmit();
       }, delay);
     });
 
     // 3. Queue progression: Automatically detect next queue record and continue auto-crawl
     // INSTRUCTION: "till working just crawl auto crawl auto submit"
-    setTimeout(() => {
-      scheduleNextQueueAutoCrawl(submittedUrl);
-    }, 600);
+    scheduleNextQueueAutoCrawl(submittedUrl);
   }
 
   /**
@@ -769,7 +782,8 @@
 
       // Per instruction: automatically confirm modal & submit record for Not Working!
       if (targetStatus === "Not Working") {
-        autoSubmitNotWorking();
+        const currentUrl = getTargetUrl();
+        autoSubmitNotWorking(currentUrl);
       }
 
       // Clear all other fields (leave empty string / default placeholder)
@@ -1034,6 +1048,7 @@
       return;
     }
 
+    isAutoQueuePipelineActive = true;
     const targetUrl = getTargetUrl();
     if (!targetUrl) {
       updateStatus("⚠️ Website Name URL not found. Please enter a URL.", "error");
