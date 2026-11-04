@@ -21,16 +21,16 @@ const RESTRICTED_PATTERNS = [
     label: "Adult & Porn"
   },
   {
-    pattern: /\b(?:weapons?|firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor|combat\s*knives|tactical\s*knives|hunting\s*knives|knives|knife|daggers?|swords?|machetes?|bayonets?|custom\s*knives|knife\s*maker)\b/i,
-    label: "Weapons & Knives"
+    pattern: /\b(?:weapons?|firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|weapons?\s*trading|weapons?\s*supply|weapons?\s*export(?:ing|er)?|weapons?\s*repair(?:ing)?|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor|body\s*armour|bulletproof|tactical\s*armaments|armor\s*plate|armour\s*plate|armored\s*vehicles?|armoured\s*vehicles?|tactical\s*armor|military\s*armor|combat\s*knives|tactical\s*knives|hunting\s*knives|knives|knife|daggers?|swords?|machetes?|bayonets?|custom\s*knives|knife\s*maker)\b/i,
+    label: "Weapons, Armor & Knives"
   },
   {
     pattern: /\b(?:military|armed\s*forces|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?|defence\s*contractors?|defense\s*contractors?|military\s*defence|military\s*defense|ministry\s*of\s*defence|department\s*of\s*defense|defence\s*forces?|defense\s*forces?|national\s*defence|national\s*defense|homeland\s*defence|homeland\s*defense|air\s*defence|air\s*defense|naval\s*defence|naval\s*defense|aerospace\s*(?:and|&)\s*defence|aerospace\s*(?:and|&)\s*defense|defence\s*equipment|defense\s*equipment|defence\s*systems?|defense\s*systems?|defence\s*industry|defense\s*industry|munitions?)\b/i,
     label: "Defence & Military"
   },
   {
-    pattern: /\b(?:aircraft|aircrafts|airplane|airplanes|commercial\s*aviation|airlines?|air\s*charter|avionics|helicopters?|fighter\s*jets?|jet\s*aircraft)\b/i,
-    label: "Aircraft & Aviation"
+    pattern: /\b(?:airlines?|commercial\s*aviation|aviation\s*industry|aviation\s*services?|air\s*travel|flight\s*booking|aircraft\s*leasing|aviation\s*charter|aircraft|aircrafts|airplane|airplanes|air\s*charter|avionics|helicopters?|fighter\s*jets?|jet\s*aircraft)\b/i,
+    label: "Aviation & Airlines"
   },
   {
     pattern: /\b(?:aerospace|aerospace\s*engineering|aerospace\s*components?|aerospace\s*parts?)\b/i,
@@ -65,8 +65,8 @@ const RESTRICTED_PATTERNS = [
     label: "Animals & Pets"
   },
   {
-    pattern: /\b(?:gambling|online\s*casino|casinos?|sports\s*betting|betting\s*site|slot\s*machines?|video\s*slots|poker\s*room|roulette|blackjack|baccarat|bookmaker|sportsbook|lottery|lotto|sports\s*wagering|jackpot\s*betting)\b/i,
-    label: "Gambling & Betting"
+    pattern: /\b(?:gambling|online\s*casino|casinos?|sports\s*betting|betting\s*site|slot\s*machines?|video\s*slots|poker\s*room|roulette|blackjack|baccarat|bookmaker|sportsbook|lottery|lotto|sports\s*wagering|jackpot\s*betting|online\s*gaming|online\s*games|igaming|i-gaming|crypto\s*casino|esports\s*betting|play\s*to\s*earn|online\s*gambling)\b/i,
+    label: "Gambling & Online Gaming"
   },
   {
     pattern: /\b(?:tobacco|cigarettes?|cigars?|cigarillos|chewing\s*tobacco|hookah|shisha|snus|nicotine\s*pouches?|vape|vaping|e-?cigarette|vape\s*shop|e-?liquid|vape\s*juice|disposable\s*vape)\b/i,
@@ -77,7 +77,19 @@ const RESTRICTED_PATTERNS = [
     label: "Cannabis & Controlled Substances"
   },
   {
-    pattern: /\b(?:counterfeit\s*goods|replica\s*watches?|fake\s*id|fake\s*passports?|hacking\s*services?|dark\s*web\s*market|payday\s*loans?|loan\s*shark)\b/i,
+    pattern: /\b(?:hacking\s*services?|hacking\s*tools?|hacking\s*information|hacking\s*tutorials?|hire\s*a\s*hacker|exploit\s*kits?|ddos\s*services?|ddos\s*attack|cyber\s*attack\s*service|ethical\s*hacking\s*service|black\s*hat\s*hacking|malware\s*distribution|spyware\s*services?)\b/i,
+    label: "Hacking Services & Information"
+  },
+  {
+    pattern: /\b(?:personal\s*blog|personal\s*website|my\s*personal\s*site|personal\s*portfolio|lifestyle\s*blog|travel\s*blog|food\s*blog|mommy\s*blog|personal\s*diary|resume\s*of|cv\s*of)\b/i,
+    label: "Personal Website & Blog"
+  },
+  {
+    pattern: /\b(?:music\s*streaming|video\s*streaming|audio\s*streaming|movie\s*streaming|streaming\s*platform|streaming\s*service)\b/i,
+    label: "Multimedia & Streaming Platform"
+  },
+  {
+    pattern: /\b(?:counterfeit\s*goods|replica\s*watches?|fake\s*id|fake\s*passports?|dark\s*web\s*market|payday\s*loans?|loan\s*shark)\b/i,
     label: "Counterfeits & Prohibited Financial Services"
   }
 ];
@@ -465,7 +477,7 @@ async function handleCrawlAndExtract(rawUrl) {
     throw new Error(`Unable to crawl ${targetUrl}: ${reason}. Form was not modified.`);
   }
 
-  // Step 2: PRE-AI STRICT CHECKS (Prohibited Category / Word & Online Shopping Cart)
+  // Step 2: PRE-AI STRICT CHECKS (Prohibited Categories, Free Platforms, Subdomains, Flash & Non-English)
   // Check across target URL, final URL, page text, metadata, image tags, and stripped body content
   const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
   const restrictedCheck = detectRestrictedKeywords(siteContent, crawlResult.mainHtml || "");
@@ -495,10 +507,9 @@ async function handleCrawlAndExtract(rawUrl) {
     };
   }
 
-  // PRE-AI CHECK 2: If Online Shopping / Shopping Cart ("Shopchart") detected:
-  // Rule: "purchase / Shopchart in website found means mark it as not working site" & "Notworking means all empty"
-  const shopCartCheck = crawlResult.shopCartCheck || detectPurchaseOrShoppingCart((crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.bodyText || "");
-  if (shopCartCheck && shopCartCheck.detected) {
+  // PRE-AI CHECK 2: Rule 9 (Free platforms) & Rule 10 (Subdomains / Streaming platforms) & Rule 8 (Personal blogs)
+  const platformCheck = detectDisallowedWebsitePlatformOrDomain(targetUrl, crawlResult.mainHtml || "", crawlResult.bodyText || "");
+  if (platformCheck.isDisallowed) {
     return {
       websiteStatus: "Not Working",
       businessType: "",
@@ -514,11 +525,59 @@ async function handleCrawlAndExtract(rawUrl) {
       numberOfProducts: "",
       productImages: "",
       numberOfProductDescriptions: "",
-      isShopCartSite: true,
-      shopCartReason: shopCartCheck.reason,
-      _note: `Online Purchase / Shopping Cart (${shopCartCheck.reason})`
+      isRestricted: true,
+      isProhibitedSite: true,
+      restrictedReason: platformCheck.reason,
+      _note: platformCheck.reason
     };
   }
+
+  // PRE-AI CHECK 3: Rule 14: Flash format websites without copyable text
+  if (detectFlashFormatSite(crawlResult.mainHtml || "")) {
+    return {
+      websiteStatus: "Flash",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      _note: "Flash Format Website - Not copyable (Rule 14)"
+    };
+  }
+
+  // PRE-AI CHECK 4: Rule 12: Non-English websites without a translation option
+  if (detectNonEnglishWithoutTranslation(crawlResult.mainHtml || "", crawlResult.bodyText || "")) {
+    return {
+      websiteStatus: "Non English",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      _note: "Non-English Language Without Translation Option (Rule 12)"
+    };
+  }
+
+  // Online Shopping Cart Check (Rules 11 & 16: "except for manufacturers")
+  // Attach check to crawlResult so analyzeWithGemini & applyStrictInstructions can verify whether the company is a Manufacturer
+  const shopCartCheck = crawlResult.shopCartCheck || detectPurchaseOrShoppingCart((crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.bodyText || "");
+  crawlResult.shopCartCheck = shopCartCheck;
 
   let extractedData;
   try {
@@ -884,12 +943,10 @@ async function crawlWebsite(targetUrl) {
     const fetchedUrls = new Set([finalUrl]);
 
     // PRE-AI CRAWL SHORT-CIRCUIT:
-    // Only skip crawling subpages if the homepage is confirmed with HIGH CONFIDENCE to be a verified retail store
-    // (with functional Add to Cart + Product Price + Online Checkout Gateway + Shipping Policy on homepage),
-    // or if a prohibited category is detected. Never skip subpages for catalog/quote sites or unconfirmed checkouts!
-    const earlyCart = detectPurchaseOrShoppingCart(mainHtml);
+    // Only skip crawling subpages if a prohibited restricted category is detected.
+    // For sites with online carts, NEVER skip subpages so we can verify if the company is a Manufacturer!
     const earlyRestricted = detectRestrictedKeywords(stripHtml(mainHtml) + " " + targetUrl, mainHtml);
-    const shouldSkipSubpages = (earlyCart && earlyCart.detected && earlyCart.isHighConfidence) || earlyRestricted.isRestricted;
+    const shouldSkipSubpages = earlyRestricted.isRestricted;
 
     if (!shouldSkipSubpages) {
       for (const cUrl of contactLinks.slice(0, 15)) {
@@ -976,10 +1033,9 @@ async function crawlWebsite(targetUrl) {
   const hasDynamicScripts = /<script[^>]+src=["'][^"']*(?:bundle|chunk|main|app|runtime)[^"']*\.js/i.test(mainHtml);
   const isDynamicSpa = isSpaRoot && (stripHtml(mainHtml).length < 500) && hasDynamicScripts;
 
-  // Check redirect host
+  // Rule 13: URL redirecting websites – only the final redirected URL will be considered
   try {
     if (isRedirectDomain(targetUrl, finalUrl)) {
-      status = "Redirect Site";
       redirected = true;
     }
   } catch (e) { }
@@ -1929,6 +1985,148 @@ function detectRestrictedKeywords(text, html = "") {
 }
 
 /**
+ * Detects whether a website is on a free platform (Rule 9), deep/streaming subdomain (Rule 10),
+ * or personal blog/website (Rule 8).
+ */
+function detectDisallowedWebsitePlatformOrDomain(url, html = "", text = "") {
+  if (!url) return { isDisallowed: false, reason: "" };
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch (e) {
+    return { isDisallowed: false, reason: "" };
+  }
+  const hostname = parsedUrl.hostname.toLowerCase();
+
+  // Rule 9: Websites hosted on free platforms (WordPress, Wix, Weebly, Blogspot, etc.)
+  const freePlatforms = [
+    "wordpress.com", "wixsite.com", "weebly.com", "blogspot.com", "blogger.com",
+    "webflow.io", "carrd.co", "squarespace.com", "jimdosite.com", "jimdofree.com",
+    "mystrikingly.com", "site123.me", "godaddysites.com", "yolasite.com",
+    "github.io", "pages.dev", "netlify.app", "vercel.app"
+  ];
+  for (const fp of freePlatforms) {
+    if (hostname.endsWith("." + fp) || hostname === fp) {
+      return {
+        isDisallowed: true,
+        reason: `Hosted on Free Platform (${fp}) - Rule 9`
+      };
+    }
+  }
+
+  // Rule 10: Multimedia / Entertainment streaming platforms
+  const streamingHosts = [
+    "youtube.com", "vimeo.com", "spotify.com", "soundcloud.com", "netflix.com",
+    "twitch.tv", "dailymotion.com", "bandcamp.com", "audiomack.com", "deezer.com", "pandora.com"
+  ];
+  for (const sh of streamingHosts) {
+    if (hostname.endsWith("." + sh) || hostname === sh) {
+      return {
+        isDisallowed: true,
+        reason: `Multimedia / Entertainment Streaming Platform (${sh}) - Rule 10`
+      };
+    }
+  }
+
+  // Rule 10: Subdomain websites not hosted at root level
+  const cleanHost = hostname.replace(/^www\./, "");
+  const domainParts = cleanHost.split(".");
+  const isMultiPartTld = /\.(?:co|com|org|net|edu|gov)\.[a-z]{2}$/i.test(hostname);
+  const minPartsForRoot = isMultiPartTld ? 3 : 2;
+  if (domainParts.length > minPartsForRoot) {
+    const firstSub = domainParts[0];
+    const isLangSub = /^[a-z]{2}(?:-[a-z]{2})?$/i.test(firstSub);
+    const isCommonSub = /^(?:m|mobile|web|shop|store|online|b2b)$/i.test(firstSub);
+    if (!isLangSub && !isCommonSub && domainParts.length > (minPartsForRoot + 1)) {
+      return {
+        isDisallowed: true,
+        reason: `Subdomain Website Not Hosted at Root Level (${hostname}) - Rule 10`
+      };
+    }
+  }
+
+  // Rule 8: Personal websites, personal blogs, etc.
+  const plainText = (text || stripHtml(html)).slice(0, 3000).toLowerCase();
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  const pageTitle = (titleMatch ? titleMatch[1] : "").toLowerCase();
+  const isPersonalBlog =
+    /\b(?:personal\s*blog|personal\s*website|my\s*personal\s*site|personal\s*portfolio|lifestyle\s*blog|travel\s*blog|food\s*blog|mommy\s*blog|personal\s*diary|resume\s*of|cv\s*of)\b/i.test(pageTitle + " " + plainText);
+  if (isPersonalBlog) {
+    return {
+      isDisallowed: true,
+      reason: `Personal Website / Blog - Rule 8`
+    };
+  }
+
+  return { isDisallowed: false, reason: "" };
+}
+
+/**
+ * Detects Flash format websites without copyable text per Rule 14.
+ */
+function detectFlashFormatSite(html = "") {
+  if (!html || typeof html !== "string") return false;
+  const hasFlashObject =
+    /<(?:object|embed)[^>]+(?:shockwave-flash|clsid:d27cdb6e-ae6d-11cf-96b8-444553540000|\.swf)/i.test(html) ||
+    /\.swf\b/i.test(html);
+  if (!hasFlashObject) return false;
+  const copyableText = stripHtml(html).replace(/\s+/g, " ").trim();
+  return copyableText.length < 80;
+}
+
+/**
+ * Detects non-English websites without an English translation option per Rule 12.
+ */
+function detectNonEnglishWithoutTranslation(html = "", text = "") {
+  if (!html && !text) return false;
+
+  // Check if an English version or translation option is available
+  const hasEnglishOption =
+    /<a[^>]+href=["'][^"']*["'][^>]*>[\s\S]{0,30}?\b(?:english|en|eng)\b[\s\S]{0,30}?<\/a>/i.test(html) ||
+    /<(?:link|meta)[^>]+(?:hreflang|lang)=["']en["']/i.test(html) ||
+    /\b(?:translate\.google\.com|gtranslate|wpml|weglot|polylang)\b/i.test(html) ||
+    /<(?:select|div|ul|nav)[^>]+(?:class|id)=["'][^"']*(?:lang|translate)[^"']*["']/i.test(html);
+
+  if (hasEnglishOption) return false;
+
+  const plainText = (text || stripHtml(html)).slice(0, 4000);
+  if (plainText.length < 20) return false;
+
+  const cjkCount = (plainText.match(/[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/g) || []).length;
+  const cyrillicCount = (plainText.match(/[\u0400-\u04ff]/g) || []).length;
+  const arabicCount = (plainText.match(/[\u0600-\u06ff]/g) || []).length;
+  const thaiCount = (plainText.match(/[\u0e00-\u0e7f]/g) || []).length;
+
+  const nonLatinChars = cjkCount + cyrillicCount + arabicCount + thaiCount;
+  if (nonLatinChars >= 10 && (nonLatinChars / plainText.length) > 0.25) {
+    return true;
+  }
+
+  const htmlLangMatch = html.match(/<html[^>]+lang=["']([a-zA-Z]{2}(?:-[a-zA-Z]{2})?)["']/i);
+  if (htmlLangMatch) {
+    const lang = htmlLangMatch[1].toLowerCase().slice(0, 2);
+    if (!["en"].includes(lang)) {
+      const englishWords = (plainText.match(/\b(?:the|and|for|with|company|contact|about|products|services|our|we|are|home)\b/gi) || []).length;
+      if (englishWords < 5) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Checks whether a website has evidence of being a Manufacturer (Rules 11 & 16 exception).
+ */
+function isManufacturerSite(crawlData, text = "") {
+  if (!crawlData) return false;
+  const combined = ((crawlData.bodyText || "") + " " + (crawlData.profilePageText || "") + " " + (crawlData.footerText || "") + " " + (text || "")).toLowerCase();
+  return /\b(?:manufacturer|manufacturers|manufacturing|manufacture|we\s+manufacture|our\s+factory|production\s+plant|production\s+facility|fabrication\s+plant|fabrication\s+facility|oem|odm|custom\s+fabricat(?:ion|or|ed|ing))\b/i.test(combined);
+}
+
+/**
  * Safely parses all JSON-LD script blocks in HTML and recursively inspects @graph / objects
  * to find genuine Product entities with valid Offer schemas containing a verified positive price.
  */
@@ -2372,11 +2570,22 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck) 
 You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
 
 WEBSITE STATUS QC RULES (Rule 1):
-- Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash Site" | "Redirect Site".
-- CRITICAL PURCHASE / SHOPPING CART ("SHOPCHART") QC RULE:
-  If the website contains an online purchase feature, shopping cart, or shop cart ('Shopchart', e.g. "Add to Cart", "Shopping Cart", "View Cart", "Checkout", "Buy Online", "Purchase Online", shopping bag, basket, e-commerce checkout), you MUST mark "websiteStatus": "Not Working"!
+- Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash".
+- Rule 11 & 16: Websites with online product selling options (e.g. "Add to Cart", "Payment Gateway", "Buy Now", "Checkout"), EXCEPT FOR MANUFACTURERS:
+  * If the company IS A MANUFACTURER (they produce, fabricate, or manufacture their own products in a factory/plant, OEM/ODM):
+    -> You MUST mark "websiteStatus": "Working" and "businessType": "Manufacturer"!
+    -> Extract and pre-fill all 14 fields (companyName, countryName, address, state, city, products, images, descriptions)!
+  * If the company is NOT A MANUFACTURER (e.g. Retailer, Online Store, E-commerce reseller, Trader, Dropshipper):
+    -> You MUST mark "websiteStatus": "Not Working" and leave all other fields empty ""!
+- Rule 12: Websites in a non-English language without an English translation option -> mark "websiteStatus": "Non English" (all other fields empty "").
+- Rule 14: Websites designed in Flash format where text is not copyable -> mark "websiteStatus": "Flash" (all other fields empty "").
+- Rule 13: URL redirecting websites – only the final redirected URL will be considered. Evaluate the company dynamically at the final redirected URL.
+- Rule 9: Websites hosted on free platforms (WordPress, Wix, Weebly, Blogspot, etc.) -> mark "websiteStatus": "Not Working" (all other fields empty "").
+- Rule 10: Subdomain websites not hosted at root level (e.g. multimedia/entertainment streaming platforms like music or video streaming) -> mark "websiteStatus": "Not Working" (all other fields empty "").
+- Rule 8: Personal websites, personal blogs, personal portfolios -> mark "websiteStatus": "Not Working" (all other fields empty "").
+- Rule 4: Service provider websites (e.g. restaurants, salons, retailers, etc.), EXCEPT for industrial service providers -> mark "websiteStatus": "Not Working" (all other fields empty "").
 - CRITICAL NOT WORKING QC RULE ("Notworking means all empty"):
-  If "websiteStatus" is "Not Working" (due to failed site, offline site, empty content, or purchase / shopping cart ("Shopchart") found on site):
+  If "websiteStatus" is NOT "Working" ("Not Working", "Domain Expired", "Non English", "Flash", "Under Construction"):
   ALL OTHER FIELDS MUST BE EMPTY STRINGS ""!
   Do NOT extract companyName, countryName, address, state, city, emails, phones, products, businessType, or profile. Leave every other field as empty string "".
 - If the domain is expired / parked, mark "Domain Expired".
@@ -2393,12 +2602,12 @@ BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
     6. "Supplier"
     7. "Wholesaler"
   * DISALLOWED / NON-WORKING BUSINESS TYPES:
-    8. "Service Provider"
-    9. "Online Shopping"
+    8. "Service Provider" (unless industrial service provider)
+    9. "Online Shopping" (unless company is a Manufacturer)
     10. "Restricted Site"
     11. "Other"
   * STRICT QC RULE:
-    If the website's business type is "Service Provider", "Online Shopping", "Restricted Site", "Other", or ANY business outside the Manufacturer to Wholesaler range:
+    If the website's business type is "Service Provider" (non-industrial), "Online Shopping" (non-manufacturer), "Restricted Site", "Other", or ANY business outside the Manufacturer to Wholesaler range:
     - YOU MUST SET "websiteStatus": "Not Working"!
     - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": "businessType": "", "companyProfile": "", "companyName": "", "countryName": "", "companyAddress": "", "state": "", "city": "", "emailId": "", "secondaryEmailId": "", "phoneNumber": "", "numberOfProducts": "", "productImages": "", "numberOfProductDescriptions": ""!
 - CRITICAL 3-TIER VERIFICATION RULE FOR "Online Shopping" (E-Commerce vs B2B Manufacturer / Wholesaler Catalog):
@@ -2417,7 +2626,8 @@ BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
      - E-Commerce Endpoints: Standard checkout routes (/cart, /checkout, /basket) or e-commerce platform footprints (Shopify, WooCommerce, Magento).
 
   QUICK CLASSIFICATION CHEAT SHEET:
-  - Cart + Checkout + Price + Direct Shipping -> "Online Shopping" (websiteStatus: "Not Working", all other fields empty "")
+  - Cart + Checkout + Price + Direct Shipping (by a Manufacturer) -> "Manufacturer" (websiteStatus: "Working", extract full company data!)
+  - Cart + Checkout + Price + Direct Shipping (by a Retailer/Reseller) -> "Online Shopping" (websiteStatus: "Not Working", all other fields empty "")
   - Products + Specs + "Contact Sales" / "Enquire" / "Request a Quote" / "Find a Dealer" -> "Manufacturer" or "Wholesaler" (websiteStatus: "Working", extract full company data!)
   - Prices + "Book an Appointment" / Calendar picker -> "Service Provider" (websiteStatus: "Not Working")
   - Articles + Affiliate links redirecting to Amazon/other stores -> "Other" (websiteStatus: "Not Working")
@@ -3141,39 +3351,62 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     return result;
   }
 
-  // 2. Online Shopping Cart / Purchase ("Shopchart") Check
-  // Rule: purchase / Shopchart in website found means mark it as Not Working site
+  // 2. Online Shopping Cart / Purchase Check (Rules 11 & 16: "except for manufacturers")
   const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
   if (shopCartCheck && shopCartCheck.detected) {
-    result.websiteStatus = "Not Working";
-    result.isShopCartSite = true;
-    result.shopCartReason = shopCartCheck.reason;
-    result.businessType = "";
-    result.companyProfile = "";
-    result.companyName = "";
-    result.countryName = "";
-    result.companyAddress = "";
-    result.state = "";
-    result.city = "";
-    result.emailId = "";
-    result.secondaryEmailId = "";
-    result.phoneNumber = "";
-    result.numberOfProducts = "";
-    result.productImages = "";
-    result.numberOfProductDescriptions = "";
-    return result;
+    const isManufacturer =
+      String(result.businessType || "").toLowerCase() === "manufacturer" ||
+      String(result.businessType || "").toLowerCase() === "manufacturing" ||
+      isManufacturerSite(crawlData, (crawlData.mainHtml || "").slice(0, 8000));
+
+    if (isManufacturer) {
+      // Allowed Manufacturer with direct online selling options! (Rules 11 & 16)
+      result.businessType = "Manufacturer";
+      result.websiteStatus = "Working";
+      result.isShopCartSite = false;
+      result._cartAllowedForManufacturer = true;
+    } else {
+      // Non-manufacturer with online purchase / cart -> Not Working!
+      result.websiteStatus = "Not Working";
+      result.isShopCartSite = true;
+      result.shopCartReason = shopCartCheck.reason;
+      result.businessType = "";
+      result.companyProfile = "";
+      result.companyName = "";
+      result.countryName = "";
+      result.companyAddress = "";
+      result.state = "";
+      result.city = "";
+      result.emailId = "";
+      result.secondaryEmailId = "";
+      result.phoneNumber = "";
+      result.numberOfProducts = "";
+      result.productImages = "";
+      result.numberOfProductDescriptions = "";
+      return result;
+    }
   }
 
-  // 3. Website Status (Redirect Site, Domain Expired, or Offline)
-  if (crawlData.status === "Redirect Site" || isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl)) {
-    result.websiteStatus = "Redirect Site";
-  } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working" || crawlData.status === "Domain Expired") {
+  // 3. Website Status (Rules 9, 10, 12, 14: Flash, Non English, Free Platforms, Subdomains, Domain Expired, or Offline)
+  const platformCheck = detectDisallowedWebsitePlatformOrDomain(crawlData.originalUrl || crawlData.finalUrl, crawlData.mainHtml || "", crawlData.bodyText || "");
+  if (platformCheck.isDisallowed) {
+    result.websiteStatus = "Not Working";
+    result.isRestricted = true;
+    result.restrictedReason = platformCheck.reason;
+  } else if (crawlData.status === "Flash" || detectFlashFormatSite(crawlData.mainHtml || "")) {
+    result.websiteStatus = "Flash";
+  } else if (crawlData.status === "Non English" || detectNonEnglishWithoutTranslation(crawlData.mainHtml || "", crawlData.bodyText || "")) {
+    result.websiteStatus = "Non English";
+  } else if (crawlData.status === "Domain Expired") {
+    result.websiteStatus = "Domain Expired";
+  } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working") {
     result.websiteStatus = crawlData.status || "Not Working";
   }
 
   // CRITICAL RULE: "Notworking means all empty"
-  // When websiteStatus is "Not Working", all other fields MUST be empty!
-  if (result.websiteStatus === "Not Working") {
+  // Whenever websiteStatus is NOT "Working" ("Not Working", "Domain Expired", "Non English", "Flash", "Under Construction"),
+  // all other fields MUST be empty!
+  if (result.websiteStatus && result.websiteStatus !== "Working") {
     result.businessType = "";
     result.companyProfile = "";
     result.companyName = "";
@@ -3218,6 +3451,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const rawBt = String(result.businessType || "").trim().toLowerCase();
   if (btAliases[rawBt]) {
     result.businessType = btAliases[rawBt];
+    if (!result.websiteStatus) result.websiteStatus = "Working";
   } else {
     // Business Type is Service Provider, Online Shopping, Restricted Site, Other, or unknown -> Mark Not Working!
     result.websiteStatus = "Not Working";

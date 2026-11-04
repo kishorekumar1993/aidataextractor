@@ -612,18 +612,23 @@
 
     const isProhibitedOrRestricted = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowedType || data.isDisallowedBusinessType);
 
-    // CRITICAL QC RULE Note 2 & "Notworking means all empty":
-    // When Website Status is "Not Working" (or prohibited category detected), select "Not Working" and clear/leave empty ALL other fields!
-    if (data.websiteStatus === "Not Working" || isProhibitedOrRestricted) {
+    // CRITICAL QC RULE:
+    // When Website Status is NOT "Working" (Not Working, Non English, Flash, Domain Expired, or prohibited category detected),
+    // select the respective status and clear/leave empty ALL other fields!
+    const isNonWorkingStatus = data.websiteStatus && data.websiteStatus !== "Working";
+    if (isNonWorkingStatus || isProhibitedOrRestricted) {
+      const targetStatus = isProhibitedOrRestricted ? "Not Working" : (data.websiteStatus || "Not Working");
       if (elements.websiteStatus) {
-        if (setSelectValue(elements.websiteStatus, "Not Working")) {
+        if (setSelectValue(elements.websiteStatus, targetStatus)) {
           highlightField(elements.websiteStatus);
           filledCount++;
         }
       }
 
-      // Per instruction: "for notworking autosubmit": automatically confirm modal & submit record for Not Working!
-      autoSubmitNotWorking();
+      // Per instruction: automatically confirm modal & submit record for Not Working!
+      if (targetStatus === "Not Working") {
+        autoSubmitNotWorking();
+      }
 
       // Clear all other fields (leave empty string / default placeholder)
       for (const [key, el] of Object.entries(elements)) {
