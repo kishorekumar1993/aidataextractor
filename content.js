@@ -424,7 +424,7 @@
             const opt = element.options[i];
             const val = (opt.value || "").trim().toLowerCase();
             const txt = (opt.text || "").trim().toLowerCase();
-            if (val === "nz" || txt === "nz" || val === "new zealand" || txt === "new zealand" || val.includes("new zealand") || txt.includes("new zealand")) {
+            if (val === "nz" || txt === "nz" || val === "nzl" || txt === "nzl" || val === "new zealand" || txt === "new zealand" || val.includes("new zealand") || txt.includes("new zealand")) {
               matchedIndex = i;
               break;
             }
@@ -434,7 +434,7 @@
             const opt = element.options[i];
             const val = (opt.value || "").trim().toLowerCase();
             const txt = (opt.text || "").trim().toLowerCase();
-            if (val === "my" || txt === "my" || val === "malaysia" || txt === "malaysia" || val.includes("malaysia") || txt.includes("malaysia")) {
+            if (val === "my" || txt === "my" || val === "mys" || txt === "mys" || val === "malaysia" || txt === "malaysia" || val.includes("malaysia") || txt.includes("malaysia")) {
               matchedIndex = i;
               break;
             }
@@ -444,7 +444,7 @@
             const opt = element.options[i];
             const val = (opt.value || "").trim().toLowerCase();
             const txt = (opt.text || "").trim().toLowerCase();
-            if (val === "id" || txt === "id" || val === "indonesia" || txt === "indonesia" || val.includes("indonesia") || txt.includes("indonesia")) {
+            if (val === "id" || txt === "id" || val === "idn" || txt === "idn" || val === "indonesia" || txt === "indonesia" || val.includes("indonesia") || txt.includes("indonesia") || val.includes("republik indonesia") || txt.includes("republik indonesia")) {
               matchedIndex = i;
               break;
             }
@@ -680,19 +680,15 @@
     // 5. Country Name (All words start with Capital)
     if (elements.countryName && data.countryName) {
       let formattedCountry = toTitleCase(data.countryName);
-      if (/^united\s*states\s*of\s*america$/i.test(formattedCountry)) {
+      if (/united\s*states/i.test(formattedCountry) || /^usa?$/i.test(formattedCountry.trim())) {
         formattedCountry = "United States Of America";
-      }
-      if (/^(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)$/i.test(formattedCountry)) {
+      } else if (/\b(?:turkey|t[uü]rkiye)\b/i.test(formattedCountry)) {
         formattedCountry = "Turkiye";
-      }
-      if (/^malaysia$/i.test(formattedCountry)) {
+      } else if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(formattedCountry) || /^(?:my|mys)$/i.test(formattedCountry.trim())) {
         formattedCountry = "Malaysia";
-      }
-      if (/^(?:indonesia|republic\s*of\s*indonesia)$/i.test(formattedCountry)) {
+      } else if (/\b(?:indonesia|republic\s*of\s*indonesia|republik\s*indonesia)\b/i.test(formattedCountry) || /^(?:id|idn|ri)$/i.test(formattedCountry.trim())) {
         formattedCountry = "Indonesia";
-      }
-      if (/^(?:new\s*zealand|aotearoa)$/i.test(formattedCountry)) {
+      } else if (/\b(?:new\s*zealand|aotearoa)\b/i.test(formattedCountry) || /^(?:nz|nzl)$/i.test(formattedCountry.trim())) {
         formattedCountry = "New Zealand";
       }
       const isSelect = elements.countryName.tagName && elements.countryName.tagName.toLowerCase() === "select";

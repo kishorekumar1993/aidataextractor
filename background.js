@@ -3263,15 +3263,25 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   let country = (result.countryName || "").trim();
   country = country.replace(/[\(\)\[\]\{\}]/g, " ");
 
-  if (country && country.length > 2) {
+  if (country && country.length >= 2) {
+    const cTrim = country.trim();
     if (/taiwan/i.test(country) || /r\.?o\.?c\.?/i.test(country)) country = "Taiwan";
-    else if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(country.trim())) country = "United States Of America";
+    else if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(cTrim)) country = "United States Of America";
     else if (/england/i.test(country)) country = "England";
     else if (/scotland/i.test(country)) country = "Scotland";
     else if (/wales/i.test(country)) country = "Wales";
     else if (/northern\s*ireland/i.test(country)) country = "Northern Ireland";
     else if (/italy|italia/i.test(country)) country = "Italy";
     else if (/spain|espa[nñ]a/i.test(country)) country = "Spain";
+    else if (/\b(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)\b/i.test(country)) country = "Turkiye";
+    else if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(country) || /^(?:my|mys)$/i.test(cTrim)) country = "Malaysia";
+    else if (/\b(?:indonesia|republik\s*indonesia|republic\s*of\s*indonesia)\b/i.test(country) || /^(?:id|idn|ri)$/i.test(cTrim)) country = "Indonesia";
+    else if (/\b(?:new\s*zealand|aotearoa)\b/i.test(country) || /^(?:nz|nzl)$/i.test(cTrim)) country = "New Zealand";
+    else if (/australia/i.test(country) || /^au$/i.test(cTrim)) country = "Australia";
+    else if (/south\s*africa/i.test(country) || /^za$/i.test(cTrim)) country = "South Africa";
+    else if (/germany|deutschland/i.test(country) || /^de$/i.test(cTrim)) country = "Germany";
+    else if (/singapore/i.test(country) || /^sg$/i.test(cTrim)) country = "Singapore";
+    else if (/thailand/i.test(country) || /^th$/i.test(cTrim)) country = "Thailand";
   }
 
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
@@ -3329,11 +3339,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
             country = "Australia";
           } else if (/\.es(?:\/|$)/i.test(urlStr)) {
             country = "Spain";
-          } else if (/\.(?:my|com\.my)(?:\/|$)/i.test(urlStr)) {
+          } else if (/\.(?:my|com\.my|org\.my|net\.my|edu\.my|gov\.my)(?:[:\/\?]|$)/i.test(urlStr)) {
             country = "Malaysia";
-          } else if (/\.(?:id|co\.id)(?:\/|$)/i.test(urlStr)) {
+          } else if (/\.(?:id|co\.id|web\.id|or\.id|net\.id|ac\.id|go\.id)(?:[:\/\?]|$)/i.test(urlStr)) {
             country = "Indonesia";
-          } else if (/\.(?:nz|co\.nz)(?:\/|$)/i.test(urlStr)) {
+          } else if (/\.(?:nz|co\.nz|org\.nz|net\.nz|gen\.nz|ac\.nz|govt\.nz)(?:[:\/\?]|$)/i.test(urlStr)) {
             country = "New Zealand";
           }
         }
@@ -3400,9 +3410,15 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = addr.replace(/(^|[,\s])Number\s+(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?\s*)?\2\b/gi, '$1Number $2');
 
       // Repair accidental commas splitting two-syllable East Asian districts/townships
-      addr = addr.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, '$1-$2');
-      addr = addr.replace(/\b([A-Z][a-z]+)-[\s,]+([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, '$1-$2');
-      addr = addr.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\b/g, '$1 $2');
+      const eaFirstSyllables = "Yung|San|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu";
+      addr = addr.replace(new RegExp(`\\b(${eaFirstSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
+      addr = addr.replace(new RegExp(`\\b(${eaFirstSyllables})-[\\s,]+([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
+
+      const eaRoadSyllables = "Chung|Zhong|Hsin|Xin|Kuang|Guang|Min|San|Da|Ta|Ren|Jen|Nan|Bei|Pei|Xi|Hsi|Dong|Tung";
+      addr = addr.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
+
+      // Remove unwanted comma between street/building number and street name
+      addr = addr.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/g, '$1$2 $3');
 
       // Clean up spaces, commas, and ensure clean formatting
       addr = addr.replace(/\s+,/g, ",");
@@ -3428,9 +3444,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       const urlStr = (crawlData.originalUrl || "") + " " + (crawlData.finalUrl || "");
       if (/\.au(?:\/|$)/i.test(urlStr)) country = "Australia";
       else if (/\.es(?:\/|$)/i.test(urlStr)) country = "Spain";
-      else if (/\.(?:my|com\.my)(?:\/|$)/i.test(urlStr)) country = "Malaysia";
-      else if (/\.(?:id|co\.id)(?:\/|$)/i.test(urlStr)) country = "Indonesia";
-      else if (/\.(?:nz|co\.nz)(?:\/|$)/i.test(urlStr)) country = "New Zealand";
+      else if (/\.(?:my|com\.my|org\.my|net\.my|edu\.my|gov\.my)(?:[:\/\?]|$)/i.test(urlStr)) country = "Malaysia";
+      else if (/\.(?:id|co\.id|web\.id|or\.id|net\.id|ac\.id|go\.id)(?:[:\/\?]|$)/i.test(urlStr)) country = "Indonesia";
+      else if (/\.(?:nz|co\.nz|org\.nz|net\.nz|gen\.nz|ac\.nz|govt\.nz)(?:[:\/\?]|$)/i.test(urlStr)) country = "New Zealand";
     }
   }
   const trimmedCountry = country.trim();
@@ -3438,12 +3454,33 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     country = "United States Of America";
   } else if (/^(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)$/i.test(trimmedCountry)) {
     country = "Turkiye";
-  } else if (/^(?:new\s*zealand|aotearoa)$/i.test(trimmedCountry)) {
+  } else if (/\b(?:new\s*zealand|aotearoa)\b/i.test(trimmedCountry) || /^(?:nz|nzl)$/i.test(trimmedCountry)) {
     country = "New Zealand";
-  } else if (/^malaysia$/i.test(trimmedCountry)) {
+  } else if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(trimmedCountry) || /^(?:my|mys)$/i.test(trimmedCountry)) {
     country = "Malaysia";
-  } else if (/^(?:indonesia|republic\s*of\s*indonesia)$/i.test(trimmedCountry)) {
+  } else if (/\b(?:indonesia|republic\s*of\s*indonesia|republik\s*indonesia)\b/i.test(trimmedCountry) || /^(?:id|idn|ri)$/i.test(trimmedCountry)) {
     country = "Indonesia";
+  } else if (/\btaiwan\b/i.test(trimmedCountry) || /r\.?o\.?c\.?/i.test(trimmedCountry)) {
+    country = "Taiwan";
+  } else if (/australia/i.test(trimmedCountry) || /^au$/i.test(trimmedCountry)) {
+    country = "Australia";
+  } else if (/south\s*africa/i.test(trimmedCountry) || /^za$/i.test(trimmedCountry)) {
+    country = "South Africa";
+  } else if (/germany|deutschland/i.test(trimmedCountry) || /^de$/i.test(trimmedCountry)) {
+    country = "Germany";
+  } else if (/singapore/i.test(trimmedCountry) || /^sg$/i.test(trimmedCountry)) {
+    country = "Singapore";
+  } else if (/thailand/i.test(trimmedCountry) || /^th$/i.test(trimmedCountry)) {
+    country = "Thailand";
+  } else if (/spain|espa[nñ]a/i.test(trimmedCountry) || /^es$/i.test(trimmedCountry)) {
+    country = "Spain";
+  } else if (/italy|italia/i.test(trimmedCountry) || /^it$/i.test(trimmedCountry)) {
+    country = "Italy";
+  } else if (/united\s*kingdom|great\s*britain|england|scotland|wales/i.test(trimmedCountry) || /^uk$/i.test(trimmedCountry)) {
+    if (/scotland/i.test(trimmedCountry)) country = "Scotland";
+    else if (/wales/i.test(trimmedCountry)) country = "Wales";
+    else if (/northern\s*ireland/i.test(trimmedCountry)) country = "Northern Ireland";
+    else country = "England";
   }
   result.countryName = toTitleCase(country.trim());
 
@@ -4875,9 +4912,15 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])(?:no\.?\s*)?(\d+)\s+\2\b/gi, '$1$2');
 
   // Repair accidental commas splitting two-syllable East Asian districts/townships
-  a = a.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, '$1-$2');
-  a = a.replace(/\b([A-Z][a-z]+)-[\s,]+([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, '$1-$2');
-  a = a.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\b/g, '$1 $2');
+  const eaFirstSyllables = "Yung|San|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu";
+  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
+  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})-[\\s,]+([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
+
+  const eaRoadSyllables = "Chung|Zhong|Hsin|Xin|Kuang|Guang|Min|San|Da|Ta|Ren|Jen|Nan|Bei|Pei|Xi|Hsi|Dong|Tung";
+  a = a.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
+
+  // Remove unwanted comma between street/building number and street name
+  a = a.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/g, "$1$2 $3");
 
   // Replace ampersand with 'and' in address
   a = a.replace(/\s*&\s*/g, " and ");
@@ -5072,35 +5115,35 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // ==========================================
   // 7. Spain (España) Abbreviations
   // ==========================================
-  // Industrial zones FIRST: Pol. Ind. / P.I. -> Poligono Industrial
-  a = a.replace(/(^|[,\s])(?:pol\.?\s*ind(?:ustrial)?\.?|p\.?i\.?)\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Poligono Industrial ');
-  a = a.replace(/\bpoligono\s+ind\b\.?/gi, 'Poligono Industrial');
-
-  // Street prefixes: C/ -> Calle, Avda. -> Avenida, P.º -> Paseo, Pl. / Pza. -> Plaza, Ctra. -> Carretera, Rbla. -> Rambla
-  a = a.replace(/(^|[,\s])C\/\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Calle ');
-  a = a.replace(/(^|[,\s])C\.\s+(?=[A-ZÁÉÍÓÚ][a-záéíóúñ])/g, '$1Calle ');
-  a = a.replace(/(^|[,\s])avda?\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Avenida ');
-  a = a.replace(/(^|[,\s])(?:p\.?[º°]|pso\.?|p\.\s*o\b|p\.º)\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Paseo ');
-  a = a.replace(/(^|[,\s])(?:plza?\.?|pza\.?|pl\.)\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Plaza ');
   if (cLower.includes("spain") || cLower.includes("espana") || isSpanishLocation(a, country)) {
-    a = a.replace(/(^|[,\s])Place\s+(?=(?:Mayor|de\s+|del\s+|Real|de\s*la|[A-ZÁÉÍÓÚ][a-z]))/g, '$1Plaza ');
-  }
-  a = a.replace(/(^|[,\s])rbla\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Rambla ');
-  a = a.replace(/(^|[,\s])ctra\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Carretera ');
-  a = a.replace(/(^|[,\s])(?:cno|cam)\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Camino ');
-  a = a.replace(/(^|[,\s])trav(?:es)?\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Travesia ');
-  a = a.replace(/(^|[,\s])p(?:t)?je\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Pasaje ');
-  a = a.replace(/(^|[,\s])rda\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Ronda ');
-  a = a.replace(/(^|[,\s])urb\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Urbanizacion ');
-  a = a.replace(/(^|[,\s])ed(?:if)?\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Edificio ');
+    // Industrial zones FIRST: Pol. Ind. / P.I. -> Poligono Industrial
+    a = a.replace(/(^|[,\s])(?:pol\.?\s*ind(?:ustrial)?\.?|p\.?i\.?)\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Poligono Industrial ');
+    a = a.replace(/\bpoligono\s+ind\b\.?/gi, 'Poligono Industrial');
 
-  // House / premise numbers / without number
-  a = a.replace(/(^|[,\s])(?:n[ºo]\.?|n\.º|n[uú]m\.?)\s*(?=\d)/gi, '$1Numero ');
-  a = a.replace(/\b(?:s\/n|sin\s*n[uú]mero)\b/gi, 'Sin Numero');
-  a = a.replace(/\bkm\.?\s*(?=\d)/gi, 'Kilometro ');
-  a = a.replace(/\bpta\.?\s*(?=\d|[A-Za-z])/gi, 'Puerta ');
-  a = a.replace(/\bplta\.?\s*(?=\d|[A-Za-z])/gi, 'Planta ');
-  a = a.replace(/\bapdo\.?\s*(?:de\s*correos)?\b/gi, 'Apartado de Correos');
+    // Street prefixes: C/ -> Calle, Avda. -> Avenida, P.º -> Paseo, Pl. / Pza. -> Plaza, Ctra. -> Carretera, Rbla. -> Rambla
+    a = a.replace(/(^|[,\s])C\/\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Calle ');
+    a = a.replace(/(^|[,\s])C\.\s+(?=[A-ZÁÉÍÓÚ][a-záéíóúñ])/g, '$1Calle ');
+    a = a.replace(/(^|[,\s])avda?\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Avenida ');
+    a = a.replace(/(^|[,\s])(?:p\.?[º°]|pso\.?|p\.\s*o\b|p\.º)\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Paseo ');
+    a = a.replace(/(^|[,\s])(?:plza?\.?|pza\.?|pl\.)\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Plaza ');
+    a = a.replace(/(^|[,\s])Place\s+(?=(?:Mayor|de\s+|del\s+|Real|de\s*la|[A-ZÁÉÍÓÚ][a-z]))/g, '$1Plaza ');
+    a = a.replace(/(^|[,\s])rbla\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Rambla ');
+    a = a.replace(/(^|[,\s])ctra\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Carretera ');
+    a = a.replace(/(^|[,\s])\b(?:cno|cam)\b\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Camino ');
+    a = a.replace(/(^|[,\s])\btrav(?:es)?\b\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Travesia ');
+    a = a.replace(/(^|[,\s])\bp(?:t)?je\b\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Pasaje ');
+    a = a.replace(/(^|[,\s])\brda\b\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Ronda ');
+    a = a.replace(/(^|[,\s])\burb\b\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Urbanizacion ');
+    a = a.replace(/(^|[,\s])\bed(?:if)?\b\.?\s*(?=[A-Za-z0-9ÁÉÍÓÚáéíóúÑñ])/gi, '$1Edificio ');
+
+    // House / premise numbers / without number
+    a = a.replace(/(^|[,\s])(?:n[ºo]\.?|n\.º|n[uú]m\.?)\s*(?=\d)/gi, '$1Numero ');
+    a = a.replace(/\b(?:s\/n|sin\s*n[uú]mero)\b/gi, 'Sin Numero');
+    a = a.replace(/\bkm\.?\s*(?=\d)/gi, 'Kilometro ');
+    a = a.replace(/\bpta\.?\s*(?=\d|[A-Za-z])/gi, 'Puerta ');
+    a = a.replace(/\bplta\.?\s*(?=\d|[A-Za-z])/gi, 'Planta ');
+    a = a.replace(/\bapdo\.?\s*(?:de\s*correos)?\b/gi, 'Apartado de Correos');
+  }
 
   // ==========================================
   // 8. Italy (Italia) Abbreviations
@@ -5339,7 +5382,14 @@ function ensureCommaBeforeState(addr) {
   const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}${nextWordPattern}`, "g");
   a = a.replace(streetSepRegex, "$1, $2");
 
-  // 3. Ensure comma after Industrial / Business parks & zones
+  // 2b. Remove unwanted comma between street/building number and street name
+  // e.g. "Number 1013, Chung Hua Road" -> "Number 1013 Chung Hua Road"
+  // e.g. "12110, Best Place" -> "12110 Best Place"
+  // e.g. "40, Sarah Street" -> "40 Sarah Street"
+  a = a.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/g, "$1$2 $3");
+
+  // 3. Ensure comma before & after Industrial / Business parks & zones
+  a = a.replace(/(?<=[A-Za-z0-9\)])\s+(?<!,\s*)\b((?:Industrial|Technology|Business|Science|Tech)\s+(?:Park|Estate|Area|Zone|District)|Kawasan\s+(?:Perindustrian|Industri|Berikat)|Taman\s+Perindustrian|Poligono\s+Industrial|Zona\s+Industriale|Gewerbegebiet)\b/gi, ", $1");
   const indParkRegex = /\b((?:industrial|technology|business|science|tech)\s+(?:park|estate|area|zone|district)|kawasan\s+(?:perindustrian|industri|berikat)(?:\s+[A-Za-z0-9]+)?|taman\s+perindustrian(?:\s+[A-Za-z0-9]+)?|poligono\s+industrial(?:\s+[A-Za-z0-9]+)?|zona\s+industriale(?:\s+[A-Za-z0-9]+)?|gewerbegebiet(?:\s+[A-Za-z0-9]+)?)\s+(?=[A-Z][a-z])/gi;
   a = a.replace(indParkRegex, "$1, ");
 
@@ -5357,14 +5407,25 @@ function ensureCommaBeforeState(addr) {
   // MUST NOT insert comma inside multi-word or hyphenated districts like "Yung, Kang District"
   a = a.replace(/(?<![A-Za-z0-9\-,/]\s*)\b((?:[A-Z][a-z0-9\u00C0-\u024F]+(?:[- ][A-Z][a-z0-9\u00C0-\u024F]+)?)\s+(?:Township|District|County|Hsien))\b/g, ", $1");
 
+  // 5b. Ensure comma after District / Township / County / Hsien when followed by City / Town / County / State
+  a = a.replace(/\b((?:Township|District|County|Hsien|Borough|Parish))\s+([A-Z][a-z0-9\u00C0-\u024F]+)/g, "$1, $2");
+
+  // 5c. Ensure comma before "X City" (handling multi-word cities like "New York City", "New Taipei City", "Salt Lake City")
+  a = a.replace(/(?<=[A-Za-z0-9\)])\s+(?<!,\s*)(?<!\b(?:New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|Salt|Lake|Ho|Chi|Minh|Kuala|Hong|San|Santa|Los|Las|El|La)\s+)\b([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)?\s+City)\b(?![\s\-]*(?:Road|Street|Avenue|Lane|Drive|Way|Place|Highway))/g, ", $1");
+
   // Repair accidental commas splitting two-syllable East Asian districts/townships:
   // e.g. "Yung, Kang District" -> "Yung-Kang District", "Yung-, Kang District" -> "Yung-Kang District"
-  a = a.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, "$1-$2");
-  a = a.replace(/\b([A-Z][a-z]+)-[\s,]+([A-Z][a-z]+\s+(?:District|Township|County|Hsien))\b/g, "$1-$2");
+  const eaFirstSyllables = "Yung|San|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu";
+  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
+  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})-[\\s,]+([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
 
   // Repair accidental commas splitting two-syllable street names:
   // e.g. "Chung, Hua Road" -> "Chung Hua Road", "Chung-, Hua Road" -> "Chung-Hua Road"
-  a = a.replace(/\b([A-Z][a-z]+)[-\s]*,[\s\-]*([A-Z][a-z]+\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\b/g, "$1 $2");
+  const eaRoadSyllables = "Chung|Zhong|Hsin|Xin|Kuang|Guang|Min|San|Da|Ta|Ren|Jen|Nan|Bei|Pei|Xi|Hsi|Dong|Tung";
+  a = a.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
+
+  // Repair accidental commas splitting multi-word prefixes: "New, York" -> "New York", "New, Zealand" -> "New Zealand"
+  a = a.replace(/\b(New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La)[,\s]+([A-Z][a-z]+)/g, "$1 $2");
 
   // 6. Comprehensive global states, provinces, regions, and counties
   const states = [
@@ -5404,7 +5465,7 @@ function ensureCommaBeforeState(addr) {
   ];
 
   for (const st of states) {
-    const regex = new RegExp(`([a-zA-Z0-9\\)])\\s+\\b(${st})\\b(?!\\s+(?:Street|Road|Avenue|Drive|Lane|Boulevard|Way|Place|Court|Highway|Close|Crescent|Square|Terrace|Park|Estate|Industrial|Unit|Suite|Building|Floor|Bldg|St|Rd|Ave|Dr|Ln|Blvd|Hwy|Ct|Pl)\\b)`, "gi");
+    const regex = new RegExp(`([a-zA-Z0-9\\)])\\s+\\b(${st})\\b(?!\\s+(?:City|Street|Road|Avenue|Drive|Lane|Boulevard|Way|Place|Court|Highway|Close|Crescent|Square|Terrace|Park|Estate|Industrial|Unit|Suite|Building|Floor|Bldg|St|Rd|Ave|Dr|Ln|Blvd|Hwy|Ct|Pl)\\b)`, "gi");
     a = a.replace(regex, "$1, $2");
   }
 
@@ -5591,12 +5652,10 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
         if (numDigits && new RegExp('\\b' + numDigits + '\\b').test(c.slice(0, 40))) {
           return cleanAddr;
         }
-        const afterNum = rawAddr.slice(rawAddr.indexOf(leadingNum) + leadingNum.length);
-        const hadComma = /^\s*,/.test(afterNum);
         if (new RegExp('^(?:' + premiseWords + ')\\b', 'i').test(leadingNum) && !leadingNum.includes(",")) {
           return `${leadingNum}, ${c}`;
         }
-        return hadComma ? `${leadingNum}, ${c}` : `${leadingNum} ${c}`;
+        return `${leadingNum} ${c}`;
       }
     }
   }
@@ -5614,12 +5673,10 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
       return cleanAddr;
     }
     if (!new RegExp('\\b' + lead.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\b', 'i').test(c)) {
-      const afterLead = rawAddr.slice(rawAddr.indexOf(lead) + lead.length);
-      const hadComma = /^\s*,/.test(afterLead);
       if (new RegExp('^(?:' + premiseWords + ')\\b', 'i').test(lead) && !lead.includes(",")) {
         return `${lead}, ${c}`;
       }
-      return hadComma ? `${lead}, ${c}` : `${lead} ${c}`;
+      return `${lead} ${c}`;
     }
   }
 
@@ -5863,9 +5920,9 @@ function detectCountryFromAddress(address) {
   if (/\b(south\s*korea|korea)\b/i.test(lower)) return "South Korea";
   if (/\b(singapore)\b/i.test(lower)) return "Singapore";
   if (/\b(netherlands|holland)\b/i.test(lower)) return "Netherlands";
-  if (/\b(new\s*zealand|aotearoa)\b/i.test(lower)) return "New Zealand";
-  if (/\b(malaysia)\b/i.test(lower)) return "Malaysia";
-  if (/\b(indonesia|republik\s*indonesia)\b/i.test(lower)) return "Indonesia";
+  if (/\b(?:new\s*zealand|aotearoa)\b/i.test(lower) || /,\s*nz\b/i.test(lower) || /\bnz\s+\d{4}\b/i.test(lower)) return "New Zealand";
+  if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(lower)) return "Malaysia";
+  if (/\b(?:indonesia|republik\s*indonesia|republic\s*of\s*indonesia)\b/i.test(lower)) return "Indonesia";
   if (/\b(united\s*arab\s*emirates|uae)\b/i.test(lower)) return "United Arab Emirates";
   if (/\b(italy|italia)\b/i.test(lower)) return "Italy";
   if (/\b(spain|espana)\b/i.test(lower)) return "Spain";
@@ -5895,12 +5952,12 @@ function detectCountryFromAddress(address) {
   if (/\b(taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung)\s*(hsien|county)\b/i.test(lower)) return "Taiwan";
   if (/\b(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eski[sş]ehir|sanliurfa|şanlıurfa|samsun|denizli|sakarya|mu[gğ]la|trabzon)\b/i.test(lower)) return "Turkiye";
   // Malaysia states & major cities
-  if (/\b(selangor|johor|perak|kedah|pahang|negeri\s*sembilan|melaka|terengganu|kelantan|sabah|sarawak|perlis|wilayah\s*persekutuan|labuan|subang\s*jaya|petaling\s*jaya|shah\s*alam|johor\s*bahru|george\s*town|kota\s*kinabalu|kuching|seremban|batu\s*pahat|pasir\s*gudang|iskandar\s*puteri)\b/i.test(lower)) return "Malaysia";
+  if (/\b(selangor|johor|perak|kedah|pahang|negeri\s*sembilan|melaka|malacca|terengganu|kelantan|sabah|sarawak|perlis|wilayah\s*persekutuan|labuan|subang\s*jaya|petaling\s*jaya|shah\s*alam|klang|johor\s*bahru|george\s*town|ipoh|kota\s*kinabalu|kuching|seremban|batu\s*pahat|pasir\s*gudang|iskandar\s*puteri|puchong|cheras|cyberjaya|rawang|kajang|kuantan|alor\s*setar|taiping|sungai\s*petani|bintulu|miri|sibu|sandakan|tawau|butterworth|bukit\s*mertajam|nilai|semenyih)\b/i.test(lower)) return "Malaysia";
   if (/\b(penang|pulau\s*pinang)\b/i.test(lower) && !/\b(?:penang\s+road|penang\s+street|penang\s+lane)\b/i.test(lower)) return "Malaysia";
   // Indonesia provinces & major cities
-  if (/\b(jawa\s*barat|jawa\s*tengah|jawa\s*timur|west\s*java|central\s*java|east\s*java|banten|sumatera\s*utara|sumatera\s*barat|sumatera\s*selatan|north\s*sumatra|west\s*sumatra|south\s*sumatra|kalimantan\s*(?:timur|barat|selatan|tengah|utara)|sulawesi\s*(?:selatan|utara|tengah|tenggara|barat)|kepulauan\s*riau|bangka\s*belitung|nusa\s*tenggara\s*(?:barat|timur)|dki\s*jakarta|di\s*yogyakarta|surabaya|bandung|medan|semarang|makassar|palembang|tangerang|bekasi|depok|bogor|pekanbaru|bandar\s*lampung|balikpapan|denpasar|samarinda)\b/i.test(lower)) return "Indonesia";
+  if (/\b(jawa\s*barat|jawa\s*tengah|jawa\s*timur|west\s*java|central\s*java|east\s*java|banten|sumatera\s*utara|sumatera\s*barat|sumatera\s*selatan|north\s*sumatra|west\s*sumatra|south\s*sumatra|kalimantan\s*(?:timur|barat|selatan|tengah|utara)?|sulawesi\s*(?:selatan|utara|tengah|tenggara|barat)?|kepulauan\s*riau|bangka\s*belitung|nusa\s*tenggara\s*(?:barat|timur)?|dki\s*jakarta|di\s*yogyakarta|surabaya|bandung|medan|semarang|makassar|palembang|tangerang|tangerang\s*selatan|bekasi|depok|bogor|batam|pekanbaru|bandar\s*lampung|balikpapan|denpasar|samarinda|cikarang|karawang|sidoarjo|gresik|serang|cilegon|solo|surakarta|malang|pontianak|manado|banjarmasin|cimahi|sukabumi|cirebon|tasikmalaya|purwakarta)\b/i.test(lower)) return "Indonesia";
   // New Zealand regions & major cities
-  if (/\b(canterbury|waikato|bay\s*of\s*plenty|otago|hawke's\s*bay|hawkes\s*bay|taranaki|manawatu|southland|northland|marlborough|tasman|west\s*coast|auckland|christchurch|hamilton|tauranga|dunedin|lower\s*hutt|upper\s*hutt|palmerston\s*north|invercargill|rotorua|whangarei|napier|porirua|new\s*plymouth|queenstown)\b/i.test(lower)) return "New Zealand";
+  if (/\b(canterbury|waikato|bay\s*of\s*plenty|otago|hawke's\s*bay|hawkes\s*bay|taranaki|manawatu|southland|northland|marlborough|tasman|west\s*coast|auckland|christchurch|hamilton|tauranga|dunedin|lower\s*hutt|upper\s*hutt|palmerston\s*north|invercargill|rotorua|whangarei|napier|porirua|new\s*plymouth|queenstown|blenheim|timaru|taupo|pukekohe|cambridge|whakatane|hastings|gisborne|nelson|whanganui|feilding|levin|masterton|ashburton|rangiora|rolleston|wanaka)\b/i.test(lower)) return "New Zealand";
 
   // 3. National Capital mentioned in the physical address text
   if (isNewTaipeiCity(lower)) return "Taiwan";
