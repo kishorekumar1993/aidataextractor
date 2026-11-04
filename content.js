@@ -113,9 +113,9 @@
     // Continuous heartbeat every 1500ms to guarantee floating widget and buttons are always visible
     setInterval(ensureAiCrawlButtonsVisible, 1500);
 
-    // Check if a batch Not Working pipeline was active across page reloads/navigations
+    // Check if auto-queue or batch Not Working pipeline was active across page reloads/navigations
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(["batchNotWorking"], (res) => {
+      chrome.storage.local.get(["batchNotWorking", "autoQueuePipeline"], (res) => {
         const batch = res?.batchNotWorking;
         // Resume if batch was active within the last 5 minutes
         if (batch && batch.active && (batch.remaining > 0 || batch.remaining === -1) && (Date.now() - (batch.updatedAt || 0) < 300000)) {
@@ -132,8 +132,27 @@
               processNextBatchNotWorkingItem();
             }
           }, 700);
+          return;
         } else if (batch) {
           chrome.storage.local.remove(["batchNotWorking"]);
+        }
+
+        // Resume "Auto-crawl till Working site" pipeline across page reloads
+        const autoPipeline = res?.autoQueuePipeline;
+        if (autoPipeline && autoPipeline.active && autoQueueEnabled && (Date.now() - (autoPipeline.updatedAt || 0) < 180000)) {
+          isAutoQueuePipelineActive = true;
+          const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+          if (pauseBtn) pauseBtn.style.display = "inline-flex";
+          console.log(`[AI Assistant] Resumed Auto-Queue Pipeline from storage. Last submitted: "${autoPipeline.lastSubmittedUrl}"`);
+          updateStatus("⚡ Auto-Queue: Advancing to next site...", "loading");
+
+          setTimeout(() => {
+            if (isAutoQueuePipelineActive && autoQueueEnabled && !isBatchNotWorkingActive) {
+              scheduleNextQueueAutoCrawl(autoPipeline.lastSubmittedUrl);
+            }
+          }, 450);
+        } else if (autoPipeline) {
+          chrome.storage.local.remove(["autoQueuePipeline"]);
         }
       });
     }
@@ -864,6 +883,9 @@
       clearInterval(autoQueuePollTimer);
       autoQueuePollTimer = null;
     }
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.remove(["autoQueuePipeline"]);
+    }
     const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
     if (pauseBtn) pauseBtn.style.display = "none";
     console.log("[AI Assistant] Auto-queue pipeline stopped" + (reason ? `: ${reason}` : "."));
@@ -887,6 +909,15 @@
     }
 
     isAutoQueuePipelineActive = true;
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({
+        autoQueuePipeline: {
+          active: true,
+          lastSubmittedUrl: submittedUrl || "",
+          updatedAt: Date.now()
+        }
+      });
+    }
     const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
     if (pauseBtn) pauseBtn.style.display = "inline-flex";
 
@@ -967,6 +998,20 @@
   function autoSubmitNotWorking(specificUrl) {
     const submittedUrl = specificUrl || getTargetUrl();
     console.log(`[AI Assistant] Auto-submitting 'Not Working' record for: ${submittedUrl}...`);
+
+    // Ensure pipeline state is preserved across form submission reload!
+    if (autoQueueEnabled && !isBatchNotWorkingActive) {
+      isAutoQueuePipelineActive = true;
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          autoQueuePipeline: {
+            active: true,
+            lastSubmittedUrl: submittedUrl || "",
+            updatedAt: Date.now()
+          }
+        });
+      }
+    }
 
     // Auto-approve native confirm dialogs in MAIN world so they don't block
     try {
@@ -1406,6 +1451,19 @@
     }
 
     isAutoQueuePipelineActive = true;
+    if (autoQueueEnabled && !isBatchNotWorkingActive) {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          autoQueuePipeline: {
+            active: true,
+            lastSubmittedUrl: getTargetUrl() || "",
+            updatedAt: Date.now()
+          }
+        });
+      }
+      const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+      if (pauseBtn) pauseBtn.style.display = "inline-flex";
+    }
     let targetUrl = getTargetUrl();
     if (!targetUrl) {
       // Try to load pending URL from queue if input is empty
@@ -1519,6 +1577,15 @@
             submitBtn.classList.remove("ai-submit-ready-highlight");
             if (autoQueueEnabled) {
               const currentSubmitted = getTargetUrl();
+              if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.set({
+                  autoQueuePipeline: {
+                    active: true,
+                    lastSubmittedUrl: currentSubmitted || "",
+                    updatedAt: Date.now()
+                  }
+                });
+              }
               setTimeout(() => {
                 scheduleNextQueueAutoCrawl(currentSubmitted);
               }, 400);

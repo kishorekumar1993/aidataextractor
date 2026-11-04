@@ -801,8 +801,10 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   if (!rawName || typeof rawName !== "string") return "";
   let name = rawName.trim();
 
-  // 1. Strip HTML entities and special boundary chars
+  // 1. Strip HTML entities, tag fragments and special boundary chars
   name = name.replace(/&amp;/gi, "&").replace(/&nbsp;/gi, " ");
+  name = name.replace(/^[^<>\n]*[>"\']+/g, "").trim();
+  name = name.replace(/<[^>]+>/g, "").replace(/^["'“”‘’«»]+|["'“”‘’«»]+$/g, "").trim();
   name = name.replace(/^[\s\-_|:•·,;*#~]+|[\s\-_|:•·,;*#~]+$/g, "").trim();
 
   // 1b. Strip embedded CTA / navigational breadcrumbs if present:
@@ -851,6 +853,11 @@ function extractLegalCandidatesFromHtml(html) {
   function addCleanCandidate(rawCand) {
     if (!rawCand) return;
     const cleaned = cleanCompanyPrefixesAndSuffixes(rawCand);
+    if (!cleaned) return;
+    // Reject third-party job portals, HR platforms, web hosts, CMS, analytics, payment gateways
+    if (/\b(?:Dayforce|Ceridian|Workday|BambooHR|Zenefits|Paychex|ADP|UltiPro|Greenhouse|Lever|Jobvite|SmartRecruiters|iCIMS|WordPress|Shopify|Wix|Squarespace|Cloudflare|Google|Facebook|Meta|Twitter|LinkedIn|Instagram|YouTube|Adobe|Salesforce|PayPal|Stripe)\b/i.test(cleaned)) {
+      return;
+    }
     if (cleaned.length >= 3 && cleaned.length <= 60 && !/^(?:all|and|the|for|with|from|including|our|your|their|loss|damage|expenses|costs)\b/i.test(cleaned)) {
       candidates.add(cleaned);
     }
@@ -1393,8 +1400,14 @@ function discoverContactLinks(html, baseUrl) {
 
     if (score > 0) {
       try {
-        const resolved = new URL(raw, baseUrl).href;
-        candidates.push({ url: resolved, score });
+        const resolved = new URL(raw, baseUrl);
+        const baseHost = new URL(baseUrl).hostname.replace(/^www\./i, "").toLowerCase();
+        const linkHost = resolved.hostname.replace(/^www\./i, "").toLowerCase();
+        // Restrict subpage discovery to same host or subdomains to prevent external job portals/SaaS (Dayforce, Workday, Greenhouse, etc.)
+        if (linkHost !== baseHost && !linkHost.endsWith("." + baseHost)) {
+          continue;
+        }
+        candidates.push({ url: resolved.href, score });
       } catch (e) { }
     }
   }
@@ -3820,6 +3833,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Remove unwanted comma between street/building number and street name
       addr = addr.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/g, '$1$2 $3');
 
+      // Strip leading list/index numbers before company names in address (e.g. "138 U.S. Tsubaki Industrial, LLC 250 Kirby Drive...")
+      addr = addr.replace(/^\d{1,4}\s+([A-Z].*?\b(?:LLC|Inc\.?|Corp\.?|Ltd\.?|Limited)\b)/i, (m, g) => g);
+      addr = addr.replace(/(\b(?:LLC|Inc\.?|Corp\.?|Ltd\.?|Limited)\b)\s+(\d+\s+[A-Z])/i, (m, g1, g2) => g1 + ", " + g2);
+
       // Clean up spaces, commas, and ensure clean formatting
       addr = addr.replace(/\s+,/g, ",");
       addr = addr.replace(/,\s*,/g, ", ");
@@ -4663,11 +4680,7 @@ function hasRecognizedPlaceName(cleanAddr, names) {
     if (!name || name.length < 3) continue;
     if (isPlaceUsedAsStreetName(cleanAddr, name)) continue;
     const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-    const isDirectionalCity = /^(?:north|south|east|west|port)\s+/i.test(name);
-    const regStr = isDirectionalCity
-      ? `\\b${escaped}\\b`
-      : `(?<!\\b(?:north|south|east|west|lower|upper|outer)\\s+)\\b${escaped}\\b`;
-    if (new RegExp(regStr, "i").test(cleanAddr)) {
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(cleanAddr)) {
       return true;
     }
   }
@@ -5850,6 +5863,11 @@ function ensureCommaBeforeState(addr) {
   const nextWordPattern = "\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)";
   const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}${nextWordPattern}`, "g");
   a = a.replace(streetSepRegex, "$1, $2");
+
+  // 2a. Ensure comma after directional street suffixes when followed by locality/city
+  // e.g. "County Road West Allenton" -> "County Road West, Allenton"
+  const directionalSepRegex = new RegExp(`\\b(${streetSuffixes}\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext))\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)(?!\\s+(?:Street|Road|Avenue|Lane|Drive|Place|Close|Court|Terrace|Way|Blvd|Hwy)\\b)`, "g");
+  a = a.replace(directionalSepRegex, "$1, $2");
 
   // 2b. Remove unwanted comma between street/building number and street name
   // e.g. "Number 1013, Chung Hua Road" -> "Number 1013 Chung Hua Road"
