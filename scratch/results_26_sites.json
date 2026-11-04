@@ -1,0 +1,216 @@
+[
+  {
+    "url": "http://www.larsenmfg.com",
+    "finalUrl": "https://larsenmfg.com/",
+    "status": "Working",
+    "address": "1201 Allanson Road Mundelein, IL 60060",
+    "city": "Mundelein",
+    "state": "IL",
+    "zip": "60060"
+  },
+  {
+    "url": "http://www.qualityautoparts.com",
+    "finalUrl": "https://www.qualityautoparts.com/",
+    "status": "Working",
+    "address": "5900 Balcones Dr, Austin, TX 78731",
+    "city": "Austin",
+    "state": "TX",
+    "zip": "78731"
+  },
+  {
+    "url": "http://www.ac-h.com",
+    "status": "Not Working",
+    "reason": "HTTP 403"
+  },
+  {
+    "url": "http://www.wildcatelectric.com",
+    "finalUrl": "https://wildcatelectric.com/",
+    "status": "Working",
+    "address": "12045 Wallisville Road, Suite 200 Houston, TX 77013",
+    "city": "Houston",
+    "state": "TX",
+    "zip": "77013"
+  },
+  {
+    "url": "http://meramecusa.com",
+    "finalUrl": "https://www.hubbell.com/hubbellpowersystems/en/hps-brands/meramec",
+    "status": "Working",
+    "address": null,
+    "city": null,
+    "state": null,
+    "zip": null
+  },
+  {
+    "url": "http://www.warmrain.com",
+    "status": "Not Working",
+    "reason": "HTTP 520"
+  },
+  {
+    "url": "http://www.palramamericas.com",
+    "finalUrl": "https://www.palram.com/us/",
+    "status": "Working",
+    "address": "9735 Commerce Cir, Kutztown, PA 19530",
+    "city": "Kutztown",
+    "state": "PA",
+    "zip": "19530"
+  },
+  {
+    "url": "http://www.lairdmfg.com",
+    "finalUrl": "https://lairdmanufacturing.com/",
+    "status": "Working",
+    "address": "1130 Stuart Dr. Merced, California 95341",
+    "city": "Merced",
+    "state": "California",
+    "zip": "95341"
+  },
+  {
+    "url": "http://www.streamlinertools.com",
+    "finalUrl": "https://www.streamlinertools.com/",
+    "status": "Working",
+    "address": null,
+    "city": null,
+    "state": null,
+    "zip": null
+  },
+  {
+    "url": "http://stonelandusa.com",
+    "finalUrl": "https://stonelandusa.com/",
+    "status": "Working",
+    "address": "11831 Vose Street North Hollywood, CA 91605",
+    "city": "North Hollywood",
+    "state": "CA",
+    "zip": "91605"
+  },
+  {
+    "url": "http://www.sncmfg.com",
+    "finalUrl": "https://sncmfg.com/",
+    "status": "Working",
+    "address": "101 West Waukau Avenue+Oshkosh+WI+54902/\" target=\"_blank\">SNC Manufacturing Co., Inc. 101 West Waukau Avenue Oshkosh, WI 54902",
+    "city": "Oshkosh",
+    "state": "WI",
+    "zip": "54902"
+  },
+  {
+    "url": "http://www.pptube.com",
+    "finalUrl": "https://www.pptube.com/",
+    "status": "Working",
+    "address": null,
+    "city": null,
+    "state": null,
+    "zip": null
+  },
+  {
+    "url": "http://www.peterforg.com",
+    "finalUrl": "https://www.peterforg.com/",
+    "status": "Working",
+    "address": "50 Park Street P.O. Box 433 Somerville, MA 02143",
+    "city": "Somerville",
+    "state": "MA",
+    "zip": "02143"
+  },
+  {
+    "url": "http://www.sterrittlumber.com",
+    "finalUrl": "https://www.sterrittlumber.com/",
+    "status": "Working",
+    "address": null,
+    "city": null,
+    "state": null,
+    "zip": null
+  },
+  {
+    "url": "http://www.maysteel.com",
+    "finalUrl": "https://www.maysteel.com/",
+    "status": "Working",
+    "address": "6199 County Rd W Allenton, Wisconsin 53002-9545",
+    "city": "Allenton",
+    "state": "Wisconsin",
+    "zip": "53002-9545"
+  },
+  {
+    "url": "http://www.marleymep.com",
+    "finalUrl": "https://www.marleymep.com/",
+    "status": "Working",
+    "address": null,
+    "city": null,
+    "state": null,
+    "zip": null
+  },
+  {
+    "url": "http://www.galaxystones.com",
+    "finalUrl": "https://galaxystones.com/",
+    "status": "Working",
+    "address": "9134 North Freeway | Houston, TX 77037",
+    "city": "Houston",
+    "state": "TX",
+    "zip": "77037"
+  },
+  {
+    "url": "http://www.baker-rullman.com",
+    "status": "Not Working",
+    "reason": "HTTP 403"
+  },
+  {
+    "url": "http://www.idealconcreteblock.com",
+    "finalUrl": "https://idealconcreteblock.com/",
+    "status": "Working",
+    "address": "45 Power Rd, P.O. Box 747 Westford, MA 01886",
+    "city": "Westford",
+    "state": "MA",
+    "zip": "01886"
+  },
+  {
+    "url": "http://www.shureusa.com",
+    "finalUrl": "https://shureusa.com/",
+    "status": "Working",
+    "address": "1901 West Main Street Washington, MO 63090",
+    "city": "Washington",
+    "state": "MO",
+    "zip": "63090"
+  },
+  {
+    "url": "http://www.ustsubaki.com",
+    "status": "Not Working",
+    "reason": "HTTP 403"
+  },
+  {
+    "url": "http://www.ornamentalsecurity.com",
+    "status": "Not Working",
+    "reason": "fetch failed"
+  },
+  {
+    "url": "http://www.mifab.com",
+    "finalUrl": "https://mifab.com/",
+    "status": "Working",
+    "address": "1321 West 119th Street Chicago, IL 60643",
+    "city": "Chicago",
+    "state": "IL",
+    "zip": "60643"
+  },
+  {
+    "url": "http://www.highprecisioninc.com",
+    "finalUrl": "https://highprecisioninc.com/",
+    "status": "Working",
+    "address": "375 Morse St, Hamden, CT 06517",
+    "city": "Hamden",
+    "state": "CT",
+    "zip": "06517"
+  },
+  {
+    "url": "http://www.christianson.com",
+    "finalUrl": "https://christianson.com/",
+    "status": "Working",
+    "address": "20421 15th Street Southeast Blomkest, MN 56216",
+    "city": "Blomkest",
+    "state": "MN",
+    "zip": "56216"
+  },
+  {
+    "url": "http://www.cjpw.com",
+    "finalUrl": "https://cjpw.com/",
+    "status": "Working",
+    "address": "1500 15th Avenue Drive East Unit 105, Palmetto, FL 34221",
+    "city": "Palmetto",
+    "state": "FL",
+    "zip": "34221"
+  }
+]
