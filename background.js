@@ -484,6 +484,35 @@ async function handleCrawlAndExtract(rawUrl) {
     targetUrl = "http://" + targetUrl;
   }
 
+  let hostname = "";
+  try {
+    hostname = new URL(targetUrl).hostname.toLowerCase();
+  } catch (e) {
+    hostname = "";
+  }
+
+  // If URL hostname is missing, incomplete (e.g. "ww", "www"), or has no domain dot (e.g. "http://ww")
+  if (!hostname || !hostname.includes(".") || hostname.length < 4 || hostname === "ww" || hostname === "www") {
+    console.warn(`[Background] Invalid/incomplete URL provided: "${rawUrl}". Marking as Not Working.`);
+    return {
+      websiteStatus: "Not Working",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      _note: `Invalid/incomplete URL (${rawUrl}) - Marked as Not Working`
+    };
+  }
+
   const settings = await chrome.storage.sync.get(["apiKey", "model"]);
   const apiKey = (settings.apiKey && settings.apiKey.trim()) ? settings.apiKey.trim() : DEFAULT_API_KEY;
   const model = settings.model || DEFAULT_MODEL;

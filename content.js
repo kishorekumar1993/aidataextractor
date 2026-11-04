@@ -53,11 +53,23 @@
 
   let showFloatingWidget = true;
   let showInlineBtn = true;
+  let autoQueueEnabled = true;
+  let isAutoQueuePipelineActive = false;
+  let autoQueuePollTimer = null;
+  let isBatchNotWorkingActive = false;
+  let batchNotWorkingRemaining = 0; // -1 for ALL, or positive count like 10
 
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true }, (res) => {
-      showFloatingWidget = res.showFloatingWidget !== false;
-      showInlineBtn = res.showInlineBtn !== false;
+    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true, autoQueueEnabled: true }, (res) => {
+      if (res) {
+        showFloatingWidget = res.showFloatingWidget !== false;
+        showInlineBtn = res.showInlineBtn !== false;
+        if (res.autoQueueEnabled !== undefined) {
+          autoQueueEnabled = !!res.autoQueueEnabled;
+        }
+      }
+      const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
+      if (widgetToggle) widgetToggle.checked = autoQueueEnabled;
       ensureAiCrawlButtonsVisible();
     });
 
@@ -68,6 +80,14 @@
         }
         if (changes.showInlineBtn) {
           showInlineBtn = changes.showInlineBtn.newValue !== false;
+        }
+        if (changes.autoQueueEnabled !== undefined) {
+          autoQueueEnabled = !!changes.autoQueueEnabled.newValue;
+          const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
+          if (widgetToggle) widgetToggle.checked = autoQueueEnabled;
+          if (!autoQueueEnabled) {
+            stopAutoQueuePipeline("Auto-queue disabled");
+          }
         }
         ensureAiCrawlButtonsVisible();
       }
@@ -560,34 +580,6 @@
     }, 2500);
   }
 
-  let isAutoQueuePipelineActive = false;
-  let autoQueuePollTimer = null;
-  let autoQueueEnabled = true;
-
-  // Initialize and keep autoQueueEnabled synchronized with storage
-  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get(["autoQueueEnabled"], (res) => {
-      if (res && res.autoQueueEnabled !== undefined) {
-        autoQueueEnabled = !!res.autoQueueEnabled;
-      }
-      const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
-      if (widgetToggle) widgetToggle.checked = autoQueueEnabled;
-    });
-
-    if (chrome.storage.onChanged) {
-      chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === "sync" && changes.autoQueueEnabled !== undefined) {
-          autoQueueEnabled = !!changes.autoQueueEnabled.newValue;
-          const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
-          if (widgetToggle) widgetToggle.checked = autoQueueEnabled;
-          if (!autoQueueEnabled) {
-            stopAutoQueuePipeline("Auto-queue disabled");
-          }
-        }
-      });
-    }
-  }
-
   function resetCrawlButtons() {
     const crawlBtn = document.getElementById("ai-crawl-btn");
     const headerCrawlBtn = document.getElementById("ai-header-crawl-btn");
@@ -611,8 +603,6 @@
   // =========================================================================
   // BATCH NOT WORKING PIPELINE (Separate options requested by user)
   // =========================================================================
-  let isBatchNotWorkingActive = false;
-  let batchNotWorkingRemaining = 0; // -1 for ALL, or positive count like 10
 
   function startBatchNotWorking(count = 10) {
     if (isBatchNotWorkingActive) {
