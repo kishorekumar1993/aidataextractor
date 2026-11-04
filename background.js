@@ -2601,13 +2601,27 @@ BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
     5. "Distributer" (note: spelled "Distributer")
     6. "Supplier"
     7. "Wholesaler"
+  * CRITICAL PHYSICAL GOODS SUPPLIER RULE:
+    - If a company sells, supplies, fabricates, fits, or distributes physical products / manufactured goods (such as windows, doors, conservatories, glass, building materials, construction products, hardware, tools, packaging, metals, plastics, machinery, equipment, components, industrial supplies):
+      -> THEY ARE A "Supplier", "Manufacturer", "Distributer", or "Trader" (options 1 to 7)!
+      -> YOU MUST MARK "websiteStatus": "Working" AND EXTRACT ALL 14 FIELDS!
+      -> EVEN IF they provide installation, fitting, surveys, or quotes for their goods (e.g. "supply and fit windows/doors", "request a quote", "book a survey"), they are a PHYSICAL PRODUCT SUPPLIER, NEVER a disallowed service provider!
   * DISALLOWED / NON-WORKING BUSINESS TYPES:
-    8. "Service Provider" (unless industrial service provider)
+    8. "Service Provider": STRICTLY AND ONLY for pure non-goods consumer services with NO physical goods supplied:
+       - Restaurants, bars, cafes, food dining, catering
+       - Hair salons, beauty clinics, barbers, nail spas, massage, wellness
+       - Legal services, law firms, solicitors, lawyers
+       - Accounting, bookkeeping, tax services
+       - Marketing agencies, SEO, IT/web design consulting
+       - Pure software / SaaS without hardware
+       - Travel agencies, tour operators, flight booking, hotels
+       - Real estate agencies, property rentals, property management
+       - Cleaning, pest control, personal trainers, tutoring
     9. "Online Shopping" (unless company is a Manufacturer)
     10. "Restricted Site"
     11. "Other"
   * STRICT QC RULE:
-    If the website's business type is "Service Provider" (non-industrial), "Online Shopping" (non-manufacturer), "Restricted Site", "Other", or ANY business outside the Manufacturer to Wholesaler range:
+    If the website's business type is pure "Service Provider" (non-goods consumer service), "Online Shopping" (non-manufacturer), "Restricted Site", "Other", or ANY business outside the Manufacturer to Wholesaler range:
     - YOU MUST SET "websiteStatus": "Not Working"!
     - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": "businessType": "", "companyProfile": "", "companyName": "", "countryName": "", "companyAddress": "", "state": "", "city": "", "emailId": "", "secondaryEmailId": "", "phoneNumber": "", "numberOfProducts": "", "productImages": "", "numberOfProductDescriptions": ""!
 - CRITICAL 3-TIER VERIFICATION RULE FOR "Online Shopping" (E-Commerce vs B2B Manufacturer / Wholesaler Catalog):
@@ -3320,6 +3334,36 @@ function heuristicExtraction(crawlData, restrictedCheck) {
 }
 
 /**
+ * Identifies whether a company sells, supplies, fabricates, fits, or distributes physical products / manufactured goods
+ * (e.g. windows, doors, conservatories, glass, building materials, construction products, hardware, tools, packaging, metals, plastics, machinery).
+ * These are valid "Supplier" or "Manufacturer" companies and MUST be treated as Working sites, never as disallowed consumer service providers.
+ */
+function checkPhysicalProductSupplier(crawlData, result) {
+  if (!crawlData) return false;
+  const combined = (
+    (crawlData.mainHtml || "") + " " +
+    (crawlData.bodyText || "") + " " +
+    (crawlData.profilePageText || "") + " " +
+    (crawlData.contactHtml || "") + " " +
+    (crawlData.title || "")
+  ).toLowerCase();
+
+  // Physical goods / tangible products markers
+  const productMarkers = /\b(?:windows|doors|conservatories|orangeries|glazing|double\s*glazing|roof\s*lanterns|shutters|blinds|fencing|gates|railings|cladding|timber|upvc|aluminium|glass|tiles|flooring|cabinets|countertops|machinery|equipment|tools|hardware|valves|pumps|pipes|fittings|fasteners|bearings|cables|wiring|packaging|plastics|textiles|steel|sheet\s*metal|fabrication|building\s*materials|construction\s*supplies|industrial\s*supplies)\b/i;
+
+  // Supplier / manufacturer / distributor operational markers
+  const supplierMarkers = /\b(?:supplier|suppliers|supplying|supply\s+and\s+(?:fit|install)|fabricator|fabricators|distributor|distributer|distributors|wholesaler|wholesalers|manufacturers?|stockists?|our\s+products|product\s+range|brochure|products\s+we\s+supply)\b/i;
+
+  // Pure non-goods consumer services exclusions (restaurants, salons, legal, accounting, marketing, real estate, hotels)
+  const isPureConsumerService = /\b(?:restaurant|cafe|coffee\s*shop|bistro|barber|hair\s*salon|nail\s*salon|spa|massage|tattoo|dentist|veterinary|legal\s*advice|law\s*firm|solicitors?|accountants?|bookkeeping|marketing\s*agency|seo\s*agency|real\s*estate\s*agency|estate\s*agents?|property\s*rental|hotel|motel)\b/i.test(combined);
+
+  if (productMarkers.test(combined) && supplierMarkers.test(combined) && !isPureConsumerService) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Enforces all 14 instructions deterministically based on physical address evidence.
  */
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
@@ -3453,24 +3497,32 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.businessType = btAliases[rawBt];
     if (!result.websiteStatus) result.websiteStatus = "Working";
   } else {
-    // Business Type is Service Provider, Online Shopping, Restricted Site, Other, or unknown -> Mark Not Working!
-    result.websiteStatus = "Not Working";
-    result.isDisallowedBusinessType = true;
-    result.disallowedReason = `Business Type "${result.businessType || 'Disallowed'}" outside allowed scope (Manufacturer to Wholesaler only worked on)`;
-    result.businessType = "";
-    result.companyProfile = "";
-    result.companyName = "";
-    result.countryName = "";
-    result.companyAddress = "";
-    result.state = "";
-    result.city = "";
-    result.emailId = "";
-    result.secondaryEmailId = "";
-    result.phoneNumber = "";
-    result.numberOfProducts = "";
-    result.productImages = "";
-    result.numberOfProductDescriptions = "";
-    return result;
+    // Check if the business actually sells or supplies physical products (e.g. windows, doors, conservatories, materials, equipment, supplies)
+    const isPhysicalSupplier = checkPhysicalProductSupplier(crawlData, result);
+    if (isPhysicalSupplier) {
+      result.businessType = "Supplier";
+      result.websiteStatus = "Working";
+      result.isDisallowedBusinessType = false;
+    } else {
+      // Business Type is Service Provider, Online Shopping, Restricted Site, Other, or unknown -> Mark Not Working!
+      result.websiteStatus = "Not Working";
+      result.isDisallowedBusinessType = true;
+      result.disallowedReason = `Business Type "${result.businessType || 'Disallowed'}" outside allowed scope (Manufacturer to Wholesaler only worked on)`;
+      result.businessType = "";
+      result.companyProfile = "";
+      result.companyName = "";
+      result.countryName = "";
+      result.companyAddress = "";
+      result.state = "";
+      result.city = "";
+      result.emailId = "";
+      result.secondaryEmailId = "";
+      result.phoneNumber = "";
+      result.numberOfProducts = "";
+      result.productImages = "";
+      result.numberOfProductDescriptions = "";
+      return result;
+    }
   }
 
   // 5. Company Profile: if a real business About / Profile page exists, mark Available
@@ -3560,9 +3612,13 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     } else {
       addr = addr.replace(/[\(\)\[\]\{\}]/g, " ");
 
+      // Strip conversational boilerplate from start of address e.g. "If you have any enquiries, require a quote or want to book a survey please feel free to call us or send us a message with your requirements Priory Windows And Conservatories 5 Burnt House Road, Whitley Bay"
+      addr = addr.replace(/^(?:if\s+you\s+have\s+any\s+enquiries|require\s+a\s+quote|want\s+to\s+book\s+a\s+survey|please\s+feel\s+free\s+to\s+call\s+us|send\s+us\s+a\s+message|with\s+your\s+requirements|get\s+in\s+touch|contact\s+us\s+at)[\s\S]*?(?=\b\d+\s+[A-Za-z]|\b(?:po\s*box|unit|suite|building|floor|no\.?)\b)/i, "").trim();
+
       if (compName && addr.toLowerCase().startsWith(compName.toLowerCase())) {
         addr = addr.slice(compName.length).trim();
       }
+      addr = addr.replace(/^,\s*/, "").trim();
 
       // Ensure country is identified from address or domain before expanding abbreviations
       if (!country || country.length < 2) {
@@ -4154,7 +4210,7 @@ const UK_CITIES_AND_TOWNS = [
   "inverness", "stirling", "canterbury", "lichfield", "newry", "ripon", "bangor", "truro", "ely",
   "wells", "st asaph", "st davids", "perth", "chelmsford", "milton keynes", "colchester", "doncaster",
   "wrexham", "dunfermline", "bradford", "wakefield", "barnsley", "doncaster",
-  "gateshead", "sunderland", "south shields", "stockton-on-tees", "hartlepool",
+  "gateshead", "sunderland", "south shields", "north shields", "whitley bay", "north tyneside", "south tyneside", "tynemouth", "wallsend", "stockton-on-tees", "hartlepool",
   "middlesborough", "redditch", "crawley", "ipswich", "colchester", "chelmsford",
   "maidstone", "gillingham", "chatham", "rochester", "gravesend", "dartford",
   "tunbridge wells", "eastbourne", "hastings", "worthing", "hove", "crawley",
