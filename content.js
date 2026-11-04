@@ -459,6 +459,17 @@
               break;
             }
           }
+        } else if (targetClean === "distributer" || targetClean === "distributor") {
+          for (let i = 0; i < element.options.length; i++) {
+            const opt = element.options[i];
+            const val = (opt.value || "").trim().toLowerCase();
+            const txt = (opt.text || "").trim().toLowerCase();
+            if (val === "distributer" || txt === "distributer" || val === "distributor" || txt === "distributor") {
+              matchedIndex = i;
+              break;
+            }
+          }
+        }
         }
       }
 
