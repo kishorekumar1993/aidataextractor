@@ -1,8 +1,8 @@
 /* Floating AI Assistant Widget Styles */
 #ai-prefill-widget {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: 20px;
+  right: 20px;
   z-index: 2147483647 !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.12);
@@ -10,10 +10,13 @@
   background: #ffffff;
   color: #1f2937;
   width: 380px;
-  max-width: 90vw;
+  max-width: 92vw;
   border: 1px solid #e5e7eb;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 #ai-prefill-widget.ai-minimized {

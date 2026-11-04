@@ -85,10 +85,13 @@
     attachFieldObservers();
 
     // Fast retries to catch dynamic / async / SPA form loads immediately
-    const checkDelays = [100, 300, 600, 1000, 1800, 3000, 5000];
+    const checkDelays = [80, 250, 500, 900, 1500, 2500, 4000];
     checkDelays.forEach((delay) => {
       setTimeout(ensureAiCrawlButtonsVisible, delay);
     });
+
+    // Continuous heartbeat every 1500ms to guarantee floating widget and buttons are always visible
+    setInterval(ensureAiCrawlButtonsVisible, 1500);
 
     setTimeout(() => {
       const initialUrl = getTargetUrl();
@@ -100,19 +103,27 @@
   }
 
   function ensureAiCrawlButtonsVisible() {
-    if (showFloatingWidget) {
+    if (showFloatingWidget !== false) {
       createFloatingWidget();
       const w = document.getElementById("ai-prefill-widget");
-      if (w) w.style.display = "";
+      if (w) {
+        w.style.setProperty("display", "block", "important");
+        w.style.setProperty("visibility", "visible", "important");
+        w.style.setProperty("opacity", "1", "important");
+      }
     } else {
       const w = document.getElementById("ai-prefill-widget");
       if (w) w.style.display = "none";
     }
 
-    if (showInlineBtn) {
+    if (showInlineBtn !== false) {
       injectInlineQuickButton();
       const b = document.getElementById("ai-quick-btn");
-      if (b) b.style.display = "inline-flex";
+      if (b) {
+        b.style.setProperty("display", "inline-flex", "important");
+        b.style.setProperty("visibility", "visible", "important");
+        b.style.setProperty("opacity", "1", "important");
+      }
     } else {
       const b = document.getElementById("ai-quick-btn");
       if (b) b.style.display = "none";
@@ -1458,7 +1469,13 @@
   }
 
   function createFloatingWidget() {
-    if (document.getElementById("ai-prefill-widget")) return;
+    const existing = document.getElementById("ai-prefill-widget");
+    if (existing && document.body && document.body.contains(existing)) {
+      return;
+    }
+    if (existing) {
+      try { existing.remove(); } catch (e) { }
+    }
     if (!document.body) return;
 
     const widget = document.createElement("div");
