@@ -58,9 +58,14 @@
   }
 
   function initAssistant() {
-    createFloatingWidget();
+    ensureAiCrawlButtonsVisible();
     attachFieldObservers();
-    injectInlineQuickButton();
+
+    // Fast retries to catch dynamic / async / SPA form loads immediately
+    const checkDelays = [100, 300, 600, 1000, 1800, 3000, 5000];
+    checkDelays.forEach((delay) => {
+      setTimeout(ensureAiCrawlButtonsVisible, delay);
+    });
 
     setTimeout(() => {
       const initialUrl = getTargetUrl();
@@ -69,6 +74,12 @@
         console.log("Detected Website Name URL on load:", initialUrl);
       }
     }, 500);
+  }
+
+  function ensureAiCrawlButtonsVisible() {
+    createFloatingWidget();
+    injectInlineQuickButton();
+    updateDetectedUrlDisplay();
   }
 
   /**
@@ -913,8 +924,13 @@
     updateStatus(`Crawling ${targetUrl} (Contact Page / Footer address)...`, "loading");
 
     const crawlBtn = document.getElementById("ai-crawl-btn");
+    const headerCrawlBtn = document.getElementById("ai-header-crawl-btn");
     const quickBtn = document.getElementById("ai-quick-btn");
     if (crawlBtn) crawlBtn.disabled = true;
+    if (headerCrawlBtn) {
+      headerCrawlBtn.disabled = true;
+      headerCrawlBtn.innerHTML = "⏳ Crawling...";
+    }
     if (quickBtn) {
       quickBtn.disabled = true;
       quickBtn.innerHTML = "⏳ Crawling...";
@@ -924,9 +940,13 @@
       const response = await sendRuntimeMessage({ action: "CRAWL_AND_EXTRACT", url: targetUrl });
 
       if (crawlBtn) crawlBtn.disabled = false;
+      if (headerCrawlBtn) {
+        headerCrawlBtn.disabled = false;
+        headerCrawlBtn.innerHTML = "⚡ AI Crawl";
+      }
       if (quickBtn) {
         quickBtn.disabled = false;
-        quickBtn.innerHTML = "🤖 AI Crawl & Fill";
+        quickBtn.innerHTML = "⚡ AI Crawl & Fill";
       }
 
       if (!response || !response.success) {
@@ -977,9 +997,13 @@
       }
     } catch (err) {
       if (crawlBtn) crawlBtn.disabled = false;
+      if (headerCrawlBtn) {
+        headerCrawlBtn.disabled = false;
+        headerCrawlBtn.innerHTML = "⚡ AI Crawl";
+      }
       if (quickBtn) {
         quickBtn.disabled = false;
-        quickBtn.innerHTML = "🤖 AI Crawl & Fill";
+        quickBtn.innerHTML = "⚡ AI Crawl & Fill";
       }
       if (err.message && err.message.includes("Extension context invalidated")) {
         showReloadBanner();
@@ -992,6 +1016,7 @@
 
   function createFloatingWidget() {
     if (document.getElementById("ai-prefill-widget")) return;
+    if (!document.body) return;
 
     const widget = document.createElement("div");
     widget.id = "ai-prefill-widget";
@@ -1003,6 +1028,7 @@
           <span>AI Data Entry Assistant</span>
         </div>
         <div class="ai-header-controls">
+          <button class="ai-btn-quick-crawl" id="ai-header-crawl-btn" title="Quick AI Crawl & Fill">⚡ AI Crawl</button>
           <button class="ai-btn-icon" id="ai-toggle-minimize" title="Minimize / Expand">−</button>
         </div>
       </div>
@@ -1055,6 +1081,15 @@
     const crawlBtn = document.getElementById("ai-crawl-btn");
     if (crawlBtn) crawlBtn.addEventListener("click", triggerCrawlAndFill);
 
+    const headerCrawlBtn = document.getElementById("ai-header-crawl-btn");
+    if (headerCrawlBtn) {
+      headerCrawlBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerCrawlAndFill();
+      });
+    }
+
     const fillCachedBtn = document.getElementById("ai-fill-cached-btn");
     if (fillCachedBtn) {
       fillCachedBtn.addEventListener("click", () => {
@@ -1077,53 +1112,117 @@
 
     const clearBtn = document.getElementById("ai-clear-btn");
     if (clearBtn) clearBtn.addEventListener("click", clearFilledFields);
-
-
   }
 
   function injectInlineQuickButton() {
-    if (document.getElementById("ai-quick-btn")) return;
+    const existing = document.getElementById("ai-quick-btn");
+    if (existing && document.body && document.body.contains(existing)) {
+      return;
+    }
+    if (existing && (!document.body || !document.body.contains(existing))) {
+      try { existing.remove(); } catch (e) { }
+    }
 
-    // Look for btnClickHere or text "click here"
+    // 1. Look for btnClickHere or text "click here"
     const clickHereBtn = document.getElementById("btnClickHere") ||
-      Array.from(document.querySelectorAll("button, a, input[type=button]")).find(b => (b.textContent || b.value || "").toLowerCase().includes("click here"));
+      Array.from(document.querySelectorAll("button, a, input[type=button]")).find(b => {
+        const t = (b.textContent || b.value || "").trim().toLowerCase();
+        return t === "click here" || t.includes("click here");
+      });
+
+    // 2. Look for Website Name input element
+    const websiteInput = findWebsiteNameInput();
+
+    let targetParent = null;
+    let referenceNode = null;
+    let insertAfter = true;
 
     if (clickHereBtn && clickHereBtn.parentNode) {
-      const quickBtn = document.createElement("button");
-      quickBtn.id = "ai-quick-btn";
-      quickBtn.type = "button";
-      quickBtn.innerHTML = "🤖 AI Crawl & Fill";
-      quickBtn.style.cssText = `
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-        color: white;
-        border: none;
-        padding: 6px 14px;
-        border-radius: 6px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        margin-left: 8px;
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        vertical-align: middle;
-        box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
-        transition: transform 0.15s ease, background 0.2s ease;
-      `;
+      targetParent = clickHereBtn.parentNode;
+      referenceNode = clickHereBtn;
+      insertAfter = true;
+    } else if (websiteInput) {
+      const rowContainer = websiteInput.closest(".input-row, .website-input-group, .input-group, .form-group");
+      if (rowContainer && (rowContainer.classList.contains("input-row") || rowContainer.classList.contains("website-input-group") || rowContainer.classList.contains("input-group"))) {
+        targetParent = rowContainer;
+        referenceNode = null;
+        insertAfter = false;
+      } else if (websiteInput.nextElementSibling) {
+        targetParent = websiteInput.parentNode;
+        referenceNode = websiteInput.nextElementSibling;
+        insertAfter = false;
+      } else if (websiteInput.parentNode) {
+        targetParent = websiteInput.parentNode;
+        referenceNode = websiteInput;
+        insertAfter = true;
+      }
+    } else {
+      const form = document.querySelector("#data-entry-form, form, .form-grid, .container");
+      if (form) {
+        targetParent = form;
+        referenceNode = form.firstElementChild;
+        insertAfter = false;
+      }
+    }
 
-      quickBtn.addEventListener("mouseenter", () => {
-        quickBtn.style.transform = "scale(1.03)";
-      });
-      quickBtn.addEventListener("mouseleave", () => {
-        quickBtn.style.transform = "scale(1)";
-      });
+    if (!targetParent) return;
 
-      quickBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        triggerCrawlAndFill();
-      });
+    const quickBtn = document.createElement("button");
+    quickBtn.id = "ai-quick-btn";
+    quickBtn.type = "button";
+    quickBtn.innerHTML = "⚡ AI Crawl & Fill";
+    quickBtn.title = "Click to automatically crawl website and pre-fill form";
+    quickBtn.style.cssText = `
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+      color: #ffffff !important;
+      border: 1px solid #047857 !important;
+      padding: 6px 14px !important;
+      border-radius: 6px !important;
+      font-size: 13px !important;
+      font-weight: 700 !important;
+      cursor: pointer !important;
+      margin-left: 8px !important;
+      margin-right: 4px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 6px !important;
+      vertical-align: middle !important;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4) !important;
+      transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease !important;
+      white-space: nowrap !important;
+      flex-shrink: 0 !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      z-index: 999999 !important;
+      height: 38px !important;
+      line-height: 1 !important;
+    `;
 
-      clickHereBtn.parentNode.insertBefore(quickBtn, clickHereBtn.nextSibling);
+    quickBtn.addEventListener("mouseenter", () => {
+      quickBtn.style.transform = "scale(1.04)";
+      quickBtn.style.boxShadow = "0 4px 14px rgba(16, 185, 129, 0.6)";
+    });
+    quickBtn.addEventListener("mouseleave", () => {
+      quickBtn.style.transform = "scale(1)";
+      quickBtn.style.boxShadow = "0 2px 8px rgba(16, 185, 129, 0.4)";
+    });
+
+    quickBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      triggerCrawlAndFill();
+    });
+
+    try {
+      if (referenceNode && insertAfter && referenceNode.parentNode === targetParent) {
+        targetParent.insertBefore(quickBtn, referenceNode.nextSibling);
+      } else if (referenceNode && !insertAfter && referenceNode.parentNode === targetParent) {
+        targetParent.insertBefore(quickBtn, referenceNode);
+      } else {
+        targetParent.appendChild(quickBtn);
+      }
+    } catch (e) {
+      console.warn("[AI Assistant] Error injecting quick button:", e);
     }
   }
 
@@ -1159,9 +1258,23 @@
       observer.observe(websiteInput, { attributes: true, attributeFilter: ["value"] });
     }
 
+    // Continuous guarantee: re-check every 1.2s so the button never vanishes after submit / next record / AJAX load
     setInterval(() => {
-      updateDetectedUrlDisplay();
-    }, 1500);
+      ensureAiCrawlButtonsVisible();
+    }, 1200);
+
+    // MutationObserver on document.body for immediate re-injection on DOM updates
+    if (document.body) {
+      const domObserver = new MutationObserver(debounce(() => {
+        ensureAiCrawlButtonsVisible();
+      }, 100));
+      domObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    window.addEventListener("focus", ensureAiCrawlButtonsVisible);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") ensureAiCrawlButtonsVisible();
+    });
   }
 
   let debounceTimer = null;
@@ -1225,6 +1338,25 @@
         <span class="ai-preview-val" ${valStyle} title="${item.val || ''}">${item.val || '-'}</span>
       `;
       previewList.appendChild(row);
+    });
+  }
+
+  // Listen for actions from popup or background (e.g. user clicked "AI Crawl" in popup)
+  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message && message.action === "TRIGGER_CRAWL") {
+        triggerCrawlAndFill()
+          .then(() => sendResponse({ success: true }))
+          .catch((err) => sendResponse({ success: false, error: err?.message || String(err) }));
+        return true; // Keep message channel open for async response
+      }
+      if (message && message.action === "GET_STATUS") {
+        sendResponse({
+          url: getTargetUrl(),
+          isAlive: true
+        });
+        return true;
+      }
     });
   }
 

@@ -85,6 +85,52 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.tabs.create({ url: chrome.runtime.getURL("test_portal.html") });
   });
 
+  // Direct AI Crawl & Fill on Active Tab
+  const btnPopupCrawl = document.getElementById("btn-popup-crawl");
+  const popupCrawlStatus = document.getElementById("popup-crawl-status");
+
+  if (btnPopupCrawl) {
+    btnPopupCrawl.addEventListener("click", () => {
+      btnPopupCrawl.disabled = true;
+      showPopupCrawlStatus("⚡ Triggering AI Crawl on active page...", "loading");
+
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || tabs.length === 0) {
+          btnPopupCrawl.disabled = false;
+          showPopupCrawlStatus("No active tab found.", "error");
+          return;
+        }
+
+        const activeTab = tabs[0];
+        chrome.tabs.sendMessage(activeTab.id, { action: "TRIGGER_CRAWL" }, (res) => {
+          btnPopupCrawl.disabled = false;
+          if (chrome.runtime.lastError) {
+            const err = chrome.runtime.lastError.message || "Failed to reach page";
+            showPopupCrawlStatus(`Please open the data entry page first (${err})`, "error");
+            return;
+          }
+          if (res && res.success) {
+            showPopupCrawlStatus("✅ AI Crawl & Fill started successfully!", "success");
+          } else {
+            showPopupCrawlStatus(`Error: ${res?.error || "Unable to start crawl"}`, "error");
+          }
+        });
+      });
+    });
+  }
+
+  function showPopupCrawlStatus(msg, type) {
+    if (!popupCrawlStatus) return;
+    popupCrawlStatus.className = `status-msg ${type}`;
+    popupCrawlStatus.textContent = msg;
+    popupCrawlStatus.style.display = "block";
+    if (type === "success") {
+      setTimeout(() => {
+        popupCrawlStatus.style.display = "none";
+      }, 4000);
+    }
+  }
+
   function showStatus(msg, type) {
     statusMsg.className = `status-msg ${type}`;
     statusMsg.textContent = msg;
