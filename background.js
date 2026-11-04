@@ -421,7 +421,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "CRAWL_AND_EXTRACT") {
     handleCrawlAndExtract(request.url)
       .then(result => sendResponse({ success: true, data: result }))
-      .catch(error => sendResponse({ success: false, error: error.message }));
+      .catch(error => {
+        console.warn("[Background] handleCrawlAndExtract caught error. Marking as Not Working:", error.message);
+        sendResponse({
+          success: true,
+          data: {
+            websiteStatus: "Not Working",
+            businessType: "",
+            companyProfile: "",
+            companyName: "",
+            countryName: "",
+            companyAddress: "",
+            state: "",
+            city: "",
+            emailId: "",
+            secondaryEmailId: "",
+            phoneNumber: "",
+            numberOfProducts: "",
+            productImages: "",
+            numberOfProductDescriptions: "",
+            _note: `Unreachable / Failed to Fetch (${error.message || "Site error"}) - Marked as Not Working`
+          }
+        });
+      });
     return true;
   }
 
@@ -437,8 +459,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * Main coordinator: Deep crawls target site, handles framesets & charsets, runs AI, applies independent QC.
  */
 async function handleCrawlAndExtract(rawUrl) {
-  if (!rawUrl || typeof rawUrl !== "string") {
-    throw new Error("No URL provided");
+  if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim() || rawUrl.trim() === "http://" || rawUrl.trim() === "https://") {
+    return {
+      websiteStatus: "Not Working",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      _note: "No URL provided or empty URL - Marked as Not Working"
+    };
   }
 
   let targetUrl = rawUrl.trim();

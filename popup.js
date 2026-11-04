@@ -16,16 +16,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnSaveKey = document.getElementById("btn-save-key");
   const btnTestKey = document.getElementById("btn-test-key");
   const statusMsg = document.getElementById("api-test-status");
+  const toggleAutoQueue = document.getElementById("toggle-auto-queue");
   const toggleStrictFilter = document.getElementById("toggle-strict-filter");
   const toggleFloatingWidget = document.getElementById("toggle-floating-widget");
   const toggleInlineBtn = document.getElementById("toggle-inline-btn");
   const btnOpenTestPortal = document.getElementById("btn-open-test-portal");
 
   // Load existing settings or pre-configure defaults
-  chrome.storage.sync.get(["apiKey", "model", "strictFilter", "showFloatingWidget", "showInlineBtn"], (res) => {
+  chrome.storage.sync.get(["apiKey", "model", "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"], (res) => {
     apiKeyInput.value = res.apiKey || DEFAULT_API_KEY;
     modelSelect.value = res.model || DEFAULT_MODEL;
     toggleStrictFilter.checked = res.strictFilter !== undefined ? res.strictFilter : true;
+    if (toggleAutoQueue) {
+      toggleAutoQueue.checked = res.autoQueueEnabled !== undefined ? res.autoQueueEnabled : true;
+    }
     if (toggleFloatingWidget) {
       toggleFloatingWidget.checked = res.showFloatingWidget !== undefined ? res.showFloatingWidget : true;
     }
@@ -50,6 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const key = apiKeyInput.value.trim();
     const model = modelSelect.value;
     const strict = toggleStrictFilter.checked;
+    const autoQueue = toggleAutoQueue ? toggleAutoQueue.checked : true;
     const floating = toggleFloatingWidget ? toggleFloatingWidget.checked : true;
     const inline = toggleInlineBtn ? toggleInlineBtn.checked : true;
 
@@ -57,6 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
       apiKey: key,
       model: model,
       strictFilter: strict,
+      autoQueueEnabled: autoQueue,
       showFloatingWidget: floating,
       showInlineBtn: inline
     }, () => {
@@ -65,6 +71,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Instant toggles without requiring Save button
+  if (toggleAutoQueue) {
+    toggleAutoQueue.addEventListener("change", () => {
+      chrome.storage.sync.set({ autoQueueEnabled: toggleAutoQueue.checked });
+    });
+  }
   if (toggleFloatingWidget) {
     toggleFloatingWidget.addEventListener("change", () => {
       chrome.storage.sync.set({ showFloatingWidget: toggleFloatingWidget.checked });

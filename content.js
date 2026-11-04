@@ -549,6 +549,81 @@
     }, 2500);
   }
 
+  let isAutoQueuePipelineActive = false;
+  let autoQueuePollTimer = null;
+
+  function stopAutoQueuePipeline(reason = "") {
+    isAutoQueuePipelineActive = false;
+    if (autoQueuePollTimer) {
+      clearInterval(autoQueuePollTimer);
+      autoQueuePollTimer = null;
+    }
+    const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+    if (pauseBtn) pauseBtn.style.display = "none";
+    console.log("[AI Assistant] Auto-queue pipeline stopped" + (reason ? `: ${reason}` : "."));
+  }
+
+  function scheduleNextQueueAutoCrawl(submittedUrl) {
+    if (autoQueuePollTimer) {
+      clearInterval(autoQueuePollTimer);
+      autoQueuePollTimer = null;
+    }
+
+    chrome.storage.sync.get(["autoQueueEnabled"], (res) => {
+      const isEnabled = res.autoQueueEnabled !== undefined ? res.autoQueueEnabled : true;
+      if (!isEnabled) {
+        console.log("[AI Assistant] Auto-queue advance is disabled in settings.");
+        stopAutoQueuePipeline("Feature disabled in settings");
+        return;
+      }
+
+      isAutoQueuePipelineActive = true;
+      const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+      if (pauseBtn) pauseBtn.style.display = "inline-flex";
+
+      let attempts = 0;
+      const maxAttempts = 60; // 60 * 200ms = 12 seconds
+
+      console.log(`[AI Assistant] Auto-queue pipeline listening for next record after "${submittedUrl}"...`);
+      updateStatus("⏳ Advancing to next queue record...", "loading");
+
+      autoQueuePollTimer = setInterval(() => {
+        attempts++;
+        if (!isAutoQueuePipelineActive) {
+          clearInterval(autoQueuePollTimer);
+          autoQueuePollTimer = null;
+          return;
+        }
+
+        const nextUrl = getTargetUrl();
+
+        // Check if a new valid URL has been loaded into the input
+        if (nextUrl && nextUrl !== submittedUrl && nextUrl.trim().length > 3) {
+          clearInterval(autoQueuePollTimer);
+          autoQueuePollTimer = null;
+          console.log(`[AI Assistant] Next queue URL detected: ${nextUrl}. Auto-crawling in 500ms...`);
+          updateStatus(`⚡ Auto-Queue: Next site detected (${nextUrl}). Crawling...`, "loading");
+
+          setTimeout(() => {
+            if (isAutoQueuePipelineActive) {
+              triggerCrawlAndFill();
+            }
+          }, 500);
+          return;
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(autoQueuePollTimer);
+          autoQueuePollTimer = null;
+          isAutoQueuePipelineActive = false;
+          if (pauseBtn) pauseBtn.style.display = "none";
+          console.log("[AI Assistant] Queue advance polling completed (no further pending URL found).");
+          updateStatus("Ready (Queue idle)", "idle");
+        }
+      }, 200);
+    });
+  }
+
   /**
    * Pre-fills the page form fields following the exact instruction rules.
    */
@@ -557,8 +632,9 @@
    * specifically for "Not Working" status (per instruction: "for notworking autosubmit").
    * For "Working" sites, submission is NEVER automatic so the user can manually review.
    */
-  function autoSubmitNotWorking() {
-    console.log("[AI Assistant] Auto-submitting 'Not Working' record...");
+  function autoSubmitNotWorking(specificUrl) {
+    const submittedUrl = specificUrl || getTargetUrl();
+    console.log(`[AI Assistant] Auto-submitting 'Not Working' record for: ${submittedUrl}...`);
 
     // 1. Confirm any confirmation dialog/modal (e.g. "Are You Sure? You are about to mark this website as 'Not Working'.")
     const checkIntervals = [80, 200, 450, 800, 1400, 2200];
@@ -619,6 +695,12 @@
         }
       }, delay);
     });
+
+    // 3. Queue progression: Automatically detect next queue record and continue auto-crawl
+    // INSTRUCTION: "till working just crawl auto crawl auto submit"
+    setTimeout(() => {
+      scheduleNextQueueAutoCrawl(submittedUrl);
+    }, 600);
   }
 
   /**
@@ -1046,10 +1128,35 @@
               ? `⚠️ ${data.disallowedReason || "Business Type outside allowed scope (Manufacturer to Wholesaler only)"}. Status set to Not Working (auto-submitting...).`
               : `⚠️ Website Status set to Not Working (all other fields cleared; auto-submitting...).`);
         updateStatus(msg, "warning");
-      } else if (data.websiteStatus === "Redirect Site") {
-        updateStatus(`🔄 Redirect Site detected! Website Status set to Redirect Site. Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
       } else {
-        updateStatus(`✅ Success! Pre-filled ${fillReport.filledCount} fields (${data._note || "Gemini AI"}).`, "success");
+        // CRITICAL INSTRUCTION: "if working site stop to submit button"
+        // STOP auto-pipeline immediately! DO NOT auto-submit working sites.
+        stopAutoQueuePipeline("Working site found");
+
+        // Highlight Submit button and scroll into view for user's manual review
+        const submitBtn = document.getElementById("btnSubmitForm") || 
+          document.getElementById("btnSubmit") || 
+          document.getElementById("submitForm") || 
+          document.querySelector('button[type="submit"], input[type="submit"]') ||
+          Array.from(document.querySelectorAll('button, input[type="button"]')).find(b => {
+            const t = (b.textContent || b.value || "").trim().toLowerCase();
+            return t === "submit" || (t.includes("submit") && !t.includes("reset") && !t.includes("cancel"));
+          });
+
+        if (submitBtn) {
+          submitBtn.classList.remove("ai-submit-ready-highlight");
+          void submitBtn.offsetWidth; // trigger reflow
+          submitBtn.classList.add("ai-submit-ready-highlight");
+          submitBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+
+          submitBtn.addEventListener("click", () => {
+            submitBtn.classList.remove("ai-submit-ready-highlight");
+          }, { once: true });
+        }
+
+        const note = data._note || "Gemini AI";
+        const redirectTag = data.websiteStatus === "Redirect Site" ? " (Redirect Site)" : "";
+        updateStatus(`✅ Working site found! Pre-filled ${fillReport.filledCount} fields${redirectTag} (${note}). Stopped at Submit button for manual review.`, "success");
       }
     } catch (err) {
       if (crawlBtn) crawlBtn.disabled = false;
@@ -1122,6 +1229,7 @@
         </button>
 
         <div class="ai-secondary-actions">
+          <button class="ai-btn-secondary" id="ai-pause-pipeline-btn" style="display: none; color: #dc2626; border-color: #fca5a5; background-color: #fef2f2; font-weight: 600;" title="Pause Auto-Queue Pipeline">⏸️ Stop Auto-Queue</button>
           <button class="ai-btn-secondary" id="ai-fill-cached-btn" title="Re-apply prefilled values">Fill Form</button>
           <button class="ai-btn-secondary" id="ai-clear-btn" title="Clear highlighted fields">Reset Form</button>
         </div>
@@ -1167,6 +1275,14 @@
           widget.classList.remove("ai-minimized");
           if (minBtn) minBtn.textContent = "−";
         }
+      });
+    }
+
+    const pausePipelineBtn = document.getElementById("ai-pause-pipeline-btn");
+    if (pausePipelineBtn) {
+      pausePipelineBtn.addEventListener("click", () => {
+        stopAutoQueuePipeline("User paused auto-queue");
+        updateStatus("⏸️ Auto-Queue paused by user.", "idle");
       });
     }
 
