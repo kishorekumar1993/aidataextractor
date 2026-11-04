@@ -113,6 +113,31 @@
     // Continuous heartbeat every 1500ms to guarantee floating widget and buttons are always visible
     setInterval(ensureAiCrawlButtonsVisible, 1500);
 
+    // Check if a batch Not Working pipeline was active across page reloads/navigations
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(["batchNotWorking"], (res) => {
+        const batch = res?.batchNotWorking;
+        // Resume if batch was active within the last 5 minutes
+        if (batch && batch.active && (batch.remaining > 0 || batch.remaining === -1) && (Date.now() - (batch.updatedAt || 0) < 300000)) {
+          isBatchNotWorkingActive = true;
+          batchNotWorkingRemaining = batch.remaining;
+          isAutoQueuePipelineActive = false;
+          updateBatchButtonsState();
+          console.log(`[AI Assistant] Resumed Batch Not Working from storage: ${batchNotWorkingRemaining} items left.`);
+          updateStatus(`⚡ Resuming Batch Not Working (${batchNotWorkingRemaining === -1 ? "ALL" : batchNotWorkingRemaining + " left"})...`, "loading");
+
+          // Give dynamic fields a moment to settle before processing next item
+          setTimeout(() => {
+            if (isBatchNotWorkingActive) {
+              processNextBatchNotWorkingItem();
+            }
+          }, 700);
+        } else if (batch) {
+          chrome.storage.local.remove(["batchNotWorking"]);
+        }
+      });
+    }
+
     setTimeout(() => {
       const initialUrl = getTargetUrl();
       if (initialUrl) {
@@ -241,7 +266,21 @@
 
     // 1. Direct ID mappings matching https://kishorekumar1993.github.io/dataextraction/ & test replica
     elements.websiteUrl = document.getElementById("inputWebsiteName") || document.getElementById("website-name") || findWebsiteNameInput();
-    elements.websiteStatus = document.getElementById("selectWebsiteStatus") || document.getElementById("website-status");
+    elements.websiteStatus = document.getElementById("selectWebsiteStatus") || 
+      document.getElementById("website-status") ||
+      document.querySelector("select[name*='status']") ||
+      document.querySelector("select[id*='status']") ||
+      document.querySelector("select[name*='website_status']");
+
+    if (!elements.websiteStatus) {
+      const allSelects = Array.from(document.querySelectorAll("select"));
+      elements.websiteStatus = allSelects.find(s => 
+        Array.from(s.options).some(o => (o.text || o.value || "").trim().toLowerCase() === "not working")
+      ) || allSelects.find(s => {
+        const firstOpt = (s.options[0]?.text || "").toLowerCase().trim();
+        return firstOpt.includes("website status") || getElementContext(s).includes("website status");
+      }) || allSelects[0];
+    }
     elements.businessType = document.getElementById("selectBusinessType") || document.getElementById("business-type");
     elements.companyProfile = document.getElementById("selectCompanyProfile") || document.getElementById("company-profile");
     elements.companyName = document.getElementById("inputCompanyName") || document.getElementById("company-name");
@@ -604,6 +643,24 @@
   // BATCH NOT WORKING PIPELINE (Separate options requested by user)
   // =========================================================================
 
+  function triggerFromQueue() {
+    const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") ||
+      document.getElementById("btnNextQueue") ||
+      document.getElementById("loadNext") ||
+      document.getElementById("nextRecord") ||
+      Array.from(document.querySelectorAll("button, a, input[type=button]")).find(b => {
+        if (b.closest("#ai-prefill-widget")) return false;
+        const t = (b.textContent || b.value || "").trim().toLowerCase();
+        return t.includes("from queue") || t.includes("load next") || t.includes("next url") || t.includes("next record") || t === "next" || t.includes("get url");
+      });
+    if (fromQueueBtn) {
+      console.log("[AI Assistant] Triggering 'From Queue' / Next Record button:", fromQueueBtn);
+      fromQueueBtn.click();
+      return true;
+    }
+    return false;
+  }
+
   function startBatchNotWorking(count = 10) {
     if (isBatchNotWorkingActive) {
       stopBatchNotWorking("Batch stopped by user.");
@@ -613,6 +670,16 @@
     isBatchNotWorkingActive = true;
     batchNotWorkingRemaining = count;
     isAutoQueuePipelineActive = false; // separate pipeline
+
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({
+        batchNotWorking: {
+          active: true,
+          remaining: count,
+          updatedAt: Date.now()
+        }
+      });
+    }
 
     const label = count === -1 ? "ALL" : count;
     console.log(`[AI Assistant] Starting Batch Not Working for ${label} sites...`);
@@ -625,6 +692,9 @@
   function stopBatchNotWorking(msg = "") {
     isBatchNotWorkingActive = false;
     batchNotWorkingRemaining = 0;
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.remove(["batchNotWorking"]);
+    }
     updateBatchButtonsState();
     updateStatus(msg || "Batch Not Working stopped.", "idle");
   }
@@ -667,10 +737,7 @@
 
     let currentUrl = getTargetUrl();
     if (!currentUrl) {
-      // Click 'From Queue' button if empty
-      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") || 
-        Array.from(document.querySelectorAll("button, a")).find(b => (b.textContent || "").toLowerCase().includes("from queue"));
-      if (fromQueueBtn) fromQueueBtn.click();
+      triggerFromQueue();
       currentUrl = getTargetUrl();
     }
 
@@ -699,19 +766,31 @@
 
     fillFormFields(notWorkingData);
 
-    if (batchNotWorkingRemaining > 0) {
-      batchNotWorkingRemaining--;
-    }
+    const nextRemaining = batchNotWorkingRemaining > 0 ? batchNotWorkingRemaining - 1 : -1;
+    batchNotWorkingRemaining = nextRemaining;
     updateBatchButtonsState();
 
-    if (batchNotWorkingRemaining === 0) {
+    if (nextRemaining === 0) {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.remove(["batchNotWorking"]);
+      }
       setTimeout(() => {
         stopBatchNotWorking("🎉 Successfully auto-submitted 10 sites as Not Working!");
-      }, 800);
+      }, 1500);
       return;
     }
 
-    // Wait for submission, advance queue, and process next item
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({
+        batchNotWorking: {
+          active: true,
+          remaining: nextRemaining,
+          updatedAt: Date.now()
+        }
+      });
+    }
+
+    // Wait for submission, advance queue, and process next item (for SPA / AJAX portals)
     setTimeout(() => {
       if (!isBatchNotWorkingActive) return;
 
@@ -725,8 +804,7 @@
 
         let nextUrl = getTargetUrl();
         if (!nextUrl && pollAttempts % 3 === 0) {
-          const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl");
-          if (fromQueueBtn) fromQueueBtn.click();
+          triggerFromQueue();
           nextUrl = getTargetUrl();
         }
 
@@ -737,25 +815,23 @@
             if (isBatchNotWorkingActive) {
               processNextBatchNotWorkingItem();
             }
-          }, 300);
+          }, 350);
           return;
         }
 
-        if (pollAttempts >= 35) { // ~5 seconds max per item
+        if (pollAttempts >= 30) { // ~5 seconds max per item
           clearInterval(pollTimer);
           if (isBatchNotWorkingActive) {
-            // Force load next from queue
-            const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl");
-            if (fromQueueBtn) fromQueueBtn.click();
+            triggerFromQueue();
             setTimeout(() => {
               if (isBatchNotWorkingActive) {
                 processNextBatchNotWorkingItem();
               }
-            }, 300);
+            }, 350);
           }
         }
-      }, 150);
-    }, 450);
+      }, 160);
+    }, 500);
   }
 
   function markAndSubmitCurrentAsNotWorking(reason = "Manual 1-click Not Working") {
@@ -794,6 +870,11 @@
   }
 
   function scheduleNextQueueAutoCrawl(submittedUrl) {
+    if (isBatchNotWorkingActive) {
+      console.log("[AI Assistant] Batch Not Working is active; skipping normal auto-crawl scheduling.");
+      return;
+    }
+
     if (autoQueuePollTimer) {
       clearInterval(autoQueuePollTimer);
       autoQueuePollTimer = null;
@@ -860,7 +941,7 @@
         updateStatus(`⚡ Auto-Queue: Next site detected (${nextUrl}). Crawling...`, "loading");
 
         setTimeout(() => {
-          if (isAutoQueuePipelineActive && autoQueueEnabled) {
+          if (isAutoQueuePipelineActive && autoQueueEnabled && !isBatchNotWorkingActive) {
             triggerCrawlAndFill();
           }
         }, 350);
@@ -879,9 +960,6 @@
   }
 
   /**
-   * Pre-fills the page form fields following the exact instruction rules.
-   */
-  /**
    * Automatically confirms custom confirmation popups/modals and submits the form
    * specifically for "Not Working" status (per instruction: "for notworking autosubmit").
    * For "Working" sites, submission is NEVER automatic so the user can manually review.
@@ -890,81 +968,109 @@
     const submittedUrl = specificUrl || getTargetUrl();
     console.log(`[AI Assistant] Auto-submitting 'Not Working' record for: ${submittedUrl}...`);
 
-    let hasSubmitted = false;
+    // Auto-approve native confirm dialogs in MAIN world so they don't block
+    try {
+      const s = document.createElement("script");
+      s.textContent = "window.confirm = function() { return true; }; window.alert = function() { return true; };";
+      (document.head || document.documentElement).appendChild(s);
+      s.remove();
+    } catch (e) { }
 
-    // Helper to click Submit button once
-    const doSubmit = () => {
-      if (hasSubmitted) return;
-      const submitBtn = document.getElementById("btnSubmitForm") || 
+    let hasClickedSubmit = false;
+    let hasConfirmedModal = false;
+
+    // Helper to find the Submit button
+    const findSubmitButton = () => {
+      return document.getElementById("btnSubmitForm") || 
         document.getElementById("btnSubmit") || 
         document.getElementById("submitForm") || 
-        document.querySelector('button[type="submit"], input[type="submit"]') ||
-        Array.from(document.querySelectorAll('button, input[type="button"]')).find(b => {
+        document.getElementById("btn-submit") ||
+        document.getElementById("submit") ||
+        document.querySelector('button[type="submit"]') ||
+        document.querySelector('input[type="submit"]') ||
+        document.querySelector('.btn-submit') ||
+        document.querySelector('button[name="submit"]') ||
+        document.querySelector('input[name="submit"]') ||
+        Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]')).find(b => {
+          if (b.closest("#ai-prefill-widget")) return false; // ignore assistant buttons
           const t = (b.textContent || b.value || "").trim().toLowerCase();
-          return t === "submit" || (t.includes("submit") && !t.includes("reset") && !t.includes("cancel"));
+          return t === "submit" || (t.includes("submit") && !t.includes("not working") && !t.includes("reset") && !t.includes("cancel"));
         });
+    };
 
+    // Helper to find confirmation modal / dialog buttons
+    const findModalConfirmButton = () => {
+      // SweetAlert / SweetAlert2
+      const swalConfirm = document.querySelector(".swal2-confirm, .swal-button--confirm");
+      if (swalConfirm && swalConfirm.offsetParent !== null) return swalConfirm;
+
+      // Check visible modals
+      const modals = Array.from(document.querySelectorAll('.modal, .swal2-container, .swal-overlay, div[role="dialog"], .confirmation-modal, .popup, div[class*="modal"], div[class*="dialog"], div[class*="confirm"], div[class*="alert"]'));
+      for (const modal of modals) {
+        if (modal.id === "ai-prefill-widget" || modal.closest("#ai-prefill-widget")) continue;
+        const text = (modal.textContent || "").toLowerCase();
+        if (text.includes("confirmation required") || text.includes("are you sure") || text.includes("not working") || text.includes("confirm")) {
+          const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+          const okBtn = buttons.find(b => {
+            const bText = (b.textContent || b.value || "").trim().toLowerCase();
+            return bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText === "proceed" || bText.includes("ok");
+          });
+          if (okBtn) return okBtn;
+        }
+      }
+
+      // Check any button with OK / Yes matching confirmation text nearby
+      const allBtns = Array.from(document.querySelectorAll('button, input[type="button"]'));
+      const okBtn = allBtns.find(b => {
+        if (b.closest("#ai-prefill-widget")) return false;
+        const bText = (b.textContent || b.value || "").trim().toLowerCase();
+        const pText = (b.closest("div")?.parentElement?.textContent || "").toLowerCase();
+        return (bText === "ok" || bText === "✓ ok" || bText === "yes") && (pText.includes("are you sure") || pText.includes("not working") || pText.includes("confirmation required"));
+      });
+      return okBtn || null;
+    };
+
+    // Step A: Click Submit button
+    const doSubmit = () => {
+      if (hasClickedSubmit) return;
+      const submitBtn = findSubmitButton();
       if (submitBtn) {
-        hasSubmitted = true;
-        console.log("[AI Assistant] Auto-clicked Submit button for 'Not Working' status");
+        hasClickedSubmit = true;
+        console.log("[AI Assistant] Auto-clicked Submit button for 'Not Working' status:", submitBtn);
         submitBtn.click();
+        const form = submitBtn.closest("form") || document.forms[0];
+        if (form && typeof form.requestSubmit === "function" && !submitBtn.disabled) {
+          try { form.requestSubmit(submitBtn); } catch (e) { }
+        }
       }
     };
 
-    // 1. Confirm any confirmation dialog/modal (e.g. "Are You Sure? You are about to mark this website as 'Not Working'.")
-    const checkIntervals = [50, 120, 250, 500, 900];
-    checkIntervals.forEach(delay => {
-      setTimeout(() => {
-        if (hasSubmitted) return;
-        // Find visible modal or dialog elements
-        const modals = Array.from(document.querySelectorAll('.modal, .swal2-container, .swal-overlay, div[role="dialog"], .confirmation-modal, .popup, div[class*="modal"], div[class*="dialog"], div[class*="confirm"], div[class*="alert"]'));
-        for (const modal of modals) {
-          const text = (modal.textContent || "").toLowerCase();
-          if (text.includes("confirmation required") || text.includes("are you sure") || text.includes("not working") || text.includes("confirm")) {
-            const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
-            const okBtn = buttons.find(b => {
-              const bText = (b.textContent || b.value || "").trim().toLowerCase();
-              return bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText.includes("ok");
-            });
-            if (okBtn) {
-              console.log("[AI Assistant] Auto-confirmed 'Not Working' confirmation modal");
-              hasSubmitted = true;
-              okBtn.click();
-              return;
-            }
-          }
-        }
+    // Step B: Continuously poll for modal confirmation buttons for up to 2.5 seconds
+    let modalPollCount = 0;
+    const modalPollTimer = setInterval(() => {
+      modalPollCount++;
+      if (hasConfirmedModal || modalPollCount > 40) {
+        clearInterval(modalPollTimer);
+        return;
+      }
+      const okBtn = findModalConfirmButton();
+      if (okBtn) {
+        hasConfirmedModal = true;
+        clearInterval(modalPollTimer);
+        console.log("[AI Assistant] Auto-confirmed 'Not Working' confirmation modal:", okBtn);
+        okBtn.click();
+      }
+    }, 60);
 
-        // Direct button search if modal wrapper wasn't matched
-        const allBtns = Array.from(document.querySelectorAll('button, input[type="button"]'));
-        const okBtn = allBtns.find(b => {
-          const bText = (b.textContent || b.value || "").trim().toLowerCase();
-          const pText = (b.closest("div")?.parentElement?.textContent || "").toLowerCase();
-          return (bText === "ok" || bText === "✓ ok") && (pText.includes("are you sure") || pText.includes("not working") || pText.includes("confirmation required"));
-        });
-        if (okBtn) {
-          console.log("[AI Assistant] Auto-confirmed 'Not Working' OK button");
-          hasSubmitted = true;
-          okBtn.click();
-        }
-      }, delay);
-    });
+    // Initial submit attempts
+    setTimeout(doSubmit, 120);
+    setTimeout(doSubmit, 400);
+    setTimeout(doSubmit, 800);
 
-    // 2. Click the form's Submit button if modal did not already submit the record
-    const submitDelays = [200, 450, 800];
-    submitDelays.forEach(delay => {
-      setTimeout(() => {
-        if (hasSubmitted) return;
-        // If confirmation modal is still open, let modal confirmation handle it first
-        const openModal = document.querySelector('.modal.show, .swal2-container, div[role="dialog"]');
-        if (openModal && openModal.offsetParent !== null) return;
-        doSubmit();
-      }, delay);
-    });
-
-    // 3. Queue progression: Automatically detect next queue record and continue auto-crawl
-    // INSTRUCTION: "till working just crawl auto crawl auto submit"
-    scheduleNextQueueAutoCrawl(submittedUrl);
+    // Queue progression: ONLY for normal auto-crawl pipeline, NEVER during batch Not Working!
+    if (!isBatchNotWorkingActive) {
+      scheduleNextQueueAutoCrawl(submittedUrl);
+    }
   }
 
   /**
