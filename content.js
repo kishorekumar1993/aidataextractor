@@ -476,6 +476,19 @@
         }
       }
 
+      // 1b. Redirect Site alias matching (supports "Redirect Site", "Redirect", etc.)
+      if (matchedIndex === -1 && targetClean.includes("redirect")) {
+        for (let i = 0; i < element.options.length; i++) {
+          const opt = element.options[i];
+          const val = (opt.value || "").trim().toLowerCase();
+          const txt = (opt.text || "").trim().toLowerCase();
+          if (val === "redirect site" || txt === "redirect site" || val === "redirect" || txt === "redirect" || txt.includes("redirect") || val.includes("redirect")) {
+            matchedIndex = i;
+            break;
+          }
+        }
+      }
+
       // 2. Symbolic & Numeric mapping (Supports 0, 1, 2, 3 options as in https://kishorekumar1993.github.io/dataextraction/)
       if (matchedIndex === -1) {
         const isZero = targetClean === "0" || targetClean === "zero";
@@ -1170,9 +1183,14 @@
     const isProhibitedOrRestricted = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowedType || data.isDisallowedBusinessType);
 
     // CRITICAL QC RULE:
-    // When Website Status is NOT "Working" (Not Working, Non English, Flash, Domain Expired, or prohibited category detected),
+    // When Website Status is NOT "Working" and NOT "Redirect Site" (Not Working, Non English, Flash, Domain Expired, or prohibited category detected),
     // select the respective status and clear/leave empty ALL other fields!
-    const isNonWorkingStatus = data.websiteStatus && data.websiteStatus !== "Working";
+    // NOTE: "Redirect Site" is a WORKING website that redirected to a new domain (Rule 13).
+    // All 14 fields MUST be filled with the company data from the final redirected URL!
+    const isNonWorkingStatus = data.websiteStatus && 
+      data.websiteStatus !== "Working" && 
+      data.websiteStatus !== "Redirect Site" && 
+      data.websiteStatus !== "Redirect";
     if (isNonWorkingStatus || isProhibitedOrRestricted) {
       const targetStatus = isProhibitedOrRestricted ? "Not Working" : (data.websiteStatus || "Not Working");
       if (elements.websiteStatus) {
@@ -1555,7 +1573,7 @@
       } else {
         // CRITICAL INSTRUCTION: "if working site stop to submit button"
         // STOP auto-pipeline immediately! DO NOT auto-submit working sites.
-        stopAutoQueuePipeline("Working site found");
+        stopAutoQueuePipeline(data.websiteStatus === "Redirect Site" ? "Redirect Site found" : "Working site found");
 
         // Highlight Submit button and scroll into view for user's manual review
         const submitBtn = document.getElementById("btnSubmitForm") || 
@@ -1594,8 +1612,11 @@
         }
 
         const note = data._note || "Gemini AI";
-        const redirectTag = data.websiteStatus === "Redirect Site" ? " (Redirect Site)" : "";
-        updateStatus(`✅ Working site found! Pre-filled ${fillReport.filledCount} fields${redirectTag} (${note}). Stopped at Submit button for manual review.`, "success");
+        if (data.websiteStatus === "Redirect Site") {
+          updateStatus(`🔄 Redirect Site detected! Pre-filled ${fillReport.filledCount} fields from destination URL (${note}). Stopped at Submit button for manual review.`, "success");
+        } else {
+          updateStatus(`✅ Working site found! Pre-filled ${fillReport.filledCount} fields (${note}). Stopped at Submit button for manual review.`, "success");
+        }
       }
     } catch (err) {
       resetCrawlButtons();

@@ -1012,6 +1012,38 @@ async function crawlWebsite(targetUrl) {
 
     mainHtml = mainRes.html || "";
 
+    // Check for client-side HTML Meta Refresh or JS location redirects
+    if (mainHtml) {
+      const metaRefreshMatch = mainHtml.match(/<meta[^>]*http-equiv=["']?refresh["']?[^>]*content=["']?[^"'>]*url=['"]?([^'">\s;]+)/i);
+      const jsRedirectMatch = (!metaRefreshMatch && stripHtml(mainHtml).length < 400)
+        ? mainHtml.match(/(?:window\.)?location(?:\.href|\.replace)?\s*=\s*['"]([^'"]+)['"]/i)
+        : null;
+
+      const clientRedirectHref = (metaRefreshMatch && metaRefreshMatch[1]) || (jsRedirectMatch && jsRedirectMatch[1]);
+      if (clientRedirectHref && !clientRedirectHref.startsWith("#")) {
+        try {
+          const resolvedClientUrl = new URL(clientRedirectHref, finalUrl).href;
+          if (isRedirectDomain(targetUrl, resolvedClientUrl) || isRedirectDomain(finalUrl, resolvedClientUrl)) {
+            console.log(`[AI Assistant] Detected client-side HTML/JS redirect from ${finalUrl} to ${resolvedClientUrl}`);
+            const clientRes = await fetchDecodedHtml(resolvedClientUrl, {
+              timeoutMs: 15000,
+              headers: {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+              }
+            });
+            if (clientRes.ok && clientRes.html && clientRes.html.trim().length > 0) {
+              mainRes = clientRes;
+              finalUrl = clientRes.url || resolvedClientUrl;
+              redirected = true;
+              mainHtml = clientRes.html;
+              status = "Redirect Site";
+            }
+          }
+        } catch (e) { }
+      }
+    }
+
     // Extract copyright line for exact official company name verification.
     // Do not stop at commas — "Co., Ltd" is otherwise truncated to "Co."
     copyrightText = extractCopyrightCompanyName(mainHtml);
@@ -1150,6 +1182,9 @@ async function crawlWebsite(targetUrl) {
   try {
     if (isRedirectDomain(targetUrl, finalUrl)) {
       redirected = true;
+      if (status === "Working") {
+        status = "Redirect Site";
+      }
     }
   } catch (e) { }
 
@@ -3555,6 +3590,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
 
   // 3. Website Status (Rules 9, 10, 12, 14: Flash, Non English, Free Platforms, Subdomains, Domain Expired, or Offline)
+  const isRedirectSite = crawlData.status === "Redirect Site" || 
+    crawlData.redirected === true || 
+    isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl);
+
   const platformCheck = detectDisallowedWebsitePlatformOrDomain(crawlData.originalUrl || crawlData.finalUrl, crawlData.mainHtml || "", crawlData.bodyText || "");
   if (platformCheck.isDisallowed) {
     result.websiteStatus = "Not Working";
@@ -3568,12 +3607,15 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.websiteStatus = "Domain Expired";
   } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working") {
     result.websiteStatus = crawlData.status || "Not Working";
+  } else if (isRedirectSite) {
+    result.websiteStatus = "Redirect Site";
   }
 
   // CRITICAL RULE: "Notworking means all empty"
-  // Whenever websiteStatus is NOT "Working" ("Not Working", "Domain Expired", "Non English", "Flash", "Under Construction"),
+  // Whenever websiteStatus is NOT "Working" and NOT "Redirect Site"
+  // ("Not Working", "Domain Expired", "Non English", "Flash", "Under Construction"),
   // all other fields MUST be empty!
-  if (result.websiteStatus && result.websiteStatus !== "Working") {
+  if (result.websiteStatus && result.websiteStatus !== "Working" && result.websiteStatus !== "Redirect Site" && result.websiteStatus !== "Redirect") {
     result.businessType = "";
     result.companyProfile = "";
     result.companyName = "";
@@ -3618,13 +3660,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const rawBt = String(result.businessType || "").trim().toLowerCase();
   if (btAliases[rawBt]) {
     result.businessType = btAliases[rawBt];
-    if (!result.websiteStatus) result.websiteStatus = "Working";
+    if (!result.websiteStatus || result.websiteStatus === "Working") {
+      result.websiteStatus = isRedirectSite ? "Redirect Site" : "Working";
+    }
   } else {
     // Check if the business actually sells or supplies physical products (e.g. windows, doors, conservatories, materials, equipment, supplies)
     const isPhysicalSupplier = checkPhysicalProductSupplier(crawlData, result);
     if (isPhysicalSupplier) {
       result.businessType = "Supplier";
-      result.websiteStatus = "Working";
+      if (!result.websiteStatus || result.websiteStatus === "Working") {
+        result.websiteStatus = isRedirectSite ? "Redirect Site" : "Working";
+      }
       result.isDisallowedBusinessType = false;
     } else {
       // Business Type is Service Provider, Online Shopping, Restricted Site, Other, or unknown -> Mark Not Working!
@@ -4001,6 +4047,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.numberOfProducts = highestVal;
   result.productImages = highestVal;
   result.numberOfProductDescriptions = highestVal;
+
+  // Final safeguard: If website redirected to another domain and is working, ALWAYS ensure websiteStatus is "Redirect Site"
+  if (isRedirectSite && (result.websiteStatus === "Working" || !result.websiteStatus)) {
+    result.websiteStatus = "Redirect Site";
+  }
 
   return result;
 }
