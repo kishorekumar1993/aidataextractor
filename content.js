@@ -1131,8 +1131,6 @@
         }
       });
     }
-      });
-    }
 
     const crawlBtn = document.getElementById("ai-crawl-btn");
     if (crawlBtn) crawlBtn.addEventListener("click", triggerCrawlAndFill);
