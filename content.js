@@ -2061,17 +2061,24 @@
       : (data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus);
     const businessTypeVal = (isRestr || data.websiteStatus === "Not Working") ? "-" : (data.businessType || "-");
 
+    const nameLink = !isRestr ? (data.companyNameSource || data._finalUrl || "") : "";
+    const primaryEmailLink = !isRestr ? (data.primaryEmailSource || "") : "";
+    const secEmailLink = !isRestr ? (data.secondaryEmailSource || "") : "";
+
     const items = [
       { key: "Status", val: statusVal, isAlert: isRestr || data.websiteStatus === "Not Working" },
       { key: "Business Type", val: businessTypeVal },
       { key: "Company Profile", val: isRestr ? "-" : data.companyProfile },
       { key: "Company Name", val: isRestr ? "-" : cleanCompanyName(data.companyName) },
+      { key: "Name Source Link", val: nameLink, isLink: true },
       { key: "Country", val: isRestr ? "-" : toTitleCase(data.countryName) },
       { key: "Address", val: isRestr ? "-" : toTitleCase(data.companyAddress) },
       { key: "State", val: isRestr ? "-" : data.state },
       { key: "City", val: isRestr ? "-" : data.city },
       { key: "Email", val: isRestr ? "-" : data.emailId },
+      { key: "Primary Email Link", val: primaryEmailLink, isLink: true },
       { key: "Secondary Email", val: isRestr ? "-" : (data.secondaryEmailId || "(None)") },
+      { key: "Sec Email Link", val: secEmailLink, isLink: true },
       { key: "Phone", val: isRestr ? "-" : data.phoneNumber },
       { key: "No. Products", val: isRestr ? "-" : data.numberOfProducts },
       { key: "Product Images", val: isRestr ? "-" : data.productImages },
@@ -2079,12 +2086,25 @@
     ];
 
     items.forEach(item => {
+      // Don't render empty link lines
+      if (item.key === "Name Source Link" && (!data.companyName || !item.val || isRestr)) return;
+      if (item.key === "Primary Email Link" && (!data.emailId || !item.val || isRestr)) return;
+      if (item.key === "Sec Email Link" && (!data.secondaryEmailId || data.secondaryEmailId === "(None)" || !item.val || isRestr)) return;
+
       const row = document.createElement("div");
       row.className = "ai-preview-row";
       const valStyle = item.isAlert ? 'style="color: #dc2626; font-weight: 700;"' : '';
+
+      let valHtml = '';
+      if (item.isLink && item.val) {
+        valHtml = `<a href="${item.val}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline; font-size: 11px; word-break: break-all;" title="Open source link in new tab: ${item.val}">🔗 ${item.val}</a>`;
+      } else {
+        valHtml = `<span class="ai-preview-val" ${valStyle} title="${item.val || ''}">${item.val || '-'}</span>`;
+      }
+
       row.innerHTML = `
-        <span class="ai-preview-key">${item.key}:</span>
-        <span class="ai-preview-val" ${valStyle} title="${item.val || ''}">${item.val || '-'}</span>
+        <span class="ai-preview-key" style="${item.isLink ? 'font-size: 11px; color: #4b5563; font-style: italic;' : ''}">${item.key}:</span>
+        ${valHtml}
       `;
       previewList.appendChild(row);
     });
