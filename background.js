@@ -1036,23 +1036,44 @@ async function crawlWebsite(targetUrl) {
       }
     });
 
-    // If HTTP failed, returned 403, 400, 0, empty HTML, or anti-bot challenge, and targetUrl started with http://:
-    // Automatically try https://!
-    const isMainFailed = !mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status);
-    if (isMainFailed && /^http:\/\//i.test(targetUrl)) {
-      const httpsUrl = targetUrl.replace(/^http:\/\//i, "https://");
+    // If HTTP failed, returned 403, 400, 0, empty HTML, or anti-bot challenge:
+    // Automatically try protocol swap (http <-> https), www toggle, and root homepage fallback
+    let isMainFailed = !mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status);
+    if (isMainFailed) {
+      const fallbackUrls = [];
+      if (/^http:\/\//i.test(targetUrl)) {
+        fallbackUrls.push(targetUrl.replace(/^http:\/\//i, "https://"));
+      } else if (/^https:\/\//i.test(targetUrl)) {
+        fallbackUrls.push(targetUrl.replace(/^https:\/\//i, "http://"));
+      }
       try {
-        const httpsRes = await fetchDecodedHtml(httpsUrl, {
-          timeoutMs: 15000,
-          headers: {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          }
-        });
-        if (httpsRes.ok && httpsRes.html && httpsRes.html.trim().length > 0 && !isAntiBotChallenge(httpsRes.html, httpsRes.status)) {
-          mainRes = httpsRes;
+        const parsedU = new URL(targetUrl);
+        if (parsedU.pathname && parsedU.pathname !== "/" && parsedU.pathname !== "") {
+          fallbackUrls.push(parsedU.origin + "/");
+        }
+        if (!/^www\./i.test(parsedU.hostname)) {
+          fallbackUrls.push(parsedU.protocol + "//www." + parsedU.hostname + (parsedU.pathname || "/"));
+        } else {
+          fallbackUrls.push(parsedU.protocol + "//" + parsedU.hostname.replace(/^www\./i, "") + (parsedU.pathname || "/"));
         }
       } catch (e) { }
+
+      for (const altUrl of fallbackUrls) {
+        try {
+          const altRes = await fetchDecodedHtml(altUrl, {
+            timeoutMs: 15000,
+            headers: {
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+          });
+          if (altRes.ok && altRes.html && altRes.html.trim().length > 0 && !isAntiBotChallenge(altRes.html, altRes.status)) {
+            mainRes = altRes;
+            isMainFailed = false;
+            break;
+          }
+        } catch (e) { }
+      }
     }
 
     httpStatus = mainRes.status || 0;
@@ -1346,21 +1367,32 @@ async function crawlWebsite(targetUrl) {
   for (const sUrl of allowedSocialUrls) {
     if (allDiscoveredEmails.size >= 4) break;
     try {
-      const sRes = await fetchDecodedHtml(sUrl, {
-        timeoutMs: 3000,
-        headers: {
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      const sUrlsToTry = [sUrl];
+      if (/facebook\.com/i.test(sUrl)) {
+        const cleanFb = sUrl.replace(/\/$/, "");
+        if (!/about$/i.test(cleanFb)) {
+          sUrlsToTry.push(cleanFb + "/about");
         }
-      });
-      if (sRes.ok && sRes.html) {
-        const sEmails = extractEmailsFromHtml(sRes.html, hostDomain);
-        for (const se of sEmails) {
-          const seHost = (se.split("@")[1] || "").toLowerCase();
-          if (hostDomain && (seHost === hostDomain || seHost.endsWith("." + hostDomain))) {
+        sUrlsToTry.push(cleanFb.replace(/www\.facebook\.com/i, "m.facebook.com"));
+        sUrlsToTry.push(cleanFb.replace(/www\.facebook\.com/i, "m.facebook.com") + "/about");
+      }
+      for (const targetSocialUrl of sUrlsToTry) {
+        const sRes = await fetchDecodedHtml(targetSocialUrl, {
+          timeoutMs: 6000,
+          headers: {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "User-Agent": /m\.facebook\.com/i.test(targetSocialUrl)
+              ? "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1"
+              : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          }
+        });
+        if (sRes.ok && sRes.html) {
+          const sEmails = extractEmailsFromHtml(sRes.html, hostDomain);
+          for (const se of sEmails) {
             allDiscoveredEmails.add(se);
             updateEmailSource(emailSourceMap, se, sUrl, finalUrl, targetUrl);
           }
+          if (allDiscoveredEmails.size > 0) break;
         }
       }
     } catch (e) { }
@@ -1454,6 +1486,10 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     return;
   }
   if (/\b(?:privacy\s*policy|terms\s*of|all\s*rights\s*reserved|cookie\s*policy|subscribe|newsletter|login|register|search\s*products|all\s*categories)\b/i.test(cleaned)) {
+    return;
+  }
+  // Reject quote inquiries, shipping terms, and order policies (e.g. "Our team will respond within 24 hours with your custom quote... FOB terms for Ho Chi Minh City...")
+  if (/\b(?:our\s+team\s+will\s+respond|within\s+\d+\s+hours|custom\s+quote|shipping\s+quotes?|free\s+on\s+board|\bfob\b|order\s+placement|before\s+order|order\s+policies|we\s+offer\s+currently|how\s+to\s+order|minimum\s+order|lead\s+time|payment\s+terms)\b/i.test(cleaned)) {
     return;
   }
 
@@ -2145,7 +2181,16 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     }
   }
 
-  // 5. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
+  // 5. Extract emails from JSON-LD, script hydration, and social profile JSON before stripping scripts
+  const scriptJsonEmailMatches = [...html.matchAll(/"(?:email|emailAddress|e-mail|mail)"\s*:\s*["']([a-zA-Z0-9._%+-]+(?:@|\\u0040|%40)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
+  for (const sjm of scriptJsonEmailMatches) {
+    const em = sjm[1].replace(/\\u0040/gi, "@").replace(/%40/gi, "@").toLowerCase().trim();
+    if (isValidCorporateEmail(em) && !isUnwantedEmail(em)) {
+      candidateEmails.add(em);
+    }
+  }
+
+  // 6. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
   // Strip <script> and <style> tags to avoid capturing error tracking (e.g. Wix Sentry DSNs), analytics tokens, and bundle code
   const emailSearchText = html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
@@ -4428,7 +4473,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = addr.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
 
       // Remove unwanted comma between street/building number and street name
-      addr = addr.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/g, '$1$2 $3');
+      // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
+      addr = addr.replace(/(^|[,\s])(?<!\b(?:section|sec|lane|ln|alley|aly|unit|suite|ste|floor|fl|flr|level|lot|plot|block|blk)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln|alley|aly|section|sec|unit|suite|ste|floor|fl|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
 
       // Strip leading list/index numbers before company names in address (e.g. "138 U.S. Tsubaki Industrial, LLC 250 Kirby Drive...")
       addr = addr.replace(/^\d{1,4}\s+([A-Z].*?\b(?:LLC|Inc\.?|Corp\.?|Ltd\.?|Limited)\b)/i, (m, g) => g);
@@ -6182,7 +6228,8 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
 
   // Remove unwanted comma between street/building number and street name
-  a = a.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/g, "$1$2 $3");
+  // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
+  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec|lane|ln|alley|aly|unit|suite|ste|floor|fl|flr|level|lot|plot|block|blk)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln|alley|aly|section|sec|unit|suite|ste|floor|fl|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
 
   // Replace ampersand with 'and' in address
   a = a.replace(/\s*&\s*/g, " and ");
@@ -6233,6 +6280,15 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])Ln\b\s*(?=\d)/gi, '$1Lane ');
   a = a.replace(/(^|[,\s])Aly\.\s*(?=\d)/gi, '$1Alley ');
   a = a.replace(/(^|[,\s])Aly\b\s*(?=\d)/gi, '$1Alley ');
+
+  // Floor abbreviations (e.g. "7F.", "7F", "7/F" -> "7th Floor")
+  a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?(?=[,\s]|$)/gi, (m, p1, num) => {
+    const n = parseInt(num, 10);
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    const ord = s[(v - 20) % 10] || s[v] || s[0];
+    return `${p1}${n}${ord} Floor`;
+  });
 
   // 4. Administrative abbreviations
   a = a.replace(/\bTwp\b\.?/gi, "Township");
@@ -6649,8 +6705,8 @@ function repairBlindlySeparatedCommas(addr) {
 
   // 2. Repair street suffix detached from previous word: "Downing, Street" -> "Downing Street", "Pump, Lane" -> "Pump Lane"
   const streetSuffixes = "Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill";
-  a = a.replace(new RegExp(`\\b([A-Za-z0-9]+),\\s+(${streetSuffixes})\\b(?!\\s+(?:East|West|North|South))`, "gi"), (m, p1, p2) => {
-    if (new RegExp(`^(?:${streetSuffixes})$`, "i").test(p1)) return m;
+  a = a.replace(new RegExp(`\\b([A-Za-z]+),\\s+(${streetSuffixes})\\b(?!\\s+(?:East|West|North|South|\\d+))`, "gi"), (m, p1, p2) => {
+    if (new RegExp(`^(?:${streetSuffixes}|Number|No|Plot|Lot|Unit|Suite|Level|Floor|Block|Section|Sec)$`, "i").test(p1)) return m;
     return `${p1} ${p2}`;
   });
 
@@ -6664,7 +6720,8 @@ function repairBlindlySeparatedCommas(addr) {
   a = a.replace(/(\b(?:Unit|Suite|Lot|Plot|Building|Bldg|Level|Floor|Block|Flr|Ste|Apt)\s+[A-Za-z0-9\-\/]+),\s+([A-Za-z0-9]+),\s+([A-Za-z0-9]+\s+(?:Park|Estate|Zone|Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway)\b)/gi, "$1, $2 $3");
 
   // 5. Remove unwanted comma between street/building number and street name: "604, Progress Drive" -> "604 Progress Drive"
-  a = a.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
+  // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
+  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec|lane|ln|alley|aly|unit|suite|ste|floor|fl|flr|level|lot|plot|block|blk)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln|alley|aly|section|sec|unit|suite|ste|floor|fl|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
 
   // Clean double commas and spaces
   a = a.replace(/\s+,/g, ",");
@@ -6707,10 +6764,8 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(directionalSepRegex, "$1, $2");
 
   // 2b. Remove unwanted comma between street/building number and street name
-  // e.g. "Number 1013, Chung Hua Road" -> "Number 1013 Chung Hua Road"
-  // e.g. "12110, Best Place" -> "12110 Best Place"
-  // e.g. "40, Sarah Street" -> "40 Sarah Street"
-  a = a.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/g, "$1$2 $3");
+  // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
+  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec|lane|ln|alley|aly|unit|suite|ste|floor|fl|flr|level|lot|plot|block|blk)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln|alley|aly|section|sec|unit|suite|ste|floor|fl|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
 
   // 3. Ensure comma before & after Industrial / Business parks & zones
   // Only separate if preceded by a street suffix (e.g. "Main Road Industrial Park" -> "Main Road, Industrial Park")
@@ -6927,8 +6982,17 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
   if (!cleanAddr || !rawAddr) return cleanAddr;
   let c = cleanAddr.trim();
 
-  // If cleanAddr already starts with a number, premise indicator, or PO Box, no need to restore
+  // If cleanAddr already starts with a number, premise indicator, or PO Box, check if rawAddr had a leading Unit/Floor/Level
   if (/^(?:\d+|no\.?|nos\.?|nº|#|number\b|unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk|kav|kavling|p\.?o\.?\s*box)\b/i.test(c)) {
+    const leadingUnitMatch = rawAddr.match(/^\s*(\b(?:\d{1,3}(?:st|nd|rd|th)?\s+floor|\d{1,3}\s*(?:\/|\s*)?F\.?|(?:unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|block|blk)\s+[A-Za-z0-9\-\/]+)[,\s]+)(?:no\.?|nos\.?|number|#)?\s*(\d+[A-Za-z]?(?:[-\/]\d+)?)/i);
+    if (leadingUnitMatch) {
+      const unitText = leadingUnitMatch[1].trim().replace(/,$/, '');
+      const numText = leadingUnitMatch[2];
+      const cleanStartsWithNum = new RegExp(`^(?:no\\.?|nos\\.?|number|#)?\\s*${numText}\\b`, 'i');
+      if (cleanStartsWithNum.test(c) && !new RegExp(`^${unitText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(c)) {
+        return `${unitText}, ${c}`;
+      }
+    }
     return cleanAddr;
   }
 
