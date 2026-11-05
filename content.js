@@ -1723,6 +1723,14 @@
           </label>
         </div>
 
+        <div class="ai-widget-auto-row" style="margin-top: 4px;">
+          <span>📸 Auto-save Validation Screens:</span>
+          <label class="ai-widget-switch" title="Auto-save Home & Contact screenshots to local Downloads for validation">
+            <input type="checkbox" id="ai-widget-auto-screenshot-toggle" checked>
+            <span class="ai-widget-slider"></span>
+          </label>
+        </div>
+
         <!-- Separate options requested by user -->
         <div class="ai-secondary-actions" style="margin-top: 5px;">
           <button class="ai-btn-secondary ai-btn-danger-light" id="ai-batch-10-btn" title="Automatically mark 10 queue sites as Not Working and auto-submit">⚡ Auto 10 Not Working</button>
@@ -1741,7 +1749,12 @@
         </div>
 
         <div id="ai-preview-section" style="display: none;" class="ai-preview-table">
-          <div style="font-weight: 600; margin-bottom: 6px; color: #374151;">Extracted Data Preview:</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <div style="font-weight: 600; color: #374151;">Extracted Data Preview:</div>
+            <button id="ai-btn-save-screenshots" type="button" title="Capture and save Home & Contact page validation screenshots to Downloads folder" style="background: #2563eb; color: #ffffff; border: none; border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">
+              📸 Save Screenshots
+            </button>
+          </div>
           <div id="ai-preview-list"></div>
         </div>
       </div>
@@ -1823,6 +1836,21 @@
           updateStatus("Auto-Queue turned OFF", "idle");
         } else {
           updateStatus("⚡ Auto-Queue enabled: Will crawl till Working site", "idle");
+        }
+      });
+    }
+
+    const widgetScreenshotToggle = document.getElementById("ai-widget-auto-screenshot-toggle");
+    if (widgetScreenshotToggle) {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+        chrome.storage.sync.get(["autoSaveValidationScreenshots"], (res) => {
+          widgetScreenshotToggle.checked = res.autoSaveValidationScreenshots !== undefined ? res.autoSaveValidationScreenshots : true;
+        });
+      }
+      widgetScreenshotToggle.addEventListener("change", () => {
+        if (typeof chrome !== "undefined" && chrome.storage) {
+          if (chrome.storage.sync) chrome.storage.sync.set({ autoSaveValidationScreenshots: widgetScreenshotToggle.checked });
+          if (chrome.storage.local) chrome.storage.local.set({ autoSaveValidationScreenshots: widgetScreenshotToggle.checked });
         }
       });
     }
@@ -2088,6 +2116,41 @@
       `;
       previewList.appendChild(row);
     });
+
+    const saveScreenBtn = document.getElementById("ai-btn-save-screenshots");
+    if (saveScreenBtn) {
+      saveScreenBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const currentUrl = getTargetUrl() || lastProcessedUrl;
+        if (!currentUrl) {
+          updateStatus("⚠️ No website URL to capture screenshots", "warning");
+          return;
+        }
+        saveScreenBtn.disabled = true;
+        saveScreenBtn.innerHTML = "⏳ Saving...";
+        updateStatus("📸 Capturing Home & Contact page validation screenshots...", "loading");
+
+        sendRuntimeMessage({
+          action: "CAPTURE_VALIDATION_SCREENSHOTS",
+          url: currentUrl,
+          finalUrl: data._finalUrl || currentUrl,
+          contactUrl: data._contactUrl || "",
+          aboutUrl: data._aboutUrl || "",
+          data: data
+        }).then((res) => {
+          saveScreenBtn.disabled = false;
+          if (res && res.success) {
+            saveScreenBtn.innerHTML = "✅ Saved!";
+            updateStatus(`✅ Screenshots & summary saved to Downloads/${res.folder}`, "success");
+          } else {
+            saveScreenBtn.innerHTML = "📸 Save Screenshots";
+            updateStatus(`⚠️ Screenshot capture: ${res?.error || "Check Downloads folder"}`, "warning");
+          }
+          setTimeout(() => { saveScreenBtn.innerHTML = "📸 Save Screenshots"; }, 3500);
+        });
+      };
+    }
   }
 
   // Listen for actions from popup or background (e.g. user clicked "AI Crawl" in popup)
