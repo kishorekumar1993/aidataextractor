@@ -1777,7 +1777,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 3. <address> tag
-  const addrTagRegex = /([\s\S]{0,350})<address[^>]*>([\s\S]*?)<\/address>/gi;
+  const addrTagRegex = /([\s\S]{0,600})<address[^>]*>([\s\S]*?)<\/address>/gi;
   let am;
   while ((am = addrTagRegex.exec(processedHtml)) !== null) {
     const ctx = getContext(am[1], defaultSource);
@@ -1788,7 +1788,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 4. Class or id containing "address" or "addr" (including li, td, dd, article, section)
-  const classAddrRegex = /([\s\S]{0,350})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
+  const classAddrRegex = /([\s\S]{0,600})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
   let cm;
   while ((cm = classAddrRegex.exec(processedHtml)) !== null) {
     const contextStr = cm[1] + " " + cm[2];
@@ -1812,7 +1812,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / Dirección: / 地址:
-  const labelAddrRegex = /([\s\S]{0,350})(?:^|[^a-zA-Z0-9])(?:address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]\s*(?:\s*<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  const labelAddrRegex = /([\s\S]{0,600})(?:^|[^a-zA-Z0-9])(?:address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]\s*(?:\s*<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let lm;
   while ((lm = labelAddrRegex.exec(processedHtml)) !== null) {
     const ctx = getContext(lm[1], defaultSource);
@@ -1834,7 +1834,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 6. Map-marker icon followed by address text (e.g. <span class="fa fa-map-marker"></span> No. 492, ...)
-  const markerRegex = /([\s\S]{0,350})(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location|e-fas-map-marker-alt)[^>]*>[\s\S]{0,800}?(?:<\/(?:span|i|div|svg)>\s*){1,4}(?:<(?:span|p|div|li)[^>]*>)*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  const markerRegex = /([\s\S]{0,600})(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location|e-fas-map-marker-alt)[^>]*>[\s\S]{0,800}?(?:<\/(?:span|i|div|svg)>\s*){1,4}(?:<(?:span|p|div|li)[^>]*>)*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let mm;
   while ((mm = markerRegex.exec(processedHtml)) !== null) {
     const ctx = getContext(mm[1], defaultSource);
@@ -1850,7 +1850,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 7. Paragraphs, list items, or table cells containing physical address patterns
-  const pAddrRegex = /([\s\S]{0,350})<(?:p|li|td)[^>]*>([\s\S]*?)<\/(?:p|li|td)>/gi;
+  const pAddrRegex = /([\s\S]{0,600})<(?:p|li|td)[^>]*>([\s\S]*?)<\/(?:p|li|td)>/gi;
   let pm;
   while ((pm = pAddrRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(pm[2]);
@@ -2012,17 +2012,38 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
     return { address: topRaw, selectedCandidate: topCandidate };
   }
 
-  // CRITICAL HQ PROTECTION: If top candidate is Headquarters and Gemini returned a branch / subsidiary address from another location:
-  if (topCandidate && (topCandidate.isHeadquarters || topCandidate.priority <= 2)) {
-    const geminiCandidate = candidates.find(c => {
-      const r = getRaw(c).toLowerCase();
-      const g = geminiAddr.toLowerCase();
-      return r.includes(g.slice(0, 20)) || g.includes(r.slice(0, 20));
-    });
-    if (geminiCandidate && (geminiCandidate.priority >= 8 || geminiCandidate.locationType === "branch" || geminiCandidate.locationType === "distributor")) {
-      // Gemini picked an overseas subsidiary / branch instead of Headquarters! Override Gemini with topCandidate
-      return { address: topRaw, selectedCandidate: topCandidate };
+  // CRITICAL HQ MANDATE: "all the addres should take headquaters only if headquater available means else main address."
+  const hqCandidate = sorted.find(c => c && (c.isHeadquarters === true || c.locationType === "headquarters" || c.priority <= 1.5));
+  if (hqCandidate) {
+    const hqRaw = getRaw(hqCandidate);
+    const hqComp = extractAddressComponents(hqRaw);
+    const geminiComp = extractAddressComponents(geminiAddr);
+
+    let geminiMatchesHq = true;
+
+    // Check street numbers
+    if (hqComp.numbers.length > 0) {
+      const hasMatchingNum = hqComp.numbers.some(num => {
+        const baseNum = num.split(/[-/]/)[0];
+        return geminiComp.numbers.includes(num) || geminiComp.numbers.includes(baseNum) || new RegExp(`\\b${baseNum}\\b`).test(geminiAddr);
+      });
+      if (!hasMatchingNum) geminiMatchesHq = false;
     }
+
+    // Check localities
+    if (hqComp.localities.length > 0 && geminiComp.localities.length > 0) {
+      const conflicting = geminiComp.localities.filter(gLoc => !hqRaw.toLowerCase().includes(gLoc));
+      const matching = geminiComp.localities.filter(gLoc => hqRaw.toLowerCase().includes(gLoc));
+      if (conflicting.length > 0 && matching.length === 0) {
+        geminiMatchesHq = false;
+      }
+    }
+
+    // If Gemini chose another branch / location or didn't provide address, enforce Headquarters!
+    if (!geminiMatchesHq || !geminiAddr || geminiAddr.length < 5) {
+      return { address: hqRaw, selectedCandidate: hqCandidate };
+    }
+    return { address: geminiAddr, selectedCandidate: hqCandidate };
   }
 
   // Parse structural components of top candidate and Gemini address
@@ -2550,8 +2571,8 @@ function checkCompanyProfilePresence(html, text, profilePageText = "") {
   }
 
   // About Us / Company Profile heading or nav plus body content of a real business
-  const hasAboutHeading = /<(?:h[1-6]|title|a|li|span|div)[^>]*>[^<]{0,80}(?:company\s*profile|corporate\s*profile|about\s*us|about\s+the\s+company|who\s*we\s*are|our\s+company|our\s+story|our\s+history)[^<]{0,40}<\/(?:h[1-6]|title|a|li|span|div)>/i.test(rawHtml);
-  const hasAboutLink = /href=["'][^"']*(?:about[-_]?us|aboutus|company[-_]?profile|corporate[-_]?profile|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story)[^"']*["']/i.test(rawHtml);
+  const hasAboutHeading = /<(?:h[1-6]|title|a|li|span|div)[^>]*>[^<]{0,80}(?:company\s*profile|corporate\s*profile|about\s*us|about\s+the\s+company|who\s*we\s*are|our\s+company|our\s+story|our\s+history|overview|company\s+overview|corporate\s+overview|关于我们|公司简介|企业概况|关于公司|公司概况|走进我们|集团概况|企业简介|sobre\s+nosotros|qui[eé]nes\s+somos|perfil\s+de\s+empresa|nuestra\s+empresa|[uü]ber\s+uns|unternehmensprofil|chi\s+siamo|profilo\s+aziendale|[aà]\s+propos|会社概要|企業情報)[^<]{0,40}<\/(?:h[1-6]|title|a|li|span|div)>/i.test(rawHtml);
+  const hasAboutLink = /href=["'][^"']*(?:about[-_]?us|aboutus|about|company[-_]?profile|corporate[-_]?profile|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|overview)[^"']*["']/i.test(rawHtml) || /href=["'][^"']*(?:关于我们|公司简介|sobre[-_]?nosotros|uber[-_]?uns)[^"']*["']/i.test(rawHtml);
   if ((hasAboutHeading || hasAboutLink) && (profile.length >= 40 || body.length >= 250)) {
     return true;
   }
@@ -4376,24 +4397,23 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
   }
 
-  // 5. Company Profile: if a real business About / Profile page exists, mark Available
+  // 5. Company Profile: if a real business About / Profile page or business details exist, mark Available
   const profileDetected = crawlData.hasCompanyProfile ||
     checkCompanyProfilePresence(crawlData.mainHtml, crawlData.bodyText, crawlData.profilePageText);
   const hasBusinessEvidence = !!(
     (result.companyName && result.companyName.trim().length > 2) ||
-    (crawlData.copyrightText && crawlData.copyrightText.trim().length > 2)
+    (crawlData.copyrightText && crawlData.copyrightText.trim().length > 2) ||
+    ((crawlData.bodyText || "").trim().length >= 80)
   );
   const hasAboutSignal = !!(crawlData.profilePageText && crawlData.profilePageText.trim().length >= 80);
   if (profileDetected || (hasBusinessEvidence && hasAboutSignal)) {
     result.companyProfile = "Available";
-  } else if (/^available$/i.test(String(result.companyProfile || "")) && hasBusinessEvidence &&
-    ((crawlData.bodyText || "").length > 300) &&
-    /\b(about\s+us|company\s+profile|our\s+company|who\s+we\s+are|founded|established|manufacturer|factory)\b/i.test(
-      (crawlData.profilePageText || "") + " " + (crawlData.bodyText || "") + " " + (crawlData.footerText || "")
-    )) {
+  } else if (/^available$/i.test(String(result.companyProfile || "")) && hasBusinessEvidence) {
     result.companyProfile = "Available";
-  } else if (profileDetected === false && !hasAboutSignal) {
+  } else if (profileDetected === false && !hasAboutSignal && (!result.companyName || result.companyName.trim().length <= 2)) {
     result.companyProfile = "Not Available";
+  } else if (!result.companyProfile) {
+    result.companyProfile = hasBusinessEvidence ? "Available" : "Not Available";
   }
 
   // 4. Country Name: Full official country name, Title Case
@@ -4569,7 +4589,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
       // Remove unwanted comma between street/building number and street name
       // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
-      addr = addr.replace(/(^|[,\s])(?<!\b(?:section|sec|lane|ln|alley|aly|unit|suite|ste|floor|fl|flr|level|lot|plot|block|blk)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln|alley|aly|section|sec|unit|suite|ste|floor|fl|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
+      addr = addr.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
 
       // Strip leading list/index numbers before company names in address only if followed by a separate street address number (e.g. "138 U.S. Tsubaki Industrial, LLC 250 Kirby Drive...")
       addr = addr.replace(/^\d{1,4}\s+([A-Z].*?\b(?:LLC|Inc\.?|Corp\.?|Ltd\.?|Limited)\b)(?=\s+\d+\s+[A-Z])/i, (m, g) => g);
@@ -4585,6 +4605,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = toTitleCase(addr);
       addr = repairBlindlySeparatedCommas(addr);
 
+      // Strip trailing contact / communication fields or loose periods attached to address
+      addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
+      addr = addr.replace(/(?:\s*\.\s*)+$/g, "").trim();
       // Address ending MUST NOT have trailing comma or point/period
       addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
     }
@@ -5826,12 +5849,27 @@ function evaluateCityQC(address, country) {
     return "Available";
   }
 
-  // 4. Australian City evaluation: Only genuine official Australian cities (suburbs excluded)
+  // 4. Australian City evaluation: Official cities or recognized town / suburb / locality per Rule 8
   if (isAustralianLocation(cleanAddr, country)) {
-    if (hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES)) {
+    if (hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES) || hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
       return "Available";
     }
-    // Suburbs in Australia (e.g. Minto, Campbellfield, Seven Hills) MUST NOT be classified as cities!
+    const structCity = detectCityFromStructure(cleanAddr, country);
+    if (structCity && !isNotCitySegment(structCity)) {
+      return "Available";
+    }
+    // Check if the locality preceding the state is an Australian suburb/town (Rule 8: Town, District, Municipality = City)
+    const parts = cleanAddr.split(",").map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      for (let i = parts.length - 1; i >= 1; i--) {
+        if (hasStateInAddress(parts[i], "Australia")) {
+          const cand = parts[i - 1].replace(/\b\d{4}\b/g, "").trim();
+          if (cand && !/\b(?:street|road|avenue|lane|drive|way|close|court|place|terrace|crescent|boulevard|highway|parade|walk|row|unit|suite|building|floor)\b/i.test(cand)) {
+            return "Available";
+          }
+        }
+      }
+    }
     return "Not Available";
   }
 
@@ -6426,7 +6464,8 @@ function romanizeChineseAddress(addr) {
     [/漕宝路/g, "Caobao Road, "],
     [/宜山路/g, "Yishan Road, "],
     [/新埔六街/g, "Xinpu 6th Street, "],
-    [/惠泽大道/g, "Huize Avenue, "],
+    [/惠泽大道/g, "Huize Road, "],
+    [/惠泽路/g, "Huize Road, "],
     [/惠泽/g, "Huize "],
 
     // General terms
@@ -6435,7 +6474,7 @@ function romanizeChineseAddress(addr) {
     [/街/g, " Street, "],
     [/巷/g, " Lane, "],
     [/弄/g, " Alley, "],
-    [/(\d+)\s*[号號]/g, "Number $1, "],
+    [/(\d+)\s*[号號]/g, "$1, "],
     [/([A-Za-z0-9]+)\s*[幢栋棟]/g, "Building $1, "],
     [/([A-Za-z0-9]+)\s*[层樓楼]/g, "Floor $1, "],
     [/([A-Za-z0-9]+)\s*[室房]/g, "Room $1, "],
@@ -6483,7 +6522,7 @@ function romanizeChineseAddress(addr) {
 function stripBlindlyAddedNumber(addr, rawEvidence = "") {
   if (!addr || !/\bNumber\s+\d+/i.test(addr)) return addr;
   return addr.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    const rawRegex = new RegExp('(?:\\b(?:no|nos|nº|numero|num|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號]', 'i');
+    const rawRegex = new RegExp('(?:\\b(?:no|nos|nº|numero|num|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b', 'i');
     if (rawEvidence && rawRegex.test(rawEvidence)) {
       return match;
     }
@@ -6511,7 +6550,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
 
   // Remove unwanted comma between street/building number and street name
   // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
-  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec|lane|ln|alley|aly|unit|suite|ste|floor|fl|flr|level|lot|plot|block|blk)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln|alley|aly|section|sec|unit|suite|ste|floor|fl|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
+  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
 
   // Replace ampersand with 'and' in address
   a = a.replace(/\s*&\s*/g, " and ");
@@ -7004,7 +7043,7 @@ function repairBlindlySeparatedCommas(addr) {
 
   // 5. Remove unwanted comma between street/building number and street name: "604, Progress Drive" -> "604 Progress Drive"
   // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
-  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec|lane|ln|alley|aly|unit|suite|ste|floor|fl|flr|level|lot|plot|block|blk)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln|alley|aly|section|sec|unit|suite|ste|floor|fl|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
+  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
 
   // Clean double commas and spaces
   a = a.replace(/\s+,/g, ",");
@@ -7048,7 +7087,21 @@ function ensureCommaBeforeState(addr) {
 
   // 2b. Remove unwanted comma between street/building number and street name
   // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
-  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec|lane|ln|alley|aly|unit|suite|ste|floor|fl|flr|level|lot|plot|block|blk)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln|alley|aly|section|sec|unit|suite|ste|floor|fl|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
+  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
+
+  // 2c. Ensure clean comma separation across Taiwanese, East Asian, and multi-component premises:
+  // Floor -> Premise Number
+  a = a.replace(/\b(\d+(?:st|nd|rd|th)?\s+Floor|Floor\s+\d+)\s*(?!,)\s+(?=(?:Number|No\.?|#)?\s*\d)/gi, "$1, ");
+  // Premise Number -> Lane / Alley / Section
+  a = a.replace(/\b((?:Number|No\.?|#)\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?|\b\d+[A-Za-z]?)\s*(?!,)\s+(?=(?:Lane|Ln\.?|Alley|Aly\.?|Section|Sec\.?)\b)/gi, "$1, ");
+  // Lane -> Alley / Section / Road
+  a = a.replace(/\b(Lane|Ln\.?)\s+(\d+[A-Za-z]?)\s*(?!,)\s+(?=(?:Alley|Aly\.?|Section|Sec\.?|[A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)*\s+(?:Road|Street|Avenue))\b)/gi, "$1 $2, ");
+  // Alley -> Section / Road
+  a = a.replace(/\b(Alley|Aly\.?)\s+(\d+[A-Za-z]?)\s*(?!,)\s+(?=(?:Section|Sec\.?|[A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)*\s+(?:Road|Street|Avenue))\b)/gi, "$1 $2, ");
+  // Section -> Road / Street
+  a = a.replace(/\b(Section|Sec\.?)\s+(\d+[A-Za-z]?)\s*(?!,)\s+(?=[A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)*\s+(?:Road|Street|Avenue)\b)/gi, "$1 $2, ");
+  // Road / Street -> District / Township
+  a = a.replace(/\b((?:Road|Street|Avenue|Lane|Alley))\s*(?!,)\s+(?=[A-Z][a-z0-9\-]+(?:\s+[A-Z][a-z0-9\-]+)*\s+(?:District|Township|County|Hsien)\b)/gi, "$1, ");
 
   // 3. Ensure comma before & after Industrial / Business parks & zones
   // Only separate if preceded by a street suffix (e.g. "Main Road Industrial Park" -> "Main Road, Industrial Park")
@@ -7251,6 +7304,40 @@ function restoreStateIfOmitted(cleanAddr, rawAddr, country = "") {
       };
       if (codeToProv[prefix]) {
         return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${codeToProv[prefix]}`;
+      }
+    }
+  }
+
+  // China check - ONLY if country is China or raw address has Chinese characters
+  if (!country || cLower.includes("china") || /[\u4e00-\u9fa5]/.test(rawAddr) || /[\u4e00-\u9fa5]/.test(cleanAddr)) {
+    const chinaProvinces = [
+      ["guangdong", "Guangdong", ["huizhou", "shenzhen", "guangzhou", "dongguan", "foshan", "zhongshan", "zhuhai", "jiangmen", "shantou", "zhanjiang", "zhaoqing", "qingyuan", "chaozhou", "jieyang", "heyuan", "shanwei", "meizhou", "shaoguan", "maoming", "yangjiang", "yunfu", "惠州", "深圳", "广州", "东莞", "佛山", "中山", "珠海", "广东"]],
+      ["jiangsu", "Jiangsu", ["suzhou", "wuxi", "changzhou", "nanjing", "nantong", "yangzhou", "zhenjiang", "taizhou", "xuzhou", "yancheng", "huai'an", "huaian", "lianyungang", "suqian", "kunshan", "昆山", "苏州", "无锡", "常州", "南京", "江苏"]],
+      ["zhejiang", "Zhejiang", ["hangzhou", "ningbo", "wenzhou", "jiaxing", "huzhou", "shaoxing", "jinhua", "quzhou", "zhoushan", "taizhou", "lishui", "yiwu", "义乌", "杭州", "宁波", "温州", "嘉兴", "湖州", "绍兴", "金华", "浙江"]],
+      ["shandong", "Shandong", ["qingdao", "jinan", "yantai", "weifang", "zibo", "jining", "linyi", "dezhou", "liaocheng", "binzhou", "heze", "zaozhuang", "dongying", "weihai", "taian", "tai'an", "rizhao", "青岛", "济南", "烟台", "潍坊", "山东"]],
+      ["sichuan", "Sichuan", ["chengdu", "mianyang", "deyang", "yibin", "nanchong", "luzhou", "leshan", "zigong", "panzhihua", "成都", "绵阳", "四川"]],
+      ["hubei", "Hubei", ["wuhan", "xiangyang", "yichang", "jingzhou", "huangshi", "shiyan", "武汉", "襄阳", "宜昌", "湖北"]],
+      ["hunan", "Hunan", ["changsha", "zhuzhou", "xiangtan", "hengyang", "yueyang", "changde", "yiyang", "chenzhou", "长沙", "湖南"]],
+      ["henan", "Henan", ["zhengzhou", "luoyang", "xinxiang", "nanyang", "kaifeng", "anyang", "jiaozuo", "xuchang", "pingdingshan", "郑州", "洛阳", "河南"]],
+      ["hebei", "Hebei", ["shijiazhuang", "tangshan", "baoding", "langfang", "cangzhou", "handan", "xingtai", "qinhuangdao", "zhangjiakou", "hengshui", "石家庄", "唐山", "保定", "河北"]],
+      ["fujian", "Fujian", ["xiamen", "fuzhou", "quanzhou", "zhangzhou", "putian", "ningde", "nanping", "longyan", "sanming", "厦门", "福州", "泉州", "福建"]],
+      ["anhui", "Anhui", ["hefei", "wuhu", "bengbu", "huainan", "maanshan", "huaibei", "tongling", "anqing", "huangshan", "chuzhou", "fuyang", "suzhou", "lu'an", "bozhou", "chizhou", "xuancheng", "合肥", "芜湖", "安徽"]],
+      ["shaangxi", "Shaanxi", ["xi'an", "xian", "xianyang", "baoji", "weinan", "yan'an", "hanzhong", "yulin", "ankang", "shangluo", "西安", "咸阳", "宝鸡", "陕西"]],
+      ["liaoning", "Liaoning", ["shenyang", "dalian", "anshan", "fushun", "benxi", "dandong", "jinzhou", "yingkou", "fuxin", "liaoyang", "panjin", "tieling", "chaoyang", "huludao", "沈阳", "大连", "辽宁"]],
+      ["jiangxi", "Jiangxi", ["nanchang", "ganzhou", "jiujiang", "yichun", "shangrao", "jian", "ji'an", "fuzhou", "xinyu", "pingxiang", "jingdezhen", "yingtan", "南昌", "赣州", "九江", "江西"]]
+    ];
+    for (const [pCode, pFull, pCities] of chinaProvinces) {
+      const regClean = new RegExp(`\\b${pFull}\\b`, "i");
+      if (regClean.test(cleanAddr)) continue; // already has province
+      const hasProvInRaw = new RegExp(`\\b${pFull}\\b`, "i").test(rawAddr) || rawAddr.includes(pCities[pCities.length - 1]);
+      const hasCityInAddr = pCities.some(city => {
+        if (/[\u4e00-\u9fa5]/.test(city)) {
+          return rawAddr.includes(city);
+        }
+        return new RegExp(`\\b${city}\\b`, "i").test(cleanAddr) || new RegExp(`\\b${city}\\b`, "i").test(rawAddr);
+      });
+      if (hasProvInRaw || hasCityInAddr) {
+        return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${pFull}`;
       }
     }
   }
