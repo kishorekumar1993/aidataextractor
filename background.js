@@ -1026,10 +1026,11 @@ async function crawlWebsite(targetUrl) {
   const emailSourceMap = {};
   const allDiscoveredPhones = new Set();
   let contactLinks = [];
+  let companySocials = {};
 
   try {
     let mainRes = await fetchDecodedHtml(targetUrl, {
-      timeoutMs: 15000,
+      timeoutMs: 8000,
       headers: {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1058,10 +1059,10 @@ async function crawlWebsite(targetUrl) {
         }
       } catch (e) { }
 
-      for (const altUrl of fallbackUrls) {
+      for (const altUrl of fallbackUrls.slice(0, 2)) {
         try {
           const altRes = await fetchDecodedHtml(altUrl, {
-            timeoutMs: 15000,
+            timeoutMs: 4000,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1112,7 +1113,7 @@ async function crawlWebsite(targetUrl) {
           if (isRedirectDomain(targetUrl, resolvedClientUrl) || isRedirectDomain(finalUrl, resolvedClientUrl)) {
             console.log(`[AI Assistant] Detected client-side HTML/JS redirect from ${finalUrl} to ${resolvedClientUrl}`);
             const clientRes = await fetchDecodedHtml(resolvedClientUrl, {
-              timeoutMs: 15000,
+              timeoutMs: 5000,
               headers: {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1136,12 +1137,12 @@ async function crawlWebsite(targetUrl) {
 
     // Support HTML <frameset> / <frame src="..."> / <iframe src="..."> (e.g. polyprise.com.tw)
     const frameMatches = [...mainHtml.matchAll(/<(?:frame|iframe)[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
-    for (const fSrc of frameMatches) {
+    for (const fSrc of frameMatches.slice(0, 2)) {
       try {
-        if (/^(javascript:|about:|mailto:|tel:)/i.test(fSrc)) continue;
+        if (/^(javascript:|about:|mailto:|tel:|https?:\/\/(?:www\.)?(?:google|youtube|vimeo|facebook|twitter|doubleclick))/i.test(fSrc)) continue;
         const frameUrl = new URL(fSrc, finalUrl).href;
         const fRes = await fetchDecodedHtml(frameUrl, {
-          timeoutMs: 6000,
+          timeoutMs: 3000,
           headers: { "User-Agent": "Mozilla/5.0" }
         });
         if (fRes.ok && fRes.html) {
@@ -1181,20 +1182,40 @@ async function crawlWebsite(targetUrl) {
     const shouldSkipSubpages = earlyRestricted.isRestricted;
 
     if (!shouldSkipSubpages) {
-      for (const cUrl of contactLinks.slice(0, 15)) {
-        if (fetchedUrls.has(cUrl)) continue;
-        fetchedUrls.add(cUrl);
-
+      // Pick top 3-4 distinct target subpages (1 primary contact, 1 primary about/profile, 1-2 branch/location)
+      const topLinks = [];
+      const seenPaths = new Set();
+      for (const link of contactLinks) {
+        if (fetchedUrls.has(link)) continue;
         try {
-          const cRes = await fetchDecodedHtml(cUrl, {
-            timeoutMs: 6000,
+          const uPath = new URL(link).pathname.toLowerCase().replace(/\/$/, "");
+          if (seenPaths.has(uPath)) continue;
+          seenPaths.add(uPath);
+          topLinks.push(link);
+          fetchedUrls.add(link);
+          if (topLinks.length >= 4) break;
+        } catch (e) { }
+      }
+
+      if (topLinks.length > 0) {
+        // High-speed concurrent parallel fetching of candidate subpages
+        const subpageResults = await Promise.allSettled(
+          topLinks.map(cUrl => fetchDecodedHtml(cUrl, {
+            timeoutMs: 3500,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
-          });
+          }))
+        );
 
-          if (cRes.ok && cRes.html) {
+        for (let i = 0; i < topLinks.length; i++) {
+          const cUrl = topLinks[i];
+          const settled = subpageResults[i];
+          if (settled.status !== "fulfilled") continue;
+          const cRes = settled.value;
+
+          if (cRes && cRes.ok && cRes.html) {
             const cText = cRes.html;
             contactHtml += "\n" + cText;
             const isDistributorPage = /(?:dealers?|distributors?|stockists?|resellers?|partners?)/i.test(cUrl);
@@ -1239,25 +1260,8 @@ async function crawlWebsite(targetUrl) {
               copyrightText = pageCopyright;
               copyrightSourceUrl = cUrl;
             }
-
-            // Check CMS dynamic form endpoints
-            if (cText.includes("main-contact.asp") || cText.includes("loadFB")) {
-              const formMatch = cText.match(/loadFB\(["']([^"']+)["']/i) || cText.match(/src=["']([^"']*main-contact\.asp[^"']*)["']/i);
-              if (formMatch) {
-                const fbUrl = new URL(formMatch[1], cUrl).href;
-                const fbRes = await fetchDecodedHtml(fbUrl, { timeoutMs: 5000 });
-                if (fbRes.ok && fbRes.html) {
-                  extractEmbeddedScriptAddresses(fbRes.html, addressCandidates);
-                  extractHtmlAddresses(fbRes.html, addressCandidates, "contact");
-                  for (const em of extractEmailsFromHtml(fbRes.html, finalUrl)) {
-                    allDiscoveredEmails.add(em);
-                    updateEmailSource(emailSourceMap, em, fbUrl, finalUrl, targetUrl);
-                  }
-                }
-              }
-            }
           }
-        } catch (e) { }
+        }
       }
     }
 
@@ -1270,41 +1274,38 @@ async function crawlWebsite(targetUrl) {
       profilePageText += "\n" + homeProfileMatch[0];
     }
 
-    // Check official Facebook & LinkedIn pages for secondary email & registered company legal name ONLY
-    // Addresses MUST be taken strictly from website only - NEVER from Facebook or LinkedIn
     const allCrawlText = mainHtml + "\n" + contactHtml;
-    const socialLinks = extractOfficialSocialLinks(allCrawlText);
-    if (socialLinks.facebook && !fetchedUrls.has(socialLinks.facebook)) {
-      fetchedUrls.add(socialLinks.facebook);
-      try {
-        const fbRes = await fetchDecodedHtml(socialLinks.facebook, { timeoutMs: 5000 });
-        if (fbRes.ok && fbRes.html) {
-          for (const em of extractEmailsFromHtml(fbRes.html, finalUrl)) {
-            allDiscoveredEmails.add(em);
-            updateEmailSource(emailSourceMap, em, socialLinks.facebook, finalUrl, targetUrl);
+    companySocials = extractOfficialSocialLinks(allCrawlText);
+
+    // High-speed smart social check: ONLY if secondary email is still missing (< 2 emails discovered)
+    // Rule: Details & Addresses MUST be taken strictly from website only! Social is ONLY for secondary email if missing.
+    if (allDiscoveredEmails.size < 2) {
+      const socialUrl = companySocials.facebook || companySocials.linkedin;
+      if (socialUrl && !fetchedUrls.has(socialUrl)) {
+        fetchedUrls.add(socialUrl);
+        try {
+          let sUrl = socialUrl;
+          if (/facebook\.com/i.test(socialUrl)) {
+            const cleanFb = socialUrl.replace(/\/$/, "");
+            sUrl = cleanFb.includes("/about")
+              ? cleanFb.replace(/www\.facebook\.com/i, "m.facebook.com")
+              : cleanFb.replace(/www\.facebook\.com/i, "m.facebook.com") + "/about";
           }
-          for (const cand of extractLegalCandidatesFromHtml(fbRes.html)) {
-            allLegalCandidates.add(cand);
-            if (!legalCandidateSources[cand]) legalCandidateSources[cand] = socialLinks.facebook;
+          const sRes = await fetchDecodedHtml(sUrl, {
+            timeoutMs: 3000,
+            headers: {
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1"
+            }
+          });
+          if (sRes && sRes.ok && sRes.html) {
+            for (const em of extractEmailsFromHtml(sRes.html, finalUrl)) {
+              allDiscoveredEmails.add(em);
+              updateEmailSource(emailSourceMap, em, socialUrl, finalUrl, targetUrl);
+            }
           }
-        }
-      } catch (e) { }
-    }
-    if (socialLinks.linkedin && !fetchedUrls.has(socialLinks.linkedin)) {
-      fetchedUrls.add(socialLinks.linkedin);
-      try {
-        const liRes = await fetchDecodedHtml(socialLinks.linkedin, { timeoutMs: 5000 });
-        if (liRes.ok && liRes.html) {
-          for (const em of extractEmailsFromHtml(liRes.html, finalUrl)) {
-            allDiscoveredEmails.add(em);
-            updateEmailSource(emailSourceMap, em, socialLinks.linkedin, finalUrl, targetUrl);
-          }
-          for (const cand of extractLegalCandidatesFromHtml(liRes.html)) {
-            allLegalCandidates.add(cand);
-            if (!legalCandidateSources[cand]) legalCandidateSources[cand] = socialLinks.linkedin;
-          }
-        }
-      } catch (e) { }
+        } catch (e) { }
+      }
     }
   } catch (err) {
     fetchError = err.message || "Failed to fetch website";
@@ -1359,43 +1360,6 @@ async function crawlWebsite(targetUrl) {
   try {
     hostDomain = new URL(finalUrl).hostname.replace(/^www\./i, "").toLowerCase();
   } catch (e) { }
-
-  // Check official company social pages (Facebook & LinkedIn only) for secondary emails per QC instructions
-  const companySocials = extractCompanySocialLinks(mainHtml + " " + contactHtml);
-  const allowedSocialUrls = [companySocials.facebook, companySocials.linkedin].filter(Boolean);
-  for (const sUrl of allowedSocialUrls) {
-    if (allDiscoveredEmails.size >= 4) break;
-    try {
-      const sUrlsToTry = [sUrl];
-      if (/facebook\.com/i.test(sUrl)) {
-        const cleanFb = sUrl.replace(/\/$/, "");
-        if (!/about$/i.test(cleanFb)) {
-          sUrlsToTry.push(cleanFb + "/about");
-        }
-        sUrlsToTry.push(cleanFb.replace(/www\.facebook\.com/i, "m.facebook.com"));
-        sUrlsToTry.push(cleanFb.replace(/www\.facebook\.com/i, "m.facebook.com") + "/about");
-      }
-      for (const targetSocialUrl of sUrlsToTry) {
-        const sRes = await fetchDecodedHtml(targetSocialUrl, {
-          timeoutMs: 6000,
-          headers: {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "User-Agent": /m\.facebook\.com/i.test(targetSocialUrl)
-              ? "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1"
-              : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          }
-        });
-        if (sRes.ok && sRes.html) {
-          const sEmails = extractEmailsFromHtml(sRes.html, hostDomain);
-          for (const se of sEmails) {
-            allDiscoveredEmails.add(se);
-            updateEmailSource(emailSourceMap, se, sUrl, finalUrl, targetUrl);
-          }
-          if (allDiscoveredEmails.size > 0) break;
-        }
-      }
-    } catch (e) { }
-  }
 
   extracted.emails = rankEmails(Array.from(allDiscoveredEmails), hostDomain, emailSourceMap);
   extracted.phones = Array.from(allDiscoveredPhones);

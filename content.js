@@ -1541,8 +1541,8 @@
       quickBtn.innerHTML = "⏳ Crawling...";
     }
 
-    // Safety timeout: ensure buttons are NEVER permanently disabled
-    const safetyTimer = setTimeout(resetCrawlButtons, 12000);
+    // Safety timeout: ensure buttons are NEVER permanently disabled (25s)
+    const safetyTimer = setTimeout(resetCrawlButtons, 25000);
 
     try {
       const response = await sendRuntimeMessage({ action: "CRAWL_AND_EXTRACT", url: targetUrl });
