@@ -2018,7 +2018,7 @@ function isUnwantedEmail(email) {
   if (/^(?:noreply|no-reply|donotreply|do-not-reply|postmaster|hostmaster|abuse|mailer-daemon|bounce|unsubscribe|notification|notifications|alert|alerts|security|dpo|gdpr|privacy|compliance|legal|copyright|dmca|terms|feedback|careers|job|jobs|hiring|recruiting|investor|investors|press|media|sentry|git|npm)@/i.test(em)) return true;
 
   // Placeholder / dummy emails
-  if (/^(?:user|email|name|test|sample|placeholder|yourname|youremail|username|example|domain|contact|admin)@(?:example|domain|test|sample|email|placeholder|yoursite)\./i.test(em)) return true;
+  if (/^(?:user|email|name|test|sample|placeholder|yourname|youremail|username|example|domain|contact|admin|info)@(?:example|domain|test|sample|email|placeholder|yoursite|mysite|mycompany|yourcompany|company|website|sitename)\./i.test(em)) return true;
 
   // Hex hashes / DSN keys / tokens (e.g. Sentry tracking DSN 605a7baede844d278b89dc95ae0a9123@...)
   if (/^[a-f0-9]{16,64}$/i.test(user)) return true;
@@ -2037,7 +2037,8 @@ function isUnwantedEmail(email) {
     "cdnjs.com", "cloudflare.net", "fontawesome.com", "doubleclick.net", "hotjar.com", "hubspot.com",
     "intercom.com", "zendesk.com", "zohocdn.com", "gravatar.com", "godaddy.com", "bluehost.com",
     "hostgator.com", "namecheap.com", "cpanel.net", "cpanel.com", "webhostbox.com", "secureserver.net",
-    "example.com", "example.org", "example.net", "domain.com", "test.com", "sample.com"
+    "example.com", "example.org", "example.net", "domain.com", "test.com", "sample.com",
+    "mysite.com", "yoursite.com", "sitename.com", "website.com", "mycompany.com", "yourcompany.com", "company.com"
   ];
   if (disallowedHosts.some(dh => host === dh || host.endsWith("." + dh))) return true;
 
@@ -3252,10 +3253,16 @@ ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
      * NEVER drop or strip the leading building / street / premise number or identifier (e.g. "12110 Best Place" -> MUST KEEP "12110", "40 Sarah Street" -> MUST KEEP "40", "18 Kuang Fu North Road" -> MUST KEEP "18"). A standalone number at the beginning of an address followed by a street name is the STREET NUMBER, NOT a postal code! You MUST retain the initial building/street number!
      * NEVER drop or strip "Lot" or "Plot" identifiers (e.g. "Lot 45, Jalan Kemajuan" -> MUST KEEP "Lot 45", "Plot 12, Phase II" -> MUST KEEP "Plot 12"). "Lot" and "Plot" are primary premise addresses in industrial zones and estates globally!
      * NEVER drop or strip Unit, Suite, Building, Floor, or Block details (e.g. "Unit 4", "Suite 200", "Building 5", "Level 3", "Block B").
-   - COMMA SEPARATION QC RULE: Ensure a comma separates EVERY major address component:
-     * Premise / Unit / Suite / Lot / Plot from Street Name (e.g. "Lot 45, Jalan Kemajuan", "Unit 4, 12 Main Street", "Suite 200, 12110 Best Place", "Building 5, 200 Broadway").
-     * Street Name from Suburb / Town / City / Industrial Park (e.g. "12110 Best Place, Cincinnati", "40 Sarah Street, Campbellfield", "46 Market Hill, Maldon", "Subang Industrial Park, Subang Jaya").
-     * Suburb / Town / City from State / Province / Territory (e.g. "Cincinnati, Ohio", "Campbellfield, Victoria", "Subang Jaya, Selangor", "Xiushui Township, Changhua County").
+   - COMMA SEPARATION QC RULE (STRICT - NEVER INSERT COMMAS BLINDLY BETWEEN WORDS):
+     * Ensure commas separate MAJOR structural address components ONLY:
+       1. Premise / Unit / Suite / Lot / Plot from Street or Estate/Park name (e.g. "Unit 2, Argent Trade Park, Pump Lane", "Suite 200, 12110 Best Place", "Lot 45, Jalan Kemajuan").
+       2. Street Name from Suburb / Town / City (e.g. "Pump Lane, Hayes", "12110 Best Place, Cincinnati", "40 Sarah Street, Campbellfield").
+       3. Suburb / Town / City from State / County / Province / Territory (e.g. "Hayes, Middlesex", "Cincinnati, Ohio", "Campbellfield, Victoria", "Subang Jaya, Selangor").
+     * CRITICAL NEGATIVE RULE (DO NOT PUT COMMAS BLINDLY):
+       - NEVER insert commas BETWEEN words of a multi-word Industrial / Business / Trade Park, Trading Estate, or Zone name! (e.g. "Argent Trade Park" is ONE park name, NEVER "Argent, Trade, Park" or "Argent, Trade Park"! "Westwood Business Park", "Cambridge Science Park", "Prologis Park").
+       - NEVER insert commas BETWEEN words of a multi-word Street Name or Highway! (e.g. "Pump Lane" NEVER "Pump, Lane", "Great Western Highway" NEVER "Great, Western, Highway", "Old Country Road" NEVER "Old, Country, Road").
+       - NEVER insert commas BETWEEN building/street numbers and street names! (e.g. "604 Progress Drive" NEVER "604, Progress Drive", "12110 Best Place" NEVER "12110, Best Place").
+       - NEVER insert commas BETWEEN words of a multi-word City or County! (e.g. "West Sussex" NEVER "West, Sussex", "Kuala Lumpur" NEVER "Kuala, Lumpur", "New York" NEVER "New, York").
    - ADDRESS ENDING CRITICAL QC RULE: Address ending MUST NOT have a comma (,) or point/period (.). It should be empty of trailing punctuation (e.g. "40 Sarah Street, Campbellfield, Victoria", NEVER end with "." or ",").
    - REMOVE ONLY:
      * Postal codes / ZIP codes that follow the city/state (e.g. "OH 45241" -> strip 45241, "VIC 3061" -> strip 3061). DO NOT strip the initial street number!
@@ -4414,6 +4421,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = addr.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
       addr = addr.replace(/\s+/g, " ");
       addr = toTitleCase(addr);
+      addr = repairBlindlySeparatedCommas(addr);
 
       // Address ending MUST NOT have trailing comma or point/period
       addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
@@ -4717,7 +4725,7 @@ const STATE_AND_PROVINCE_NAMES = [
   "greater london", "greater manchester", "west midlands", "west yorkshire", "south yorkshire",
   "tyne and wear", "merseyside", "berkshire", "buckinghamshire", "cambridgeshire", "cheshire",
   "cornwall", "cumbria", "derbyshire", "devon", "dorset", "durham", "essex", "gloucestershire",
-  "hampshire", "hertfordshire", "kent", "lancashire", "leicestershire", "lincolnshire",
+  "hampshire", "hertfordshire", "kent", "lancashire", "leicestershire", "lincolnshire", "middlesex",
   "norfolk", "northamptonshire", "northumberland", "nottinghamshire", "oxfordshire",
   "shropshire", "somerset", "staffordshire", "suffolk", "surrey", "sussex", "east sussex",
   "west sussex", "warwickshire", "wiltshire", "worcestershire", "yorkshire", "bedfordshire",
@@ -6591,6 +6599,57 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
 }
 
 /**
+ * Repairs blindly separated commas in addresses:
+ * 1. Multi-word park names (e.g. "Argent, Trade, Park" or "Argent, Trade Park" -> "Argent Trade Park")
+ * 2. Detached street suffixes (e.g. "Downing, Street" -> "Downing Street", "Pump, Lane" -> "Pump Lane")
+ * 3. Directional prefixes (e.g. "North, Main Street" -> "North Main Street", "Great, Western Highway" -> "Great Western Highway")
+ * 4. Multi-word cities, states, counties (e.g. "West, Sussex" -> "West Sussex", "Kuala, Lumpur" -> "Kuala Lumpur")
+ * 5. Accidental comma between building number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
+ */
+function repairBlindlySeparatedCommas(addr) {
+  if (!addr) return "";
+  let a = addr;
+
+  // 1. Multi-word Industrial / Trade / Business / Science / Technology / Retail / Enterprise Parks & Estates
+  const parkTypes = "Park|Estate|Zone|District|Centre|Center|Area";
+  const parkQualifiers = "Trade|Trading|Industrial|Business|Technology|Tech|Science|Commercial|Retail|Enterprise|Logistics";
+
+  // "Argent, Trade, Park" -> "Argent Trade Park"
+  a = a.replace(new RegExp(`\\b([A-Za-z0-9]+),\\s*(${parkQualifiers}),\\s*(${parkTypes})\\b`, "gi"), "$1 $2 $3");
+  // "Argent, Trade Park" -> "Argent Trade Park"
+  a = a.replace(new RegExp(`\\b([A-Za-z0-9]+),\\s*(${parkQualifiers})\\s+(${parkTypes})\\b`, "gi"), "$1 $2 $3");
+  // "Trade, Park" -> "Trade Park"
+  a = a.replace(new RegExp(`\\b(${parkQualifiers}),\\s*(${parkTypes})\\b`, "gi"), "$1 $2");
+
+  // 2. Repair street suffix detached from previous word: "Downing, Street" -> "Downing Street", "Pump, Lane" -> "Pump Lane"
+  const streetSuffixes = "Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill";
+  a = a.replace(new RegExp(`\\b([A-Za-z0-9]+),\\s+(${streetSuffixes})\\b(?!\\s+(?:East|West|North|South))`, "gi"), (m, p1, p2) => {
+    if (new RegExp(`^(?:${streetSuffixes})$`, "i").test(p1)) return m;
+    return `${p1} ${p2}`;
+  });
+
+  // Directional street prefixes: "North, Main Street" -> "North Main Street", "Great, Western Highway" -> "Great Western Highway"
+  a = a.replace(new RegExp(`\\b(Great|Grand|Old|New|North|South|East|West|Upper|Lower|Central|Little|High|Long|Royal),\\s+([A-Za-z0-9]+(?:\\s+(?:${streetSuffixes}))\\b)`, "gi"), "$1 $2");
+
+  // 3. Multi-word cities, states, counties: "West, Sussex" -> "West Sussex", "Kuala, Lumpur" -> "Kuala Lumpur"
+  a = a.replace(/\b(West|East|North|South|New|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La|Kuala|Hong|Batu|Johor|Petaling|Subang|Shah|George|Cape|Port|Fort|Mount|St\.?|Saint),\s+([A-Za-z0-9]+)/gi, "$1 $2");
+
+  // 4. Premise comma fix: "Unit 2, Argent, Trade Park" -> "Unit 2, Argent Trade Park"
+  a = a.replace(/(\b(?:Unit|Suite|Lot|Plot|Building|Bldg|Level|Floor|Block|Flr|Ste|Apt)\s+[A-Za-z0-9\-\/]+),\s+([A-Za-z0-9]+),\s+([A-Za-z0-9]+\s+(?:Park|Estate|Zone|Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway)\b)/gi, "$1, $2 $3");
+
+  // 5. Remove unwanted comma between street/building number and street name: "604, Progress Drive" -> "604 Progress Drive"
+  a = a.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
+
+  // Clean double commas and spaces
+  a = a.replace(/\s+,/g, ",");
+  a = a.replace(/,\s*,+/g, ", ");
+  a = a.replace(/,\s*/g, ", ");
+  a = a.replace(/\s+/g, " ").trim();
+
+  return a;
+}
+
+/**
  * Ensures clean comma separation across all major address components:
  * 1. Premise indicators (Lot, Plot, Unit, Suite, Bldg, Level, Floor)
  * 2. Street types before suburb / city
@@ -6602,9 +6661,11 @@ function ensureCommaBeforeState(addr) {
   let a = addr;
 
   // 1. Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
-  const premiseRegex = /(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+((?:pt\s*)?[A-Za-z0-9\-\/]+(?:\s*(?:&|and|,)\s*(?:pt\s*)?[A-Za-z0-9\-\/]+)*)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi;
-  a = a.replace(premiseRegex, (match, p1, type, val) => {
-    return `${p1}${type} ${val}, `;
+  // Only if NOT ALREADY followed by a comma!
+  const premiseRegex = /(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+(\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?|[A-Za-z](?:\d+)?)(?:\s*(?:&|and)\s*(\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?|[A-Za-z]))?\s*(?!,)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi;
+  a = a.replace(premiseRegex, (match, p1, type, val1, val2) => {
+    const fullVal = val2 ? `${val1} and ${val2}` : val1;
+    return `${p1}${type} ${fullVal}, `;
   });
 
   // 2. Ensure comma after street types when followed by locality/city/town/state
@@ -6626,9 +6687,10 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(/(^|[,\s])\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/g, "$1$2 $3");
 
   // 3. Ensure comma before & after Industrial / Business parks & zones
-  a = a.replace(/(?<=[A-Za-z0-9\)])\s+(?<!,\s*)\b((?:Industrial|Technology|Business|Science|Tech)\s+(?:Park|Estate|Area|Zone|District)|Kawasan\s+(?:Perindustrian|Industri|Berikat)|Taman\s+Perindustrian|Poligono\s+Industrial|Zona\s+Industriale|Gewerbegebiet)\b/gi, ", $1");
-  const indParkRegex = /\b((?:industrial|technology|business|science|tech)\s+(?:park|estate|area|zone|district)|kawasan\s+(?:perindustrian|industri|berikat)(?:\s+[A-Za-z0-9]+)?|taman\s+perindustrian(?:\s+[A-Za-z0-9]+)?|poligono\s+industrial(?:\s+[A-Za-z0-9]+)?|zona\s+industriale(?:\s+[A-Za-z0-9]+)?|gewerbegebiet(?:\s+[A-Za-z0-9]+)?)\s+(?=[A-Z][a-z])/gi;
-  a = a.replace(indParkRegex, "$1, ");
+  // Only separate if preceded by a street suffix (e.g. "Main Road Industrial Park" -> "Main Road, Industrial Park")
+  // NEVER separate the proper name of the park itself (e.g. "Argent Trade Park", "Cambridge Science Park", "Westwood Business Park")
+  a = a.replace(new RegExp(`(\\b${streetSuffixes})\\s+(?<!,\\s*)\\b((?:Industrial|Technology|Business|Science|Tech|Trade|Trading|Commercial|Retail|Enterprise|Logistics)\\s+(?:Park|Estate|Area|Zone|District)|Kawasan\\s+(?:Perindustrian|Industri|Berikat)|Taman\\s+Perindustrian|Poligono\\s+Industrial|Zona\\s+Industriale|Gewerbegebiet)\\b`, "gi"), "$1, $2");
+  a = a.replace(/\b((?:Industrial|Technology|Business|Science|Tech|Trade|Trading|Commercial|Retail|Enterprise|Logistics)\s+(?:Park|Estate|Area|Zone|District)|Kawasan\s+(?:Perindustrian|Industri|Berikat)|Taman\s+Perindustrian|Poligono\s+Industrial|Zona\s+Industriale|Gewerbegebiet)\s+(?!(?:Road|Street|Avenue|Lane|Drive|Way|Place|Court|Highway)\b)(?=[A-Z][a-z0-9])/gi, "$1, ");
 
   // 4. Malaysian / Singapore recognized city hubs
   a = a.replace(/(?<!,\s*)\b(Subang Jaya|Petaling Jaya|Shah Alam|Klang|Kuala Lumpur|Puchong|Cheras|George Town|Johor Bahru|Ipoh|Kota Kinabalu|Kuching|Seremban|Batu Pahat|Pasir Gudang|Iskandar Puteri)\b/gi, ", $1");
@@ -6715,6 +6777,9 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
   a = a.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
   a = a.replace(/\s+/g, " ");
+
+  // Final pass: repair any blindly split commas
+  a = repairBlindlySeparatedCommas(a);
 
   return a;
 }
