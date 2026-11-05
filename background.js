@@ -1197,10 +1197,11 @@ async function crawlWebsite(targetUrl) {
           if (cRes.ok && cRes.html) {
             const cText = cRes.html;
             contactHtml += "\n" + cText;
-            const isProfilePage = /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
-            const isContactPage = /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)/i.test(cUrl);
+            const isDistributorPage = /(?:dealers?|distributors?|stockists?|resellers?|partners?)/i.test(cUrl);
+            const isProfilePage = !isDistributorPage && /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
+            const isContactPage = !isDistributorPage && /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)/i.test(cUrl);
             const isLowQualitySubpage = /(?:terms|privacy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)/i.test(cUrl);
-            const pageSource = isProfilePage ? "profile" : (isContactPage ? "contact" : "other");
+            const pageSource = isDistributorPage ? "distributor" : (isProfilePage ? "profile" : (isContactPage ? "contact" : "other"));
 
             if (isProfilePage && !primaryAboutUrl) primaryAboutUrl = cUrl;
             if (isContactPage && !primaryContactUrl) primaryContactUrl = cUrl;
@@ -1208,7 +1209,7 @@ async function crawlWebsite(targetUrl) {
             extractEmbeddedScriptAddresses(cText, addressCandidates);
             extractMapAddresses(cText, addressCandidates);
             extractMetaAddresses(cText, addressCandidates);
-            extractHtmlAddresses(cText, addressCandidates, pageSource);
+            extractHtmlAddresses(cText, addressCandidates, pageSource, cUrl);
 
             if (isProfilePage || /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(stripHtml(cText).slice(0, 5000))) {
               profilePageText += "\n" + stripHtml(cText);
@@ -1475,7 +1476,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   const cleaned = decoded
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
-    .replace(/^(?:address|add|addr|location|headquarters|head\s*office|registered\s*office|corporate\s*office|廠址|地址)\s*[:：\-–]?\s*/i, "")
+    .replace(/^(?:address|add|addr|location|headquarters|head\s*office|registered\s*office|corporate\s*office|廠址|地址|view|learn\s*more|read\s*more|see\s*more|click\s*here|find\s*out\s*more|get\s*directions|directions)\s*[:：\-–]?\s*/i, "")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -1512,9 +1513,10 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   const isEnglish = latinLetters >= 4 && latinLetters >= nonLatinLetters;
 
   // Location Context & Priority hierarchy:
-  // Headquarters (Tier 1) > Contact (Tier 2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Branch/Factory (Tier 8)
+  // Headquarters (Tier 1) > Contact (Tier 2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Branch/Factory (Tier 8) > Distributor/Dealer (Tier 9)
   const hasHqKeyword = /\b(?:headquarters|head\s*office|registered\s*office|corporate\s*office|main\s*office|principal\s*office|hq|總公司|總部|本公司|總廠|本廠)\b/i.test(rawText) || isHq || source === "headquarters";
   const hasBranchKeyword = /\b(?:branch(?:\s*office)?|factory|plant|warehouse|distribution\s*center|showroom|depot|facility|subsidiary|unit\s*\d+|分公司|工廠|廠房|分處|辦事處|營業所|經銷商)\b/i.test(rawText) || locationType === "branch" || source === "branch";
+  const hasDistributorKeyword = /\b(?:distributors?|dealers?|stockists?|resellers?|partners?)\b/i.test(pageUrl) || source === "distributor" || locationType === "distributor";
 
   let basePriority = 7;
   let locType = locationType || "general";
@@ -1544,6 +1546,13 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   if (hasBranchKeyword && !hasHqKeyword) {
     basePriority = 8;
     locType = "branch";
+    isHq = false;
+  }
+
+  // Deprioritize third-party reseller / distributor addresses if not marked as Headquarters
+  if (hasDistributorKeyword && !hasHqKeyword) {
+    basePriority = 9;
+    locType = "distributor";
     isHq = false;
   }
 
@@ -1645,7 +1654,8 @@ function discoverContactLinks(html, baseUrl) {
     if (/\b(sales|inquiry|enquiry|inquiries|enquiries|quote|request-quote|request-a-quote|order|orders)\b/i.test(rawLower)) score += 8;
     if (/\b(shop|store|online-store|cart|basket)\b/i.test(rawLower)) score += 8;
     if (/\b(team|our-team|staff|management|people|leadership)\b/i.test(rawLower)) score += 6;
-    if (/\b(locations|branches|branch|offices|stores|dealers|distributors)\b/i.test(rawLower)) score += 6;
+    if (/\b(locations|branches|branch|offices|stores)\b/i.test(rawLower)) score += 6;
+    if (/\b(dealers|distributors|stockists|resellers|partners)\b/i.test(rawLower) || /\b(dealers|distributors|stockists|resellers|partners)\b/i.test(innerText)) score -= 10;
     if (/\b(feedback|complaints|careers|jobs|directory)\b/i.test(rawLower)) score += 5;
     if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us)\b/i.test(innerText)) score += 12;
     if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile)\b/i.test(innerText)) score += 10;
@@ -1711,7 +1721,7 @@ function extractMetaAddresses(html, targetList) {
   }
 }
 
-function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
+function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageUrl = "") {
   if (!html) return;
 
   // Helper to determine context from surrounding text / headers
@@ -1731,7 +1741,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   while ((hqm = hqRegex.exec(html)) !== null) {
     const raw = stripHtml(hqm[1]);
     if (raw.length > 8) {
-      addAddressCandidate(targetList, raw, "headquarters", true, "headquarters");
+      addAddressCandidate(targetList, raw, "headquarters", true, "headquarters", pageUrl);
     }
   }
 
@@ -1747,11 +1757,11 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     const raw = stripHtml(hm[2]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
-      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType);
+      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
     const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
     for (const line of lines) {
-      addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType);
+      addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
   }
 
@@ -1762,7 +1772,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     const ctx = getContext(am[1], defaultSource);
     const raw = stripHtml(am[2]);
     if (raw.length > 10) {
-      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
+      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
   }
 
@@ -1775,7 +1785,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     const raw = stripHtml(cm[3]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
-      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType);
+      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
   }
 
@@ -1787,23 +1797,33 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     const raw = stripHtml(lm[2]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
-      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType);
+      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
+    }
+  }
+
+  // 5b. Elementor Icon List items containing map marker icons or addresses
+  const elementorListRegex = /<(?:li|div)[^>]+class=["'][^"']*elementor-icon-list-item[^"']*["'][\s\S]*?(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|e-fas-map-marker-alt|location)[\s\S]*?class=["'][^"']*elementor-icon-list-text[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|div|p)>/gi;
+  let elm;
+  while ((elm = elementorListRegex.exec(html)) !== null) {
+    const raw = stripHtml(elm[1]).trim();
+    if (raw.length > 8) {
+      addAddressCandidate(targetList, raw, defaultSource, false, "contact", pageUrl);
     }
   }
 
   // 6. Map-marker icon followed by address text (e.g. <span class="fa fa-map-marker"></span> No. 492, ...)
-  const markerRegex = /([\s\S]{0,100})(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location)[^>]*>[\s\S]{0,100}?(?:<\/(?:span|i|div)>\s*){1,3}([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  const markerRegex = /([\s\S]{0,100})(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location|e-fas-map-marker-alt)[^>]*>[\s\S]{0,800}?(?:<\/(?:span|i|div|svg)>\s*){1,4}(?:<(?:span|p|div|li)[^>]*>)*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let mm;
   while ((mm = markerRegex.exec(html)) !== null) {
     const ctx = getContext(mm[1], defaultSource);
     const raw = stripHtml(mm[2]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
-      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType);
+      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
     const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
     for (const line of lines) {
-      addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType);
+      addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
   }
 
@@ -1815,9 +1835,11 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     if (raw.length >= 15 && raw.length <= 250 &&
       (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
         /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja)\b/i.test(raw)) &&
-      /\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|gpo\s*box)\b/i.test(raw)) {
+      (/\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|gpo\s*box)\b/i.test(raw) ||
+       /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(raw) ||
+       /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
       const ctx = getContext(pm[1], defaultSource);
-      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
+      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
   }
 }
@@ -4415,14 +4437,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
 
       // CRITICAL GLOBAL FIX: Restore missing initial street / building / premise number if dropped
-      const candidateRawSources = [
-        rawSource,
-        ...(crawlData.addressCandidates || []).map(c => (typeof c === "object" ? c.raw : c))
-      ].filter(Boolean);
-      for (const src of candidateRawSources) {
-        const beforeNum = addr;
-        addr = restoreStreetNumberIfOmitted(addr, src);
-        if (addr !== beforeNum) break;
+      // Restore missing number ONLY from the selected candidate's raw text (NEVER mix multiple addresses)
+      if (rawSource) {
+        addr = restoreStreetNumberIfOmitted(addr, rawSource);
       }
 
       if (country && country.length > 2) {
@@ -6714,7 +6731,8 @@ function repairBlindlySeparatedCommas(addr) {
   a = a.replace(new RegExp(`\\b(Great|Grand|Old|New|North|South|East|West|Upper|Lower|Central|Little|High|Long|Royal),\\s+([A-Za-z0-9]+(?:\\s+(?:${streetSuffixes}))\\b)`, "gi"), "$1 $2");
 
   // 3. Multi-word cities, states, counties: "West, Sussex" -> "West Sussex", "Kuala, Lumpur" -> "Kuala Lumpur"
-  a = a.replace(/\b(West|East|North|South|New|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La|Kuala|Hong|Batu|Johor|Petaling|Subang|Shah|George|Cape|Port|Fort|Mount|St\.?|Saint),\s+([A-Za-z0-9]+)/gi, "$1 $2");
+  // Do NOT merge if the directional word is preceded by a park/estate/facility suffix (e.g. "Industrial Estate South, Durham" must NOT become "Estate South Durham")
+  a = a.replace(/(?<!\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard|Estate|Park|Zone|Area|District|Sector|Ward|Block|Building|Phase)\s+)\b(West|East|North|South|New|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La|Kuala|Hong|Batu|Johor|Petaling|Subang|Shah|George|Cape|Port|Fort|Mount|St\.?|Saint),\s+([A-Za-z0-9]+)/gi, "$1 $2");
 
   // 4. Premise comma fix: "Unit 2, Argent, Trade Park" -> "Unit 2, Argent Trade Park"
   a = a.replace(/(\b(?:Unit|Suite|Lot|Plot|Building|Bldg|Level|Floor|Block|Flr|Ste|Apt)\s+[A-Za-z0-9\-\/]+),\s+([A-Za-z0-9]+),\s+([A-Za-z0-9]+\s+(?:Park|Estate|Zone|Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway)\b)/gi, "$1, $2 $3");
@@ -6771,7 +6789,7 @@ function ensureCommaBeforeState(addr) {
   // Only separate if preceded by a street suffix (e.g. "Main Road Industrial Park" -> "Main Road, Industrial Park")
   // NEVER separate the proper name of the park itself (e.g. "Argent Trade Park", "Cambridge Science Park", "Westwood Business Park")
   a = a.replace(new RegExp(`(\\b${streetSuffixes})\\s+(?<!,\\s*)\\b((?:Industrial|Technology|Business|Science|Tech|Trade|Trading|Commercial|Retail|Enterprise|Logistics)\\s+(?:Park|Estate|Area|Zone|District)|Kawasan\\s+(?:Perindustrian|Industri|Berikat)|Taman\\s+Perindustrian|Poligono\\s+Industrial|Zona\\s+Industriale|Gewerbegebiet)\\b`, "gi"), "$1, $2");
-  a = a.replace(/\b((?:Industrial|Technology|Business|Science|Tech|Trade|Trading|Commercial|Retail|Enterprise|Logistics)\s+(?:Park|Estate|Area|Zone|District)|Kawasan\s+(?:Perindustrian|Industri|Berikat)|Taman\s+Perindustrian|Poligono\s+Industrial|Zona\s+Industriale|Gewerbegebiet)\s+(?!(?:Road|Street|Avenue|Lane|Drive|Way|Place|Court|Highway)\b)(?=[A-Z][a-z0-9])/gi, "$1, ");
+  a = a.replace(/\b((?:Industrial|Technology|Business|Science|Tech|Trade|Trading|Commercial|Retail|Enterprise|Logistics)\s+(?:Park|Estate|Area|Zone|District)(?:\s+(?:North|South|East|West|Central|Upper|Lower))?|Kawasan\s+(?:Perindustrian|Industri|Berikat)|Taman\s+Perindustrian|Poligono\s+Industrial|Zona\s+Industriale|Gewerbegebiet)\s+(?!(?:Road|Street|Avenue|Lane|Drive|Way|Place|Court|Highway|North|South|East|West|Central|Upper|Lower)\b)(?=[A-Z][a-z0-9])/gi, "$1, ");
 
   // 4. Malaysian / Singapore recognized city hubs
   a = a.replace(/(?<!,\s*)\b(Subang Jaya|Petaling Jaya|Shah Alam|Klang|Kuala Lumpur|Puchong|Cheras|George Town|Johor Bahru|Ipoh|Kota Kinabalu|Kuching|Seremban|Batu Pahat|Pasir Gudang|Iskandar Puteri)\b/gi, ", $1");
@@ -6807,7 +6825,8 @@ function ensureCommaBeforeState(addr) {
 
   // Repair accidental commas splitting multi-word prefixes: "New, York" -> "New York", "New, Zealand" -> "New Zealand"
   // Do NOT merge if the directional word is a street suffix (e.g. "Main Street East, City", "County Road West, City")
-  a = a.replace(/(?<!\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard)\s+)\b(New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La)[,\s]+([A-Z][a-z]+)/g, "$1 $2");
+  // or a facility / industrial estate suffix (e.g. "Industrial Estate South, Durham")
+  a = a.replace(/(?<!\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard|Estate|Park|Zone|Area|District|Sector|Ward|Block|Building|Phase)\s+)\b(New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La)[,\s]+([A-Z][a-z]+)/g, "$1 $2");
 
   // 6. Comprehensive global states, provinces, regions, and counties
   const states = [
@@ -7359,6 +7378,17 @@ function detectCountryFromAddress(address) {
   if (/\b(jawa\s*barat|jawa\s*tengah|jawa\s*timur|west\s*java|central\s*java|east\s*java|banten|sumatera\s*utara|sumatera\s*barat|sumatera\s*selatan|north\s*sumatra|west\s*sumatra|south\s*sumatra|kalimantan\s*(?:timur|barat|selatan|tengah|utara)?|sulawesi\s*(?:selatan|utara|tengah|tenggara|barat)?|kepulauan\s*riau|bangka\s*belitung|nusa\s*tenggara\s*(?:barat|timur)?|dki\s*jakarta|di\s*yogyakarta|surabaya|bandung|medan|semarang|makassar|palembang|tangerang|tangerang\s*selatan|bekasi|depok|bogor|batam|pekanbaru|bandar\s*lampung|balikpapan|denpasar|samarinda|cikarang|karawang|sidoarjo|gresik|serang|cilegon|solo|surakarta|malang|pontianak|manado|banjarmasin|cimahi|sukabumi|cirebon|tasikmalaya|purwakarta)\b/i.test(lower)) return "Indonesia";
   // New Zealand regions & major cities
   if (/\b(canterbury|waikato|bay\s*of\s*plenty|otago|hawke's\s*bay|hawkes\s*bay|taranaki|manawatu|southland|northland|marlborough|tasman|west\s*coast|auckland|christchurch|hamilton|tauranga|dunedin|lower\s*hutt|upper\s*hutt|palmerston\s*north|invercargill|rotorua|whangarei|napier|porirua|new\s*plymouth|queenstown|blenheim|timaru|taupo|pukekohe|cambridge|whakatane|hastings|gisborne|nelson|whanganui|feilding|levin|masterton|ashburton|rangiora|rolleston|wanaka)\b/i.test(lower)) return "New Zealand";
+
+  // UK postcodes & major UK counties / administrative regions
+  if (/\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) {
+    if (/\b(?:eh|g|ab|dd|dg|fk|hs|iv|ka|kw|ky|ml|pa|ph|td|ze)\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) return "Scotland";
+    if (/\b(?:cf|ld|ll|np|sa)\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) return "Wales";
+    if (/\bbt\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) return "Northern Ireland";
+    return "England";
+  }
+  if (/\b(greater\s*london|greater\s*manchester|west\s*midlands|west\s*yorkshire|south\s*yorkshire|tyne\s*and\s*wear|merseyside|berkshire|buckinghamshire|cambridgeshire|cheshire|cornwall|cumbria|derbyshire|devon|dorset|durham|county\s*durham|essex|gloucestershire|hampshire|hertfordshire|kent|lancashire|leicestershire|lincolnshire|middlesex|norfolk|northamptonshire|northumberland|nottinghamshire|oxfordshire|shropshire|somerset|staffordshire|suffolk|surrey|sussex|east\s*sussex|west\s*sussex|warwickshire|wiltshire|worcestershire|yorkshire|east\s*yorkshire|north\s*yorkshire|bedfordshire|rutland|herefordshire|isle\s*of\s*wight)\b/i.test(lower)) {
+    return "England";
+  }
 
   // 3. National Capital mentioned in the physical address text
   if (isNewTaipeiCity(lower)) return "Taiwan";
