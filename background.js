@@ -180,10 +180,11 @@ const RECOGNIZED_TOWNS = [
   "kimberley", "george", "rustenburg", "potchefstroom", "paarl", "stellenbosch", "upington",
   "witbank", "emalahleni", "klerksdorp", "secunda", "middelburg", "vanderbijlpark", "vereeniging",
   // United Kingdom towns / cities / boroughs
-  "london", "manchester", "birmingham", "liverpool", "leeds", "glasgow", "edinburgh", "bristol",
+  "cradley heath", "hayes", "london", "manchester", "birmingham", "liverpool", "leeds", "glasgow", "edinburgh", "bristol",
   "sheffield", "newcastle", "nottingham", "cardiff", "belfast", "cambridge", "oxford", "coventry",
   "leicester", "southampton", "aberdeen", "plymouth", "swansea", "dundee", "norwich",
   // United States cities / towns
+  "morgan hill", "rock hill", "chapel hill", "cherry hill", "sanborn", "beaverton",
   "new york", "los angeles", "chicago", "houston", "phoenix", "philadelphia", "san antonio",
   "san diego", "dallas", "san jose", "austin", "jacksonville", "fort worth", "columbus",
   "san francisco", "charlotte", "indianapolis", "seattle", "denver", "boston", "detroit",
@@ -226,6 +227,7 @@ const RECOGNIZED_TOWNS = [
   "sanchong", "sanchong district", "tamsui", "tamsui district", "xizhi", "xizhi district",
   "yonghe", "yonghe district", "tucheng", "tucheng district", "shulin", "shulin district",
   "taichung", "tainan", "kaohsiung", "keelung", "hsinchu", "chiayi", "hualien", "yilan",
+  "hsi-hu", "hsihu", "xihu", "lu-kang", "lukang", "yuan-lin", "yuanlin", "daxi", "tamsui",
   // Germany
   "berlin", "munich", "hamburg", "frankfurt", "cologne", "stuttgart", "dusseldorf", "dortmund",
   "essen", "leipzig", "bremen", "dresden", "hanover", "nuremberg", "duisburg",
@@ -1383,6 +1385,7 @@ async function crawlWebsite(targetUrl) {
       if (evaluateCityQC(raw, "") === "Available") score += 40;
       if (/\b\d{4,6}\b/.test(raw)) score += 20;
       score += Math.min(raw.length, 60);
+      if (/\b(?:will\s+be\s+held|trade\s*show|exhibition|expo|conference|convention|booth|cookies?|privacy\s*policy)\b/i.test(raw)) score -= 200;
       return score;
     };
     return scoreCandidate(rawB) - scoreCandidate(rawA);
@@ -1706,12 +1709,13 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
 
     const ctx = getContext(hText, defaultSource);
     const raw = stripHtml(hm[2]);
+    const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    if (combinedBlock.length > 10) {
+      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType);
+    }
     const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
     for (const line of lines) {
       addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType);
-    }
-    if (raw.length > 10 && lines.length <= 1) {
-      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
     }
   }
 
@@ -1733,8 +1737,9 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
     const contextStr = cm[1] + " " + cm[2];
     const ctx = getContext(contextStr, defaultSource);
     const raw = stripHtml(cm[3]);
-    if (raw.length > 10) {
-      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
+    const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    if (combinedBlock.length > 10) {
+      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType);
     }
   }
 
@@ -1744,8 +1749,9 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   while ((lm = labelAddrRegex.exec(html)) !== null) {
     const ctx = getContext(lm[1], defaultSource);
     const raw = stripHtml(lm[2]);
-    if (raw.length > 10) {
-      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType);
+    const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    if (combinedBlock.length > 10) {
+      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType);
     }
   }
 
@@ -1755,6 +1761,10 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact") {
   while ((mm = markerRegex.exec(html)) !== null) {
     const ctx = getContext(mm[1], defaultSource);
     const raw = stripHtml(mm[2]);
+    const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    if (combinedBlock.length > 10) {
+      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType);
+    }
     const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
     for (const line of lines) {
       addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType);
@@ -2512,6 +2522,17 @@ function detectRestrictedKeywords(text, html = "") {
     .replace(/\b(?:chemical|chemically|marine|food)\s*(?:grade|resistance|resistant|proof|inert|inertness|compatibility|safe|approved)\b/gi, " ")
     .replace(/\bresistant\s+to\s+chemicals?\b/gi, " ")
     .replace(/\bisopropyl\s+alcohol\b/gi, " ");
+
+  // 6. Sanitize industrial equipment/machinery/conveyors/tooling/supplies for food processing, bakery, dairy, and beverage industries
+  cleanText = cleanText
+    .replace(/\b(?:equipment|machinery|machines?|conveyors?|systems?|solutions?|supplies|tooling)\s+(?:for|in)\s+(?:the\s+)?(?:food\s*processing|meat\s*processing|poultry\s*processing|dairy|bakery|beverage|pharmaceutical|medical)\s*(?:industry|industries|sector|sectors|market|markets|facilities|plants?)?\b/gi, " ")
+    .replace(/\b(?:food\s*processing|meat\s*processing|poultry\s*processing|seafood\s*processing|dairy\s*processing|bakery|bakeries|catering)\s+(?:equipment|machinery|machines?|conveyors?|systems?|packaging|packaging\s*machinery|automation|tooling|lines?|plants?|technology|engineering|solutions?|supplies|appliances?|industry|industries|facilities)\b/gi, " ");
+
+  // 7. Sanitize pharmaceutical/medical industrial equipment, machinery, conveyors, packaging & served industries
+  cleanText = cleanText
+    .replace(/\b(?:pharmaceutical|medical|healthcare)\s+(?:equipment|machinery|machines?|conveyors?|packaging|packaging\s*machinery|processing|processing\s*equipment|automation|tooling|cleanrooms?|clean\s*rooms?|tanks?|vessels?|pumps?|valves?|piping|tubing|devices?|instrumentation|instruments?|components?|parts?|systems?|grade|applications?|industry|industries|sector|sectors|market|markets|facilities|manufacturing|solutions?)\b/gi, " ")
+    .replace(/\b(?:food|beverage|packaging|dairy|bakery|meat|confectionery|cosmetic|cosmetics|chemical|nutraceutical)[,\s]+(?:and\s+)?(?:pharmaceutical|medical)\b/gi, " ")
+    .replace(/\b(?:serving|serves|served|for|to)\s+(?:the\s+)?(?:pharmaceutical|medical)\s+(?:industry|industries|sector|sectors|applications?|market|markets)\b/gi, " ");
 
   for (const item of RESTRICTED_PATTERNS) {
     const regex = item.pattern || item;
@@ -4856,18 +4877,18 @@ function hasNamedStateOrProvince(lower) {
 // Per strict QC rule: All 13 counties are considered as State (State: Available),
 // whether written with or without the word "County" / "Hsien" / "Country" / "縣"
 const TAIWAN_COUNTIES = [
-  "changhua", "changhwa",
-  "chiayi", "jiayi",
-  "hsinchu", "xinzhu",
-  "hualien", "hwalien",
-  "kinmen", "jinmen", "quemoy",
-  "lienchiang", "lianjiang", "matsu",
-  "miaoli",
-  "nantou",
-  "penghu", "pescadores",
+  "changhua", "changhwa", "chang-hua", "chang hua",
+  "chiayi", "jiayi", "chia-yi", "chia yi",
+  "hsinchu", "xinzhu", "hsin-chu", "hsin chu",
+  "hualien", "hwalien", "hua-lien", "hua lien",
+  "kinmen", "jinmen", "quemoy", "kin-men", "kin men",
+  "lienchiang", "lianjiang", "matsu", "lien-chiang", "lien chiang",
+  "miaoli", "miao-li", "miao li",
+  "nantou", "nan-tou", "nan tou",
+  "penghu", "pescadores", "peng-hu", "peng hu",
   "pingtung", "ping-tung", "ping tung",
   "taitung", "taidong", "tai-tung", "tai tung",
-  "yilan", "ilan",
+  "yilan", "ilan", "yi-lan", "yi lan",
   "yunlin", "yun-lin", "yun lin"
 ];
 
@@ -5437,6 +5458,11 @@ function isNotCitySegment(segment) {
     if (new RegExp(`^${escaped}$`, "i").test(s) || (new RegExp(`\\b${escaped}\\b`, "i").test(s) && !hasRecognizedPlaceName(s, RECOGNIZED_TOWNS) && !hasRecognizedPlaceName(s, AUSTRALIAN_CITIES) && !hasCityDesignation(s))) {
       return true;
     }
+  }
+
+  // Multi-word cities that contain street-like words (e.g. "hill", "view", "park", "gate", "close")
+  if (/\b(?:morgan\s*hill|richmond\s*hill|cherry\s*hill|chapel\s*hill|rock\s*hill|beverly\s*hills|farmington\s*hills|chino\s*hills|mountain\s*view|oak\s*ridge|glen\s*ridge|cradley\s*heath)\b/i.test(s)) {
+    return false;
   }
 
   // Street types
