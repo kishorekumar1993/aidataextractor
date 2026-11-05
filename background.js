@@ -473,19 +473,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
-
-  if (request.action === "CAPTURE_VALIDATION_SCREENSHOTS") {
-    captureAndSaveValidationScreenshots({
-      targetUrl: request.url,
-      finalUrl: request.finalUrl || request.url,
-      contactUrl: request.contactUrl,
-      aboutUrl: request.aboutUrl,
-      data: request.data
-    })
-      .then(res => sendResponse({ success: true, ...res }))
-      .catch(err => sendResponse({ success: false, error: err?.message || String(err) }));
-    return true;
-  }
 });
 
 /**
@@ -710,35 +697,6 @@ async function handleCrawlAndExtract(rawUrl) {
 
   // Step 3: Strictly enforce State, City, Country, and Products based on instructions
   const cleanedData = applyStrictInstructions(extractedData, crawlResult, restrictedCheck);
-
-  // Attach metadata and discovered URLs for validation reference & UI
-  cleanedData._targetUrl = targetUrl;
-  cleanedData._finalUrl = crawlResult.finalUrl || targetUrl;
-  cleanedData._contactUrl = crawlResult.contactUrl || "";
-  cleanedData._aboutUrl = crawlResult.aboutUrl || "";
-
-  // Auto-Save Validation Screenshots if enabled and website is Working or Redirect Site
-  try {
-    const isWorkingOrRedirect = cleanedData.websiteStatus === "Working" || cleanedData.websiteStatus === "Redirect Site";
-    if (isWorkingOrRedirect && typeof chrome !== "undefined" && chrome.storage) {
-      chrome.storage.sync.get(["autoSaveValidationScreenshots"], (res) => {
-        const autoSave = (res && res.autoSaveValidationScreenshots !== undefined) ? res.autoSaveValidationScreenshots : true;
-        if (autoSave) {
-          console.log(`[AI Assistant] Auto-capturing validation screenshots for ${targetUrl}...`);
-          captureAndSaveValidationScreenshots({
-            targetUrl,
-            finalUrl: crawlResult.finalUrl || targetUrl,
-            contactUrl: crawlResult.contactUrl || "",
-            aboutUrl: crawlResult.aboutUrl || "",
-            data: cleanedData
-          }).catch(err => console.warn("[AI Assistant] Auto screenshot error:", err));
-        }
-      });
-    }
-  } catch (e) {
-    console.warn("[AI Assistant] Auto screenshot trigger error:", e);
-  }
-
   return cleanedData;
 }
 
@@ -1141,8 +1099,6 @@ async function crawlWebsite(targetUrl) {
     // Discover Contact, About, Terms & Legal Pages
     const contactLinks = discoverContactLinks(mainHtml, finalUrl);
     const fetchedUrls = new Set([finalUrl]);
-    let primaryContactUrl = "";
-    let primaryAboutUrl = "";
 
     // PRE-AI CRAWL SHORT-CIRCUIT:
     // Only skip crawling subpages if a prohibited restricted category is detected.
@@ -1169,12 +1125,6 @@ async function crawlWebsite(targetUrl) {
             contactHtml += "\n" + cText;
             const isProfilePage = /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
             const pageSource = isProfilePage ? "profile" : "contact";
-
-            if (isProfilePage && !primaryAboutUrl) {
-              primaryAboutUrl = cUrl;
-            } else if (!isProfilePage && !primaryContactUrl) {
-              primaryContactUrl = cUrl;
-            }
 
             extractEmbeddedScriptAddresses(cText, addressCandidates);
             extractMapAddresses(cText, addressCandidates);
@@ -1304,8 +1254,6 @@ async function crawlWebsite(targetUrl) {
   return {
     originalUrl: targetUrl,
     finalUrl,
-    contactUrl: primaryContactUrl || (contactLinks.length > 0 ? contactLinks[0] : ""),
-    aboutUrl: primaryAboutUrl || "",
     redirected: isRedirectDomain(targetUrl, finalUrl),
     status,
     fetchError,
@@ -6813,224 +6761,4 @@ async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
   }
 
   return { success: false, error: lastError || "Failed to connect with any Gemini model" };
-}
-
-/**
- * Captures Home and Contact page screenshots and saves validation summary to local Downloads
- */
-async function captureAndSaveValidationScreenshots({
-  targetUrl,
-  finalUrl,
-  contactUrl,
-  aboutUrl,
-  data
-}) {
-  const urlToCaptureHome = finalUrl || targetUrl;
-  if (!urlToCaptureHome || !urlToCaptureHome.startsWith("http")) {
-    return { success: false, error: "Invalid URL for screenshot" };
-  }
-
-  let domain = "";
-  try {
-    domain = new URL(urlToCaptureHome).hostname.replace(/^www\d?\./i, "");
-  } catch (e) {
-    domain = "website";
-  }
-  const cleanDomain = domain.replace(/[^a-z0-9.-]/gi, "_");
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const folder = `Validation_Screenshots/${cleanDomain}`;
-
-  // 1. Save Validation Summary Text file
-  const summaryLines = [
-    "===========================================================",
-    `QC DATA ENTRY VALIDATION REPORT - ${cleanDomain.toUpperCase()}`,
-    "===========================================================",
-    `Website URL:    ${targetUrl || ""}`,
-    `Final URL:      ${finalUrl || targetUrl || ""}`,
-    `Contact URL:    ${contactUrl || "(None)"}`,
-    `About URL:      ${aboutUrl || "(None)"}`,
-    `Website Status: ${data?.websiteStatus || "Working"}`,
-    "",
-    "----------------- 1. COMPANY NAME -------------------------",
-    `Company Name:   ${data?.companyName || ""}`,
-    "",
-    "----------------- 2. BUSINESS TYPE ------------------------",
-    `Business Type:  ${data?.businessType || ""}`,
-    "",
-    "----------------- 3. CONTACT DETAILS ----------------------",
-    `Country:        ${data?.countryName || ""}`,
-    `Company Address:${data?.companyAddress || ""}`,
-    `State:          ${data?.state || ""}`,
-    `City:           ${data?.city || ""}`,
-    `Email:          ${data?.emailId || ""}`,
-    `Secondary Email:${data?.secondaryEmailId || ""}`,
-    `Phone:          ${data?.phoneNumber || ""}`,
-    "",
-    "----------------- 4. PRODUCT METRICS ----------------------",
-    `No. Products:   ${data?.numberOfProducts || ""}`,
-    `Product Images: ${data?.productImages || ""}`,
-    `Product Descs:  ${data?.numberOfProductDescriptions || ""}`,
-    "",
-    "----------------- 5. SCREENSHOT FILES ---------------------",
-    `- 01_Home_Page_${timestamp}.png (Company Name & Business Type)`,
-    contactUrl ? `- 02_Contact_Page_${timestamp}.png (Contact Details & Address)` : `- (No separate contact URL)`,
-    aboutUrl && aboutUrl !== contactUrl ? `- 03_About_Page_${timestamp}.png (Company Profile & History)` : "",
-    "===========================================================",
-    `Generated:      ${new Date().toLocaleString()}`
-  ].filter(Boolean).join("\r\n");
-
-  const capturedFiles = [];
-  try {
-    const summaryDataUrl = "data:text/plain;charset=utf-8;base64," + btoa(unescape(encodeURIComponent(summaryLines)));
-    await chrome.downloads.download({
-      url: summaryDataUrl,
-      filename: `${folder}/00_Validation_Summary_${timestamp}.txt`,
-      conflictAction: "overwrite",
-      saveAs: false
-    });
-    capturedFiles.push(`00_Validation_Summary_${timestamp}.txt`);
-  } catch (e) {
-    console.warn("[AI Assistant] Could not save summary txt:", e);
-  }
-
-  // 2. Open temporary window/tab for screenshot capture
-  let win = null;
-  let originalWinId = null;
-
-  try {
-    try {
-      const curWin = await chrome.windows.getCurrent();
-      originalWinId = curWin?.id;
-    } catch (e) { }
-
-    try {
-      win = await chrome.windows.create({
-        url: urlToCaptureHome,
-        type: "popup",
-        width: 1280,
-        height: 800,
-        focused: true
-      });
-    } catch (winErr) {
-      console.warn("[AI Assistant] popup window creation failed, opening normal window:", winErr);
-      win = await chrome.windows.create({
-        url: urlToCaptureHome,
-        width: 1280,
-        height: 800,
-        focused: true
-      });
-    }
-
-    const winTabId = win.tabs && win.tabs[0] ? win.tabs[0].id : null;
-    if (winTabId) {
-      await waitForTabReady(winTabId, 8000);
-      await delayTab(700);
-
-      // Home Page Screenshot
-      try {
-        const homeDataUrl = await chrome.tabs.captureVisibleTab(win.id, { format: "png" });
-        if (homeDataUrl) {
-          await chrome.downloads.download({
-            url: homeDataUrl,
-            filename: `${folder}/01_Home_Page_${timestamp}.png`,
-            conflictAction: "overwrite",
-            saveAs: false
-          });
-          capturedFiles.push(`01_Home_Page_${timestamp}.png`);
-        }
-      } catch (err) {
-        console.warn("[AI Assistant] Error capturing Home page:", err);
-      }
-
-      // Contact Page Screenshot
-      if (contactUrl && contactUrl !== urlToCaptureHome) {
-        try {
-          await chrome.tabs.update(winTabId, { url: contactUrl });
-          await waitForTabReady(winTabId, 8000);
-          await delayTab(700);
-          const contactDataUrl = await chrome.tabs.captureVisibleTab(win.id, { format: "png" });
-          if (contactDataUrl) {
-            await chrome.downloads.download({
-              url: contactDataUrl,
-              filename: `${folder}/02_Contact_Page_${timestamp}.png`,
-              conflictAction: "overwrite",
-              saveAs: false
-            });
-            capturedFiles.push(`02_Contact_Page_${timestamp}.png`);
-          }
-        } catch (err) {
-          console.warn("[AI Assistant] Error capturing Contact page:", err);
-        }
-      }
-
-      // About Page Screenshot
-      if (aboutUrl && aboutUrl !== urlToCaptureHome && aboutUrl !== contactUrl) {
-        try {
-          await chrome.tabs.update(winTabId, { url: aboutUrl });
-          await waitForTabReady(winTabId, 7000);
-          await delayTab(700);
-          const aboutDataUrl = await chrome.tabs.captureVisibleTab(win.id, { format: "png" });
-          if (aboutDataUrl) {
-            await chrome.downloads.download({
-              url: aboutDataUrl,
-              filename: `${folder}/03_About_Page_${timestamp}.png`,
-              conflictAction: "overwrite",
-              saveAs: false
-            });
-            capturedFiles.push(`03_About_Page_${timestamp}.png`);
-          }
-        } catch (err) {
-          console.warn("[AI Assistant] Error capturing About page:", err);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("[AI Assistant] Error during screenshot capture:", err);
-  } finally {
-    if (win && win.id) {
-      try {
-        await chrome.windows.remove(win.id);
-      } catch (e) { }
-    }
-    if (originalWinId) {
-      try {
-        await chrome.windows.update(originalWinId, { focused: true });
-      } catch (e) { }
-    }
-  }
-
-  return {
-    success: capturedFiles.length > 0,
-    folder,
-    files: capturedFiles
-  };
-}
-
-function waitForTabReady(tabId, timeoutMs = 8000) {
-  return new Promise((resolve) => {
-    let resolved = false;
-    const timer = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        try { chrome.tabs.onUpdated.removeListener(listener); } catch (e) { }
-        resolve();
-      }
-    }, timeoutMs);
-
-    function listener(updatedTabId, changeInfo) {
-      if (updatedTabId === tabId && changeInfo.status === "complete") {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timer);
-          try { chrome.tabs.onUpdated.removeListener(listener); } catch (e) { }
-          resolve();
-        }
-      }
-    }
-    chrome.tabs.onUpdated.addListener(listener);
-  });
-}
-
-function delayTab(ms) {
-  return new Promise(r => setTimeout(r, ms));
 }
