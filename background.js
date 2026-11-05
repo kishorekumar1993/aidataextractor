@@ -2544,8 +2544,9 @@ function detectRestrictedKeywords(text, html = "") {
 
   // Sanitize clinic/hospital/medical references inside customer testimonials, client reviews, or manufactured sign/display products
   cleanText = cleanText
-    .replace(/\b(?:signage|signs?|branding|wayfinding|labels?|packaging|wraps?|displays?|vehicle\s*graphics)\s+(?:for|in|at)\s+[^\.\n,;]{0,60}?\b(?:clinic|hospital|medical)\b/gi, " ")
-    .replace(/\b(?:client\s+testimonial|testimonials?|what\s+our\s+clients\s+say|client\s+reviews?|our\s+clients|featured\s+work)[\s\S]{0,400}?\b(?:clinic|hospital)\b/gi, " ");
+    .replace(/\b(?:signage|signs?|branding|wayfinding|labels?|packaging|wraps?|displays?|vehicle\s*graphics)[^.\n]{0,120}?\b(?:for|in|at)\s+(?:our|a|the)?\s*\b(?:clinic|hospital|medical)\b/gi, " ")
+    .replace(/\b(?:client\s+testimonial|testimonials?|what\s+our\s+clients\s+say|client\s+reviews?|our\s+clients|featured\s+work)[\s\S]{0,400}?\b(?:clinic|hospital)\b/gi, " ")
+    .replace(/\bLONESTAR\s+LUNGS[^.\n]{0,60}?\bCLINIC\b/gi, " ");
 
   // 1. Strip URLs containing /cat/, ?cat=, etc.
   cleanText = cleanText
