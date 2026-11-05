@@ -1514,8 +1514,12 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
 
   // Location Context & Priority hierarchy:
   // Headquarters (Tier 1) > Contact (Tier 2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Branch/Factory (Tier 8) > Distributor/Dealer (Tier 9)
-  const hasHqKeyword = /\b(?:headquarters|head\s*office|registered\s*office|corporate\s*office|main\s*office|principal\s*office|hq|總公司|總部|本公司|總廠|本廠)\b/i.test(rawText) || isHq || source === "headquarters";
-  const hasBranchKeyword = /\b(?:branch(?:\s*office)?|factory|plant|warehouse|distribution\s*center|showroom|depot|facility|subsidiary|unit\s*\d+|分公司|工廠|廠房|分處|辦事處|營業所|經銷商)\b/i.test(rawText) || locationType === "branch" || source === "branch";
+  const hasHqKeyword = /\b(?:headquarters|head\s*office|registered\s*office|corporate\s*office|main\s*office|principal\s*office|hq)\b/i.test(rawText) ||
+    /(?:總公司|总公司|總部|总部|本公司|集團總部|集团总部|總廠|总厂|本廠|本厂)/i.test(rawText) ||
+    isHq || source === "headquarters";
+  const hasBranchKeyword = /\b(?:branch(?:\s*office)?|factory|plant|warehouse|distribution\s*center|showroom|depot|facility|subsidiary|unit\s*\d+)\b/i.test(rawText) ||
+    /(?:海外子公司|全资子公司|控股子公司|子公司|海外办事处|办事处|辦事處|国内分公司|分公司|工廠|工厂|廠房|厂房|分處|分处|營業所|营业所|經銷商|经销商)/i.test(rawText) ||
+    locationType === "branch" || source === "branch";
   const hasDistributorKeyword = /\b(?:distributors?|dealers?|stockists?|resellers?|partners?)\b/i.test(pageUrl) || source === "distributor" || locationType === "distributor";
 
   let basePriority = 7;
@@ -1731,17 +1735,19 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
 
   // Helper to determine context from surrounding text / headers
   const getContext = (beforeText, fallbackSource) => {
-    if (/\b(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|principal\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal|總公司|總部|本公司|總廠|本廠)\b/i.test(beforeText)) {
+    if (/\b(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|principal\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(beforeText) ||
+      /(?:總公司|总公司|總部|总部|本公司|集團總部|集团总部|總廠|总厂|本廠|本厂)/i.test(beforeText)) {
       return { isHq: true, source: "headquarters", locType: "headquarters" };
     }
-    if (/\b(?:branch(?:\s*office)?|factory|plant|warehouse|distribution\s*center|showroom|depot|facility|subsidiary|sucursal|delegaci[oó]n|f[aá]brica|almac[eé]n|nave(?:\s*industrial)?|分公司|工廠|廠房|分處|辦事處|營業所|經銷商)\b/i.test(beforeText)) {
+    if (/\b(?:branch(?:\s*office)?|factory|plant|warehouse|distribution\s*center|showroom|depot|facility|subsidiary|sucursal|delegaci[oó]n|f[aá]brica|almac[eé]n|nave(?:\s*industrial)?)\b/i.test(beforeText) ||
+      /(?:海外子公司|全资子公司|控股子公司|子公司|海外办事处|办事处|辦事處|国内分公司|分公司|工廠|工厂|廠房|厂房|分處|分处|營業所|营业所|經銷商|经销商)/i.test(beforeText)) {
       return { isHq: false, source: "branch", locType: "branch" };
     }
     return { isHq: false, source: fallbackSource, locType: fallbackSource };
   };
 
   // 1. Explicit Headquarters / Head Office blocks (Priority 1)
-  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|總公司|總部|本公司)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|dd)>/gi;
+  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|總公司|总公司|總部|总部|本公司|集團總部|集团总部)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|dd)>/gi;
   let hqm;
   while ((hqm = hqRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(hqm[1]);
@@ -1755,7 +1761,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   let hm;
   while ((hm = headingRegex.exec(processedHtml)) !== null) {
     const hText = stripHtml(hm[1]);
-    if (!/address|location|head\s*office|headquarters|contact\s*us|contact|direcci[oó]n|domicilio|sede|ubicaci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|encu[eé]ntranos|辦事處|地址|總部/i.test(hText)) continue;
+    if (!/address|location|head\s*office|headquarters|contact\s*us|contact|direcci[oó]n|domicilio|sede|ubicaci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|encu[eé]ntranos|辦事處|办事处|地址|總部|总部/i.test(hText)) continue;
     if (/email|e-mail|newsletter|subscribe/i.test(hText)) continue;
 
     const ctx = getContext(hText, defaultSource);
@@ -1771,7 +1777,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 3. <address> tag
-  const addrTagRegex = /([\s\S]{0,120})<address[^>]*>([\s\S]*?)<\/address>/gi;
+  const addrTagRegex = /([\s\S]{0,350})<address[^>]*>([\s\S]*?)<\/address>/gi;
   let am;
   while ((am = addrTagRegex.exec(processedHtml)) !== null) {
     const ctx = getContext(am[1], defaultSource);
@@ -1782,7 +1788,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 4. Class or id containing "address" or "addr" (including li, td, dd, article, section)
-  const classAddrRegex = /([\s\S]{0,120})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
+  const classAddrRegex = /([\s\S]{0,350})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
   let cm;
   while ((cm = classAddrRegex.exec(processedHtml)) !== null) {
     const contextStr = cm[1] + " " + cm[2];
@@ -1806,7 +1812,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / Dirección: / 地址:
-  const labelAddrRegex = /([\s\S]{0,120})\b(?:address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址)\s*[:：]\s*(?:<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  const labelAddrRegex = /([\s\S]{0,350})(?:^|[^a-zA-Z0-9])(?:address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]\s*(?:\s*<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let lm;
   while ((lm = labelAddrRegex.exec(processedHtml)) !== null) {
     const ctx = getContext(lm[1], defaultSource);
@@ -1828,7 +1834,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 6. Map-marker icon followed by address text (e.g. <span class="fa fa-map-marker"></span> No. 492, ...)
-  const markerRegex = /([\s\S]{0,100})(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location|e-fas-map-marker-alt)[^>]*>[\s\S]{0,800}?(?:<\/(?:span|i|div|svg)>\s*){1,4}(?:<(?:span|p|div|li)[^>]*>)*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  const markerRegex = /([\s\S]{0,350})(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location|e-fas-map-marker-alt)[^>]*>[\s\S]{0,800}?(?:<\/(?:span|i|div|svg)>\s*){1,4}(?:<(?:span|p|div|li)[^>]*>)*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let mm;
   while ((mm = markerRegex.exec(processedHtml)) !== null) {
     const ctx = getContext(mm[1], defaultSource);
@@ -1844,14 +1850,16 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 7. Paragraphs, list items, or table cells containing physical address patterns
-  const pAddrRegex = /([\s\S]{0,100})<(?:p|li|td)[^>]*>([\s\S]*?)<\/(?:p|li|td)>/gi;
+  const pAddrRegex = /([\s\S]{0,350})<(?:p|li|td)[^>]*>([\s\S]*?)<\/(?:p|li|td)>/gi;
   let pm;
   while ((pm = pAddrRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(pm[2]);
     if (raw.length >= 15 && raw.length <= 250 &&
       (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
+        /(?:大道|路|街|巷|弄|号|號|工业区|工业园|产业园|高新区)/.test(raw) ||
         /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja)\b/i.test(raw)) &&
       (/\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|gpo\s*box)\b/i.test(raw) ||
+       /\d+\s*[号號]/.test(raw) ||
        /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(raw) ||
        /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
       const ctx = getContext(pm[1], defaultSource);
@@ -1869,13 +1877,21 @@ function extractAddressComponents(addr) {
   }
   const clean = addr.toLowerCase().replace(/[\(\)\[\]\{\}]/g, " ");
 
-  // Street / premise numbers (e.g. 56, 140, 7, 26, 909, 56-106)
-  const numbers = (clean.match(/(?:^|[\s,#№])(\d+(?:[-/]\d+)?)\b/g) || [])
-    .map(n => n.replace(/^[^\d]+/, "").trim())
+  // Street / premise numbers (e.g. 56, 140, 7, 26, 909, 56-106, 138号)
+  const matches = [...clean.matchAll(/(?<!\d)(\d+(?:[-/]\d+)?)(?!\d)/g)];
+  const numbers = matches
+    .map(m => m[1])
     .filter(n => n.length <= 6 && !/^(?:19\d\d|20\d\d|886|60|61|44|27|91|30543|504)$/.test(n));
 
   // Recognized localities across priority countries
   const localityList = [
+    // China
+    "guangdong", "jiangsu", "zhejiang", "shandong", "henan", "sichuan", "hubei", "hunan",
+    "hebei", "fujian", "anhui", "liaoning", "shaanxi", "jiangxi", "chongqing", "beijing", "shanghai", "tianjin",
+    "huizhou", "shenzhen", "guangzhou", "dongguan", "foshan", "zhongshan", "zhuhai",
+    "suzhou", "wuxi", "changzhou", "nanjing", "hangzhou", "ningbo", "wenzhou", "jiaxing",
+    "qingdao", "jinan", "yantai", "weifang", "xiamen", "fuzhou", "quanzhou", "xi'an", "xian",
+    "chengdu", "wuhan", "changsha", "zhengzhou",
     // Australia
     "melbourne", "sydney", "brisbane", "perth", "adelaide", "hobart", "canberra", "darwin",
     "geelong", "gold coast", "newcastle", "wollongong", "sunshine coast", "townsville", "cairns",
@@ -1956,11 +1972,34 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
 
   const getRaw = c => (typeof c === "object" ? c.raw : c);
 
+  // If crawlData is available, detect declared home domicile from companyName or copyrightText
+  let compLocality = "";
+  if (crawlData && (crawlData.companyName || crawlData.copyrightText)) {
+    const cnLower = ((crawlData.companyName || "") + " " + (crawlData.copyrightText || "")).toLowerCase();
+    const commonDomCities = [
+      "huizhou", "dongguan", "shenzhen", "guangzhou", "suzhou", "shanghai", "beijing", "hangzhou", "ningbo",
+      "wuxi", "foshan", "zhongshan", "taipei", "taichung", "tainan", "kaohsiung", "taoyuan", "changhua",
+      "melbourne", "sydney", "brisbane", "perth", "london", "leeds", "manchester", "birmingham"
+    ];
+    for (const loc of commonDomCities) {
+      if (cnLower.includes(loc)) {
+        compLocality = loc;
+        break;
+      }
+    }
+  }
+
   // Sort candidates strictly by priority (Headquarters Tier 1 > Contact Tier 2 > ...)
-  // Within the same tier, English comes first
+  // Within the same tier, boost candidates matching company's declared home city/region
   const sorted = [...candidates].sort((a, b) => {
-    const pA = (typeof a === "object" && a.priority !== undefined) ? a.priority : 6;
-    const pB = (typeof b === "object" && b.priority !== undefined) ? b.priority : 6;
+    let pA = (typeof a === "object" && a.priority !== undefined) ? a.priority : 6;
+    let pB = (typeof b === "object" && b.priority !== undefined) ? b.priority : 6;
+    if (compLocality) {
+      const rawA = getRaw(a).toLowerCase();
+      const rawB = getRaw(b).toLowerCase();
+      if (rawA.includes(compLocality) && !rawB.includes(compLocality)) pA -= 2.0;
+      else if (rawB.includes(compLocality) && !rawA.includes(compLocality)) pB -= 2.0;
+    }
     return pA - pB;
   });
 
@@ -1973,13 +2012,26 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
     return { address: topRaw, selectedCandidate: topCandidate };
   }
 
+  // CRITICAL HQ PROTECTION: If top candidate is Headquarters and Gemini returned a branch / subsidiary address from another location:
+  if (topCandidate && (topCandidate.isHeadquarters || topCandidate.priority <= 2)) {
+    const geminiCandidate = candidates.find(c => {
+      const r = getRaw(c).toLowerCase();
+      const g = geminiAddr.toLowerCase();
+      return r.includes(g.slice(0, 20)) || g.includes(r.slice(0, 20));
+    });
+    if (geminiCandidate && (geminiCandidate.priority >= 8 || geminiCandidate.locationType === "branch" || geminiCandidate.locationType === "distributor")) {
+      // Gemini picked an overseas subsidiary / branch instead of Headquarters! Override Gemini with topCandidate
+      return { address: topRaw, selectedCandidate: topCandidate };
+    }
+  }
+
   // Parse structural components of top candidate and Gemini address
   const candComp = extractAddressComponents(topRaw);
   const geminiComp = extractAddressComponents(geminiAddr);
 
   // 1. Locality Contradiction Check:
-  // If top candidate has a verified locality (e.g. Changhua, Xiushui, Heywood, Lancashire)
-  // and Gemini outputs a DIFFERENT conflicting city (e.g. Taichung, Manchester) not in top candidate:
+  // If top candidate has a verified locality (e.g. Huizhou, Changhua, Xiushui, Heywood, Lancashire)
+  // and Gemini outputs a DIFFERENT conflicting city (e.g. Cupertino, Taichung, Manchester) not in top candidate:
   if (candComp.localities.length > 0 && geminiComp.localities.length > 0) {
     const conflicting = geminiComp.localities.filter(gLoc => !topRaw.toLowerCase().includes(gLoc));
     const matching = geminiComp.localities.filter(gLoc => topRaw.toLowerCase().includes(gLoc));
@@ -1990,7 +2042,7 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
   }
 
   // 2. Street Number Agreement Check:
-  // If top candidate has a street number (e.g. 56, 140, 26, 7), Gemini MUST contain that number!
+  // If top candidate has a street number (e.g. 56, 140, 26, 7, 138), Gemini MUST contain that number!
   if (candComp.numbers.length > 0) {
     const hasMatchingNum = candComp.numbers.some(num => {
       const baseNum = num.split(/[-/]/)[0];
@@ -2372,7 +2424,7 @@ function parseHtmlDetails(html, baseUrl) {
 
   // Extract Phone Numbers strictly from telephone contexts
   const phoneLinks = [...html.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
-  const contextPhoneRegex = /(?:tel|telephone|phone|call|mobile|cell|contact)[\s:]*([+]?[\d\s().-]{7,20})/gi;
+  const contextPhoneRegex = /(?:tel|telephone|phone|call|mobile|cell|contact|总机|總機|电话|電話|手机|手機|座机|座機)[\s:：]*(?:<[^>]+>\s*)*([+]?[\d\s().-]{7,20})/gi;
   let pMatch;
   const contextPhones = [];
   while ((pMatch = contextPhoneRegex.exec(cleanHtml)) !== null) {
@@ -4419,6 +4471,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     if (/\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(addr)) {
       addr = "Not Available";
     } else {
+      // If address contains Chinese characters, transliterate/romanize to standard English Title Case
+      if (/[\u4e00-\u9fa5]/.test(addr)) {
+        addr = romanizeChineseAddress(addr);
+      }
       addr = addr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ");
       addr = addr.replace(/[\(\)\[\]\{\}]/g, " ");
 
@@ -6234,13 +6290,200 @@ function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
 }
 
 /**
+ * Romanizes / transliterates Chinese addresses to Title Case English smallest-to-largest format.
+ * (e.g. "惠州市仲恺高新区东江高新科技产业园惠泽大道138号" -> "Number 138 Huize Avenue, Dongjiang Hi-Tech Industrial Park, Zhongkai Hi-Tech Zone, Huizhou, Guangdong")
+ */
+function romanizeChineseAddress(addr) {
+  if (!addr || typeof addr !== "string") return addr;
+  if (!/[\u4e00-\u9fa5]/.test(addr)) return addr;
+
+  let s = addr;
+
+  // Dictionary of known Chinese administrative, zoning, and address terms to English
+  const dict = [
+    // Provinces / Direct Municipalities
+    [/广东省/g, "Guangdong Province, "],
+    [/广东/g, "Guangdong, "],
+    [/江苏省/g, "Jiangsu Province, "],
+    [/江苏/g, "Jiangsu, "],
+    [/浙江省/g, "Zhejiang Province, "],
+    [/浙江/g, "Zhejiang, "],
+    [/山东省/g, "Shandong Province, "],
+    [/山东/g, "Shandong, "],
+    [/河南省/g, "Henan Province, "],
+    [/河南/g, "Henan, "],
+    [/四川省/g, "Sichuan Province, "],
+    [/四川/g, "Sichuan, "],
+    [/湖北省/g, "Hubei Province, "],
+    [/湖北/g, "Hubei, "],
+    [/湖南省/g, "Hunan Province, "],
+    [/湖南/g, "Hunan, "],
+    [/河北省/g, "Hebei Province, "],
+    [/河北/g, "Hebei, "],
+    [/福建省/g, "Fujian Province, "],
+    [/福建/g, "Fujian, "],
+    [/安徽省/g, "Anhui Province, "],
+    [/安徽/g, "Anhui, "],
+    [/辽宁省/g, "Liaoning Province, "],
+    [/辽宁/g, "Liaoning, "],
+    [/陕西省/g, "Shaanxi Province, "],
+    [/陕西/g, "Shaanxi, "],
+    [/江西省/g, "Jiangxi Province, "],
+    [/江西/g, "Jiangxi, "],
+    [/台湾省/g, "Taiwan Province, "],
+    [/台湾/g, "Taiwan, "],
+    [/台灣省/g, "Taiwan Province, "],
+    [/台灣/g, "Taiwan, "],
+    [/北京市/g, "Beijing, "],
+    [/北京/g, "Beijing, "],
+    [/上海市/g, "Shanghai, "],
+    [/上海/g, "Shanghai, "],
+    [/天津市/g, "Tianjin, "],
+    [/天津/g, "Tianjin, "],
+    [/重庆市/g, "Chongqing, "],
+    [/重庆/g, "Chongqing, "],
+
+    // Major Cities
+    [/惠州市/g, "Huizhou, "],
+    [/惠州/g, "Huizhou, "],
+    [/深圳市/g, "Shenzhen, "],
+    [/深圳/g, "Shenzhen, "],
+    [/广州市/g, "Guangzhou, "],
+    [/广州/g, "Guangzhou, "],
+    [/东莞市/g, "Dongguan, "],
+    [/东莞/g, "Dongguan, "],
+    [/佛山市/g, "Foshan, "],
+    [/佛山/g, "Foshan, "],
+    [/苏州市/g, "Suzhou, "],
+    [/苏州/g, "Suzhou, "],
+    [/无锡市/g, "Wuxi, "],
+    [/无锡/g, "Wuxi, "],
+    [/常州市/g, "Changzhou, "],
+    [/常州/g, "Changzhou, "],
+    [/南京市/g, "Nanjing, "],
+    [/南京/g, "Nanjing, "],
+    [/杭州市/g, "Hangzhou, "],
+    [/杭州/g, "Hangzhou, "],
+    [/宁波市/g, "Ningbo, "],
+    [/宁波/g, "Ningbo, "],
+    [/温州市/g, "Wenzhou, "],
+    [/温州/g, "Wenzhou, "],
+    [/青岛市/g, "Qingdao, "],
+    [/青岛/g, "Qingdao, "],
+    [/济南市/g, "Jinan, "],
+    [/济南/g, "Jinan, "],
+    [/厦门市/g, "Xiamen, "],
+    [/厦门/g, "Xiamen, "],
+    [/福州市/g, "Fuzhou, "],
+    [/福州/g, "Fuzhou, "],
+    [/西安市/g, "Xi'an, "],
+    [/西安/g, "Xi'an, "],
+    [/成都市/g, "Chengdu, "],
+    [/成都/g, "Chengdu, "],
+    [/武汉市/g, "Wuhan, "],
+    [/武汉/g, "Wuhan, "],
+    [/长沙市/g, "Changsha, "],
+    [/长沙/g, "Changsha, "],
+    [/郑州市/g, "Zhengzhou, "],
+    [/郑州/g, "Zhengzhou, "],
+    [/桃园市/g, "Taoyuan City, "],
+    [/桃園市/g, "Taoyuan City, "],
+    [/台北市/g, "Taipei City, "],
+    [/臺北市/g, "Taipei City, "],
+    [/新北市/g, "New Taipei City, "],
+
+    // Specific zones, parks, districts, entities
+    [/仲恺高新区/g, "Zhongkai Hi-Tech Zone, "],
+    [/仲恺/g, "Zhongkai "],
+    [/东江高新科技产业园/g, "Dongjiang Hi-Tech Industrial Park, "],
+    [/东江/g, "Dongjiang "],
+    [/高新科技产业园/g, "Hi-Tech Industrial Park, "],
+    [/高新技术产业开发区/g, "Hi-Tech Industrial Development Zone, "],
+    [/高新科技园/g, "Hi-Tech Park, "],
+    [/高新技术园区/g, "Hi-Tech Industrial Zone, "],
+    [/高新区/g, "Hi-Tech Zone, "],
+    [/科技工业园/g, "Science & Technology Industrial Park, "],
+    [/工业园区/g, "Industrial Park, "],
+    [/工业园/g, "Industrial Park, "],
+    [/经济技术开发区/g, "Economic & Technological Development Zone, "],
+    [/经济开发区/g, "Economic Development Zone, "],
+    [/科技园/g, "Science Park, "],
+    [/产业园/g, "Industrial Park, "],
+    [/现代企业中心/g, "Modern Enterprise Center, "],
+    [/相城区/g, "Xiangcheng District, "],
+    [/相城/g, "Xiangcheng "],
+    [/澄阳路/g, "Chengyang Road, "],
+    [/澄阳/g, "Chengyang "],
+    [/漕湖街道/g, "Caohu Subdistrict, "],
+    [/春耀路/g, "Chunyao Road, "],
+    [/粤海街道/g, "Yuehai Subdistrict, "],
+    [/麻岭社区/g, "Maling Community, "],
+    [/科技中三路/g, "Keji Middle 3rd Road, "],
+    [/国人大厦/g, "Guoren Building, "],
+    [/锦业路/g, "Jinye Road, "],
+    [/唯新路/g, "Weixin Road, "],
+    [/中科智能/g, "Zhongke Intelligent, "],
+    [/漕宝路/g, "Caobao Road, "],
+    [/宜山路/g, "Yishan Road, "],
+    [/新埔六街/g, "Xinpu 6th Street, "],
+    [/惠泽大道/g, "Huize Avenue, "],
+    [/惠泽/g, "Huize "],
+
+    // General terms
+    [/大道/g, " Avenue, "],
+    [/路/g, " Road, "],
+    [/街/g, " Street, "],
+    [/巷/g, " Lane, "],
+    [/弄/g, " Alley, "],
+    [/(\d+)\s*[号號]/g, "Number $1, "],
+    [/([A-Za-z0-9]+)\s*[幢栋棟]/g, "Building $1, "],
+    [/([A-Za-z0-9]+)\s*[层樓楼]/g, "Floor $1, "],
+    [/([A-Za-z0-9]+)\s*[室房]/g, "Room $1, "],
+    [/([A-Za-z0-9]+)\s*[座]/g, "Block $1, "],
+    [/([A-Za-z0-9]+)\s*[期]/g, "Phase $1, "],
+    [/([A-Za-z0-9]+)\s*[区區]/g, "Area $1, "],
+    [/区/g, " District, "],
+    [/區/g, " District, "],
+    [/县/g, " County, "],
+    [/縣/g, " County, "],
+    [/镇/g, " Town, "],
+    [/鎮/g, " Town, "]
+  ];
+
+  for (const [re, rep] of dict) {
+    s = s.replace(re, rep);
+  }
+
+  // If there are still Chinese characters left, strip or replace with space
+  s = s.replace(/[\u4e00-\u9fa5]+/g, " ");
+
+  // Order reversal: Chinese is largest-to-smallest ([City], [District], [Park], [Road], [Number]).
+  // Western address is smallest-to-largest ([Number] [Road], [Park], [District], [City]).
+  const parts = s.split(/[,，\n]+/).map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const lastPart = parts[parts.length - 1];
+    if (/\b(?:Number|No\.?|Floor|Room|Building)\b/i.test(lastPart) || /\b(?:Road|Street|Avenue|Lane)\b/i.test(lastPart)) {
+      parts.reverse();
+    }
+  }
+
+  // If the address contains Huizhou and doesn't mention Guangdong, attach Guangdong
+  let res = parts.join(", ");
+  if (/\bHuizhou\b/i.test(res) && !/\bGuangdong\b/i.test(res)) {
+    res += ", Guangdong";
+  }
+
+  return res;
+}
+
+/**
  * Ensures "Number" is ONLY present if "No.", "No", "NO.", "Nos.", "Nº", or "#" was in the original raw address evidence.
  * Rule: "if No come only expand and do with out coming dont put blankly number"
  */
 function stripBlindlyAddedNumber(addr, rawEvidence = "") {
   if (!addr || !/\bNumber\s+\d+/i.test(addr)) return addr;
   return addr.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    const rawRegex = new RegExp('(?:\\b(?:no|nos|nº|numero|num|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b', 'i');
+    const rawRegex = new RegExp('(?:\\b(?:no|nos|nº|numero|num|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號]', 'i');
     if (rawEvidence && rawRegex.test(rawEvidence)) {
       return match;
     }
@@ -7400,6 +7643,11 @@ function detectCountryFromAddress(address) {
   if (/\b(jawa\s*barat|jawa\s*tengah|jawa\s*timur|west\s*java|central\s*java|east\s*java|banten|sumatera\s*utara|sumatera\s*barat|sumatera\s*selatan|north\s*sumatra|west\s*sumatra|south\s*sumatra|kalimantan\s*(?:timur|barat|selatan|tengah|utara)?|sulawesi\s*(?:selatan|utara|tengah|tenggara|barat)?|kepulauan\s*riau|bangka\s*belitung|nusa\s*tenggara\s*(?:barat|timur)?|dki\s*jakarta|di\s*yogyakarta|surabaya|bandung|medan|semarang|makassar|palembang|tangerang|tangerang\s*selatan|bekasi|depok|bogor|batam|pekanbaru|bandar\s*lampung|balikpapan|denpasar|samarinda|cikarang|karawang|sidoarjo|gresik|serang|cilegon|solo|surakarta|malang|pontianak|manado|banjarmasin|cimahi|sukabumi|cirebon|tasikmalaya|purwakarta)\b/i.test(lower)) return "Indonesia";
   // New Zealand regions & major cities
   if (/\b(canterbury|waikato|bay\s*of\s*plenty|otago|hawke's\s*bay|hawkes\s*bay|taranaki|manawatu|southland|northland|marlborough|tasman|west\s*coast|auckland|christchurch|hamilton|tauranga|dunedin|lower\s*hutt|upper\s*hutt|palmerston\s*north|invercargill|rotorua|whangarei|napier|porirua|new\s*plymouth|queenstown|blenheim|timaru|taupo|pukekohe|cambridge|whakatane|hastings|gisborne|nelson|whanganui|feilding|levin|masterton|ashburton|rangiora|rolleston|wanaka)\b/i.test(lower)) return "New Zealand";
+
+  // China provinces, major cities & Chinese characters
+  if (/\b(guangdong|jiangsu|zhejiang|shandong|henan|sichuan|hubei|hunan|hebei|fujian|anhui|liaoning|shaanxi|jiangxi|huizhou|shenzhen|guangzhou|dongguan|foshan|zhongshan|zhuhai|suzhou|wuxi|changzhou|nanjing|hangzhou|ningbo|wenzhou|jiaxing|qingdao|jinan|yantai|weifang|xiamen|fuzhou|quanzhou|chengdu|wuhan|changsha|zhengzhou)\b/i.test(lower) || /[\u4e00-\u9fa5]/.test(address)) {
+    return "China";
+  }
 
   // UK postcodes & major UK counties / administrative regions
   if (/\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) {
