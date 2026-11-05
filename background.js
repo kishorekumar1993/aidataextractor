@@ -773,14 +773,14 @@ function extractCopyrightCompanyName(html) {
   if (!html) return "";
   const decoded = decodeHtmlEntities(html);
   const patterns = [
-    /(?:©|&copy;|copyright)\s*(?:©|&copy;)?\s*(?:20\d{2}(?:\s*[-–\/]\s*20\d{2})?)?\s*([^<\n\r|]{3,200}?)(?:\.?\s*all\s+rights\s+reserved|\s*<\/|$)/i,
-    /all\s+rights\s+reserved(?:\s+by)?\s+([^<\n\r|]{3,200}?)(?:\s*<\/|$)/i
+    /(?:©|&copy;|copyright)\s*(?:©|&copy;)?\s*(?:20\d{2}(?:\s*[-–\/]\s*20\d{2})?)?\s*([^<\n\r|]{3,200}?)(?:\.?\s*all\s+rights?\s+reserved|\s*<\/|$)/i,
+    /all\s+rights?\s+reserved(?:\s+by)?\s+([^<\n\r|]{3,200}?)(?:\s*<\/|$)/i
   ];
   for (const re of patterns) {
     const m = decoded.match(re);
     if (!m || !m[1]) continue;
     let name = stripHtml(m[1])
-      .replace(/all\s+rights\s+reserved/gi, " ")
+      .replace(/all\s+rights?\s+reserved/gi, " ")
       .replace(/\b(?:copyright|powered\s+by|designed\s+by|website\s+by)\b.*$/i, " ")
       .replace(/\s+/g, " ")
       .trim()
@@ -829,7 +829,8 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
 
   // 3. Strip trailing marketing taglines / SEO categories if corporate legal suffix is already present
   // e.g. "Danzer UK Limited - Timber Merchants Suppliers of Hardwoods" -> "Danzer UK Limited"
-  const legalSuffixCutoff = /\b(Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada|Sociedad\s*An[oó]nima)\b\s*[-–—|:•·,]\s*.*$/i;
+  // e.g. "YUKIWA SEIKO USA INC. Drill Chucks, Tool Holder..." -> "YUKIWA SEIKO USA INC."
+  const legalSuffixCutoff = /\b(Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada|Sociedad\s*An[oó]nima)\b(?:\s*[-–—|:•·,]\s*|\s+(?:Drill|Tool|Rotary|Spring|Chucks|Holder|Tables|Collets|Manufacturer|Supplier|Wholesaler|Distributor|Products|Services|Solutions|Store|Shop|Leading|Specialists|Machining|Precision|Online|Official)\b|\.\s+[A-Z]).*$/i;
   name = name.replace(legalSuffixCutoff, "$1");
 
   // 4. Strip trailing SEO taglines even without separator if starts with " - Manufacturer of...", " | Suppliers of..."
@@ -892,7 +893,7 @@ function extractLegalCandidatesFromHtml(html) {
   }
 
   // Pattern 3: Explicit legal suffix preceded by capitalized words
-  const generalLegalRegex = /\b([A-Z][A-Za-z0-9&.'\- ]{1,45}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Incorporated|LLC|LLP|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))\b/g;
+  const generalLegalRegex = /\b([A-Z][A-Za-z0-9&.'\- ]{1,45}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))(?:\.|\b)/gi;
   while ((m = generalLegalRegex.exec(text)) !== null) {
     const cand = m[1].trim();
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
@@ -5250,7 +5251,9 @@ function preferOfficialCompanyName(name, crawlData) {
 
   // 2. Search for the FULL official registered corporate name (with complete legal suffix/prefix/category).
   // If current name is missing legal suffix (incomplete, e.g. "Custom Flat Packs"), an official candidate matching the domain/brand MUST win!
-  const allCandidates = [...legalCandidates, jsonLdName, copyrightName]
+  const titleCandidate = cleanCompanyPrefixesAndSuffixes(extractBestBrandFromTitle(title, domain, logoText, ogSiteName));
+  const logoCandidate = cleanCompanyPrefixesAndSuffixes(logoText);
+  const allCandidates = [...legalCandidates, jsonLdName, copyrightName, logoCandidate, titleCandidate]
     .map(n => cleanCompanyPrefixesAndSuffixes(n))
     .filter(n => n && n.length >= 3 && n.length <= 160);
 
@@ -5276,6 +5279,18 @@ function preferOfficialCompanyName(name, crawlData) {
       else if (offNorm.includes(domainStem) || domainStem.includes(offNorm)) score += 50;
     }
     if (companyNamesMatch(current, official)) score += 80;
+
+    // Boost candidate that retains country designation (e.g. USA, UK, Taiwan) if domain or current name has that country
+    const domainOrBrandHasCountry = /(?:[-_.]|\b)(?:usa|us|taiwan|uk|australia|india|germany|america|americas)\b/i.test(domain) ||
+      /\b(?:usa|u\.s\.a\.|taiwan|uk|u\.k\.|australia|india|germany|america|americas)\b/i.test(current);
+    if (domainOrBrandHasCountry) {
+      const offHasCountry = /\b(?:usa|u\.s\.a\.|taiwan|uk|u\.k\.|australia|india|germany|america|americas)\b/i.test(official);
+      if (offHasCountry) {
+        score += 80;
+      } else {
+        score -= 50; // Penalize foreign/parent entity that drops the specific country branch designation
+      }
+    }
 
     // Favor concise, exact official names over overly long/noisy matches
     score -= Math.min(20, Math.floor(official.length / 5));
