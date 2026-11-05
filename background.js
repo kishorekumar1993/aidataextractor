@@ -818,7 +818,7 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   name = name.replace(/^[A-Za-z0-9\s]+[•·|*\/]\s*/, "").trim();
 
   // 2. Strip common unwanted leading prefixes (iterative loop to handle chained prefixes like "Submit scroll to top Contact")
-  const prefixRegex = /^(?:(?:contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+the\s+official\s+website\s+of)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo)\b[\s\-_|:•·,]*)+/i;
+  const prefixRegex = /^(?:(?:contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+the\s+official\s+website\s+of)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo|facebook|instagram|linkedin|twitter|youtube|pinterest|tiktok|vimeo|social\s*media|follow\s*us|connect\s*with\s*us)\b[\s\-_|:•·,]*)+/i;
 
   let prev = "";
   while (prev !== name) {
@@ -854,7 +854,7 @@ function extractLegalCandidatesFromHtml(html) {
   if (!html) return [];
   const text = html.replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<\/(?:p|div|h[1-6]|li|td|tr|th|header|footer|nav|section|article|aside|caption|blockquote|ul|ol|table|br\s*\/?)>/gi, "\n")
+    .replace(/<\/(?:a|span|p|div|h[1-6]|li|td|tr|th|header|footer|nav|section|article|aside|caption|blockquote|ul|ol|table|br\s*\/?)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ");
 
@@ -862,7 +862,9 @@ function extractLegalCandidatesFromHtml(html) {
 
   function addCleanCandidate(rawCand) {
     if (!rawCand) return;
-    const cleaned = cleanCompanyPrefixesAndSuffixes(rawCand);
+    // Strip leading words like "and", "the", "or", "from", "with", "between", "fault arises and"
+    let candidateToClean = rawCand.replace(/^.*?\b(?:and|or|by|for|with|from|including|between|the|to|at|arises)\s+/i, "").trim();
+    const cleaned = cleanCompanyPrefixesAndSuffixes(candidateToClean || rawCand);
     if (!cleaned) return;
     // Reject third-party job portals, HR platforms, web hosts, CMS, analytics, payment gateways
     if (/\b(?:Dayforce|Ceridian|Workday|BambooHR|Zenefits|Paychex|ADP|UltiPro|Greenhouse|Lever|Jobvite|SmartRecruiters|iCIMS|WordPress|Shopify|Wix|Squarespace|Cloudflare|Google|Facebook|Meta|Twitter|LinkedIn|Instagram|YouTube|Adobe|Salesforce|PayPal|Stripe)\b/i.test(cleaned)) {
@@ -892,8 +894,8 @@ function extractLegalCandidatesFromHtml(html) {
     if (m[1]) addCleanCandidate(m[1].trim());
   }
 
-  // Pattern 3: Explicit legal suffix preceded by capitalized words
-  const generalLegalRegex = /\b([A-Z][A-Za-z0-9&.'\- ]{1,45}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))(?:\.|\b)/gi;
+  // Pattern 3: Explicit legal suffix preceded by capitalized words (horizontal spaces only to avoid cross-line/inline link merging)
+  const generalLegalRegex = /\b((?:[A-Z0-9][a-zA-Z0-9&.'\-]*(?:[^\S\r\n]+[A-Z0-9][a-zA-Z0-9&.'\-]*){0,5})[^\S\r\n]+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))\b/g;
   while ((m = generalLegalRegex.exec(text)) !== null) {
     const cand = m[1].trim();
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
@@ -1503,7 +1505,7 @@ function discoverContactLinks(html, baseUrl) {
     let score = 0;
     if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us)\b/i.test(rawLower)) score += 10;
     if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile)\b/i.test(rawLower)) score += 8;
-    if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|impressum|imprint|mentions-legales)\b/i.test(rawLower)) score += 7;
+    if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|impressum|imprint|mentions-legales|warranty|warranties|guarantee|returns)\b/i.test(rawLower)) score += 7;
     if (/\b(support|customer-support|service|customer-service|help|help-desk|faq)\b/i.test(rawLower)) score += 8;
     if (/\b(sales|inquiry|enquiry|inquiries|enquiries|quote|request-quote|request-a-quote|order|orders)\b/i.test(rawLower)) score += 8;
     if (/\b(shop|store|online-store|cart|basket)\b/i.test(rawLower)) score += 8;
@@ -1513,7 +1515,7 @@ function discoverContactLinks(html, baseUrl) {
     if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us)\b/i.test(innerText)) score += 12;
     if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile)\b/i.test(innerText)) score += 10;
     if (/\b(shop|store|online\s*store|cart|basket|buy\s*online)\b/i.test(innerText)) score += 9;
-    if (/\b(terms|terms\s*and\s*conditions|terms\s*of\s*(?:service|use)|privacy\s*policy|legal\s*notice|company\s*info|imprint|impressum)\b/i.test(innerText)) score += 8;
+    if (/\b(terms|terms\s*and\s*conditions|terms\s*of\s*(?:service|use)|privacy\s*policy|legal\s*notice|company\s*info|imprint|impressum|warranty|warranties|guarantee)\b/i.test(innerText)) score += 8;
     if (/\b(customer\s*support|customer\s*service|technical\s*support|help\s*center|support)\b/i.test(innerText)) score += 10;
     if (/\b(sales|sales\s*enquiry|sales\s*inquiry|request\s*a\s*quote|quote|orders)\b/i.test(innerText)) score += 10;
     if (/\b(en|english)\b/i.test(innerText) || /[\/_](?:en|eng)\b/i.test(rawLower) || /[?&]lang=en/i.test(rawLower)) score += 7;
@@ -1922,14 +1924,18 @@ function isUnwantedEmail(email) {
   // Placeholder / dummy emails
   if (/^(?:user|email|name|test|sample|placeholder|yourname|youremail|username|example|domain|contact|admin)@(?:example|domain|test|sample|email|placeholder|yoursite)\./i.test(em)) return true;
 
-  // ROT13 obfuscation remnants (e.g. .pbz, .bet, .arg, .rqh, .tbi)
+  // Hex hashes / DSN keys / tokens (e.g. Sentry tracking DSN 605a7baede844d278b89dc95ae0a9123@...)
+  if (/^[a-f0-9]{16,64}$/i.test(user)) return true;
+
+  // ROT13 obfuscation remnants (e.g. .pbz, .bet, .arg, .rqh, .tbi or fnyrf@, vasb@)
   if (/\.(?:pbz|bet|arg|rqh|tbi)$/i.test(host)) return true;
+  if (/^(?:fnyrf|vasb|fhccbeg|pbagnpg|uryyb|nqzva)@/i.test(em)) return true;
 
   // Known third-party platforms / analytics / CDN / web builders
   const disallowedHosts = [
-    "wix.com", "wixsite.com", "shopify.com", "myshopify.com", "wordpress.com", "wordpress.org",
-    "squarespace.com", "weebly.com", "sentry.io", "sentry-cdn.com", "cloudflare.com",
-    "github.com", "gitlab.com", "google.com", "googleapis.com", "gstatic.com", "google-analytics.com",
+    "wix.com", "wixsite.com", "wixpress.com", "shopify.com", "myshopify.com", "wordpress.com", "wordpress.org",
+    "squarespace.com", "weebly.com", "sentry.io", "sentry-cdn.com", "sentry-next.wixpress.com", "sentry.wixpress.com", "static.wixpress.com",
+    "cloudflare.com", "github.com", "gitlab.com", "google.com", "googleapis.com", "gstatic.com", "google-analytics.com",
     "googletagmanager.com", "facebook.com", "twitter.com", "instagram.com", "linkedin.com", "youtube.com",
     "schema.org", "w3.org", "apache.org", "nginx.org", "openjsf.org", "jsdelivr.net", "unpkg.com",
     "cdnjs.com", "cloudflare.net", "fontawesome.com", "doubleclick.net", "hotjar.com", "hubspot.com",
@@ -2026,11 +2032,18 @@ function extractEmailsFromHtml(html, hostDomain = "") {
   // 4. Decode mailto: links (including mailto:user@domain.com?subject=...)
   const mailtoMatches = [...html.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)].map(m => m[1]);
   for (const em of mailtoMatches) {
-    candidateEmails.add(em.toLowerCase().trim());
+    const cleanedEm = em.toLowerCase().trim();
+    if (!isUnwantedEmail(cleanedEm)) {
+      candidateEmails.add(cleanedEm);
+    }
   }
 
   // 5. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
+  // Strip <script> and <style> tags to avoid capturing error tracking (e.g. Wix Sentry DSNs), analytics tokens, and bundle code
   const emailSearchText = html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, " ")
     .replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec))
     .replace(/&#x([0-9a-f]+);/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&amp;/g, "&")
@@ -2042,10 +2055,11 @@ function extractEmailsFromHtml(html, hostDomain = "") {
   const rawEmails = emailSearchText.match(emailRegex) || [];
   for (let em of rawEmails) {
     em = em.toLowerCase().trim();
+    if (isUnwantedEmail(em)) continue;
     // If an email ends in ROT13 TLD (.pbz -> .com, .bet -> .org, .arg -> .net, .rqh -> .edu, .tbi -> .gov), decode it!
     if (/\.(?:pbz|bet|arg|rqh|tbi)$/i.test(em)) {
       const decodedRot = decodeRot13(em);
-      if (isValidCorporateEmail(decodedRot)) {
+      if (isValidCorporateEmail(decodedRot) && !isUnwantedEmail(decodedRot)) {
         candidateEmails.add(decodedRot);
         continue;
       }
@@ -2055,7 +2069,7 @@ function extractEmailsFromHtml(html, hostDomain = "") {
 
   const uniqueEmails = [];
   for (const em of candidateEmails) {
-    if (isValidCorporateEmail(em) && !uniqueEmails.includes(em)) {
+    if (isValidCorporateEmail(em) && !isUnwantedEmail(em) && !uniqueEmails.includes(em)) {
       uniqueEmails.push(em);
     }
   }
@@ -2186,8 +2200,11 @@ function parseHtmlDetails(html, baseUrl) {
     cleanHtml.match(/<div[^>]*data-product[^>]*>/gi) ||
     cleanHtml.match(/href=["'][^"']*(?:machin\d|prod\d)[^"']*["']/gi) || [];
 
-  const imgMatches = cleanHtml.match(/<img\s+[^>]*src=["']([^"']*)["'][^>]*>/gi) || [];
-  const validProductImgs = imgMatches.filter(img => !/logo|icon|banner|social|arrow|pixel|loader|nav|header|footer|button|spinner|backbar/i.test(img));
+  const imgMatches = cleanHtml.match(/<img\b[^>]+>/gi) || [];
+  const validProductImgs = imgMatches.filter(img => {
+    if (/src=['"]data:image\/(?:svg|gif)/i.test(img) && !/data-(?:src|lazy-src|original)=/i.test(img)) return false;
+    return !/logo|icon|banner|social|arrow|pixel|loader|nav|header|footer|button|spinner|backbar|avatar/i.test(img);
+  });
 
   const descMatches = cleanHtml.match(/class=["'][^"']*(?:product-desc|product-description|item-description|catalog-desc)[^"']*["']/gi) || [];
 
@@ -3738,7 +3755,20 @@ function heuristicExtraction(crawlData, restrictedCheck) {
 
   const country = detectCountryFromAddress(address);
   const emailId = crawlData.emails.length > 0 ? crawlData.emails[0] : "";
-  const secondaryEmailId = crawlData.emails.length > 1 ? crawlData.emails[1] : "";
+  let targetDomain = "";
+  try {
+    targetDomain = new URL(crawlData.originalUrl || crawlData.url).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch (e) { }
+  const primHost = emailId ? (emailId.split("@")[1] || "").toLowerCase() : "";
+  const secCandidate = crawlData.emails.find(e => {
+    if (!e || e === emailId || !isValidCorporateEmail(e) || isUnwantedEmail(e)) return false;
+    const h = (e.split("@")[1] || "").toLowerCase();
+    if (!h) return false;
+    if (primHost && (h === primHost || h.endsWith("." + primHost) || primHost.endsWith("." + h))) return true;
+    if (targetDomain && (h === targetDomain || h.endsWith("." + targetDomain))) return true;
+    return false;
+  });
+  const secondaryEmailId = secCandidate || "";
   const phoneNumber = crawlData.phones.length > 0 ? crawlData.phones[0] : "";
 
   // Dynamic product counts preserving 0
@@ -4392,8 +4422,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       secEmail === email ||
       !isValidCorporateEmail(secEmail) ||
       isUnwantedEmail(secEmail) ||
-      (!isCompanyDomainEmail(secEmail) && !crawlEmails.includes(secEmail)) ||
-      (!isCompanyDomainEmail(secEmail) && isGenericWebmail(secEmail))
+      !isCompanyDomainEmail(secEmail)
     ) {
       secEmail = "";
     }
@@ -4415,7 +4444,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
   }
 
-  if (secEmail === email || !isValidCorporateEmail(secEmail) || isUnwantedEmail(secEmail)) {
+  if (secEmail === email || !isValidCorporateEmail(secEmail) || isUnwantedEmail(secEmail) || !isCompanyDomainEmail(secEmail)) {
     secEmail = "";
   }
   result.secondaryEmailId = secEmail;
