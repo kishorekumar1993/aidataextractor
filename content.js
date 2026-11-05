@@ -1153,6 +1153,32 @@
     });
   }
 
+  /**
+   * Rule 4: Cleans and formats company name per QC requirements:
+   * - Remove brackets while preserving inner text
+   * - Keep country name as it is
+   * - Preserve commas and dots (e.g. U.S., Co., Ltd.)
+   * - Remove any special characters from beginning and end
+   * - Apply Title Case
+   */
+  function cleanCompanyName(name) {
+    if (!name || typeof name !== "string") return "";
+    let n = name.trim();
+    // Remove brackets while preserving inner text
+    n = n.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
+    n = n.replace(/[\(\)\[\]\{\}]/g, " ");
+    // Remove any special characters from beginning
+    n = n.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
+    // Remove trailing special characters (symbols, dashes, colons, semicolons, commas, slashes, quotes)
+    n = n.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
+    n = n.replace(/\.{2,}$/g, ".");
+    n = n.replace(/[^a-zA-Z0-9.\u00C0-\u024F]+$/gu, "").trim();
+    n = n.replace(/(?<![\p{L}\p{N}])\.+$/gu, "").trim();
+    n = n.replace(/[,;]+$/g, "").trim();
+    n = n.replace(/\s+/g, " ").trim();
+    return toTitleCase(n);
+  }
+
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
     const elements = detectFormElements();
@@ -1249,9 +1275,9 @@
       }
     }
 
-    // 4. Company Name (All words start with Capital)
+    // 4. Company Name (Rule 4: Full form, remove brackets, preserve country, commas & dots, clean boundary special chars)
     if (elements.companyName && data.companyName) {
-      const formattedName = toTitleCase(data.companyName);
+      const formattedName = cleanCompanyName(data.companyName);
       if (setInputValue(elements.companyName, formattedName)) {
         highlightField(elements.companyName);
         filledCount++;
@@ -2039,7 +2065,7 @@
       { key: "Status", val: statusVal, isAlert: isRestr || data.websiteStatus === "Not Working" },
       { key: "Business Type", val: businessTypeVal },
       { key: "Company Profile", val: isRestr ? "-" : data.companyProfile },
-      { key: "Company Name", val: isRestr ? "-" : toTitleCase(data.companyName) },
+      { key: "Company Name", val: isRestr ? "-" : cleanCompanyName(data.companyName) },
       { key: "Country", val: isRestr ? "-" : toTitleCase(data.countryName) },
       { key: "Address", val: isRestr ? "-" : toTitleCase(data.companyAddress) },
       { key: "State", val: isRestr ? "-" : data.state },

@@ -801,11 +801,16 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   if (!rawName || typeof rawName !== "string") return "";
   let name = rawName.trim();
 
-  // 1. Strip HTML entities, tag fragments and special boundary chars
+  // 1. Strip HTML entities, tag fragments and quotes
   name = name.replace(/&amp;/gi, "&").replace(/&nbsp;/gi, " ");
-  name = name.replace(/^[^<>\n]*[>"\']+/g, "").trim();
-  name = name.replace(/<[^>]+>/g, "").replace(/^["'“”‘’«»]+|["'“”‘’«»]+$/g, "").trim();
-  name = name.replace(/^[\s\-_|:•·,;*#~]+|[\s\-_|:•·,;*#~]+$/g, "").trim();
+  name = name.replace(/^[^<>\n]*>/g, "").trim();
+  name = name.replace(/<[^>]+>/g, "").replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
+
+  // Strip leading copyright indicators like "© 2024", "(c) 2024", "Copyright 2024"
+  name = name.replace(/^(?:(?:©|\(c\)|&copy;|copyright)\s*(?:\d{4}(?:\s*[-–\/]\s*\d{4})?)?\s*(?:by)?|(?:\d{4}\s+)?(?:©|\(c\)|&copy;)\s*(?:\d{4})?\s*(?:by)?)\s*/i, "").trim();
+
+  // Remove special characters from the beginning per Rule 4
+  name = name.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
 
   // 1b. Strip embedded CTA / navigational breadcrumbs if present:
   // e.g. "Aerospace Contact Us Data Plastics Ltd" -> "Data Plastics Ltd"
@@ -819,7 +824,7 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   while (prev !== name) {
     prev = name;
     name = name.replace(prefixRegex, "").trim();
-    name = name.replace(/^[\s\-_|:•·,;*#~]+|[\s\-_|:•·,;*#~]+$/g, "").trim();
+    name = name.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
   }
 
   // 3. Strip trailing marketing taglines / SEO categories if corporate legal suffix is already present
@@ -830,8 +835,12 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   // 4. Strip trailing SEO taglines even without separator if starts with " - Manufacturer of...", " | Suppliers of..."
   name = name.replace(/\s*[-–—|:•·]\s*(?:manufacturer|supplier|wholesaler|distributor|timber\s*merchants|specialists|services|official\s*website|home|online\s*store).*$/i, "");
 
-  // 5. Clean boundary punctuation
-  name = name.replace(/^[\s\-_|:•·,;*#~]+|[\s\-_|:•·,;*#~]+$/g, "").trim();
+  // 5. Clean boundary punctuation and special characters per Rule 4
+  // Remove special characters from beginning
+  name = name.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
+  // Remove trailing special characters (symbols, dashes, colons, semicolons, commas, slashes, quotes)
+  name = name.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
+  name = name.replace(/[^a-zA-Z0-9.)\u00C0-\u024F]+$/gu, "").trim();
 
   return name;
 }
@@ -3008,17 +3017,30 @@ COMPANY NAME RULES (Rule 4):
    - Look at the FOOTER, COPYRIGHT LINE (e.g. "© 2026 Company Name"), LEGAL NOTICES, and CONTACT BLOCK for the full official registered corporate name.
    - Restore legal entity designations (e.g. [Pty]Ltd -> Proprietary Limited, Sdn Bhd -> Sendirian Berhad, Inc -> Incorporated) ONLY when supported by official website text evidence (footer, copyright, Contact page, or Company Profile).
 2. REMOVE BRACKETS FROM THE COMPANY NAME:
-   - Remove square brackets [ ] and parentheses ( ) from the company name:
+   - Remove square brackets [ ] and parentheses ( ) from the company name while KEEPING their internal words:
      * "[Pty]Ltd" or "(Pty) Ltd" -> "Proprietary Limited"
      * "(Pte) Ltd" or "[Pte] Ltd" -> "Private Limited"
      * "(Pvt) Ltd" or "[Pvt] Ltd" -> "Private Limited"
      * "(M)" -> "M" (e.g. "Nikorex Display Products (M) Sdn Bhd" -> "Nikorex Display Products M Sendirian Berhad")
-     * "(Australia)" or "(USA)" -> "Australia" / "USA" (brackets removed, country name preserved)
+     * "(Australia)" or "(USA)" or "(Taiwan)" -> "Australia" / "USA" / "Taiwan" (brackets removed, country name preserved)
+     * "Carrier (USA) Corporation" -> "Carrier USA Corporation"
+     * "Furco (Taiwan) Company Limited" -> "Furco Taiwan Company Limited"
 3. RETAIN COUNTRY NAMES IN COMPANY NAME:
    - If a country name is mentioned in the company name, take it as it is (DO NOT remove country names from the company name).
    - Example: "FP Chassis Australia (Pty) Ltd" -> "FP Chassis Australia Proprietary Limited"
    - Example: "Meramec USA Inc" -> "Meramec USA Incorporated"
-4. EXPAND LEGAL ABBREVIATIONS GLOBALLY TO FULL WORDS:
+   - Example: "Stoneland USA" -> "Stoneland USA"
+   - Example: "Palram Americas" -> "Palram Americas"
+4. PRESERVE COMMAS AND PERIODS/DOTS (CRITICAL QC RULE):
+   - STRICTLY DO NOT strip or remove commas (,) and periods/dots (.) inside the company name or abbreviations!
+   - Example: "U.S. Tsubaki Industrial, LLC" -> MUST KEEP the dots in "U.S." and the comma before "LLC"!
+   - Example: "Acme, Inc." -> MUST KEEP the comma and dot!
+   - Example: "Data Plastics Co., Ltd." -> MUST KEEP dots and comma!
+5. REMOVE SPECIAL CHARACTERS FROM BEGINNING AND END:
+   - Remove any special characters, symbols, quotes, colons, slashes, dashes, hashes, copyright marks (©), bullets (•), asterisks (*), or stray punctuation from the BEGINNING or END of the company name.
+   - The company name must begin directly with an alphanumeric letter or number (e.g. "# Carrier Inc" -> "Carrier Incorporated", "© 2024 Acme Ltd." -> "Acme Limited").
+   - The company name must end cleanly without trailing dashes, colons, semicolons, vertical bars, slashes, or trailing commas.
+6. EXPAND LEGAL ABBREVIATIONS GLOBALLY TO FULL WORDS:
    - Indonesia:
      * PT, PT., P.T. -> Perseroan Terbatas (prefix before name: e.g. "PT Astra International Tbk" -> "Perseroan Terbatas Astra International Terbuka")
      * CV, CV., C.V. -> Commanditaire Vennootschap
@@ -3756,11 +3778,20 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = compName.replace(/['’`]\s*s\b/gi, "'s");
   compName = cleanCompanyPrefixesAndSuffixes(compName);
 
-  // Expand abbreviations to full form and clean brackets
+  // Expand abbreviations to full form and clean brackets per Rule 4
   compName = expandCompanyAbbreviations(compName, country);
   compName = cleanCompanyPrefixesAndSuffixes(compName);
+  // Remove brackets while preserving inner text
+  compName = compName.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
   compName = compName.replace(/[\(\)\[\]\{\}]/g, " ");
-  compName = compName.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  // Remove any special characters from the beginning
+  compName = compName.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
+  // Remove trailing special characters (symbols, dashes, colons, semicolons, commas, slashes, quotes)
+  compName = compName.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
+  compName = compName.replace(/\.{2,}$/g, ".");
+  compName = compName.replace(/[^a-zA-Z0-9.\u00C0-\u024F]+$/gu, "").trim();
+  compName = compName.replace(/(?<![\p{L}\p{N}])\.+$/gu, "").trim();
+  compName = compName.replace(/[,;]+$/g, "").trim();
   compName = compName.replace(/\s+/g, " ").trim();
   compName = toTitleCase(compName);
   result.companyName = compName;
@@ -5354,7 +5385,8 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/[\[\(]\s*m\s*[\]\)]\s*(?=(?:sdn|sendirian|bhd|berhad|\b))/gi, " M ");
   n = n.replace(/[\[\(]\s*(malaysia)\s*[\]\)]/gi, " $1 ");
 
-  // 2. Remove brackets from company name per Rule 4
+  // 2. Remove brackets from company name per Rule 4 (keep inner content, remove bracket symbols)
+  n = n.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
   n = n.replace(/[\(\)\[\]\{\}]/g, " ");
 
   // 3. Indonesia entities (prefix and suffix)
@@ -5426,29 +5458,32 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:osakeyhti[oö]|oy)\b\.?$/gi, "Osakeyhtiö");
 
   // 12. Australia & South Africa
-  n = n.replace(/\bpty\s*ltd\.?\b/gi, "Proprietary Limited");
-  n = n.replace(/\bpty\.?\b/gi, "Proprietary");
+  n = n.replace(/\bpty\.?\s*ltd(?:\.|\b)/gi, "Proprietary Limited");
+  n = n.replace(/\bpty(?:\.|\b)/gi, "Proprietary");
 
   // 13. Singapore, India, UK
-  n = n.replace(/\bpte\s*ltd\.?\b/gi, "Private Limited");
-  n = n.replace(/\bpvt\s*ltd\.?\b/gi, "Private Limited");
-  n = n.replace(/\bplc\.?\b/gi, "Public Limited Company");
+  n = n.replace(/\bpte\.?\s*ltd(?:\.|\b)/gi, "Private Limited");
+  n = n.replace(/\bpvt\.?\s*ltd(?:\.|\b)/gi, "Private Limited");
+  n = n.replace(/\bpte(?:\.|\b)/gi, "Private");
+  n = n.replace(/\bpvt(?:\.|\b)/gi, "Private");
+  n = n.replace(/\bplc(?:\.|\b)/gi, "Public Limited Company");
 
   // 14. United States & Global
-  n = n.replace(/\bpllc\.?\b/gi, "Professional Limited Liability Company");
-  n = n.replace(/\bllp\.?\b/gi, "Limited Liability Partnership");
-  n = n.replace(/\bllc\.?\b/gi, "Limited Liability Company");
-  n = n.replace(/\bl\.?l\.?c\.?\b/gi, "Limited Liability Company");
-  n = n.replace(/\blp\.?\b/gi, "Limited Partnership");
-  n = n.replace(/\bl\.?p\.?\b/gi, "Limited Partnership");
-  n = n.replace(/\bco\.?\s*,?\s*ltd\.?/gi, "Company Limited");
-  n = n.replace(/\bltd\.?\b/gi, "Limited");
-  n = n.replace(/\binc\.?\b/gi, "Incorporated");
-  n = n.replace(/\bcorp\.?\b/gi, "Corporation");
-  n = n.replace(/\bco\.?\b/gi, "Company");
+  n = n.replace(/\bpllc(?:\.|\b)/gi, "Professional Limited Liability Company");
+  n = n.replace(/\bllp(?:\.|\b)/gi, "Limited Liability Partnership");
+  n = n.replace(/\bllc(?:\.|\b)/gi, "Limited Liability Company");
+  n = n.replace(/\bl\.?l\.?c(?:\.|\b)/gi, "Limited Liability Company");
+  n = n.replace(/\blp(?:\.|\b)/gi, "Limited Partnership");
+  n = n.replace(/\bl\.?p(?:\.|\b)/gi, "Limited Partnership");
+  n = n.replace(/\bco\.?\s*,?\s*ltd(?:\.|\b)/gi, "Company Limited");
+  n = n.replace(/\bltd(?:\.|\b)/gi, "Limited");
+  n = n.replace(/\binc(?:\.|\b)/gi, "Incorporated");
+  n = n.replace(/\bcorp(?:\.|\b)/gi, "Corporation");
+  n = n.replace(/\bco(?:\.|\b)/gi, "Company");
 
-  // Clean remaining punctuation and duplicate spaces
-  n = n.replace(/[,;.]+/g, " ");
+  // Clean semicolons and normalize commas without stripping dots and commas per Rule 4
+  n = n.replace(/;+/g, " ");
+  n = n.replace(/\s*,\s*/g, ", ");
   n = n.replace(/\s+/g, " ").trim();
   return n;
 }
