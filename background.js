@@ -215,6 +215,12 @@ const RECOGNIZED_TOWNS = [
   // Canada
   "toronto", "montreal", "vancouver", "calgary", "edmonton", "ottawa", "winnipeg", "quebec city",
   "hamilton", "kitchener", "london", "victoria bc", "halifax", "oshawa", "windsor",
+  "mississauga", "brampton", "surrey", "laval", "markham", "vaughan", "gatineau", "longueuil", "burnaby",
+  "richmond", "oakville", "burlington", "richmond hill", "sudbury", "sherbrooke", "saguenay", "kelowna",
+  "abbotsford", "coquitlam", "cambridge", "kingston", "guelph", "whitby", "dartmouth", "moncton",
+  "regina", "saskatoon", "victoria", "waterloo", "barrie", "st. catharines", "saint catharines", "scarborough",
+  "etobicoke", "north york", "delta", "nanaimo", "kamloops", "prince george", "chilliwack", "red deer",
+  "lethbridge", "st. albert", "medicine hat", "wood buffalo", "milton", "brantford", "thunder bay", "niagara falls",
   // Taiwan districts & cities
   "yangmei", "yangmei town", "banqiao", "banqiao district", "xinzhuang", "xinzhuang district", "zhonghe", "zhonghe district",
   "sanchong", "sanchong district", "tamsui", "tamsui district", "xizhi", "xizhi district",
@@ -248,6 +254,10 @@ const RECOGNIZED_TOWNS = [
   "beijing", "shanghai", "guangzhou", "shenzhen", "chengdu", "wuhan", "chongqing",
   "tianjin", "nanjing", "hangzhou", "xi'an", "shenyang", "dongguan", "foshan",
   "qingdao", "wuxi", "zhengzhou", "suzhou", "wenzhou", "dalian", "ningbo",
+  "cixi", "kunshan", "yiwu", "changzhou", "taizhou", "huzhou", "shaoxing", "jiaxing",
+  "zhongshan", "huizhou", "jiangmen", "zhuhai", "shantou", "chaozhou", "quanzhou", "xiamen",
+  "zhangzhou", "fuzhou", "weifang", "zibo", "yantai", "jinan", "tangshan", "baoding",
+  "shijiazhuang", "langfang", "cangzhou", "hefei", "wuhu", "chuzhou", "nanchang", "jiujiang", "yichun",
   // Middle East
   "dubai", "abu dhabi", "sharjah", "riyadh", "jeddah", "mecca", "medina",
   "doha", "kuwait city", "manama", "muscat", "amman", "beirut", "tehran",
@@ -1364,7 +1374,18 @@ async function crawlWebsite(targetUrl) {
   addressCandidates.sort((a, b) => {
     const pA = (typeof a === "object" && a.priority !== undefined) ? a.priority : 6;
     const pB = (typeof b === "object" && b.priority !== undefined) ? b.priority : 6;
-    return pA - pB;
+    if (pA !== pB) return pA - pB;
+    const rawA = typeof a === "object" ? (a.raw || "") : String(a || "");
+    const rawB = typeof b === "object" ? (b.raw || "") : String(b || "");
+    const scoreCandidate = (raw) => {
+      let score = 0;
+      if (hasStateInAddress(raw, "")) score += 50;
+      if (evaluateCityQC(raw, "") === "Available") score += 40;
+      if (/\b\d{4,6}\b/.test(raw)) score += 20;
+      score += Math.min(raw.length, 60);
+      return score;
+    };
+    return scoreCandidate(rawB) - scoreCandidate(rawA);
   });
 
   const logoText = extractSiteLogoText(mainHtml);
@@ -4939,6 +4960,13 @@ function hasStateInAddress(addr, country) {
   if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})(?:\\s*,|\\s*\\d{5}|\\s*$)`, "i").test(lower)) return true;
   if (isUSState && new RegExp(`^(?:${US_STATE_CODES_STR})(?:\\s+\\d{5}(?:-\\d{4})?)?$`, "i").test(lower.trim())) return true;
 
+  // Canadian province abbreviations (e.g. ON, QC, BC, AB, MB, SK, NS, NB, NL, PE)
+  const isCanada = (country && /canada/i.test(country)) || /\b(canada)\b/i.test(lower);
+  if (isCanada) {
+    if (/,\s*(?:ON|QC|BC|AB|MB|SK|NS|NB|NL|PE|YT|NT|NU)\b/i.test(addr)) return true;
+    if (/\b(?:ON|QC|BC|AB|MB|SK|NS|NB|NL|PE)\s+[A-Za-z]\d[A-Za-z]\s*\d[A-Za-z]\d\b/i.test(addr)) return true;
+  }
+
   // Non-English state/province/prefecture/county markers across the 16 priority countries
   // Germany: Bundesland, Land, Landkreis, Kreis, Regierungsbezirk
   if (/\b(bundesland|landkreis|kreis|regierungsbezirk)\b/i.test(lower)) return true;
@@ -5499,6 +5527,11 @@ function evaluateCityQC(address, country) {
       return "Available";
     }
     return "Not Available";
+  }
+
+  // Capital City Rule: (If a country's capital is mentioned in the address, then both City and State are considered available.)
+  if (hasCapitalInAddress(cleanAddr, country)) {
+    return "Available";
   }
 
   // New Zealand City Evaluation (Strict QC Rule):
