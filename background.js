@@ -979,6 +979,7 @@ async function crawlWebsite(targetUrl) {
   const allDiscoveredEmails = new Set();
   const emailSourceMap = {};
   const allDiscoveredPhones = new Set();
+  let contactLinks = [];
 
   try {
     let mainRes = await fetchDecodedHtml(targetUrl, {
@@ -1103,7 +1104,7 @@ async function crawlWebsite(targetUrl) {
     }
 
     // Discover Contact, About, Terms & Legal Pages
-    const contactLinks = discoverContactLinks(mainHtml, finalUrl);
+    contactLinks = discoverContactLinks(mainHtml, finalUrl);
     const fetchedUrls = new Set([finalUrl]);
 
     // PRE-AI CRAWL SHORT-CIRCUIT:
@@ -1355,7 +1356,15 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     return;
   }
 
-  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|box|gpo|lot|unit|factory|shed|warehouse|level|number|no|#|sec|section|jln|jalan|taman|lorong|lebuh|kawasan|perindustrian|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned) &&
+  // Reject opening hours / business hours strings (e.g. "Monday to Saturday - 9.00 AM to 5.30 PM CT")
+  if (/\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s+(?:to|-|through)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i.test(cleaned) ||
+      /\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i.test(cleaned)) {
+    return;
+  }
+
+  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|ste|box|gpo|lot|unit|factory|shed|warehouse|level|number|no|sec|section|jln|jalan|taman|lorong|lebuh|kawasan|perindustrian|st|rd|ave|dr|blvd|ln|hwy|apt|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned) &&
+    !/#\s*\d+/.test(cleaned) &&
+    !/\b(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\s+\d{5}(?:-\d{4})?\b/i.test(cleaned) &&
     !/\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act)\b/i.test(cleaned) &&
     !/[\u4e00-\u9fa5]{2,}/.test(cleaned)) {
     return;
@@ -4412,11 +4421,22 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.secondaryEmailId = secEmail;
 
   // 11. Phone Number: Country-specific cleaning & validation
-  let phone = cleanPhoneNumber(result.phoneNumber, country);
+  // First pass: try direct local landline phone (non-toll-free)
+  let phone = cleanPhoneNumber(result.phoneNumber, country, false);
   if (!phone && crawlData.phones && crawlData.phones.length > 0) {
     for (const cand of crawlData.phones) {
-      phone = cleanPhoneNumber(cand, country);
+      phone = cleanPhoneNumber(cand, country, false);
       if (phone) break;
+    }
+  }
+  // Fallback: If no direct landline exists, capture official toll-free contact number (e.g. 888-783-3584 on sturdell.com)
+  if (!phone) {
+    phone = cleanPhoneNumber(result.phoneNumber, country, true);
+    if (!phone && crawlData.phones && crawlData.phones.length > 0) {
+      for (const cand of crawlData.phones) {
+        phone = cleanPhoneNumber(cand, country, true);
+        if (phone) break;
+      }
     }
   }
   result.phoneNumber = phone;
@@ -5720,6 +5740,31 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
     }
   }
 
+  // 1c. Check acronym-based legal candidate or title (e.g. cleanName = "Custom Rollform Products", cand = "CRP Inc" -> suffix is "Inc" -> "Custom Rollform Products, Inc")
+  const getAcronym = (str) => {
+    const words = (str || "").replace(/[^a-zA-Z0-9\s]/g, " ").trim().split(/\s+/).filter(w => w.length > 0 && !/^(the|and|for|of|in|on|at|co|company|corp|inc|ltd|llc)$/i.test(w));
+    return words.map(w => w[0]).join("").toLowerCase();
+  };
+  const nameAcronym = getAcronym(cleanName);
+  if (nameAcronym.length >= 2) {
+    for (const cand of legalCandidates) {
+      const candBase = cand.replace(/[^a-zA-Z0-9\s]/g, " ").trim().split(/\s+/)[0].toLowerCase();
+      if (candBase === nameAcronym && hasCompleteLegalSuffix(cand)) {
+        const m = cand.match(new RegExp(LEGAL_SUFFIX_CAPTURE + "$", "i"));
+        if (m && m[1]) {
+          return `${cleanName}, ${m[1].trim()}`;
+        }
+      }
+    }
+    // Also check page title (e.g. title: "... | CRP Inc.")
+    if (crawlData && crawlData.title) {
+      const titleMatch = crawlData.title.match(new RegExp(`\\b${nameAcronym}\\s*[,.]?\\s*${LEGAL_SUFFIX_CAPTURE}`, "i"));
+      if (titleMatch && titleMatch[1]) {
+        return `${cleanName}, ${titleMatch[1].trim()}`;
+      }
+    }
+  }
+
   // 2. Check corpus regex
   const corpus = companyEvidenceCorpus(crawlData);
   if (!corpus) return cleanName;
@@ -6788,7 +6833,7 @@ function removePostalCodesCarefully(addr) {
  * Country-specific phone cleaner and validator strictly conforming to Rule 11.
  * Strips international calling codes globally and removes leading zeros.
  */
-function cleanPhoneNumber(rawPhone, country) {
+function cleanPhoneNumber(rawPhone, country, allowTollFree = false) {
   if (!rawPhone) return "";
   let p = String(rawPhone).trim();
 
@@ -6861,8 +6906,8 @@ function cleanPhoneNumber(rawPhone, country) {
   // Rule 11: Strip leading zero
   digits = digits.replace(/^0+/, "");
 
-  // Rule 11: Do not take toll-free numbers
-  if (/^(800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902)/.test(digits)) {
+  // Rule 11: Do not take toll-free numbers unless allowed or fallback
+  if (!allowTollFree && /^(800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902)/.test(digits)) {
     return "";
   }
 
