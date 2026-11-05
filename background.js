@@ -1005,8 +1005,11 @@ async function crawlWebsite(targetUrl) {
 
     httpStatus = mainRes.status || 0;
     if (mainRes.redirected) {
-      redirected = true;
       finalUrl = mainRes.url;
+      if (isRedirectDomain(targetUrl, finalUrl)) {
+        redirected = true;
+        status = "Redirect Site";
+      }
     }
 
     if (!mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status)) {
@@ -1195,6 +1198,12 @@ async function crawlWebsite(targetUrl) {
       if (status === "Working") {
         status = "Redirect Site";
       }
+    } else {
+      // Same domain redirect (http->https, www, subpath) is NOT a Redirect Site!
+      if (status === "Redirect Site") {
+        status = "Working";
+      }
+      redirected = false;
     }
   } catch (e) { }
 
@@ -1245,7 +1254,7 @@ async function crawlWebsite(targetUrl) {
   return {
     originalUrl: targetUrl,
     finalUrl,
-    redirected,
+    redirected: isRedirectDomain(targetUrl, finalUrl),
     status,
     fetchError,
     httpStatus,
@@ -2743,7 +2752,7 @@ WEBSITE STATUS QC RULES (Rule 1):
     -> You MUST mark "websiteStatus": "Not Working" and leave all other fields empty ""!
 - Rule 12: Websites in a non-English language without an English translation option -> mark "websiteStatus": "Non English" (all other fields empty "").
 - Rule 14: Websites designed in Flash format where text is not copyable -> mark "websiteStatus": "Flash" (all other fields empty "").
-- Rule 13: URL redirecting websites – only the final redirected URL will be considered. Evaluate the company dynamically at the final redirected URL.
+- Rule 13: URL redirecting websites – only if the website redirected to a completely DIFFERENT domain (e.g. companyA.com -> companyB.com), mark "websiteStatus": "Redirect Site". If it is on the SAME domain (http to https, www vs non-www, language path /en/, subpage or subfolder), it is NOT a Redirect Site! Mark "websiteStatus": "Working". Evaluate the company dynamically at the final redirected URL.
 - Rule 9: Websites hosted on free platforms (WordPress, Wix, Weebly, Blogspot, etc.) -> mark "websiteStatus": "Not Working" (all other fields empty "").
 - Rule 10: Subdomain websites not hosted at root level (e.g. multimedia/entertainment streaming platforms like music or video streaming) -> mark "websiteStatus": "Not Working" (all other fields empty "").
 - Rule 8: Personal websites, personal blogs, personal portfolios -> mark "websiteStatus": "Not Working" (all other fields empty "").
@@ -3311,6 +3320,27 @@ Return ONLY valid JSON matching this schema:
   return parsed;
 }
 
+function extractRootDomain(urlOrHost) {
+  if (!urlOrHost || typeof urlOrHost !== "string") return "";
+  let host = urlOrHost.trim().toLowerCase();
+  try {
+    if (host.includes("://")) {
+      host = new URL(host).hostname;
+    } else if (host.includes("/")) {
+      host = host.split("/")[0];
+    }
+  } catch (e) { }
+  host = host.replace(/:\d+$/, "");
+  host = host.replace(/^www\d?\./i, "");
+  const parts = host.split(".").filter(Boolean);
+  if (parts.length <= 2) return parts.join(".");
+  const lastTwo = parts.slice(-2).join(".");
+  if (/^(?:co|com|org|net|gov|edu|ac|asn|idv|gen|nic|ltd|me|tm)\.[a-z]{2}$/i.test(lastTwo)) {
+    return parts.slice(-3).join(".");
+  }
+  return parts.slice(-2).join(".");
+}
+
 function extractDomainStem(urlOrHost) {
   if (!urlOrHost || typeof urlOrHost !== "string") return "";
   let host = urlOrHost.trim().toLowerCase();
@@ -3334,9 +3364,17 @@ function cleanDomainStem(url) {
 function isRedirectDomain(origUrl, finalUrl) {
   if (!origUrl || !finalUrl) return false;
   try {
+    const origRoot = extractRootDomain(origUrl);
+    const finalRoot = extractRootDomain(finalUrl);
+    if (origRoot && finalRoot && origRoot === finalRoot) {
+      return false;
+    }
     const origStem = extractDomainStem(origUrl);
     const finalStem = extractDomainStem(finalUrl);
-    return !!(origStem && finalStem && origStem !== finalStem);
+    if (origStem && finalStem && origStem === finalStem) {
+      return false;
+    }
+    return !!(origRoot && finalRoot && origRoot !== finalRoot);
   } catch (e) {
     return false;
   }
@@ -3618,9 +3656,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
 
   // 3. Website Status (Rules 9, 10, 12, 14: Flash, Non English, Free Platforms, Subdomains, Domain Expired, or Offline)
-  const isRedirectSite = crawlData.status === "Redirect Site" || 
-    crawlData.redirected === true || 
-    isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl);
+  const isDiffDomain = isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl);
+  const isRedirectSite = isDiffDomain && (crawlData.status === "Redirect Site" || crawlData.redirected === true || isDiffDomain);
 
   const platformCheck = detectDisallowedWebsitePlatformOrDomain(crawlData.originalUrl || crawlData.finalUrl, crawlData.mainHtml || "", crawlData.bodyText || "");
   if (platformCheck.isDisallowed) {
@@ -3637,6 +3674,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.websiteStatus = crawlData.status || "Not Working";
   } else if (isRedirectSite) {
     result.websiteStatus = "Redirect Site";
+  } else if (!isDiffDomain && (result.websiteStatus === "Redirect Site" || result.websiteStatus === "Redirect")) {
+    result.websiteStatus = "Working";
   }
 
   // CRITICAL RULE: "Notworking means all empty"
@@ -4089,6 +4128,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // Final safeguard: If website redirected to another domain and is working, ALWAYS ensure websiteStatus is "Redirect Site"
   if (isRedirectSite && (result.websiteStatus === "Working" || !result.websiteStatus)) {
     result.websiteStatus = "Redirect Site";
+  } else if (!isDiffDomain && (result.websiteStatus === "Redirect Site" || result.websiteStatus === "Redirect")) {
+    result.websiteStatus = "Working";
   }
 
   return result;
