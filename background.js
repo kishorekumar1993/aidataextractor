@@ -1130,10 +1130,12 @@ async function crawlWebsite(targetUrl) {
             const cText = cRes.html;
             contactHtml += "\n" + cText;
             const isProfilePage = /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
-            const pageSource = isProfilePage ? "profile" : "contact";
+            const isContactPage = /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)/i.test(cUrl);
+            const isLowQualitySubpage = /(?:terms|privacy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)/i.test(cUrl);
+            const pageSource = isProfilePage ? "profile" : (isContactPage ? "contact" : "other");
 
             if (isProfilePage && !primaryAboutUrl) primaryAboutUrl = cUrl;
-            if (!isProfilePage && !primaryContactUrl) primaryContactUrl = cUrl;
+            if (isContactPage && !primaryContactUrl) primaryContactUrl = cUrl;
 
             extractEmbeddedScriptAddresses(cText, addressCandidates);
             extractMapAddresses(cText, addressCandidates);
@@ -1147,13 +1149,17 @@ async function crawlWebsite(targetUrl) {
             // Extract legal corporate names across this page
             for (const cand of extractLegalCandidatesFromHtml(cText)) {
               allLegalCandidates.add(cand);
-              if (!legalCandidateSources[cand]) legalCandidateSources[cand] = cUrl;
+              if (!legalCandidateSources[cand]) {
+                legalCandidateSources[cand] = cUrl;
+              } else if (!isLowQualitySubpage && /(?:terms|privacy|policy|disclaimer|faq|cart)/i.test(legalCandidateSources[cand])) {
+                legalCandidateSources[cand] = cUrl;
+              }
             }
 
             // Extract all corporate emails and phones across this page
             for (const em of extractEmailsFromHtml(cText, finalUrl)) {
               allDiscoveredEmails.add(em);
-              emailSourceMap[em.toLowerCase()] = cUrl;
+              updateEmailSource(emailSourceMap, em, cUrl, finalUrl, targetUrl);
             }
             const pagePhoneLinks = [...cText.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
             for (const p of pagePhoneLinks) allDiscoveredPhones.add(p);
@@ -1177,7 +1183,7 @@ async function crawlWebsite(targetUrl) {
                   extractHtmlAddresses(fbRes.html, addressCandidates, "contact");
                   for (const em of extractEmailsFromHtml(fbRes.html, finalUrl)) {
                     allDiscoveredEmails.add(em);
-                    emailSourceMap[em.toLowerCase()] = fbUrl;
+                    updateEmailSource(emailSourceMap, em, fbUrl, finalUrl, targetUrl);
                   }
                 }
               }
@@ -1228,9 +1234,7 @@ async function crawlWebsite(targetUrl) {
   // Merge discovered emails/phones from all crawled pages
   for (const em of extracted.emails) {
     allDiscoveredEmails.add(em);
-    if (!emailSourceMap[em.toLowerCase()]) {
-      emailSourceMap[em.toLowerCase()] = finalUrl;
-    }
+    updateEmailSource(emailSourceMap, em, finalUrl, finalUrl, targetUrl);
   }
   for (const p of extracted.phones) allDiscoveredPhones.add(p);
 
@@ -1238,17 +1242,41 @@ async function crawlWebsite(targetUrl) {
     const contactParsed = parseHtmlDetails(contactHtml, finalUrl);
     for (const em of contactParsed.emails) {
       allDiscoveredEmails.add(em);
-      if (!emailSourceMap[em.toLowerCase()]) {
-        emailSourceMap[em.toLowerCase()] = primaryContactUrl || finalUrl;
-      }
+      updateEmailSource(emailSourceMap, em, primaryContactUrl || finalUrl, finalUrl, targetUrl);
     }
     for (const p of contactParsed.phones) allDiscoveredPhones.add(p);
   }
 
   let hostDomain = "";
   try {
-    hostDomain = new URL(finalUrl).hostname.replace(/^www\./i, "");
+    hostDomain = new URL(finalUrl).hostname.replace(/^www\./i, "").toLowerCase();
   } catch (e) { }
+
+  // Check official company social pages (Facebook & LinkedIn only) for secondary emails per QC instructions
+  const companySocials = extractCompanySocialLinks(mainHtml + " " + contactHtml);
+  const allowedSocialUrls = [companySocials.facebook, companySocials.linkedin].filter(Boolean);
+  for (const sUrl of allowedSocialUrls) {
+    if (allDiscoveredEmails.size >= 4) break;
+    try {
+      const sRes = await fetchDecodedHtml(sUrl, {
+        timeoutMs: 3000,
+        headers: {
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+      });
+      if (sRes.ok && sRes.html) {
+        const sEmails = extractEmailsFromHtml(sRes.html, hostDomain);
+        for (const se of sEmails) {
+          const seHost = (se.split("@")[1] || "").toLowerCase();
+          if (hostDomain && (seHost === hostDomain || seHost.endsWith("." + hostDomain))) {
+            allDiscoveredEmails.add(se);
+            updateEmailSource(emailSourceMap, se, sUrl, finalUrl, targetUrl);
+          }
+        }
+      }
+    } catch (e) { }
+  }
 
   extracted.emails = rankEmails(Array.from(allDiscoveredEmails), hostDomain);
   extracted.phones = Array.from(allDiscoveredPhones);
@@ -1297,8 +1325,9 @@ async function crawlWebsite(targetUrl) {
     legalCompanyCandidates: Array.from(allLegalCandidates),
     legalCandidateSources,
     emailSourceMap,
-    primaryContactUrl: primaryContactUrl || (contactLinks.length > 0 ? contactLinks[0] : ""),
-    primaryAboutUrl: primaryAboutUrl || "",
+    primaryContactUrl: primaryContactUrl || (contactLinks.find(u => /\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)\b/i.test(u)) || ""),
+    primaryAboutUrl: primaryAboutUrl || (contactLinks.find(u => /\b(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|profile)\b/i.test(u)) || ""),
+    companySocials,
     ...extracted
   };
 }
@@ -1813,6 +1842,98 @@ function stripHtml(html) {
 }
 
 /**
+ * Decodes ROT13 encoded text (used by WordPress plugins like Email Encoder Bundle).
+ */
+function decodeRot13(str) {
+  if (!str || typeof str !== "string") return str;
+  return str.replace(/[a-zA-Z]/g, function (c) {
+    const code = c.charCodeAt(0);
+    if (code >= 65 && code <= 90) return String.fromCharCode(((code - 65 + 13) % 26) + 65);
+    if (code >= 97 && code <= 122) return String.fromCharCode(((code - 97 + 13) % 26) + 97);
+    return c;
+  });
+}
+
+/**
+ * Extracts official company social profile URLs from HTML.
+ * Strictly limited to Facebook and LinkedIn per QC instructions (never Twitter, Instagram, TikTok, YouTube).
+ */
+function extractCompanySocialLinks(html) {
+  if (!html || typeof html !== "string") return { facebook: "", linkedin: "" };
+  let facebook = "";
+  let linkedin = "";
+
+  // 1. Facebook company profile link
+  const fbMatches = [...html.matchAll(/href=["'](https?:\/\/(?:www\.)?facebook\.com\/[a-zA-Z0-9.\-_/]+)["']/gi)];
+  for (const m of fbMatches) {
+    const u = m[1];
+    if (!/sharer|share\.php|intent|plugins|privacy|help|dialog|login|signup|tr\?|hashtag/i.test(u)) {
+      facebook = u;
+      break;
+    }
+  }
+
+  // 2. LinkedIn company profile link
+  const liMatches = [...html.matchAll(/href=["'](https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in)\/[a-zA-Z0-9.\-_/]+)["']/gi)];
+  for (const m of liMatches) {
+    const u = m[1];
+    if (!/share|sharing|intent|legal|privacy|login|signup/i.test(u)) {
+      linkedin = u;
+      break;
+    }
+  }
+
+  return { facebook, linkedin };
+}
+
+/**
+ * Detects unwanted emails: asset files, tracking scripts, third-party platform vendors,
+ * administrative/automated addresses, privacy/GDPR bots, and dummy placeholders.
+ */
+function isUnwantedEmail(email) {
+  if (!email || typeof email !== "string") return true;
+  const em = email.toLowerCase().trim();
+  const atIdx = em.indexOf("@");
+  if (atIdx <= 0 || atIdx === em.length - 1) return true;
+
+  const user = em.slice(0, atIdx);
+  const host = em.slice(atIdx + 1);
+
+  // File extension anywhere in user or host (e.g. icon@2x.png, image.jpg@domain, logo@2x)
+  if (/\.(?:png|jpg|jpeg|gif|svg|webp|avif|bmp|ico|css|js|woff|woff2|ttf|eot|pdf|zip|rar|tar|gz|json|xml|map|html|htm|php|asp|aspx)$/i.test(user)) return true;
+  if (/\.(?:png|jpg|jpeg|gif|svg|webp|avif|bmp|ico|css|js|woff|woff2|ttf|eot|pdf|zip|rar|tar|gz|json|xml|map|html|htm|php|asp|aspx)$/i.test(host)) return true;
+
+  // Media / asset / bundle prefixes
+  if (/^(?:icon|logo|image|img|pic|photo|asset|banner|file|avatar|bg|font|theme|bundle|chunk|main|vendor|webpack)@/i.test(em)) return true;
+  if (/@\d+x\./i.test(em)) return true; // e.g. logo@2x.png
+
+  // Administrative / automated / privacy / non-contact prefixes
+  if (/^(?:noreply|no-reply|donotreply|do-not-reply|postmaster|hostmaster|abuse|mailer-daemon|bounce|unsubscribe|notification|notifications|alert|alerts|security|dpo|gdpr|privacy|compliance|legal|copyright|dmca|terms|feedback|careers|job|jobs|hiring|recruiting|investor|investors|press|media|sentry|git|npm)@/i.test(em)) return true;
+
+  // Placeholder / dummy emails
+  if (/^(?:user|email|name|test|sample|placeholder|yourname|youremail|username|example|domain|contact|admin)@(?:example|domain|test|sample|email|placeholder|yoursite)\./i.test(em)) return true;
+
+  // ROT13 obfuscation remnants (e.g. .pbz, .bet, .arg, .rqh, .tbi)
+  if (/\.(?:pbz|bet|arg|rqh|tbi)$/i.test(host)) return true;
+
+  // Known third-party platforms / analytics / CDN / web builders
+  const disallowedHosts = [
+    "wix.com", "wixsite.com", "shopify.com", "myshopify.com", "wordpress.com", "wordpress.org",
+    "squarespace.com", "weebly.com", "sentry.io", "sentry-cdn.com", "cloudflare.com",
+    "github.com", "gitlab.com", "google.com", "googleapis.com", "gstatic.com", "google-analytics.com",
+    "googletagmanager.com", "facebook.com", "twitter.com", "instagram.com", "linkedin.com", "youtube.com",
+    "schema.org", "w3.org", "apache.org", "nginx.org", "openjsf.org", "jsdelivr.net", "unpkg.com",
+    "cdnjs.com", "cloudflare.net", "fontawesome.com", "doubleclick.net", "hotjar.com", "hubspot.com",
+    "intercom.com", "zendesk.com", "zohocdn.com", "gravatar.com", "godaddy.com", "bluehost.com",
+    "hostgator.com", "namecheap.com", "cpanel.net", "cpanel.com", "webhostbox.com", "secureserver.net",
+    "example.com", "example.org", "example.net", "domain.com", "test.com", "sample.com"
+  ];
+  if (disallowedHosts.some(dh => host === dh || host.endsWith("." + dh))) return true;
+
+  return false;
+}
+
+/**
  * Strict corporate email validator.
  * Rejects web URLs, images/assets, placeholders, prose artifacts (e.g. "collected at www.domain.com"),
  * and domains starting with www.
@@ -1820,6 +1941,9 @@ function stripHtml(html) {
 function isValidCorporateEmail(email) {
   if (!email || typeof email !== "string") return false;
   const em = email.trim().toLowerCase();
+
+  // Filter unwanted emails, script artifacts, and third-party vendors
+  if (isUnwantedEmail(em)) return false;
 
   // Basic standard RFC-style email format
   if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(em)) return false;
@@ -1833,25 +1957,26 @@ function isValidCorporateEmail(email) {
   // Email host/domain must never start with www., http., https., or contain /
   if (/^(?:www\d?|http|https)\./i.test(host) || host.includes("/")) return false;
 
+  // Domain must contain a dot and have valid letters after dot
+  if (!host.includes(".") || !/\.[a-zA-Z]{2,}$/.test(host)) return false;
+
   // Domain cannot end with non-email file extension
   if (/\.(png|jpg|jpeg|gif|svg|webp|css|js|woff|woff2|ttf|eot|ico|bmp|mp4|webm|pdf|exe|zip|rar|tar|gz|json|xml|map)$/i.test(host)) return false;
-
-  // Reject dummy/placeholder emails
-  if (/^(?:user@example|email@domain|name@email|test@|sample@|info@domain|your@email|placeholder@|noreply@|no-reply@|donotreply@)/i.test(em)) return false;
 
   // Prose verb/preposition artifacts from text scraping (e.g. "collected at www.domain.com")
   const proseVerbs = /^(?:collected|located|registered|hosted|available|visited|published|stored|created|updated|viewed|see|look|shop|buy|contacted|served|found)$/i;
   if (proseVerbs.test(user)) return false;
 
-  // Reject if username or host is excessively long or has invalid characters
-  if (user.length > 64 || host.length > 255) return false;
+  // Reject if username or host is excessively short or long
+  if (user.length < 2 || user.length > 64 || host.length < 4 || host.length > 255) return false;
 
   return true;
 }
 
 /**
  * Extracts and decodes all valid email addresses from any HTML snippet or page.
- * Handles mailto links, Cloudflare obfuscation, HTML numeric/hex entities, URL encoding, and [at] patterns.
+ * Handles mailto links, Cloudflare obfuscation, ROT13 encoding (WordPress Email Encoder),
+ * decodeURIComponent/hex scripts, HTML numeric entities, URL encoding, and [at] patterns.
  */
 function extractEmailsFromHtml(html, hostDomain = "") {
   if (!html || typeof html !== "string") return [];
@@ -1871,13 +1996,31 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     } catch (e) { }
   }
 
-  // 2. Decode mailto: links (including mailto:user@domain.com?subject=...)
+  // 2. Decode ROT13 obfuscated emails (e.g. data-enc-email="fnyrf[at]unegznaapbagebyf.pbz" or class="mail-link" data-enc-email="...")
+  const rotMatches = [...html.matchAll(/data-enc-email=["']([a-zA-Z0-9._%+-]+(?:@|\[at\]|\(at\))[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
+  for (const rm of rotMatches) {
+    const rawEnc = rm[1].replace(/\[at\]|\(at\)/gi, "@");
+    const decoded = decodeRot13(rawEnc).toLowerCase().trim();
+    if (/@/.test(decoded)) candidateEmails.add(decoded);
+  }
+
+  // 3. Decode inline URI / URIComponent scripts (e.g. innerHTML = decodeURIComponent("%73%61%6c%65%73..."))
+  const uriEncodedMatches = [...html.matchAll(/(?:decodeURIComponent|decodeURI|unescape)\s*\(\s*["']([^"']+)["']\s*\)/gi)];
+  for (const um of uriEncodedMatches) {
+    try {
+      const decoded = decodeURIComponent(um[1]).toLowerCase().trim();
+      const emMatches = decoded.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+      for (const em of emMatches) candidateEmails.add(em);
+    } catch (e) { }
+  }
+
+  // 4. Decode mailto: links (including mailto:user@domain.com?subject=...)
   const mailtoMatches = [...html.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)].map(m => m[1]);
   for (const em of mailtoMatches) {
     candidateEmails.add(em.toLowerCase().trim());
   }
 
-  // 3. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
+  // 5. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
   const emailSearchText = html
     .replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec))
     .replace(/&#x([0-9a-f]+);/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
@@ -1888,8 +2031,17 @@ function extractEmailsFromHtml(html, hostDomain = "") {
 
   const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
   const rawEmails = emailSearchText.match(emailRegex) || [];
-  for (const em of rawEmails) {
-    candidateEmails.add(em.toLowerCase().trim());
+  for (let em of rawEmails) {
+    em = em.toLowerCase().trim();
+    // If an email ends in ROT13 TLD (.pbz -> .com, .bet -> .org, .arg -> .net, .rqh -> .edu, .tbi -> .gov), decode it!
+    if (/\.(?:pbz|bet|arg|rqh|tbi)$/i.test(em)) {
+      const decodedRot = decodeRot13(em);
+      if (isValidCorporateEmail(decodedRot)) {
+        candidateEmails.add(decodedRot);
+        continue;
+      }
+    }
+    candidateEmails.add(em);
   }
 
   const uniqueEmails = [];
@@ -1900,6 +2052,58 @@ function extractEmailsFromHtml(html, hostDomain = "") {
   }
 
   return rankEmails(uniqueEmails, hostDomain);
+}
+
+/**
+ * Updates email source tracking with page priority (Contact page > Home page > About page > Social media > Other subpages).
+ * Prevents repeating footers on legal/faq/terms pages from overwriting genuine Contact page sources.
+ */
+function updateEmailSource(emailSourceMap, email, pageUrl, finalUrl = "", targetUrl = "") {
+  if (!email || !pageUrl || !emailSourceMap) return;
+  const em = email.toLowerCase().trim();
+  const currentSrc = emailSourceMap[em];
+  if (!currentSrc) {
+    emailSourceMap[em] = pageUrl;
+    return;
+  }
+  const getPagePriority = (url) => {
+    const u = (url || "").toLowerCase();
+    if (/\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)\b/i.test(u)) return 4;
+    if (u === (finalUrl || "").toLowerCase() || u === (targetUrl || "").toLowerCase()) return 3;
+    if (/\b(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|profile)\b/i.test(u)) return 2;
+    if (/facebook\.com|linkedin\.com/i.test(u)) return 1;
+    if (/\b(?:terms|terms-and-conditions|privacy|privacy-policy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)\b/i.test(u)) return -1;
+    return 0;
+  };
+  if (getPagePriority(pageUrl) > getPagePriority(currentSrc)) {
+    emailSourceMap[em] = pageUrl;
+  }
+}
+
+/**
+ * Resolves the most accurate and genuine page source URL for an email address.
+ * Prioritizes Contact page, Home page, and allowed Social Media (Facebook/LinkedIn) over low-quality repeating footer pages (Terms, Privacy, FAQ, Cart).
+ */
+function resolveBestEmailSource(email, crawlData) {
+  if (!email || !crawlData) return "";
+  const em = email.toLowerCase().trim();
+  const mappedSrc = (crawlData.emailSourceMap && crawlData.emailSourceMap[em]) || "";
+  const contactUrl = crawlData.primaryContactUrl || "";
+  const finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+  const aboutUrl = crawlData.primaryAboutUrl || "";
+
+  const isLowQualityPage = (u) => /\b(?:terms|terms-and-conditions|privacy|privacy-policy|policy|policies|disclaimer|faq|legal|cart|basket|checkout|cookie|cookies|sitemap)\b/i.test(u || "");
+
+  // If mapped source is clean (genuine contact, home, about, or allowed social media), use it directly
+  if (mappedSrc && !isLowQualityPage(mappedSrc)) {
+    return mappedSrc;
+  }
+
+  // If mapped source was a low quality page (e.g. privacy/terms footer), prefer genuine Contact page or Home page
+  if (contactUrl) return contactUrl;
+  if (finalUrl) return finalUrl;
+  if (aboutUrl) return aboutUrl;
+  return mappedSrc || finalUrl;
 }
 
 function parseHtmlDetails(html, baseUrl) {
@@ -3616,39 +3820,66 @@ function checkPhysicalProductSupplier(crawlData, result) {
 }
 
 /**
- * Determines the source URL where the official company name was discovered
+ * Determines the source URL where the official company name was discovered.
+ * Prioritizes Home page and About Us page over low-quality terms/privacy/policy/faq pages.
  */
 function determineCompanyNameSource(compName, crawlData) {
   if (!compName || !crawlData) return (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "";
   const norm = normalizeNameForComparison(compName);
   if (!norm) return crawlData.finalUrl || crawlData.originalUrl || "";
 
-  // Check legalCandidateSources
+  const finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+  const primaryAboutUrl = crawlData.primaryAboutUrl || "";
+  const primaryContactUrl = crawlData.primaryContactUrl || "";
+
+  const isLowQualityPage = (url) => /\b(?:terms|terms-and-conditions|privacy|privacy-policy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)\b/i.test(url || "");
+
+  // 1. If homepage HTML, title, logo, header, or copyright matches company name, homepage is the primary source
+  if (crawlData.mainHtml) {
+    const mainHtmlLower = crawlData.mainHtml.toLowerCase();
+    const compNameLower = compName.toLowerCase();
+    if (
+      (crawlData.copyrightText && normalizeNameForComparison(crawlData.copyrightText).includes(norm)) ||
+      mainHtmlLower.includes(compNameLower) ||
+      (norm.length > 5 && mainHtmlLower.includes(norm))
+    ) {
+      return finalUrl;
+    }
+  }
+
+  // 2. If primaryAboutUrl exists and compName is mentioned on about page
+  if (primaryAboutUrl && crawlData.profilePageText && crawlData.profilePageText.toLowerCase().includes(compName.toLowerCase())) {
+    return primaryAboutUrl;
+  }
+
+  // 3. Check legalCandidateSources (excluding terms/privacy/cart pages)
   if (crawlData.legalCandidateSources) {
     for (const [cand, srcUrl] of Object.entries(crawlData.legalCandidateSources)) {
-      if (normalizeNameForComparison(cand) === norm) {
+      if (normalizeNameForComparison(cand) === norm && !isLowQualityPage(srcUrl)) {
         return srcUrl;
       }
     }
     for (const [cand, srcUrl] of Object.entries(crawlData.legalCandidateSources)) {
       const cNorm = normalizeNameForComparison(cand);
-      if (cNorm && (cNorm.includes(norm) || norm.includes(cNorm))) {
+      if (cNorm && (cNorm.includes(norm) || norm.includes(cNorm)) && !isLowQualityPage(srcUrl)) {
         return srcUrl;
       }
     }
   }
 
-  // Check copyrightText
+  // 4. Prefer primaryAboutUrl if present
+  if (primaryAboutUrl) return primaryAboutUrl;
+
+  // 5. Prefer primaryContactUrl if present
+  if (primaryContactUrl) return primaryContactUrl;
+
+  // 6. Check copyrightText source
   if (crawlData.copyrightText && normalizeNameForComparison(crawlData.copyrightText).includes(norm)) {
-    return crawlData.copyrightSourceUrl || crawlData.finalUrl || "";
+    const cpUrl = crawlData.copyrightSourceUrl || finalUrl;
+    if (!isLowQualityPage(cpUrl)) return cpUrl;
   }
 
-  // If primaryAboutUrl exists and compName is mentioned on about page
-  if (crawlData.primaryAboutUrl && crawlData.profilePageText && crawlData.profilePageText.toLowerCase().includes(compName.toLowerCase())) {
-    return crawlData.primaryAboutUrl;
-  }
-
-  return crawlData.finalUrl || crawlData.originalUrl || "";
+  return finalUrl;
 }
 
 /**
@@ -4113,6 +4344,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 9. Primary Email ID
   let email = (result.emailId || "").trim().toLowerCase();
+  if (email && (isUnwantedEmail(email) || !isValidCorporateEmail(email))) {
+    email = "";
+  }
   // Reject email if generic webmail and was NOT discovered during the website HTML crawl
   if (email && isGenericWebmail(email) && !crawlEmails.includes(email)) {
     email = "";
@@ -4124,31 +4358,57 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       email = "";
     }
   }
-  if (!email || !isValidCorporateEmail(email)) {
-    const validFromCrawl = crawlEmails.find(e => isValidCorporateEmail(e));
+  if (!email || !isValidCorporateEmail(email) || isUnwantedEmail(email)) {
+    const validFromCrawl = crawlEmails.find(e => isValidCorporateEmail(e) && !isUnwantedEmail(e));
     email = validFromCrawl || "";
   }
   result.emailId = email;
 
-  // 10. Secondary Email ID
+  // 10. Secondary Email ID (Strict Quality Control: only genuine corporate alternate from same domain or Facebook/LinkedIn company source)
   let secEmail = (result.secondaryEmailId || "").trim().toLowerCase();
-  // Reject secondary email if generic webmail and was NOT discovered during the website HTML crawl
-  if (secEmail && isGenericWebmail(secEmail) && !crawlEmails.includes(secEmail)) {
-    secEmail = "";
-  }
-  // Reject secondary email if not in crawlEmails and does not match target host domain
-  if (secEmail && !crawlEmails.includes(secEmail)) {
-    const secHost = (secEmail.split("@")[1] || "").toLowerCase();
-    if (!targetHostDomain || (secHost !== targetHostDomain && !secHost.endsWith("." + targetHostDomain))) {
+  const primHost = email ? (email.split("@")[1] || "").toLowerCase() : "";
+
+  const isCompanyDomainEmail = (candEmail) => {
+    if (!candEmail || typeof candEmail !== "string") return false;
+    const candHost = (candEmail.split("@")[1] || "").toLowerCase();
+    if (!candHost) return false;
+    if (primHost && (candHost === primHost || candHost.endsWith("." + primHost) || primHost.endsWith("." + candHost))) return true;
+    if (targetHostDomain && (candHost === targetHostDomain || candHost.endsWith("." + targetHostDomain))) return true;
+    return false;
+  };
+
+  // If Gemini provided a secondary email, validate it strictly
+  if (secEmail) {
+    if (
+      secEmail === email ||
+      !isValidCorporateEmail(secEmail) ||
+      isUnwantedEmail(secEmail) ||
+      (!isCompanyDomainEmail(secEmail) && !crawlEmails.includes(secEmail)) ||
+      (!isCompanyDomainEmail(secEmail) && isGenericWebmail(secEmail))
+    ) {
       secEmail = "";
     }
   }
-  // Fallback ONLY to a verified distinct alternate corporate email found during crawl
-  if (!secEmail || secEmail === email || !isValidCorporateEmail(secEmail)) {
-    const alternate = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== email.toLowerCase());
-    secEmail = alternate ? alternate.toLowerCase() : "";
+
+  // Fallback ONLY to a verified distinct alternate corporate email from the SAME company domain discovered during crawl.
+  // NEVER force an unwanted, external, or non-domain email if the site only has one email!
+  if (!secEmail && email) {
+    const cleanCrawlAlternates = crawlEmails.filter(e => {
+      const emLower = (e || "").trim().toLowerCase();
+      if (!emLower || emLower === email || !isValidCorporateEmail(emLower) || isUnwantedEmail(emLower)) {
+        return false;
+      }
+      return isCompanyDomainEmail(emLower);
+    });
+
+    if (cleanCrawlAlternates.length > 0) {
+      secEmail = cleanCrawlAlternates[0];
+    }
   }
-  if (secEmail === email || !isValidCorporateEmail(secEmail)) secEmail = "";
+
+  if (secEmail === email || !isValidCorporateEmail(secEmail) || isUnwantedEmail(secEmail)) {
+    secEmail = "";
+  }
   result.secondaryEmailId = secEmail;
 
   // 11. Phone Number: Country-specific cleaning & validation
@@ -4198,12 +4458,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // Quality check source links: Company Name, Primary Email, Secondary Email
   result.companyNameSource = determineCompanyNameSource(result.companyName, crawlData);
-  result.primaryEmailSource = (result.emailId && crawlData && crawlData.emailSourceMap && crawlData.emailSourceMap[result.emailId.toLowerCase()])
-    ? crawlData.emailSourceMap[result.emailId.toLowerCase()]
-    : (result.emailId ? ((crawlData && (crawlData.primaryContactUrl || crawlData.finalUrl)) || "") : "");
-  result.secondaryEmailSource = (result.secondaryEmailId && crawlData && crawlData.emailSourceMap && crawlData.emailSourceMap[result.secondaryEmailId.toLowerCase()])
-    ? crawlData.emailSourceMap[result.secondaryEmailId.toLowerCase()]
-    : (result.secondaryEmailId ? ((crawlData && (crawlData.primaryContactUrl || crawlData.finalUrl)) || "") : "");
+  result.primaryEmailSource = result.emailId ? resolveBestEmailSource(result.emailId, crawlData) : "";
+  result.secondaryEmailSource = result.secondaryEmailId ? resolveBestEmailSource(result.secondaryEmailId, crawlData) : "";
 
   return result;
 }
