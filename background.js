@@ -3034,6 +3034,11 @@ COMPANY NAME RULES (Rule 4):
    - Example: "Palram Americas" -> "Palram Americas"
 4. PRESERVE COMMAS AND PERIODS/DOTS (CRITICAL QC RULE):
    - STRICTLY DO NOT strip or remove commas (,) and periods/dots (.) inside the company name or abbreviations!
+   - When expanding ", Inc" or ", Inc." to full form, YOU MUST KEEP THE COMMA:
+     * "TP Orthodontics, Inc" -> "TP Orthodontics, Incorporated"
+     * "Transformer Manufacturers, Inc" -> "Transformer Manufacturers, Incorporated"
+   - When expanding "CO., LTD" or "Co., Ltd." to full form, YOU MUST EXPAND MFG. TO "Manufacturing" AND KEEP THE COMMA IN "Company, Limited":
+     * "KAULIN MFG. CO., LTD" -> "Kaulin Manufacturing Company, Limited"
    - Example: "U.S. Tsubaki Industrial, LLC" -> MUST KEEP the dots in "U.S." and the comma before "LLC"!
    - Example: "Acme, Inc." -> MUST KEEP the comma and dot!
    - Example: "Data Plastics Co., Ltd." -> MUST KEEP dots and comma!
@@ -3795,6 +3800,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = compName.replace(/[,;]+$/g, "").trim();
   compName = compName.replace(/\s+/g, " ").trim();
   compName = toTitleCase(compName);
+  compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
   result.companyName = compName;
 
   // 6. Company Address: Compare Gemini's answer against website candidates, prioritizing Headquarters
@@ -5484,13 +5490,17 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\bplc(?:\.|\b)/gi, "Public Limited Company");
 
   // 14. United States & Global
+  n = n.replace(/\bmfg(?:\.|\b)/gi, "Manufacturing");
+  n = n.replace(/\bmfrs(?:\.|\b)/gi, "Manufacturers");
+  n = n.replace(/\bmfr(?:\.|\b)/gi, "Manufacturer");
   n = n.replace(/\bpllc(?:\.|\b)/gi, "Professional Limited Liability Company");
   n = n.replace(/\bllp(?:\.|\b)/gi, "Limited Liability Partnership");
   n = n.replace(/\bllc(?:\.|\b)/gi, "Limited Liability Company");
   n = n.replace(/\bl\.?l\.?c(?:\.|\b)/gi, "Limited Liability Company");
   n = n.replace(/\blp(?:\.|\b)/gi, "Limited Partnership");
   n = n.replace(/\bl\.?p(?:\.|\b)/gi, "Limited Partnership");
-  n = n.replace(/\bco\.?\s*,?\s*ltd(?:\.|\b)/gi, "Company Limited");
+  n = n.replace(/\bco\.?\s*,?\s*ltd(?:\.|\b)/gi, "Company, Limited");
+  n = n.replace(/\bCompany\s+Limited\b/gi, "Company, Limited");
   n = n.replace(/\bltd(?:\.|\b)/gi, "Limited");
   n = n.replace(/\binc(?:\.|\b)/gi, "Incorporated");
   n = n.replace(/\bcorp(?:\.|\b)/gi, "Corporation");
@@ -5501,6 +5511,38 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\s*,\s*/g, ", ");
   n = n.replace(/\s+/g, " ").trim();
   return n;
+}
+
+/**
+ * Rule 4: Preserves/restores comma before corporate legal designations:
+ * e.g. "TP Orthodontics, Inc" -> "TP Orthodontics, Incorporated"
+ * e.g. "Transformer Manufacturers, Inc" -> "Transformer Manufacturers, Incorporated"
+ * e.g. "Kaulin Manufacturing Company, Limited"
+ */
+function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
+  if (!compName || typeof compName !== "string") return compName;
+  // If already has a comma before Incorporated / Company, Limited / Limited Liability Company, keep it intact
+  if (/,\s*(?:Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Limited)\b/i.test(compName)) {
+    return compName;
+  }
+  const m = compName.match(/^(.*?)\s+(Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company)\b(.*)$/i);
+  if (m) {
+    const base = m[1].trim();
+    const suffix = m[2].trim();
+    const rest = m[3] || "";
+    const corpus = [
+      crawlData && crawlData.copyrightText,
+      crawlData && crawlData.title,
+      crawlData && (crawlData.legalCompanyCandidates || []).join(" "),
+      crawlData && crawlData.mainHtml
+    ].filter(Boolean).join(" ");
+
+    const escBase = base.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+    if (new RegExp(`${escBase}\\s*,\\s*(?:Inc|Incorporated|LLC|Ltd)`, "i").test(corpus)) {
+      return `${base}, ${suffix}${rest}`;
+    }
+  }
+  return compName;
 }
 
 /**
@@ -6489,7 +6531,7 @@ function toTitleCase(str) {
   if (!str) return "";
   const upperAcronyms = new Set([
     "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
-    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "SDN", "BHD", "LTD", "PLC", "LLC", "INC", "CORP"
+    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "SDN", "BHD", "LTD", "PLC", "LLC", "INC", "CORP", "TP"
   ]);
   let s = str.replace(/['’`]\s*s\b/gi, "'s");
   // Every word starts with a Capital letter per QC instruction: "All words come start with Captial make it"
@@ -6500,6 +6542,10 @@ function toTitleCase(str) {
     const upper = word.toUpperCase();
     if (upperAcronyms.has(upper)) return upper;
     if (/^GmbH$/i.test(word)) return "GmbH";
+    // Retain 2-4 letter uppercase acronyms like TP, SNC, PP, etc.
+    if (/^[A-Z]{2,4}$/.test(word) && !/^(?:AND|THE|FOR|WITH|FROM|OUT)$/i.test(word)) {
+      return word;
+    }
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });
 }
