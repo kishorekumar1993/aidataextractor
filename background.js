@@ -870,7 +870,7 @@ function extractLegalCandidatesFromHtml(html) {
     if (/\b(?:Dayforce|Ceridian|Workday|BambooHR|Zenefits|Paychex|ADP|UltiPro|Greenhouse|Lever|Jobvite|SmartRecruiters|iCIMS|WordPress|Shopify|Wix|Squarespace|Cloudflare|Google|Facebook|Meta|Twitter|LinkedIn|Instagram|YouTube|Adobe|Salesforce|PayPal|Stripe)\b/i.test(cleaned)) {
       return;
     }
-    if (cleaned.length >= 3 && cleaned.length <= 60 && !/^(?:all|and|the|for|with|from|including|our|your|their|loss|damage|expenses|costs)\b/i.test(cleaned)) {
+    if (cleaned.length >= 3 && cleaned.length <= 60 && !/^(?:and|the|for|with|from|including|our|your|their|loss|damage|expenses|costs)\b/i.test(cleaned) && !/^all\s+(?:rights|damages|losses|claims|disclaimers)\b/i.test(cleaned)) {
       candidates.add(cleaned);
     }
   }
@@ -899,7 +899,8 @@ function extractLegalCandidatesFromHtml(html) {
   while ((m = generalLegalRegex.exec(text)) !== null) {
     const cand = m[1].trim();
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
-      !/^(?:all|and|the|for|with|from|including|our|your|their)\b/i.test(cand) &&
+      !/^(?:and|the|for|with|from|including|our|your|their)\b/i.test(cand) &&
+      !/^all\s+(?:rights|damages|losses|claims|disclaimers)\b/i.test(cand) &&
       cand.length >= 3 && cand.length <= 60) {
       addCleanCandidate(cand);
     }
@@ -955,6 +956,37 @@ function extractSiteLogoText(html) {
   }
 
   return "";
+}
+
+/**
+ * Extracts official company Facebook and LinkedIn URLs from HTML.
+ * Ignores generic social sharing buttons (sharer, shareArticle, etc.).
+ */
+function extractOfficialSocialLinks(html) {
+  if (!html) return { facebook: null, linkedin: null };
+  const fbMatches = [...html.matchAll(/href=["'](https?:\/\/(?:www\.)?facebook\.com\/([A-Za-z0-9_.\-]+)\/?)(?:["'?>]|$)/gi)];
+  let facebook = null;
+  for (const m of fbMatches) {
+    const rawUrl = m[1].trim();
+    const handle = (m[2] || "").toLowerCase();
+    if (!/^(?:sharer|share|tr|plugins|dialog|hashtag|home|login|search|pages|group|groups|events|watch|marketplace|help|policies|privacy|settings)$/i.test(handle)) {
+      facebook = rawUrl;
+      break;
+    }
+  }
+
+  const liMatches = [...html.matchAll(/href=["'](https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in)\/([A-Za-z0-9_.\-]+)\/?)(?:["'?>]|$)/gi)];
+  let linkedin = null;
+  for (const m of liMatches) {
+    const rawUrl = m[1].trim();
+    const handle = (m[2] || "").toLowerCase();
+    if (!/^(?:shareArticle|sharing|feed|jobs|learning|pulse|help|legal|login|signup)$/i.test(handle)) {
+      linkedin = rawUrl;
+      break;
+    }
+  }
+
+  return { facebook, linkedin };
 }
 
 /**
@@ -1204,6 +1236,44 @@ async function crawlWebsite(targetUrl) {
     if (homeProfileMatch) {
       profilePageText += "\n" + homeProfileMatch[0];
     }
+
+    // Check official Facebook & LinkedIn pages for secondary email & registered company legal name
+    const allCrawlText = mainHtml + "\n" + contactHtml;
+    const socialLinks = extractOfficialSocialLinks(allCrawlText);
+    if (socialLinks.facebook && !fetchedUrls.has(socialLinks.facebook)) {
+      fetchedUrls.add(socialLinks.facebook);
+      try {
+        const fbRes = await fetchDecodedHtml(socialLinks.facebook, { timeoutMs: 5000 });
+        if (fbRes.ok && fbRes.html) {
+          contactHtml += "\n" + fbRes.html;
+          for (const em of extractEmailsFromHtml(fbRes.html, finalUrl)) {
+            allDiscoveredEmails.add(em);
+            updateEmailSource(emailSourceMap, em, socialLinks.facebook, finalUrl, targetUrl);
+          }
+          for (const cand of extractLegalCandidatesFromHtml(fbRes.html)) {
+            allLegalCandidates.add(cand);
+            if (!legalCandidateSources[cand]) legalCandidateSources[cand] = socialLinks.facebook;
+          }
+        }
+      } catch (e) { }
+    }
+    if (socialLinks.linkedin && !fetchedUrls.has(socialLinks.linkedin)) {
+      fetchedUrls.add(socialLinks.linkedin);
+      try {
+        const liRes = await fetchDecodedHtml(socialLinks.linkedin, { timeoutMs: 5000 });
+        if (liRes.ok && liRes.html) {
+          contactHtml += "\n" + liRes.html;
+          for (const em of extractEmailsFromHtml(liRes.html, finalUrl)) {
+            allDiscoveredEmails.add(em);
+            updateEmailSource(emailSourceMap, em, socialLinks.linkedin, finalUrl, targetUrl);
+          }
+          for (const cand of extractLegalCandidatesFromHtml(liRes.html)) {
+            allLegalCandidates.add(cand);
+            if (!legalCandidateSources[cand]) legalCandidateSources[cand] = socialLinks.linkedin;
+          }
+        }
+      } catch (e) { }
+    }
   } catch (err) {
     fetchError = err.message || "Failed to fetch website";
   }
@@ -1325,13 +1395,15 @@ async function crawlWebsite(targetUrl) {
     profilePageText: profilePageText.slice(0, 8000),
     copyrightText: copyrightText.slice(0, 500),
     copyrightSourceUrl: copyrightSourceUrl || finalUrl,
+    ...extracted,
     legalCompanyCandidates: Array.from(allLegalCandidates),
     legalCandidateSources,
     emailSourceMap,
+    emails: rankEmails(Array.from(allDiscoveredEmails), targetUrl, emailSourceMap),
+    phones: Array.from(allDiscoveredPhones),
     primaryContactUrl: primaryContactUrl || (contactLinks.find(u => /\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)\b/i.test(u)) || ""),
     primaryAboutUrl: primaryAboutUrl || (contactLinks.find(u => /\b(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|profile)\b/i.test(u)) || ""),
-    companySocials,
-    ...extracted
+    companySocials
   };
 }
 
@@ -2111,22 +2183,17 @@ function resolveBestEmailSource(email, crawlData) {
   if (!email || !crawlData) return "";
   const em = email.toLowerCase().trim();
   const mappedSrc = (crawlData.emailSourceMap && crawlData.emailSourceMap[em]) || "";
+  // Always return the exact page where the email was genuinely discovered (Contact, Warranty, Home, About, or Social)
+  if (mappedSrc) {
+    return mappedSrc;
+  }
   const contactUrl = crawlData.primaryContactUrl || "";
   const finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
   const aboutUrl = crawlData.primaryAboutUrl || "";
-
-  const isLowQualityPage = (u) => /\b(?:terms|terms-and-conditions|privacy|privacy-policy|policy|policies|disclaimer|faq|legal|cart|basket|checkout|cookie|cookies|sitemap)\b/i.test(u || "");
-
-  // If mapped source is clean (genuine contact, home, about, or allowed social media), use it directly
-  if (mappedSrc && !isLowQualityPage(mappedSrc)) {
-    return mappedSrc;
-  }
-
-  // If mapped source was a low quality page (e.g. privacy/terms footer), prefer genuine Contact page or Home page
   if (contactUrl) return contactUrl;
   if (finalUrl) return finalUrl;
   if (aboutUrl) return aboutUrl;
-  return mappedSrc || finalUrl;
+  return finalUrl;
 }
 
 function parseHtmlDetails(html, baseUrl) {
@@ -2231,13 +2298,14 @@ function parseHtmlDetails(html, baseUrl) {
 }
 
 /**
- * Scores and ranks emails giving highest priority to corporate domain addresses without subdomains.
+ * Scores and ranks emails giving highest priority to corporate domain addresses without subdomains
+ * and prioritizing emails discovered directly on Contact and Home pages.
  */
-function rankEmails(emails, targetDomain) {
+function rankEmails(emails, targetDomain, emailSourceMap = {}) {
   if (!emails || emails.length === 0) return [];
-  const validList = emails.filter(e => isValidCorporateEmail(e));
+  const validList = emails.filter(e => isValidCorporateEmail(e) && !isUnwantedEmail(e));
   if (validList.length === 0) return [];
-  const domainClean = (targetDomain || "").replace(/^www\./i, "").toLowerCase();
+  const domainClean = (targetDomain || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split(/[\/?#]/)[0].toLowerCase();
 
   const scored = validList.map(email => {
     const lower = email.toLowerCase().trim();
@@ -2246,17 +2314,29 @@ function rankEmails(emails, targetDomain) {
     const hostClean = host ? host.replace(/^www\./i, "") : "";
 
     if (hostClean && domainClean && (hostClean === domainClean || hostClean.endsWith("." + domainClean))) {
-      score += 50;
+      score += 100;
     }
-    // Prefer direct domain over nested subdomain (e.g. ppi@polyprise.com.tw over polypriz@www.polyprise.com.tw)
+    // Prefer direct domain over nested subdomain
     if (hostClean === domainClean) {
-      score += 20;
-    }
-    if (/^(info|contact|sales|enquir|office|admin|mail|service|head|hq|ppi)/i.test(user)) {
       score += 30;
     }
+    // Page location priority
+    const src = (emailSourceMap && emailSourceMap[lower]) || "";
+    if (/\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us)\b/i.test(src)) {
+      score += 60; // Highest priority: directly on Contact page
+    } else if (src === targetDomain || (domainClean && src.includes(domainClean) && !/\/(?:warranty|terms|privacy|policy|faq)/i.test(src))) {
+      score += 40; // On Home page or general landing page
+    } else if (/facebook\.com|linkedin\.com/i.test(src)) {
+      score += 20; // Official company social media
+    }
+
+    if (/^(sales|contact)/i.test(user)) {
+      score += 35;
+    } else if (/^(info|enquir|office|admin|mail|service|head|hq|ppi)/i.test(user)) {
+      score += 25;
+    }
     if (/^(webmaster|abuse|privacy|no-?reply|support@wordpress|support@wix)/i.test(user)) {
-      score -= 50;
+      score -= 80;
     }
 
     return { email: lower, score };
@@ -4397,7 +4477,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       email = "";
     }
   }
-  if (!email || !isValidCorporateEmail(email) || isUnwantedEmail(email)) {
+  // Ensure primary email uses the highest-ranked verified corporate email from the website/contact page
+  if (!email || !isValidCorporateEmail(email) || isUnwantedEmail(email) || (crawlEmails.length > 0 && crawlEmails[0] && isValidCorporateEmail(crawlEmails[0]) && !isUnwantedEmail(crawlEmails[0]))) {
     const validFromCrawl = crawlEmails.find(e => isValidCorporateEmail(e) && !isUnwantedEmail(e));
     email = validFromCrawl || "";
   }
