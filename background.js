@@ -6501,18 +6501,12 @@ function romanizeChineseAddress(addr) {
   const parts = s.split(/[,，\n]+/).map(p => p.trim()).filter(Boolean);
   if (parts.length >= 2) {
     const lastPart = parts[parts.length - 1];
-    if (/\b(?:Number|No\.?|Floor|Room|Building)\b/i.test(lastPart) || /\b(?:Road|Street|Avenue|Lane)\b/i.test(lastPart)) {
+    if (/\b(?:Number|No\.?|Floor|Room|Building)\b/i.test(lastPart) || /\b(?:Road|Street|Avenue|Lane)\b/i.test(lastPart) || /^\d+[A-Za-z]?$/.test(lastPart)) {
       parts.reverse();
     }
   }
 
-  // If the address contains Huizhou and doesn't mention Guangdong, attach Guangdong
-  let res = parts.join(", ");
-  if (/\bHuizhou\b/i.test(res) && !/\bGuangdong\b/i.test(res)) {
-    res += ", Guangdong";
-  }
-
-  return res;
+  return parts.join(", ");
 }
 
 /**
@@ -7284,59 +7278,37 @@ function restoreStateIfOmitted(cleanAddr, rawAddr, country = "") {
         return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${prov}`;
       }
     }
-
-    // 2. Map 5-digit Spanish postal code prefix (01-52) to official Province
-    const esPostcodeMatch = rawAddr.match(/\b(?:ES[-\s]?)?(0[1-9]|[1-4]\d|5[0-2])\d{3}\b/i);
-    if (esPostcodeMatch) {
-      const prefix = esPostcodeMatch[1];
-      const codeToProv = {
-        "01": "Álava", "02": "Albacete", "03": "Alicante", "04": "Almería", "05": "Ávila",
-        "06": "Badajoz", "07": "Islas Baleares", "08": "Barcelona", "09": "Burgos", "10": "Cáceres",
-        "11": "Cádiz", "12": "Castellón", "13": "Ciudad Real", "14": "Córdoba", "15": "A Coruña",
-        "16": "Cuenca", "17": "Girona", "18": "Granada", "19": "Guadalajara", "20": "Guipúzcoa",
-        "21": "Huelva", "22": "Huesca", "23": "Jaén", "24": "León", "25": "Lleida",
-        "26": "La Rioja", "27": "Lugo", "28": "Madrid", "29": "Málaga", "30": "Murcia",
-        "31": "Navarra", "32": "Ourense", "33": "Asturias", "34": "Palencia", "35": "Las Palmas",
-        "36": "Pontevedra", "37": "Salamanca", "38": "Santa Cruz de Tenerife", "39": "Cantabria", "40": "Segovia",
-        "41": "Sevilla", "42": "Soria", "43": "Tarragona", "44": "Teruel", "45": "Toledo",
-        "46": "Valencia", "47": "Valladolid", "48": "Vizcaya", "49": "Zamora", "50": "Zaragoza",
-        "51": "Ceuta", "52": "Melilla"
-      };
-      if (codeToProv[prefix]) {
-        return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${codeToProv[prefix]}`;
-      }
-    }
   }
 
-  // China check - ONLY if country is China or raw address has Chinese characters
+  // China check - ONLY if province is explicitly mentioned in raw website address
   if (!country || cLower.includes("china") || /[\u4e00-\u9fa5]/.test(rawAddr) || /[\u4e00-\u9fa5]/.test(cleanAddr)) {
     const chinaProvinces = [
-      ["guangdong", "Guangdong", ["huizhou", "shenzhen", "guangzhou", "dongguan", "foshan", "zhongshan", "zhuhai", "jiangmen", "shantou", "zhanjiang", "zhaoqing", "qingyuan", "chaozhou", "jieyang", "heyuan", "shanwei", "meizhou", "shaoguan", "maoming", "yangjiang", "yunfu", "惠州", "深圳", "广州", "东莞", "佛山", "中山", "珠海", "广东"]],
-      ["jiangsu", "Jiangsu", ["suzhou", "wuxi", "changzhou", "nanjing", "nantong", "yangzhou", "zhenjiang", "taizhou", "xuzhou", "yancheng", "huai'an", "huaian", "lianyungang", "suqian", "kunshan", "昆山", "苏州", "无锡", "常州", "南京", "江苏"]],
-      ["zhejiang", "Zhejiang", ["hangzhou", "ningbo", "wenzhou", "jiaxing", "huzhou", "shaoxing", "jinhua", "quzhou", "zhoushan", "taizhou", "lishui", "yiwu", "义乌", "杭州", "宁波", "温州", "嘉兴", "湖州", "绍兴", "金华", "浙江"]],
-      ["shandong", "Shandong", ["qingdao", "jinan", "yantai", "weifang", "zibo", "jining", "linyi", "dezhou", "liaocheng", "binzhou", "heze", "zaozhuang", "dongying", "weihai", "taian", "tai'an", "rizhao", "青岛", "济南", "烟台", "潍坊", "山东"]],
-      ["sichuan", "Sichuan", ["chengdu", "mianyang", "deyang", "yibin", "nanchong", "luzhou", "leshan", "zigong", "panzhihua", "成都", "绵阳", "四川"]],
-      ["hubei", "Hubei", ["wuhan", "xiangyang", "yichang", "jingzhou", "huangshi", "shiyan", "武汉", "襄阳", "宜昌", "湖北"]],
-      ["hunan", "Hunan", ["changsha", "zhuzhou", "xiangtan", "hengyang", "yueyang", "changde", "yiyang", "chenzhou", "长沙", "湖南"]],
-      ["henan", "Henan", ["zhengzhou", "luoyang", "xinxiang", "nanyang", "kaifeng", "anyang", "jiaozuo", "xuchang", "pingdingshan", "郑州", "洛阳", "河南"]],
-      ["hebei", "Hebei", ["shijiazhuang", "tangshan", "baoding", "langfang", "cangzhou", "handan", "xingtai", "qinhuangdao", "zhangjiakou", "hengshui", "石家庄", "唐山", "保定", "河北"]],
-      ["fujian", "Fujian", ["xiamen", "fuzhou", "quanzhou", "zhangzhou", "putian", "ningde", "nanping", "longyan", "sanming", "厦门", "福州", "泉州", "福建"]],
-      ["anhui", "Anhui", ["hefei", "wuhu", "bengbu", "huainan", "maanshan", "huaibei", "tongling", "anqing", "huangshan", "chuzhou", "fuyang", "suzhou", "lu'an", "bozhou", "chizhou", "xuancheng", "合肥", "芜湖", "安徽"]],
-      ["shaangxi", "Shaanxi", ["xi'an", "xian", "xianyang", "baoji", "weinan", "yan'an", "hanzhong", "yulin", "ankang", "shangluo", "西安", "咸阳", "宝鸡", "陕西"]],
-      ["liaoning", "Liaoning", ["shenyang", "dalian", "anshan", "fushun", "benxi", "dandong", "jinzhou", "yingkou", "fuxin", "liaoyang", "panjin", "tieling", "chaoyang", "huludao", "沈阳", "大连", "辽宁"]],
-      ["jiangxi", "Jiangxi", ["nanchang", "ganzhou", "jiujiang", "yichun", "shangrao", "jian", "ji'an", "fuzhou", "xinyu", "pingxiang", "jingdezhen", "yingtan", "南昌", "赣州", "九江", "江西"]]
+      ["Guangdong", ["广东省", "广东", "guangdong"]],
+      ["Jiangsu", ["江苏省", "江苏", "jiangsu"]],
+      ["Zhejiang", ["浙江省", "浙江", "zhejiang"]],
+      ["Shandong", ["山东省", "山东", "shandong"]],
+      ["Sichuan", ["四川省", "四川", "sichuan"]],
+      ["Hubei", ["湖北省", "湖北", "hubei"]],
+      ["Hunan", ["湖南省", "湖南", "hunan"]],
+      ["Henan", ["河南省", "河南", "henan"]],
+      ["Hebei", ["河北省", "河北", "hebei"]],
+      ["Fujian", ["福建省", "福建", "fujian"]],
+      ["Anhui", ["安徽省", "安徽", "anhui"]],
+      ["Shaanxi", ["陕西省", "陕西", "shaanxi"]],
+      ["Liaoning", ["辽宁省", "辽宁", "liaoning"]],
+      ["Jiangxi", ["江西省", "江西", "jiangxi"]]
     ];
-    for (const [pCode, pFull, pCities] of chinaProvinces) {
+    for (const [pFull, pKeywords] of chinaProvinces) {
       const regClean = new RegExp(`\\b${pFull}\\b`, "i");
       if (regClean.test(cleanAddr)) continue; // already has province
-      const hasProvInRaw = new RegExp(`\\b${pFull}\\b`, "i").test(rawAddr) || rawAddr.includes(pCities[pCities.length - 1]);
-      const hasCityInAddr = pCities.some(city => {
-        if (/[\u4e00-\u9fa5]/.test(city)) {
-          return rawAddr.includes(city);
+      const hasProvInRaw = pKeywords.some(kw => {
+        if (/[\u4e00-\u9fa5]/.test(kw)) {
+          return rawAddr.includes(kw);
         }
-        return new RegExp(`\\b${city}\\b`, "i").test(cleanAddr) || new RegExp(`\\b${city}\\b`, "i").test(rawAddr);
+        return new RegExp(`\\b${kw}\\b`, "i").test(rawAddr);
       });
-      if (hasProvInRaw || hasCityInAddr) {
+      // ONLY restore if the province was actually present in raw address on website!
+      if (hasProvInRaw) {
         return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${pFull}`;
       }
     }
