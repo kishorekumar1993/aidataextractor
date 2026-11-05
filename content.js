@@ -1638,10 +1638,13 @@
         }
 
         const note = data._note || "Gemini AI";
+        const snapInfo = (data._screenshotResult && data._screenshotResult.success)
+          ? ` 📸 Screenshots saved to Downloads/${data._screenshotResult.folder}!`
+          : "";
         if (data.websiteStatus === "Redirect Site") {
-          updateStatus(`🔄 Redirect Site detected! Pre-filled ${fillReport.filledCount} fields from destination URL (${note}). Stopped at Submit button for manual review.`, "success");
+          updateStatus(`🔄 Redirect Site detected! Pre-filled ${fillReport.filledCount} fields (${note}).${snapInfo} Stopped at Submit button for manual review.`, "success");
         } else {
-          updateStatus(`✅ Working site found! Pre-filled ${fillReport.filledCount} fields (${note}). Stopped at Submit button for manual review.`, "success");
+          updateStatus(`✅ Working site found! Pre-filled ${fillReport.filledCount} fields (${note}).${snapInfo} Stopped at Submit button for manual review.`, "success");
         }
       }
     } catch (err) {
@@ -2143,6 +2146,13 @@
           if (res && res.success) {
             saveScreenBtn.innerHTML = "✅ Saved!";
             updateStatus(`✅ Screenshots & summary saved to Downloads/${res.folder}`, "success");
+          } else if (res && res.downloadsPayload && res.downloadsPayload.length > 0) {
+            for (const item of res.downloadsPayload) {
+              const fname = item.filename ? item.filename.split("/").pop() : "validation_screenshot.png";
+              triggerDomDownload(item.url, fname);
+            }
+            saveScreenBtn.innerHTML = "✅ Saved!";
+            updateStatus(`✅ Screenshots saved to Downloads folder!`, "success");
           } else {
             saveScreenBtn.innerHTML = "📸 Save Screenshots";
             updateStatus(`⚠️ Screenshot capture: ${res?.error || "Check Downloads folder"}`, "warning");
@@ -2150,6 +2160,19 @@
           setTimeout(() => { saveScreenBtn.innerHTML = "📸 Save Screenshots"; }, 3500);
         });
       };
+    }
+  }
+
+  function triggerDomDownload(dataUrl, filename) {
+    try {
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { try { a.remove(); } catch (e) { } }, 1000);
+    } catch (e) {
+      console.warn("[AI Assistant] triggerDomDownload error:", e);
     }
   }
 
