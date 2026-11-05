@@ -1315,7 +1315,10 @@ async function crawlWebsite(targetUrl) {
     const contactParsed = parseHtmlDetails(contactHtml, finalUrl);
     for (const em of contactParsed.emails) {
       allDiscoveredEmails.add(em);
-      updateEmailSource(emailSourceMap, em, primaryContactUrl || finalUrl, finalUrl, targetUrl);
+      // Only set fallback source if not already mapped to an exact subpage URL
+      if (!emailSourceMap[em]) {
+        updateEmailSource(emailSourceMap, em, primaryContactUrl || finalUrl, finalUrl, targetUrl);
+      }
     }
     for (const p of contactParsed.phones) allDiscoveredPhones.add(p);
   }
@@ -1351,7 +1354,7 @@ async function crawlWebsite(targetUrl) {
     } catch (e) { }
   }
 
-  extracted.emails = rankEmails(Array.from(allDiscoveredEmails), hostDomain);
+  extracted.emails = rankEmails(Array.from(allDiscoveredEmails), hostDomain, emailSourceMap);
   extracted.phones = Array.from(allDiscoveredPhones);
 
   // Sort candidates strictly by priority hierarchy:
@@ -2190,10 +2193,18 @@ function resolveBestEmailSource(email, crawlData) {
   const contactUrl = crawlData.primaryContactUrl || "";
   const finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
   const aboutUrl = crawlData.primaryAboutUrl || "";
-  if (contactUrl) return contactUrl;
-  if (finalUrl) return finalUrl;
-  if (aboutUrl) return aboutUrl;
-  return finalUrl;
+
+  // If not explicitly mapped, check which crawled page actually contains this email
+  if (contactUrl && crawlData.contactHtml && crawlData.contactHtml.toLowerCase().includes(em)) {
+    return contactUrl;
+  }
+  if (finalUrl && crawlData.mainHtml && crawlData.mainHtml.toLowerCase().includes(em)) {
+    return finalUrl;
+  }
+  if (aboutUrl && crawlData.profilePageText && crawlData.profilePageText.toLowerCase().includes(em)) {
+    return aboutUrl;
+  }
+  return contactUrl || finalUrl || "";
 }
 
 function parseHtmlDetails(html, baseUrl) {
