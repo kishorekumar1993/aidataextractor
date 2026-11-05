@@ -1724,6 +1724,11 @@ function extractMetaAddresses(html, targetList) {
 function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageUrl = "") {
   if (!html) return;
 
+  // Preprocess HTML to close unclosed <td> and <th> cells so adjacent table columns never merge
+  let processedHtml = html
+    .replace(/(<td\b[^>]*>[\s\S]*?)(?=<td\b)/gi, (m) => m.includes('</td>') ? m : m + '</td>')
+    .replace(/(<th\b[^>]*>[\s\S]*?)(?=<th\b)/gi, (m) => m.includes('</th>') ? m : m + '</th>');
+
   // Helper to determine context from surrounding text / headers
   const getContext = (beforeText, fallbackSource) => {
     if (/\b(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|principal\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal|總公司|總部|本公司|總廠|本廠)\b/i.test(beforeText)) {
@@ -1738,7 +1743,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   // 1. Explicit Headquarters / Head Office blocks (Priority 1)
   const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|總公司|總部|本公司)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|dd)>/gi;
   let hqm;
-  while ((hqm = hqRegex.exec(html)) !== null) {
+  while ((hqm = hqRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(hqm[1]);
     if (raw.length > 8) {
       addAddressCandidate(targetList, raw, "headquarters", true, "headquarters", pageUrl);
@@ -1748,7 +1753,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   // 2. <h1-6> with "address" or "contact" followed by <p>, <div>, <span>, <li>, <td> (excluding email headings)
   const headingRegex = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>\s*<(?:p|div|span|li|td)[^>]*>([\s\S]*?)<\/(?:p|div|span|li|td)>/gi;
   let hm;
-  while ((hm = headingRegex.exec(html)) !== null) {
+  while ((hm = headingRegex.exec(processedHtml)) !== null) {
     const hText = stripHtml(hm[1]);
     if (!/address|location|head\s*office|headquarters|contact\s*us|contact|direcci[oó]n|domicilio|sede|ubicaci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|encu[eé]ntranos|辦事處|地址|總部/i.test(hText)) continue;
     if (/email|e-mail|newsletter|subscribe/i.test(hText)) continue;
@@ -1768,7 +1773,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   // 3. <address> tag
   const addrTagRegex = /([\s\S]{0,120})<address[^>]*>([\s\S]*?)<\/address>/gi;
   let am;
-  while ((am = addrTagRegex.exec(html)) !== null) {
+  while ((am = addrTagRegex.exec(processedHtml)) !== null) {
     const ctx = getContext(am[1], defaultSource);
     const raw = stripHtml(am[2]);
     if (raw.length > 10) {
@@ -1779,7 +1784,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   // 4. Class or id containing "address" or "addr" (including li, td, dd, article, section)
   const classAddrRegex = /([\s\S]{0,120})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
   let cm;
-  while ((cm = classAddrRegex.exec(html)) !== null) {
+  while ((cm = classAddrRegex.exec(processedHtml)) !== null) {
     const contextStr = cm[1] + " " + cm[2];
     const ctx = getContext(contextStr, defaultSource);
     const raw = stripHtml(cm[3]);
@@ -1789,10 +1794,21 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     }
   }
 
+  // 4b. Elements whose class contains "fa-map-marker" or "location" directly (e.g. <li class="fa-map-marker">11092 SW Allen...</li>)
+  const classMarkerRegex = /<(?:li|p|div|span)[^>]+class=["'][^"']*(?:fa-map-marker|map-marker|icon-location|dashicons-location)[^"']*["'][^>]*>([\s\S]*?)<\/(?:li|p|div|span)>/gi;
+  let cmm;
+  while ((cmm = classMarkerRegex.exec(processedHtml)) !== null) {
+    const raw = stripHtml(cmm[1]);
+    const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    if (combinedBlock.length > 10) {
+      addAddressCandidate(targetList, combinedBlock, defaultSource, false, "contact", pageUrl);
+    }
+  }
+
   // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / Dirección: / 地址:
   const labelAddrRegex = /([\s\S]{0,120})\b(?:address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址)\s*[:：]\s*(?:<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let lm;
-  while ((lm = labelAddrRegex.exec(html)) !== null) {
+  while ((lm = labelAddrRegex.exec(processedHtml)) !== null) {
     const ctx = getContext(lm[1], defaultSource);
     const raw = stripHtml(lm[2]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
@@ -1804,7 +1820,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   // 5b. Elementor Icon List items containing map marker icons or addresses
   const elementorListRegex = /<(?:li|div)[^>]+class=["'][^"']*elementor-icon-list-item[^"']*["'][\s\S]*?(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|e-fas-map-marker-alt|location)[\s\S]*?class=["'][^"']*elementor-icon-list-text[^"']*["'][^>]*>([\s\S]*?)<\/(?:span|div|p)>/gi;
   let elm;
-  while ((elm = elementorListRegex.exec(html)) !== null) {
+  while ((elm = elementorListRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(elm[1]).trim();
     if (raw.length > 8) {
       addAddressCandidate(targetList, raw, defaultSource, false, "contact", pageUrl);
@@ -1814,7 +1830,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   // 6. Map-marker icon followed by address text (e.g. <span class="fa fa-map-marker"></span> No. 492, ...)
   const markerRegex = /([\s\S]{0,100})(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location|e-fas-map-marker-alt)[^>]*>[\s\S]{0,800}?(?:<\/(?:span|i|div|svg)>\s*){1,4}(?:<(?:span|p|div|li)[^>]*>)*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let mm;
-  while ((mm = markerRegex.exec(html)) !== null) {
+  while ((mm = markerRegex.exec(processedHtml)) !== null) {
     const ctx = getContext(mm[1], defaultSource);
     const raw = stripHtml(mm[2]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
@@ -1830,7 +1846,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   // 7. Paragraphs, list items, or table cells containing physical address patterns
   const pAddrRegex = /([\s\S]{0,100})<(?:p|li|td)[^>]*>([\s\S]*?)<\/(?:p|li|td)>/gi;
   let pm;
-  while ((pm = pAddrRegex.exec(html)) !== null) {
+  while ((pm = pAddrRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(pm[2]);
     if (raw.length >= 15 && raw.length <= 250 &&
       (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
@@ -2525,6 +2541,11 @@ function detectRestrictedKeywords(text, html = "") {
 
   // Strip HTML tags and attributes first so HTML tag/class/id attributes never create false tokens
   let cleanText = combined.replace(/<[^>]+>/g, " ");
+
+  // Sanitize clinic/hospital/medical references inside customer testimonials, client reviews, or manufactured sign/display products
+  cleanText = cleanText
+    .replace(/\b(?:signage|signs?|branding|wayfinding|labels?|packaging|wraps?|displays?|vehicle\s*graphics)\s+(?:for|in|at)\s+[^\.\n,;]{0,60}?\b(?:clinic|hospital|medical)\b/gi, " ")
+    .replace(/\b(?:client\s+testimonial|testimonials?|what\s+our\s+clients\s+say|client\s+reviews?|our\s+clients|featured\s+work)[\s\S]{0,400}?\b(?:clinic|hospital)\b/gi, " ");
 
   // 1. Strip URLs containing /cat/, ?cat=, etc.
   cleanText = cleanText
@@ -4397,6 +4418,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     if (/\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(addr)) {
       addr = "Not Available";
     } else {
+      addr = addr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ");
       addr = addr.replace(/[\(\)\[\]\{\}]/g, " ");
 
       // Strip conversational boilerplate from start of address e.g. "If you have any enquiries, require a quote or want to book a survey please feel free to call us or send us a message with your requirements Priory Windows And Conservatories 5 Burnt House Road, Whitley Bay"
@@ -4405,6 +4427,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       if (compName && addr.toLowerCase().startsWith(compName.toLowerCase())) {
         addr = addr.slice(compName.length).trim();
       }
+      // Strip company name or corporate brand prefix at start of address before street number or premise
+      if (compName) {
+        const compClean = compName.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+/g, " ").trim();
+        const firstToken = compClean.split(/\s+/)[0];
+        if (firstToken && firstToken.length >= 3 && !/^(?:the|and|for)$/i.test(firstToken)) {
+          const compPrefixRegex = new RegExp(`^${firstToken}\\b[\\s\\S]*?(?=\\b(?:\\d{1,5}|no\\.?\\s*\\d+|po\\s*box|unit|suite|building|floor)\\b)`, "i");
+          addr = addr.replace(compPrefixRegex, "").trim();
+        }
+      }
+      // Strip leftover corporate legal suffixes and generic company words at the start of address
+      addr = addr.replace(/^(?:company|co\.?|incorporated|inc\.?|corporation|corp\.?|llc|limited|ltd\.?|equipment|systems|industries|technologies|enterprises|group|products)\b[\s,:\-–]*/i, "").trim();
       addr = addr.replace(/^,\s*/, "").trim();
 
       // Ensure country is identified from address or domain before expanding abbreviations
@@ -4442,28 +4475,16 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         addr = restoreStreetNumberIfOmitted(addr, rawSource);
       }
 
-      if (country && country.length > 2) {
-        if (/australia/i.test(country)) {
-          addr = addr.replace(/,\s*\bAustralia\b\s*$/i, "");
-          addr = addr.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
-        } else if (/united\s*states/i.test(country)) {
-          addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.)\b/gi, " ");
-        } else if (/spain/i.test(country)) {
-          addr = addr.replace(/\b(?:Spain|Espa[nñ]a)\b/gi, " ");
-        } else if (/turk/i.test(country)) {
-          addr = addr.replace(/\b(?:Turkiye|T[uü]rkiye|Turkey)\b/gi, " ");
-        } else if (/new\s*zealand/i.test(country)) {
-          addr = addr.replace(/\b(?:New\s*Zealand|Aotearoa)\b/gi, " ");
-        } else if (/malaysia/i.test(country)) {
-          addr = addr.replace(/\bMalaysia\b/gi, " ");
-        } else if (/indonesia/i.test(country)) {
-          addr = addr.replace(/\b(?:Indonesia|Republik\s*Indonesia)\b/gi, " ");
-        } else {
-          const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
-          addr = addr.replace(countryRegex, " ");
-        }
-      }
+      // Unconditionally strip country names from address so the country name never appears inside the street address field
+      addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.)\b/gi, " ");
+      addr = addr.replace(/\b(?:Great\s*Britain|United\s*Kingdom|UK|U\.K\.)\b/gi, " ");
+      addr = addr.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
+      addr = addr.replace(/\b(?:Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Turkiye|T[uü]rkiye|Turkey|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|China|India|South\s*Africa)\b/gi, " ");
       addr = addr.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china)\b/gi, " ");
+      if (country && country.length > 2) {
+        const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
+        addr = addr.replace(countryRegex, " ");
+      }
 
       // Remove international postal codes carefully without stripping street numbers
       addr = removePostalCodesCarefully(addr);
@@ -4493,8 +4514,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
       addr = addr.replace(/(^|[,\s])(?<!\b(?:section|sec|lane|ln|alley|aly|unit|suite|ste|floor|fl|flr|level|lot|plot|block|blk)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln|alley|aly|section|sec|unit|suite|ste|floor|fl|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
 
-      // Strip leading list/index numbers before company names in address (e.g. "138 U.S. Tsubaki Industrial, LLC 250 Kirby Drive...")
-      addr = addr.replace(/^\d{1,4}\s+([A-Z].*?\b(?:LLC|Inc\.?|Corp\.?|Ltd\.?|Limited)\b)/i, (m, g) => g);
+      // Strip leading list/index numbers before company names in address only if followed by a separate street address number (e.g. "138 U.S. Tsubaki Industrial, LLC 250 Kirby Drive...")
+      addr = addr.replace(/^\d{1,4}\s+([A-Z].*?\b(?:LLC|Inc\.?|Corp\.?|Ltd\.?|Limited)\b)(?=\s+\d+\s+[A-Z])/i, (m, g) => g);
       addr = addr.replace(/(\b(?:LLC|Inc\.?|Corp\.?|Ltd\.?|Limited)\b)\s+(\d+\s+[A-Z])/i, (m, g1, g2) => g1 + ", " + g2);
 
       // Clean up spaces, commas, and ensure clean formatting
