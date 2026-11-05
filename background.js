@@ -1468,7 +1468,7 @@ async function crawlWebsite(targetUrl) {
 /**
  * Adds an address candidate with provenance tracking and priority ranking.
  */
-function addAddressCandidate(targetList, rawText, source, isHq = false, locationType = "general", pageUrl = "") {
+function addAddressCandidate(targetList, rawText, source, isHq = false, locationType = "general", pageUrl = "", contextText = "") {
   if (!rawText || typeof rawText !== "string") return;
   const decoded = decodeHtmlEntities(rawText);
   const cleaned = decoded
@@ -1487,8 +1487,9 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   if (/\b(?:privacy\s*policy|terms\s*of|all\s*rights\s*reserved|cookie\s*policy|subscribe|newsletter|login|register|search\s*products|all\s*categories)\b/i.test(cleaned)) {
     return;
   }
-  // Reject quote inquiries, shipping terms, and order policies (e.g. "Our team will respond within 24 hours with your custom quote... FOB terms for Ho Chi Minh City...")
-  if (/\b(?:our\s+team\s+will\s+respond|within\s+\d+\s+hours|custom\s+quote|shipping\s+quotes?|free\s+on\s+board|\bfob\b|order\s+placement|before\s+order|order\s+policies|we\s+offer\s+currently|how\s+to\s+order|minimum\s+order|lead\s+time|payment\s+terms)\b/i.test(cleaned)) {
+  // Reject conversational copy / sentences with questions / first-person marketing
+  if (/[?!]/.test(cleaned)) return;
+  if (/\b(?:we\s+are\s+located|contact\s+our\s+team|visit\s+our|please\s+(?:call|contact|feel\s+free)|our\s+team\s+will|get\s+in\s+touch\s+with|happy\s+to\s+help|custom\s+quote|shipping\s+quotes?|free\s+on\s+board|\bfob\b|order\s+placement|before\s+order|order\s+policies|we\s+offer\s+currently|how\s+to\s+order|minimum\s+order|lead\s+time|payment\s+terms)\b/i.test(cleaned)) {
     return;
   }
 
@@ -1498,11 +1499,27 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     return;
   }
 
-  if (!/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|town|township|district|city|province|county|hsien|state|building|floor|suite|ste|box|gpo|lot|unit|factory|shed|warehouse|level|number|no|sec|section|jln|jalan|taman|lorong|lebuh|kawasan|perindustrian|st|rd|ave|dr|blvd|ln|hwy|apt|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned) &&
-    !/#\s*\d+/.test(cleaned) &&
-    !/\b(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\s+\d{5}(?:-\d{4})?\b/i.test(cleaned) &&
-    !/\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act)\b/i.test(cleaned) &&
-    !/(?:[0-9一二三四五六七八九十]+[号號]|大道|大厦|大廈|路|街|巷|弄|工业区|工業區|工业园|工業園|产业园|產業園|开发区|開發區|科技园|科技園|高新区|高新區|园区|園區|楼|樓|栋|棟|室|城|[省市区縣县鄉镇鎭])/.test(cleaned)) {
+  // STRUCTURAL COMPONENT VALIDATION:
+  // A valid address must possess verifiable structural address components:
+  // 1. Premise indicator / street number (e.g. 12, Lot 45, Unit 2, Suite 200, Building 5, PO Box 123, No. 12)
+  // 2. Thoroughfare suffix (Street, Road, Ave, Lane, Drive, Boulevard, Highway, Way, Close, Court, Terrace, Crescent, etc.)
+  // 3. Or locality/postal code (e.g. 4-6 digit postal code, state abbreviation with ZIP, or East Asian structural address)
+  const hasPremiseNum = /\b(?:number|no\.?|nos\.?|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?\b/i.test(cleaned) ||
+    /\b(?:lot|plot|unit|suite|ste|bldg|building|floor|level|rm|room|shed|warehouse|kav|kavling|apt|apartment|po\s*box)\s+[A-Za-z0-9\-\/]+/i.test(cleaned);
+  const hasThoroughfare = /\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|jln|jalan|taman|lorong|lebuh|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|apt\b|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned);
+  const hasLocalityOrPostcode = /\b\d{4,6}\b/.test(cleaned) ||
+    /\b(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\s+\d{5}(?:-\d{4})?\b/i.test(cleaned) ||
+    /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|vic|nsw|qld|wa|sa|tas|act)\b/i.test(cleaned) ||
+    /\b(?:town|township|district|city|province|county|hsien|state|borough|municipality)\b/i.test(cleaned);
+
+  const hasChineseAddressStructure = /(?:[0-9一二三四五六七八九十]+[号號]|大道|大厦|大廈|路|街|巷|弄|工业区|工業區|工业园|工業園|产业园|產業園|开发区|開發區|科技园|科技園|高新区|高新區|园区|園區|楼|樓|栋|棟|室|城|[省市区縣县鄉镇鎭])/.test(cleaned);
+
+  const isValidStructure = (hasPremiseNum && hasThoroughfare) ||
+    (hasThoroughfare && hasLocalityOrPostcode) ||
+    (hasPremiseNum && hasLocalityOrPostcode && (isHq || source === "headquarters" || source === "jsonld")) ||
+    hasChineseAddressStructure;
+
+  if (!isValidStructure) {
     return;
   }
 
@@ -1517,12 +1534,12 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
 
   // Location Context & Priority hierarchy:
   // Headquarters (Tier 1) > Contact (Tier 2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Branch (Tier 8) > Distributor/Dealer (Tier 9)
-  const hasHqKeyword = /\b(?:headquarters|head\s*office|registered\s*office|corporate\s*office|main\s*office|principal\s*office|hq|main\s*factory|main\s*plant|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(rawText) ||
-    /(?:總公司|总公司|總部|总部|本公司|集團總部|集团总部|總廠|总厂|本廠|本厂|本部|本社|本店)/i.test(rawText) ||
+  const hasHqKeyword = /\b(?:headquarters|head\s*office|registered\s*office|corporate\s*office|main\s*office|principal\s*office|hq|main\s*factory|main\s*plant|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(rawText + " " + contextText) ||
+    /(?:總公司|总公司|總部|总部|本公司|集團總部|集团总部|總廠|总厂|本廠|本厂|本部|本社|本店)/i.test(rawText + " " + contextText) ||
     isHq || source === "headquarters";
   // Only demote explicit secondary/branch offices (NEVER treat manufacturing plants, factories, warehouses, or units as branches!)
-  const hasBranchKeyword = /\b(?:branch(?:\s*office)?|regional\s*office|overseas\s*office|sales\s*office|subsidiary|sucursal|delegaci[oó]n|filiale|filial)\b/i.test(rawText) ||
-    /(?:海外子公司|全资子公司|控股子公司|子公司|海外办事处|办事处|辦事處|国内分公司|分公司|分處|分处|營業所|营业所|經銷商|经销商)/i.test(rawText) ||
+  const hasBranchKeyword = /\b(?:branch(?:\s*office)?|regional\s*office|overseas\s*office|sales\s*office|subsidiary|sucursal|delegaci[oó]n|filiale|filial)\b/i.test(rawText + " " + contextText) ||
+    /(?:海外子公司|全资子公司|控股子公司|子公司|海外办事处|办事处|辦事處|国内分公司|分公司|分處|分处|營業所|营业所|經銷商|经销商)/i.test(rawText + " " + contextText) ||
     locationType === "branch" || source === "branch";
   const hasDistributorKeyword = /\b(?:distributors?|dealers?|stockists?|resellers?|partners?)\b/i.test(pageUrl) || source === "distributor" || locationType === "distributor";
 
@@ -1565,10 +1582,6 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   }
 
   // Tie-breaker: Within the SAME basePriority tier, English gets a minor advantage (0.0 vs +0.4).
-  // Headquarters English = 1.0, Headquarters Non-English = 1.4.
-  // Contact English = 2.0, Contact Non-English = 2.4.
-  // Footer English = 6.0, Branch English = 8.0.
-  // This mathematically guarantees Headquarters ALWAYS outranks Footer and Branch addresses regardless of language!
   const priority = isEnglish ? basePriority : (basePriority + 0.4);
 
   const candObj = {
@@ -1578,6 +1591,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     isHeadquarters: isHq,
     isEnglish: isEnglish,
     pageUrl: pageUrl || "",
+    contextText: contextText || "",
     priority: priority
   };
 
@@ -1699,7 +1713,7 @@ function extractFooterText(html) {
   return stripHtml(footerMatch[1]);
 }
 
-function extractMapAddresses(html, targetList) {
+function extractMapAddresses(html, targetList, pageUrl = "") {
   if (!html) return;
   const mapRegex = /(?:google\.com\/maps|maps\.google|baidu\.com|openstreetmap)[^"'>\s]*/gi;
   let match;
@@ -1707,12 +1721,43 @@ function extractMapAddresses(html, targetList) {
     const rawUrl = match[0];
     try {
       const decoded = decodeURIComponent(rawUrl);
-      const qMatch = decoded.match(/[?&](?:q|query|place|destination|daddr)=([^&"'>]+)/i);
+      let query = "";
+
+      // 1. Standard query parameters (?q=..., ?query=..., ?place=..., ?daddr=...)
+      const qMatch = decoded.match(/[?&](?:q|query|place|destination|daddr|saddr)=([^&"'>]+)/i);
       if (qMatch) {
-        const query = qMatch[1].replace(/\+/g, " ").trim();
-        if (query.length > 8 && !/^[-\d.,\s]+$/.test(query)) {
-          addAddressCandidate(targetList, query, "map", false);
+        query = qMatch[1].replace(/\+/g, " ").trim();
+      }
+
+      // 2. /maps/place/<Address>/ or /maps/search/<Address>/
+      if (!query || /^[-\d.,\s]+$/.test(query)) {
+        const placeMatch = decoded.match(/\/maps\/(?:place|search)\/([^/@?#]+)/i);
+        if (placeMatch) {
+          query = placeMatch[1].replace(/\+/g, " ").replace(/,/g, ", ").trim();
         }
+      }
+
+      // 3. /maps/dir/.../<Address>
+      if (!query || /^[-\d.,\s]+$/.test(query)) {
+        const dirMatch = decoded.match(/\/maps\/dir\/[^\/]+\/([^/@?#]+)/i);
+        if (dirMatch) {
+          query = dirMatch[1].replace(/\+/g, " ").trim();
+        }
+      }
+
+      // 4. Embedded Google Maps !2s<Address> parameter
+      if (!query || /^[-\d.,\s]+$/.test(query)) {
+        const pbMatch = decoded.match(/!2s([^!&"'>]+)/i);
+        if (pbMatch) {
+          const pbCandidate = pbMatch[1].replace(/\+/g, " ").trim();
+          if (pbCandidate.length > 8 && !/^[-\d.,\s]+$/.test(pbCandidate)) {
+            query = pbCandidate;
+          }
+        }
+      }
+
+      if (query.length > 8 && !/^[-\d.,\s]+$/.test(query) && !/^\d+$/.test(query)) {
+        addAddressCandidate(targetList, query, "map", false, "map", pageUrl, "Google Maps");
       }
     } catch (e) { }
   }
@@ -1984,146 +2029,131 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
 
   const getRaw = c => (typeof c === "object" ? c.raw : c);
 
-  // If crawlData is available, detect declared home domicile from companyName or copyrightText
-  let compLocality = "";
-  let homeCountry = "";
-  if (crawlData) {
-    if (crawlData.companyName || crawlData.copyrightText) {
-      const cnLower = ((crawlData.companyName || "") + " " + (crawlData.copyrightText || "")).toLowerCase();
-      const commonDomCities = [
-        "huizhou", "dongguan", "shenzhen", "guangzhou", "suzhou", "shanghai", "beijing", "hangzhou", "ningbo",
-        "wuxi", "foshan", "zhongshan", "taipei", "taichung", "tainan", "kaohsiung", "taoyuan", "changhua",
-        "melbourne", "sydney", "brisbane", "perth", "london", "leeds", "manchester", "birmingham"
-      ];
-      for (const loc of commonDomCities) {
-        if (cnLower.includes(loc)) {
-          compLocality = loc;
-          break;
-        }
+  // 1. Establish Home Country from EXPLICIT HEADQUARTERS EVIDENCE on the website:
+  // An address explicitly marked as Headquarters / Head Office / 總部 / 总公司 establishes the company's true home domicile!
+  let provenHomeCountry = "";
+  const explicitHqCandidate = candidates.find(c => c && (c.isHeadquarters === true || c.locationType === "headquarters"));
+  if (explicitHqCandidate) {
+    const hqRawText = getRaw(explicitHqCandidate);
+    const detectedHqCountry = detectCountryFromAddress(hqRawText);
+    if (detectedHqCountry) {
+      provenHomeCountry = detectedHqCountry.toLowerCase();
+    } else if (/[\u4e00-\u9fa5]/.test(hqRawText)) {
+      // Check for Taiwan counties / districts or .tw domain
+      const urlStr = crawlData ? ((crawlData.finalUrl || "") + " " + (crawlData.originalUrl || "")).toLowerCase() : "";
+      if (/\.tw(?:\/|$)/i.test(urlStr) || /\b(taiwan|taipei|changhua|chiayi|hsinchu|taichung|tainan|kaohsiung|taoyuan|new taipei)\b/i.test(hqRawText) || /[\u81fa\u53f0\u7063\u65b0\u5317\u53f0\u5317]/.test(hqRawText)) {
+        provenHomeCountry = "taiwan";
+      } else {
+        provenHomeCountry = "china";
       }
     }
-    const urlStr = ((crawlData.finalUrl || "") + " " + (crawlData.originalUrl || "")).toLowerCase();
-    if (/\.(?:com\.)?tw(?:\/|$)/i.test(urlStr)) homeCountry = "taiwan";
-    else if (/\.(?:com\.)?au(?:\/|$)/i.test(urlStr)) homeCountry = "australia";
-    else if (/\.(?:co\.)?uk(?:\/|$)/i.test(urlStr)) homeCountry = "england";
-    else if (/\.ca(?:\/|$)/i.test(urlStr)) homeCountry = "canada";
-    else if (/\.(?:com\.)?cn(?:\/|$)/i.test(urlStr)) homeCountry = "china";
-    else if (/\.(?:com\.)?my(?:\/|$)/i.test(urlStr)) homeCountry = "malaysia";
-    else if (/\.(?:co\.)?in(?:\/|$)/i.test(urlStr)) homeCountry = "india";
-    else if (/\.(?:co\.)?za(?:\/|$)/i.test(urlStr)) homeCountry = "south africa";
-    else if (/\.de(?:\/|$)/i.test(urlStr)) homeCountry = "germany";
-    else if (/\.es(?:\/|$)/i.test(urlStr)) homeCountry = "spain";
-    else if (/\.it(?:\/|$)/i.test(urlStr)) homeCountry = "italy";
-    else if (/\.(?:co\.)?nz(?:\/|$)/i.test(urlStr)) homeCountry = "new zealand";
-    else if (/\.us(?:\/|$)/i.test(urlStr)) homeCountry = "united states";
   }
 
-  // Sort candidates strictly by priority (Headquarters Tier 1 > Contact Tier 2 > ...)
-  // Within the same tier, boost candidates matching company's declared home city/region or ccTLD home country
+  // Fallback home country signals if no explicit HQ block was tagged:
+  if (!provenHomeCountry && crawlData) {
+    const contactText = (crawlData.contactPageText || "") + " " + (crawlData.footerText || "");
+    const firstPhone = (crawlData.phones && crawlData.phones[0]) || "";
+    if (/^\+?886\b/.test(firstPhone) || /\+886\b/.test(contactText)) provenHomeCountry = "taiwan";
+    else if (/^\+?86\b/.test(firstPhone) || /\+86\b/.test(contactText)) provenHomeCountry = "china";
+    else if (/^\+?44\b/.test(firstPhone) || /\+44\b/.test(contactText)) provenHomeCountry = "england";
+    else if (/^\+?61\b/.test(firstPhone) || /\+61\b/.test(contactText)) provenHomeCountry = "australia";
+    else if (/^\+?91\b/.test(firstPhone) || /\+91\b/.test(contactText)) provenHomeCountry = "india";
+    else if (/^\+?27\b/.test(firstPhone) || /\+27\b/.test(contactText)) provenHomeCountry = "south africa";
+    else if (/^\+?60\b/.test(firstPhone) || /\+60\b/.test(contactText)) provenHomeCountry = "malaysia";
+    else if (/^\+?49\b/.test(firstPhone) || /\+49\b/.test(contactText)) provenHomeCountry = "germany";
+    else if (/^\+?34\b/.test(firstPhone) || /\+34\b/.test(contactText)) provenHomeCountry = "spain";
+    else if (/^\+?39\b/.test(firstPhone) || /\+39\b/.test(contactText)) provenHomeCountry = "italy";
+    else if (/^\+?64\b/.test(firstPhone) || /\+64\b/.test(contactText)) provenHomeCountry = "new zealand";
+
+    // Domain ccTLD if still unknown
+    if (!provenHomeCountry) {
+      const urlStr = ((crawlData.finalUrl || "") + " " + (crawlData.originalUrl || "")).toLowerCase();
+      if (/\.(?:com\.)?tw(?:\/|$)/i.test(urlStr)) provenHomeCountry = "taiwan";
+      else if (/\.(?:com\.)?au(?:\/|$)/i.test(urlStr)) provenHomeCountry = "australia";
+      else if (/\.(?:co\.)?uk(?:\/|$)/i.test(urlStr)) provenHomeCountry = "england";
+      else if (/\.ca(?:\/|$)/i.test(urlStr)) provenHomeCountry = "canada";
+      else if (/\.(?:com\.)?cn(?:\/|$)/i.test(urlStr)) provenHomeCountry = "china";
+      else if (/\.(?:com\.)?my(?:\/|$)/i.test(urlStr)) provenHomeCountry = "malaysia";
+      else if (/\.(?:co\.)?in(?:\/|$)/i.test(urlStr)) provenHomeCountry = "india";
+      else if (/\.(?:co\.)?za(?:\/|$)/i.test(urlStr)) provenHomeCountry = "south africa";
+      else if (/\.de(?:\/|$)/i.test(urlStr)) provenHomeCountry = "germany";
+      else if (/\.es(?:\/|$)/i.test(urlStr)) provenHomeCountry = "spain";
+      else if (/\.it(?:\/|$)/i.test(urlStr)) provenHomeCountry = "italy";
+      else if (/\.(?:co\.)?nz(?:\/|$)/i.test(urlStr)) provenHomeCountry = "new zealand";
+    }
+  }
+
+  // 2. Sort candidates strictly by priority hierarchy:
+  // - Explicit Headquarters (Tier 1)
+  // - Candidates matching provenHomeCountry get a -4.0 boost over overseas branch offices
+  // - Overseas / foreign branch offices get demoted (+4.0) so a US sales office on a foreign site NEVER outranks home HQ
   const sorted = [...candidates].sort((a, b) => {
     let pA = (typeof a === "object" && a.priority !== undefined) ? a.priority : 6;
     let pB = (typeof b === "object" && b.priority !== undefined) ? b.priority : 6;
     const rawA = getRaw(a).toLowerCase();
     const rawB = getRaw(b).toLowerCase();
-    if (compLocality) {
-      if (rawA.includes(compLocality) && !rawB.includes(compLocality)) pA -= 2.0;
-      else if (rawB.includes(compLocality) && !rawA.includes(compLocality)) pB -= 2.0;
-    }
-    if (homeCountry) {
-      const matchA = rawA.includes(homeCountry) || (homeCountry === "china" && /[\u4e00-\u9fa5]/.test(rawA)) || (homeCountry === "taiwan" && (rawA.includes("taiwan") || /[\u4e00-\u9fa5]/.test(rawA)));
-      const matchB = rawB.includes(homeCountry) || (homeCountry === "china" && /[\u4e00-\u9fa5]/.test(rawB)) || (homeCountry === "taiwan" && (rawB.includes("taiwan") || /[\u4e00-\u9fa5]/.test(rawB)));
-      if (matchA && !matchB) pA -= 3.0;
-      else if (matchB && !matchA) pB -= 3.0;
+
+    if (provenHomeCountry) {
+      const matchA = rawA.includes(provenHomeCountry) ||
+        (provenHomeCountry === "china" && /[\u4e00-\u9fa5]/.test(rawA)) ||
+        (provenHomeCountry === "taiwan" && (rawA.includes("taiwan") || /[\u4e00-\u9fa5]/.test(rawA)));
+      const matchB = rawB.includes(provenHomeCountry) ||
+        (provenHomeCountry === "china" && /[\u4e00-\u9fa5]/.test(rawB)) ||
+        (provenHomeCountry === "taiwan" && (rawB.includes("taiwan") || /[\u4e00-\u9fa5]/.test(rawB)));
+
+      if (matchA && !matchB) pA -= 4.0;
+      else if (matchB && !matchA) pB -= 4.0;
     }
     return pA - pB;
   });
 
-  const topCandidate = sorted[0];
-  const topRaw = getRaw(topCandidate);
+  const bestCandidate = sorted[0];
+  const bestRaw = getRaw(bestCandidate);
 
-  // If Gemini provided invalid text, missing address, or Cloudflare protection, reject immediately
-  if (!geminiAddr || geminiAddr.length < 5 || /^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim()) ||
-    /\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr)) {
-    return { address: topRaw, selectedCandidate: topCandidate };
+  // 3. SOURCE OF TRUTH MANDATE (Correction for Problem 1):
+  // The verified website candidate is the absolute source of truth!
+  // We NEVER allow Gemini to invent, drop, or alter address components.
+  //
+  // Case A: The verified website candidate is in English / Latin:
+  // -> Return bestRaw directly as the base source of truth!
+  const isCandidateEnglish = bestCandidate.isEnglish || ((bestRaw.match(/[a-zA-Z]/g) || []).length >= 4 && !/[\u4e00-\u9fa5]/.test(bestRaw));
+  if (isCandidateEnglish) {
+    return { address: bestRaw, selectedCandidate: bestCandidate };
   }
 
-  // CRITICAL HQ MANDATE: "all the addres should take headquaters only if headquater available means else main address."
-  const hqCandidate = sorted.find(c => c && (c.isHeadquarters === true || c.locationType === "headquarters" || c.priority <= 1.5));
-  if (hqCandidate) {
-    const hqRaw = getRaw(hqCandidate);
-    const hqComp = extractAddressComponents(hqRaw);
+  // Case B: The verified website candidate is in non-Latin script (e.g. Chinese):
+  // -> If Gemini provided an English translation, verify that Gemini faithfully translates bestRaw:
+  if (geminiAddr && geminiAddr.length >= 5 && !/^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim()) && !/[\u4e00-\u9fa5]/.test(geminiAddr)) {
+    const candComp = extractAddressComponents(bestRaw);
     const geminiComp = extractAddressComponents(geminiAddr);
 
-    let geminiMatchesHq = true;
+    let geminiFaithful = true;
 
-    // Check street numbers
-    if (hqComp.numbers.length > 0) {
-      const hasMatchingNum = hqComp.numbers.some(num => {
+    // Check street/premise numbers: Gemini MUST contain the premise numbers from bestRaw
+    if (candComp.numbers.length > 0) {
+      const hasMatchingNum = candComp.numbers.some(num => {
         const baseNum = num.split(/[-/]/)[0];
         return geminiComp.numbers.includes(num) || geminiComp.numbers.includes(baseNum) || new RegExp(`\\b${baseNum}\\b`).test(geminiAddr);
       });
-      if (!hasMatchingNum) geminiMatchesHq = false;
+      if (!hasMatchingNum) geminiFaithful = false;
     }
 
-    // Check localities
-    if (hqComp.localities.length > 0 && geminiComp.localities.length > 0) {
-      const conflicting = geminiComp.localities.filter(gLoc => !hqRaw.toLowerCase().includes(gLoc));
-      const matching = geminiComp.localities.filter(gLoc => hqRaw.toLowerCase().includes(gLoc));
+    // Check localities: Gemini must NOT introduce a foreign/conflicting city
+    if (candComp.localities.length > 0 && geminiComp.localities.length > 0) {
+      const conflicting = geminiComp.localities.filter(gLoc => !bestRaw.toLowerCase().includes(gLoc) && !candComp.localities.includes(gLoc));
+      const matching = geminiComp.localities.filter(gLoc => bestRaw.toLowerCase().includes(gLoc) || candComp.localities.includes(gLoc));
       if (conflicting.length > 0 && matching.length === 0) {
-        geminiMatchesHq = false;
+        geminiFaithful = false;
       }
     }
 
-    // If Gemini chose another branch / location or didn't provide address, enforce Headquarters!
-    if (!geminiMatchesHq || !geminiAddr || geminiAddr.length < 5) {
-      return { address: hqRaw, selectedCandidate: hqCandidate };
-    }
-    return { address: geminiAddr, selectedCandidate: hqCandidate };
-  }
-
-  // Parse structural components of top candidate and Gemini address
-  const candComp = extractAddressComponents(topRaw);
-  const geminiComp = extractAddressComponents(geminiAddr);
-
-  // 1. Locality Contradiction Check:
-  // If top candidate has a verified locality (e.g. Huizhou, Changhua, Xiushui, Heywood, Lancashire)
-  // and Gemini outputs a DIFFERENT conflicting city (e.g. Cupertino, Taichung, Manchester) not in top candidate:
-  if (candComp.localities.length > 0 && geminiComp.localities.length > 0) {
-    const conflicting = geminiComp.localities.filter(gLoc => !topRaw.toLowerCase().includes(gLoc));
-    const matching = geminiComp.localities.filter(gLoc => topRaw.toLowerCase().includes(gLoc));
-    if (conflicting.length > 0 && matching.length === 0) {
-      // Contradiction detected! Reject Gemini and use topCandidate
-      return { address: topRaw, selectedCandidate: topCandidate };
+    if (geminiFaithful) {
+      return { address: geminiAddr, selectedCandidate: bestCandidate };
     }
   }
 
-  // 2. Street Number Agreement Check:
-  // If top candidate has a street number (e.g. 56, 140, 26, 7, 138), Gemini MUST contain that number!
-  if (candComp.numbers.length > 0) {
-    const hasMatchingNum = candComp.numbers.some(num => {
-      const baseNum = num.split(/[-/]/)[0];
-      return geminiComp.numbers.includes(num) || geminiComp.numbers.includes(baseNum) || new RegExp(`\\b${baseNum}\\b`).test(geminiAddr);
-    });
-    if (!hasMatchingNum) {
-      // Gemini dropped or changed the street number! Reject Gemini and use topCandidate
-      return { address: topRaw, selectedCandidate: topCandidate };
-    }
-  }
-
-  // 3. Non-English vs English Translation:
-  // If candidate is non-English and Gemini is English:
-  // Numbers match and no conflicting locality was introduced -> accept Gemini's English translation!
-  if (!candComp.isEnglish && geminiComp.isEnglish) {
-    return { address: geminiAddr, selectedCandidate: topCandidate };
-  }
-
-  // 4. Candidate and Gemini are both English:
-  if (candComp.isEnglish && geminiComp.isEnglish) {
-    return { address: geminiAddr, selectedCandidate: topCandidate };
-  }
-
-  // Default fallback: Top verified candidate
-  return { address: topRaw, selectedCandidate: topCandidate };
+  // Fallback for non-Latin candidate: deterministic romanization (e.g. romanizeChineseAddress)
+  return { address: bestRaw, selectedCandidate: bestCandidate };
 }
 
 function stripHtml(html) {
@@ -4050,6 +4080,74 @@ function extractBestBrandFromTitle(title, domain, logoText = "", ogSiteName = ""
 }
 
 /**
+ * Infers business type from website text and structural signals.
+ * Never defaults blindly to Manufacturer.
+ */
+function inferBusinessTypeFromEvidence(corpus, html = "") {
+  if (!corpus && !html) return "Supplier";
+  const text = (corpus + " " + html).toLowerCase();
+
+  const scores = {
+    "Manufacturer": 0,
+    "Supplier": 0,
+    "Distributer": 0,
+    "Wholesaler": 0,
+    "Exporter": 0,
+    "Trader": 0,
+    "Industrial Services": 0
+  };
+
+  // 1. Manufacturer signals
+  if (/\b(?:we\s+manufacture|our\s+factory|our\s+plant|production\s+facility|manufacturing\s+facility|oem\s*\/\s*odm|oem|odm|fabricated\s+in|custom\s+fabrication|die\s+casting|injection\s+molding|cnc\s+machining|assembly\s+line)\b/i.test(text)) scores["Manufacturer"] += 15;
+  const mMatches = text.match(/\b(?:manufacturer|manufacturing|manufacture|fabricator|fabrication|producers?)\b/g);
+  if (mMatches) scores["Manufacturer"] += mMatches.length * 3;
+
+  // 2. Industrial Services signals
+  if (/\b(?:industrial\s+services?|machining\s+services?|engineering\s+services?|surface\s+treatment|heat\s+treatment|calibration\s+services?|maintenance\s+and\s+repair|fabrication\s+services?|contract\s+manufacturing)\b/i.test(text)) scores["Industrial Services"] += 15;
+
+  // 3. Supplier signals
+  if (/\b(?:leading\s+supplier|we\s+supply|product\s+supplier|stockist\s+and\s+supplier|supplying\s+quality)\b/i.test(text)) scores["Supplier"] += 12;
+  const sMatches = text.match(/\b(?:supplier|suppliers|supplying)\b/g);
+  if (sMatches) scores["Supplier"] += sMatches.length * 3;
+
+  // 4. Distributer signals
+  if (/\b(?:authorized\s+distributor|authorised\s+distributor|master\s+distributor|official\s+distributor|distribution\s+network)\b/i.test(text)) scores["Distributer"] += 15;
+  const dMatches = text.match(/\b(?:distributor|distributer|distributors|distributers|distribution)\b/g);
+  if (dMatches) scores["Distributer"] += dMatches.length * 3;
+
+  // 5. Wholesaler signals
+  if (/\b(?:trade\s+only|wholesale\s+prices?|bulk\s+orders?|wholesale\s+supply|wholesalers?)\b/i.test(text)) scores["Wholesaler"] += 12;
+  const wMatches = text.match(/\b(?:wholesaler|wholesalers|wholesale)\b/g);
+  if (wMatches) scores["Wholesaler"] += wMatches.length * 3;
+
+  // 6. Exporter signals
+  if (/\b(?:export\s+to|worldwide\s+exporter|exporting\s+to|global\s+export)\b/i.test(text)) scores["Exporter"] += 12;
+  const eMatches = text.match(/\b(?:exporter|exporters|exporting)\b/g);
+  if (eMatches) scores["Exporter"] += eMatches.length * 3;
+
+  // 7. Trader signals
+  if (/\b(?:general\s+trading|import\s+and\s+export|import\s*\/\s*export|trading\s+co(?:mpany)?)\b/i.test(text)) scores["Trader"] += 12;
+  const tMatches = text.match(/\b(?:trader|traders|trading)\b/g);
+  if (tMatches) scores["Trader"] += tMatches.length * 3;
+
+  let bestType = "Supplier";
+  let maxScore = 0;
+  for (const [type, score] of Object.entries(scores)) {
+    if (score > maxScore) {
+      maxScore = score;
+      bestType = type;
+    }
+  }
+
+  if (maxScore === 0) {
+    if (/\b(?:factory|plant|works)\b/i.test(text)) return "Manufacturer";
+    return "Supplier";
+  }
+
+  return bestType;
+}
+
+/**
  * Deterministic fallback extraction.
  */
 function heuristicExtraction(crawlData, restrictedCheck) {
@@ -4146,9 +4244,13 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     };
   }
 
+  const inferredBusiness = restrictedCheck.isRestricted
+    ? "Restricted Site"
+    : inferBusinessTypeFromEvidence(text, crawlData.mainHtml || "");
+
   return {
     websiteStatus: websiteStatus,
-    businessType: restrictedCheck.isRestricted ? "Restricted Site" : "Manufacturer",
+    businessType: inferredBusiness,
     companyProfile: crawlData.hasCompanyProfile ? "Available" : "Not Available",
     companyName: companyName,
     countryName: country,
@@ -5065,18 +5167,55 @@ const STATE_AND_PROVINCE_NAMES = [
   "sulawesi tenggara", "sulawesi barat", "kepulauan riau", "bangka belitung"
 ];
 
+/**
+ * Positional locality segmentation:
+ * Isolates genuine locality segments (city, town, district, county, state) from an address
+ * by stripping street lines, premise lines, industrial estates, building names, and country/postal codes.
+ */
+function extractAddressLocalitySegments(address) {
+  if (!address || typeof address !== "string") return [];
+  const parts = address.split(',').map(p => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return parts;
+
+  const localitySegments = [];
+  const streetSuffixPattern = /\b(?:street|road|avenue|lane|drive|way|close|court|place|terrace|crescent|boulevard|highway|parade|circuit|esplanade|walk|row|alley|mews|track|trail|strasse|str\b|calle|avenida|via|corso|viale|jalan|jln|lorong|lebuh|大道|路|街|巷|弄|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|ct\b|pl\b)\b/i;
+  const premisePattern = /^(?:unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|lot|plot|room|rm|shed|warehouse|factory|kav|kavling|apt|apartment|po\s*box|p\.?o\.?\s*box)\b/i;
+  const buildingPremise = /\b(?:house|building|tower|towers|hall|lodge|mansions|plaza)\b/i;
+  const estatePattern = /\b(?:industrial|business|technology|science|trade|trading|retail|enterprise|commercial|logistics)\s+(?:park|estate|area|zone|district)\b/i;
+  const countryPattern = /\b(?:united\s*states(?:\s*of\s*america)?|usa|united\s*kingdom|great\s*britain|england|scotland|wales|northern\s*ireland|australia|canada|germany|deutschland|france|spain|espana|españa|italy|italia|malaysia|indonesia|taiwan|china|india|south\s*africa|new\s*zealand|aotearoa|singapore|turkey|turkiye)\b/i;
+
+  for (const part of parts) {
+    const pLower = part.toLowerCase();
+    if (countryPattern.test(pLower) && pLower.split(/\s+/).length <= 4) continue;
+    if (/^\b(?:[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}|\d{4,6}(?:-\d{4})?)\b$/i.test(part)) continue;
+    if (premisePattern.test(pLower)) continue;
+    if (buildingPremise.test(pLower) && !/\b(?:town|city|district|county)\b/i.test(pLower)) continue;
+    if (estatePattern.test(pLower)) continue;
+    if (streetSuffixPattern.test(pLower)) continue;
+    if (/^(?:number|no\.?|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+)?$/i.test(part)) continue;
+    if (/^(?:section|sec\.?|lane|ln\.?|alley|aly\.?)\s*\d+[A-Za-z]?$/i.test(part)) continue;
+
+    localitySegments.push(part);
+  }
+
+  return localitySegments.length > 0 ? localitySegments : parts;
+}
+
 function hasNamedStateOrProvince(lower) {
-  for (const name of STATE_AND_PROVINCE_NAMES) {
-    if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, name)) continue;
-    const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&").replace(/\\s/g, "\\s+");
-    if (new RegExp(`\\b${escaped}\\b`, "i").test(lower)) return true;
+  if (!lower) return false;
+  const segments = extractAddressLocalitySegments(lower);
+  const targetTexts = (segments && segments.length > 0) ? segments : [lower];
+
+  for (const text of targetTexts) {
+    for (const name of STATE_AND_PROVINCE_NAMES) {
+      if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(text, name)) continue;
+      const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&").replace(/\s/g, "\\s+");
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(text)) return true;
+    }
   }
   return false;
 }
 
-// The 13 official Counties of Taiwan (Republic of China):
-// Per strict QC rule: All 13 counties are considered as State (State: Available),
-// whether written with or without the word "County" / "Hsien" / "Country" / "縣"
 const TAIWAN_COUNTIES = [
   "changhua", "changhwa", "chang-hua", "chang hua",
   "chiayi", "jiayi", "chia-yi", "chia yi",
@@ -5469,14 +5608,20 @@ const INDONESIAN_CITIES_AND_TOWNS = [
 ];
 
 function hasUkCityOrTown(cleanAddr) {
+  if (!cleanAddr) return false;
+  const segments = extractAddressLocalitySegments(cleanAddr);
+  const targetTexts = (segments && segments.length > 0) ? segments : [cleanAddr];
+
   const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
   const streetPrefixPattern = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park)\\s+";
 
-  for (const name of UK_CITIES_AND_TOWNS) {
-    const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-    const regex = new RegExp(`(?<!${streetPrefixPattern})\\b${escaped}\\b(?!${streetSuffixPattern})`, "i");
-    if (regex.test(cleanAddr)) {
-      return true;
+  for (const text of targetTexts) {
+    for (const name of UK_CITIES_AND_TOWNS) {
+      const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      const regex = new RegExp(`(?<!${streetPrefixPattern})\\b${escaped}\\b(?!${streetSuffixPattern})`, "i");
+      if (regex.test(text)) {
+        return true;
+      }
     }
   }
   return false;
@@ -5572,12 +5717,18 @@ function isPlaceUsedAsStreetName(cleanAddr, name) {
 }
 
 function hasRecognizedPlaceName(cleanAddr, names) {
-  for (const name of names) {
-    if (!name || name.length < 3) continue;
-    if (isPlaceUsedAsStreetName(cleanAddr, name)) continue;
-    const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-    if (new RegExp(`\\b${escaped}\\b`, "i").test(cleanAddr)) {
-      return true;
+  if (!cleanAddr || !names) return false;
+  const segments = extractAddressLocalitySegments(cleanAddr);
+  const targetTexts = (segments && segments.length > 0) ? segments : [cleanAddr];
+
+  for (const text of targetTexts) {
+    for (const name of names) {
+      if (!name || name.length < 3) continue;
+      if (isPlaceUsedAsStreetName(text, name)) continue;
+      const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(text)) {
+        return true;
+      }
     }
   }
   return false;
@@ -5673,6 +5824,9 @@ function isNotCitySegment(segment) {
 
   // Unit / premise / floor / room / building prefix or descriptor
   if (/^(?:unit|suite|bldg|building|floor|fl|rm|room|dept|flat|apt|apartment|block|blk|no\.?\s*\d|number\s*\d|p\.?o\.?\s*box|post\s*office\s*box)\b/i.test(s)) {
+    return true;
+  }
+  if (/\b(?:house|building|tower|towers|hall|lodge|mansions|plaza)\b/i.test(s) && !/\b(?:town|city|district|county)\b/i.test(s)) {
     return true;
   }
 
@@ -5882,8 +6036,15 @@ function evaluateCityQC(address, country) {
   }
 
   // 3. UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
-  if (isUkLocation(cleanAddr, country) && hasUkCityOrTown(cleanAddr)) {
-    return "Available";
+  if (isUkLocation(cleanAddr, country)) {
+    if (hasUkCityOrTown(cleanAddr)) {
+      return "Available";
+    }
+    const structCity = detectCityFromStructure(cleanAddr, country);
+    if (structCity && !isNotCitySegment(structCity)) {
+      return "Available";
+    }
+    return "Not Available";
   }
 
   // 4. Australian City evaluation: Official cities or recognized town / suburb / locality per Rule 8
