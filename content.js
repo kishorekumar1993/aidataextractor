@@ -14,12 +14,12 @@
     }
   }
 
-  // Resilient message sender preventing any unhandled Promise rejections
-  function sendRuntimeMessage(message) {
-    return new Promise((resolve, reject) => {
+  // Resilient message sender preventing any unhandled Promise rejections with auto-retry
+  function sendRuntimeMessage(message, retryCount = 1) {
+    return new Promise((resolve) => {
       if (!isExtensionAlive()) {
         showReloadBanner();
-        return resolve({ success: false, error: "Extension context invalidated. Please refresh this page (F5)." });
+        return resolve({ success: false, error: "Extension context invalidated. Please refresh this page (F5).", isExtensionError: true });
       }
 
       try {
@@ -28,8 +28,17 @@
             const err = chrome.runtime.lastError.message || "Unknown error";
             if (err.includes("Extension context invalidated")) {
               showReloadBanner();
+              return resolve({ success: false, error: err, isExtensionError: true });
             }
-            return resolve({ success: false, error: err });
+            // Auto-retry once on service worker wakeup/port disconnect
+            if (retryCount > 0 && (err.includes("message channel closed") || err.includes("Could not establish connection"))) {
+              console.warn(`[AI Assistant] Service worker message port closed (${err}). Waking worker and retrying...`);
+              setTimeout(() => {
+                sendRuntimeMessage(message, retryCount - 1).then(resolve);
+              }, 400);
+              return;
+            }
+            return resolve({ success: false, error: err, isExtensionError: true });
           }
           resolve(response);
         });
@@ -37,7 +46,7 @@
         if (err.message && err.message.includes("Extension context invalidated")) {
           showReloadBanner();
         }
-        resolve({ success: false, error: err.message });
+        resolve({ success: false, error: err.message, isExtensionError: true });
       }
     });
   }
@@ -1653,6 +1662,15 @@
 
       if (!response || !response.success) {
         const errorMsg = response?.error || "Unable to fetch or crawl website";
+        const isExtError = !!response?.isExtensionError || /message\s*channel\s*closed|context\s*invalidated|could\s*not\s*establish\s*connection/i.test(errorMsg);
+
+        if (isExtError) {
+          // Internal Chrome extension communication glitch: DO NOT mark the site as Not Working!
+          console.warn("[AI Assistant] Extension service worker communication issue:", errorMsg);
+          updateStatus(`⚠️ Extension background busy (${errorMsg}). Please click AI Crawl & Fill again.`, "warning");
+          return;
+        }
+
         console.warn("[AI Assistant] Website unreachable / failed to fetch. Marking as Not Working as instructed:", errorMsg);
         const notWorkingData = {
           websiteStatus: "Not Working",
@@ -1673,7 +1691,7 @@
         };
         fillFormFields(notWorkingData);
         renderPreview(notWorkingData);
-        updateStatus(`⚠️ Website unreachable (${errorMsg}). Status set to Not Working (auto-submitting...).`, "warning");
+        updateStatus(`⚠️ Website unreachable (${errorMsg}). Status set to Not Working.`, "warning");
         return;
       }
 

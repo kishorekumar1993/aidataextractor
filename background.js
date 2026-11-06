@@ -765,6 +765,14 @@ async function fetchDecodedHtml(url, options = {}) {
       decoded = new TextDecoder("utf-8").decode(buf);
     }
 
+    // Auto-solve JavaScript Cookie Challenges (e.g. document.cookie = "humans_21909=1"; document.location.reload(true))
+    const jsCookieMatch = decoded.length < 500 && decoded.match(/document\.cookie\s*=\s*["']([^"';]+)/i);
+    if (jsCookieMatch && !options._hasRetriedCookie) {
+      const cookieVal = jsCookieMatch[1].trim();
+      const retryHeaders = { ...(options.headers || {}), "Cookie": cookieVal };
+      return await fetchDecodedHtml(url, { ...options, headers: retryHeaders, _hasRetriedCookie: true });
+    }
+
     return {
       ok: res.ok,
       status: res.status,
@@ -789,12 +797,13 @@ async function fetchDecodedHtml(url, options = {}) {
 function extractCopyrightCompanyName(html) {
   if (!html) return "";
   const decoded = decodeHtmlEntities(html);
+  const plainText = stripHtml(decoded.replace(/<(?:br|\/p|\/div|\/li)[^>]*>/gi, "\n"));
   const patterns = [
     /(?:©|&copy;|copyright)\s*(?:©|&copy;)?\s*(?:20\d{2}(?:\s*[-–\/]\s*20\d{2})?)?\s*([^<\n\r|]{3,200}?)(?:\.?\s*all\s+rights?\s+reserved|\s*<\/|$)/i,
     /all\s+rights?\s+reserved(?:\s+by)?\s+([^<\n\r|]{3,200}?)(?:\s*<\/|$)/i
   ];
   for (const re of patterns) {
-    const m = decoded.match(re);
+    const m = plainText.match(re) || decoded.match(re);
     if (!m || !m[1]) continue;
     let name = stripHtml(m[1])
       .replace(/all\s+rights?\s+reserved/gi, " ")
@@ -1199,7 +1208,7 @@ async function crawlWebsite(targetUrl) {
           seenPaths.add(uPath);
           topLinks.push(link);
           fetchedUrls.add(link);
-          if (topLinks.length >= 4) break;
+          if (topLinks.length >= 3) break;
         } catch (e) { }
       }
 
@@ -1207,7 +1216,7 @@ async function crawlWebsite(targetUrl) {
         // High-speed concurrent parallel fetching of candidate subpages
         const subpageResults = await Promise.allSettled(
           topLinks.map(cUrl => fetchDecodedHtml(cUrl, {
-            timeoutMs: 3500,
+            timeoutMs: 4500,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -1752,21 +1761,22 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     .replace(/(<td\b[^>]*>[\s\S]*?)(?=<td\b)/gi, (m) => m.includes('</td>') ? m : m + '</td>')
     .replace(/(<th\b[^>]*>[\s\S]*?)(?=<th\b)/gi, (m) => m.includes('</th>') ? m : m + '</th>');
 
-  // Helper to determine context from surrounding text / headers
-  const getContext = (beforeText, fallbackSource) => {
-    if (/\b(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|principal\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(beforeText) ||
-      /(?:總公司|总公司|總部|总部|本公司|集團總部|集团总部|總廠|总厂|本廠|本厂|本部|本社|本店)/i.test(beforeText)) {
+  // Helper to determine context from surrounding text / headers / inner text
+  const getContext = (beforeText, fallbackSource, innerText = "") => {
+    const textToCheck = (beforeText || "") + " " + (innerText || "");
+    if (/\b(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|principal\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(textToCheck) ||
+      /(?:總公司|总公司|總部|总部|本公司|集團總部|集团总部|總廠|总厂|本廠|本厂|本部|本社|本店)/i.test(textToCheck)) {
       return { isHq: true, source: "headquarters", locType: "headquarters" };
     }
-    if (/\b(?:branch(?:\s*office)?|regional\s*office|overseas\s*office|sales\s*office|subsidiary|sucursal|delegaci[oó]n|filiale|filial)\b/i.test(beforeText) ||
-      /(?:海外子公司|全资子公司|控股子公司|子公司|海外办事处|办事处|辦事處|国内分公司|分公司|分處|分处|營業所|营业所|經銷商|经销商)/i.test(beforeText)) {
+    if (/\b(?:branch(?:\s*office)?|regional\s*office|overseas\s*office|sales\s*office|subsidiary|sucursal|delegaci[oó]n|filiale|filial)\b/i.test(textToCheck) ||
+      /(?:海外子公司|全资子公司|控股子公司|子公司|海外办事处|办事处|辦事處|国内分公司|分公司|分處|分处|營業所|营业所|經銷商|经销商)/i.test(textToCheck)) {
       return { isHq: false, source: "branch", locType: "branch" };
     }
     return { isHq: false, source: fallbackSource, locType: fallbackSource };
   };
 
   // 1. Explicit Headquarters / Head Office blocks (Priority 1)
-  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|總公司|总公司|總部|总部|本公司|集團總部|集团总部)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|dd)>/gi;
+  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|總公司|总公司|總部|总部|本公司|集團總部|集团总部)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|th|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|th|dd)>/gi;
   let hqm;
   while ((hqm = hqRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(hqm[1]);
@@ -1775,8 +1785,8 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     }
   }
 
-  // 2. <h1-6> with "address" or "contact" followed by <p>, <div>, <span>, <li>, <td> (excluding email headings)
-  const headingRegex = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>\s*<(?:p|div|span|li|td)[^>]*>([\s\S]*?)<\/(?:p|div|span|li|td)>/gi;
+  // 2. <h1-6> with "address" or "contact" followed by <p>, <div>, <span>, <li>, <td>, <th>
+  const headingRegex = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>\s*<(?:p|div|span|li|td|th)[^>]*>([\s\S]*?)<\/(?:p|div|span|li|td|th)>/gi;
   let hm;
   while ((hm = headingRegex.exec(processedHtml)) !== null) {
     const hText = stripHtml(hm[1]);
@@ -1869,19 +1879,20 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 7. Paragraphs, list items, or table cells containing physical address patterns
-  const pAddrRegex = /([\s\S]{0,600})<(?:p|li|td)[^>]*>([\s\S]*?)<\/(?:p|li|td)>/gi;
+  const pAddrRegex = /([\s\S]{0,600})<(?:p|li|td|th)[^>]*>([\s\S]*?)<\/(?:p|li|td|th)>/gi;
   let pm;
   while ((pm = pAddrRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(pm[2]);
-    if (raw.length >= 15 && raw.length <= 250 &&
-      (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
+    if (raw.length >= 15 && raw.length <= 400 &&
+      (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|marg|nagar|estate|colony|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
         /(?:大道|路|街|巷|弄|号|號|工业区|工业园|产业园|高新区)/.test(raw) ||
-        /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja)\b/i.test(raw)) &&
-      (/\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|gpo\s*box)\b/i.test(raw) ||
+        /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja|maharashtra|mumbai|delhi|bangalore|karnataka|tamil\s*nadu|chennai|gujarat|ahmedabad|kolkata|hyderabad|pune)\b/i.test(raw)) &&
+      (/\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|floor\s*\d+|ist\s*floor|1st\s*floor|2nd\s*floor|3rd\s*floor|gpo\s*box)\b/i.test(raw) ||
        /\d+\s*[号號]/.test(raw) ||
        /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(raw) ||
+       /\b\d{6}\b/.test(raw) ||
        /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
-      const ctx = getContext(pm[1], defaultSource);
+      const ctx = getContext(pm[1], defaultSource, pm[2]);
       addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
   }
@@ -3836,20 +3847,33 @@ Return ONLY valid JSON matching this schema:
   for (const modelToTry of candidateModels) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${apiKey}`;
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: "application/json"
-          }
-        })
-      });
+      const abortCtrl = new AbortController();
+      const abortTimer = setTimeout(() => abortCtrl.abort(), 6000);
+      let response;
+      try {
+        response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: abortCtrl.signal,
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: "application/json"
+            }
+          })
+        });
+      } finally {
+        clearTimeout(abortTimer);
+      }
 
       if (!response.ok) {
         const errText = await response.text();
+        if (response.status === 400 || response.status === 401 || response.status === 403) {
+          console.warn(`[AI Assistant] Gemini API key invalid / permission denied (${response.status}). Fast-falling back to local rule engine.`);
+          lastError = new Error(`Gemini authorization error ${response.status}: ${errText}`);
+          break; // Stop immediately! Invalid key will fail on all models!
+        }
         throw new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
       }
 
@@ -7668,8 +7692,9 @@ function removePostalCodesCarefully(addr) {
   });
   a = a.replace(/(\b\d+\s+)\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b\s+(?=[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, "$1");
 
-  // 11. Postal code at the very end of the address string (e.g. "... Campbellfield 3061" or "... Cincinnati, Ohio 45241")
-  a = a.replace(/[\s,]+\b\d{3,6}\b(?:\s*[.,]?\s*)$/g, "");
+  // 11. Postal code at the very end of the address string (e.g. "... Campbellfield 3061", "... Mumbai - 400001", or "... Cincinnati, Ohio 45241")
+  a = a.replace(/[\s,\-]+(?:\bpin(?:\s*code)?\b[\s:#\-]*)?\b\d{3,6}\b(?:\s*[.,]?\s*)$/gi, "");
+  a = a.replace(/\s*-\s*\b\d{4,6}\b(?=[\s,]|$)/g, "");
 
   return a;
 }
@@ -7943,11 +7968,11 @@ function extractLikelyAddress(text) {
   if (!text) return "";
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 10);
   for (const line of lines) {
-    if (/\b(street|road|avenue|drive|lane|way|boulevard|park|industrial|building|box|suite|town|district|county|hsien)\b/i.test(line)) {
+    if (/\b(street|road|avenue|drive|lane|way|boulevard|park|industrial|building|box|suite|town|district|county|hsien|marg|nagar|estate|floor|block|sector|plot|no\.?|mumbai|delhi|bangalore|chennai|kolkata|hyderabad|pune|ahmedabad)\b/i.test(line)) {
       return line;
     }
   }
-  return lines.length > 0 ? lines[0] : "";
+  return "";
 }
 
 async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
@@ -7990,6 +8015,9 @@ async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
       }
       const err = await res.text();
       lastError = `API HTTP ${res.status}: ${err}`;
+      if (res.status === 400 || res.status === 401 || res.status === 403) {
+        break; // Key invalid or unauthorized, no other model will succeed
+      }
     } catch (e) {
       lastError = e.message;
     }
