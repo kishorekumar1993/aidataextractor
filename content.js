@@ -1653,6 +1653,22 @@
       };
     }
 
+    // 8.5. No Business Products / 0 Products / Empty Catalog (Rule 1)
+    if (data.errorCategory === "No Business Products / 0 Products" || /0\s*products/i.test(data.errorKeyword || "") || /0\s*products/i.test(data.notWorkingReason || "")) {
+      const rawLink = data.errorSourceUrl || siteBaseUrl;
+      return {
+        category: "No Business Products",
+        badge: "0 PRODUCTS / NO CATALOG",
+        badgeBg: "#fee2e2",
+        badgeColor: "#b91c1c",
+        reason: data.notWorkingReason || "Website has 0 products and no verifiable catalog or physical address (Rule 1).",
+        rule: "Rule 1: If site has no verifiable business products, physical goods, or cannot be reached, mark Not Working.",
+        keyword: data.errorKeyword || "0 Products / No Catalog",
+        link: formatClickableUrl(rawLink, siteBaseUrl),
+        snippet: data.errorSnippet || "Website returned 0 products and has no physical company address or verifiable business catalog."
+      };
+    }
+
     // 9. Generic Not Working / No Business Content
     const rawLink = data.errorSourceUrl || siteBaseUrl;
     const reasonText = data.notWorkingReason || data._note || "Website has no verifiable business products, physical address, or services";

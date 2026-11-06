@@ -3141,6 +3141,22 @@ function detectDisallowedWebsitePlatformOrDomain(url, html = "", text = "") {
     };
   }
 
+  // Rule 1: Parked domains, domains for sale, placeholder holding pages, and under construction
+  const parkedPatterns = [
+    /\b(?:buy\s+this\s+domain|domain\s+(?:is\s+)?for\s+sale|this\s+domain\s+(?:may\s+be\s+)?for\s+sale|inquire\s+about\s+this\s+domain|purchase\s+this\s+domain)\b/i,
+    /\b(?:hugedomains\.com|sedo(?:\.com)?|godaddy\s*parked|dan\.com|afternic\.com|parked\s+domain|domain\s+parking)\b/i,
+    /\b(?:website\s+under\s+construction|site\s+under\s+construction|under\s+construction|page\s+under\s+development|default\s+web\s+site\s+page|apache2\s+(?:ubuntu|debian)\s+default\s+page)\b/i,
+    /\b(?:this\s+site\s+is\s+currently\s+unavailable|account\s+suspended|this\s+account\s+has\s+been\s+suspended)\b/i
+  ];
+  for (const pp of parkedPatterns) {
+    if (pp.test(pageTitle + " " + plainText)) {
+      return {
+        isDisallowed: true,
+        reason: "Parked Domain / Under Construction (Rule 1)"
+      };
+    }
+  }
+
   return { isDisallowed: false, reason: "" };
 }
 
@@ -4388,7 +4404,7 @@ function extractBestBrandFromTitle(title, domain, logoText = "", ogSiteName = ""
  * Never defaults blindly to Manufacturer.
  */
 function inferBusinessTypeFromEvidence(corpus, html = "") {
-  if (!corpus && !html) return "Supplier";
+  if (!corpus && !html) return "";
   const text = (corpus + " " + html).toLowerCase();
 
   const scores = {
@@ -4434,7 +4450,7 @@ function inferBusinessTypeFromEvidence(corpus, html = "") {
   const tMatches = text.match(/\b(?:trader|traders|trading)\b/g);
   if (tMatches) scores["Trader"] += tMatches.length * 3;
 
-  let bestType = "Supplier";
+  let bestType = "";
   let maxScore = 0;
   for (const [type, score] of Object.entries(scores)) {
     if (score > maxScore) {
@@ -4445,7 +4461,7 @@ function inferBusinessTypeFromEvidence(corpus, html = "") {
 
   if (maxScore === 0) {
     if (/\b(?:factory|plant|works)\b/i.test(text)) return "Manufacturer";
-    return "Supplier";
+    return "";
   }
 
   return bestType;
@@ -4479,13 +4495,8 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   if (!companyName && crawlData.title) {
     companyName = extractBestBrandFromTitle(crawlData.title, crawlData.originalUrl || crawlData.finalUrl, crawlData.logoText, crawlData.ogSiteName);
   }
-  if (!companyName || companyName.length < 3) {
-    try {
-      const hostname = new URL(crawlData.originalUrl).hostname;
-      companyName = hostname.replace(/^www\./i, "").split(".")[0];
-    } catch (e) {
-      companyName = "";
-    }
+  if (!companyName) {
+    companyName = "";
   }
 
   const topCandidate = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
@@ -4521,11 +4532,25 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   const hasState = address && hasStateInAddress(address, country);
   const hasCity = address && hasCityInAddress(address, country);
 
+  const inferredBusiness = restrictedCheck.isRestricted
+    ? "Restricted Site"
+    : inferBusinessTypeFromEvidence(text, crawlData.mainHtml || "");
+
   const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
-  const websiteStatus = (shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working");
+  let websiteStatus = (shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working");
+
+  // Rule 1: If website has 0 products and no address and no inferred business evidence, mark Not Working!
+  if (!address && prodCount === "0" && !inferredBusiness) {
+    websiteStatus = "Not Working";
+  }
 
   // CRITICAL RULE: "Notworking means all empty"
   if (websiteStatus === "Not Working") {
+    const isZeroProdReason = (!address && prodCount === "0" && !inferredBusiness);
+    const reasonMsg = isZeroProdReason
+      ? "Website has 0 products and no verifiable catalog or physical address (Rule 1)."
+      : (crawlData.fetchError || "Website has no verifiable business products, physical address, or services.");
+
     return {
       websiteStatus: "Not Working",
       businessType: "",
@@ -4541,16 +4566,17 @@ function heuristicExtraction(crawlData, restrictedCheck) {
       numberOfProducts: "",
       productImages: "",
       numberOfProductDescriptions: "",
+      errorCategory: isZeroProdReason ? "No Business Products / 0 Products" : (crawlData.fetchError ? "Unreachable / Timeout" : "No Business Content"),
+      errorKeyword: isZeroProdReason ? "0 Products / No Catalog" : (crawlData.fetchError ? "Connection Failed" : "No Verifiable Content"),
+      errorSourceUrl: crawlData.finalUrl || crawlData.originalUrl || "",
+      errorSnippet: reasonMsg,
+      notWorkingReason: reasonMsg,
       isRestricted: restrictedCheck.isRestricted,
       restrictedReason: restrictedCheck.matchedKeyword,
       isShopCartSite: !!(shopCartCheck && shopCartCheck.detected),
       shopCartReason: (shopCartCheck && shopCartCheck.reason) || ""
     };
   }
-
-  const inferredBusiness = restrictedCheck.isRestricted
-    ? "Restricted Site"
-    : inferBusinessTypeFromEvidence(text, crawlData.mainHtml || "");
 
   return {
     websiteStatus: websiteStatus,
@@ -5117,6 +5143,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Strip trailing contact / communication fields or loose periods attached to address
       addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
       addr = addr.replace(/(?:\s*\.\s*)+$/g, "").trim();
+      // Strip trailing map UI links (e.g. "View Map", "Open Map", "Get Directions", "See on Maps")
+      addr = addr.replace(/[,;\s]*(?:\b(?:view\s*map|open\s*map|open\s*in\s*maps?|get\s*directions?|see\s*on\s*maps?|google\s*maps?|directions?)\b.*)$/i, "").trim();
+      // Strip trailing country codes (e.g. ", CA", ", USA", ", UK", ", AU")
+      addr = addr.replace(/[,;\s]+\b(?:CA|USA|US|UK|AU|NZ)\b\s*$/i, "").trim();
       // Final pass: clean postal codes, stray quotes, and punctuation
       addr = removePostalCodesCarefully(addr);
       addr = addr.replace(/["“”«»`]+/g, " ");
@@ -5341,6 +5371,30 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.numberOfProducts = highestVal;
   result.productImages = highestVal;
   result.numberOfProductDescriptions = highestVal;
+
+  // Final safeguard: If highestCount is 0 and company has no physical address, it CANNOT be a working site
+  const finalHasAddr = result.companyAddress && result.companyAddress !== "Not Available" && result.companyAddress.trim().length > 5;
+  if ((result.websiteStatus === "Working" || !result.websiteStatus) && highestCount === 0 && !finalHasAddr) {
+    result.websiteStatus = "Not Working";
+    result.errorCategory = "No Business Products / 0 Products";
+    result.errorKeyword = "0 Products / No Catalog";
+    result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    result.errorSnippet = "Website has 0 products and no physical address or verifiable catalog (Rule 1).";
+    result.notWorkingReason = result.errorSnippet;
+    result.businessType = "";
+    result.companyProfile = "";
+    result.companyName = "";
+    result.countryName = "";
+    result.companyAddress = "";
+    result.state = "";
+    result.city = "";
+    result.emailId = "";
+    result.secondaryEmailId = "";
+    result.phoneNumber = "";
+    result.numberOfProducts = "";
+    result.productImages = "";
+    result.numberOfProductDescriptions = "";
+  }
 
   // Final safeguard: If website redirected to another domain and is working, ALWAYS ensure websiteStatus is "Redirect Site"
   if (isRedirectSite && (result.websiteStatus === "Working" || !result.websiteStatus)) {
@@ -7507,7 +7561,11 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   }
 
   // Canada
-  if (cLower.includes("canada") || /\b(?:ont|que|b\.?c\.|alta|sask|man)\b/i.test(a)) {
+  const isCanadaAddress = cLower.includes("canada") ||
+    /\b(?:ont|que|qc|on|bc|b\.?c\.|alta|ab|sask|sk|man|mb|ns|nb|nl|pe|pei|quebec|ontario|alberta)\b/i.test(a) ||
+    /\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/i.test(a);
+
+  if (isCanadaAddress) {
     a = a.replace(/,\s*\b(?:on|ont)\b\.?/gi, ", Ontario");
     a = a.replace(/,\s*\b(?:qc|que)\b\.?/gi, ", Quebec");
     a = a.replace(/,\s*\b(?:bc|b\.c\.)\b\.?/gi, ", British Columbia");
@@ -7521,9 +7579,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   }
 
   // United States - Only when country is United States or has US zip or explicit US context
-  const isUsAddress = (typeof isUnitedStatesLocation === "function" && isUnitedStatesLocation(a, country)) ||
+  const isUsAddress = !isCanadaAddress && ((typeof isUnitedStatesLocation === "function" && isUnitedStatesLocation(a, country)) ||
     cLower.includes("united states") || cLower.includes("usa") || cLower.includes("america") ||
-    /\b\d{5}(?:-\d{4})?\b/.test(a) || (!country && /,\s*[A-Z]{2}\b/.test(a));
+    /\b\d{5}(?:-\d{4})?\b/.test(a) || (!country && /,\s*[A-Z]{2}\b/.test(a)));
 
   if (isUsAddress && !["australia", "canada", "united kingdom", "india", "south africa", "malaysia", "spain", "espana", "italy", "italia", "germany", "deutschland", "france"].includes(cLower)) {
     const usAbbreviations = [
@@ -8497,11 +8555,19 @@ function detectCountryFromAddress(address) {
   if (/\b(thailand)\b/i.test(lower)) return "Thailand";
 
   // 2. Verified State / Province / County / Region in the physical address text
+  // Canada provinces, territory codes, Canadian postal code pattern (A1A 1A1)
+  if (/\b(?:ontario|quebec|british\s*columbia|alberta|manitoba|saskatchewan|nova\s*scotia|new\s*brunswick|newfoundland|prince\s*edward\s*island)\b/i.test(lower) ||
+    /\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/i.test(address) ||
+    /(?:^|[,\s])(?:QC|BC|AB|ON|MB|SK|NS|NB|NL|PE)\b/i.test(address) && /\b(?:Canada|CA)\b/i.test(address) ||
+    /,\s*(?:QC|BC|AB|ON|MB|SK|NS|NB|NL|PE)(?:,\s*CA)?\s*$/i.test(address) ||
+    /\b(?:Montreal|Toronto|Vancouver|Calgary|Edmonton|Ottawa|Winnipeg|Quebec\s*City|Hamilton|Kitchener|London|Victoria|Halifax|Longueuil|Laval|Gatineau|Burnaby|Richmond|Saskatoon|Regina)\b/i.test(lower) && /\b(?:Canada|CA|QC|BC|AB|ON|MB|SK)\b/i.test(address)) {
+    return "Canada";
+  }
+
   const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
   if (new RegExp(`(?:^|[,\\s])(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return "United States Of America";
   if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})\\s*$`, "i").test(lower)) return "United States Of America";
   if (/\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s*hampshire|new\s*jersey|new\s*mexico|new\s*york|north\s*carolina|north\s*dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s*island|south\s*carolina|south\s*dakota|tennessee|texas|utah|vermont|virginia|washington|west\s*virginia|wisconsin|wyoming|district\s*of\s*columbia)\b/i.test(lower)) return "United States Of America";
-  if (/\b(ontario|quebec|british\s*columbia|alberta|manitoba|nova\s*scotia)\b/i.test(lower)) return "Canada";
   if (/\b(?:new\s*south\s*wales|victoria|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|sydney|melbourne|brisbane|perth|adelaide|canberra|hobart|darwin|gold\s*coast|newcastle|wollongong|geelong|cairns|townsville)\b/i.test(lower) ||
     /\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(lower) ||
     /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower)) return "Australia";
