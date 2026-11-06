@@ -553,8 +553,8 @@ async function handleCrawlAndExtract(rawUrl) {
     hostname = "";
   }
 
-  // If URL hostname is missing, incomplete (e.g. "ww", "www"), or has no domain dot (e.g. "http://ww")
-  if (!hostname || !hostname.includes(".") || hostname.length < 4 || hostname === "ww" || hostname === "www") {
+  // If URL hostname is missing, incomplete (e.g. "ww", "www", "http://www.larsenlumber."), has trailing dot, or lacks valid TLD
+  if (!hostname || !hostname.includes(".") || hostname.length < 4 || hostname === "ww" || hostname === "www" || /\.$/.test(hostname) || !/\.[a-z]{2,}$/i.test(hostname)) {
     console.warn(`[Background] Invalid/incomplete URL provided: "${rawUrl}". Marking as Not Working.`);
     return {
       websiteStatus: "Not Working",
@@ -571,6 +571,13 @@ async function handleCrawlAndExtract(rawUrl) {
       numberOfProducts: "",
       productImages: "",
       numberOfProductDescriptions: "",
+      errorCategory: "Invalid Website URL",
+      errorKeyword: "Malformed / Incomplete URL",
+      errorSourceUrl: targetUrl,
+      errorSnippet: `Incomplete or malformed URL (${rawUrl}) missing top-level domain.`,
+      notWorkingReason: `Incomplete or malformed URL (${rawUrl}) missing top-level domain.`,
+      _finalUrl: targetUrl,
+      _originalUrl: targetUrl,
       _note: `Invalid/incomplete URL (${rawUrl}) - Marked as Not Working`
     };
   }
@@ -1469,11 +1476,22 @@ async function crawlWebsite(targetUrl) {
   // Within the SAME tier, English precedes non-English (basePriority + 0.0 vs basePriority + 0.4).
   // An English footer or branch address will NEVER outrank an actual Headquarters address!
   addressCandidates.sort((a, b) => {
-    const pA = (typeof a === "object" && a.priority !== undefined) ? a.priority : 6;
-    const pB = (typeof b === "object" && b.priority !== undefined) ? b.priority : 6;
-    if (pA !== pB) return pA - pB;
+    let pA = (typeof a === "object" && a.priority !== undefined) ? a.priority : 6;
+    let pB = (typeof b === "object" && b.priority !== undefined) ? b.priority : 6;
     const rawA = typeof a === "object" ? (a.raw || "") : String(a || "");
     const rawB = typeof b === "object" ? (b.raw || "") : String(b || "");
+
+    // Full Address Boost: Candidate containing City AND (State or Postcode) beats street-only fragment
+    const hasFullA = (hasStateInAddress(rawA, "") || /\b\d{4,6}\b/.test(rawA)) && evaluateCityQC(rawA, "") === "Available";
+    const hasFullB = (hasStateInAddress(rawB, "") || /\b\d{4,6}\b/.test(rawB)) && evaluateCityQC(rawB, "") === "Available";
+    if (hasFullA && !hasFullB) pA -= 4.0;
+    else if (hasFullB && !hasFullA) pB -= 4.0;
+
+    // Substring Superseded Rule: If rawB is a complete address containing rawA as a street substring, rawB wins!
+    if (rawA.length > 10 && rawB.toLowerCase().includes(rawA.toLowerCase()) && hasFullB && !hasFullA) return 1;
+    if (rawB.length > 10 && rawA.toLowerCase().includes(rawB.toLowerCase()) && hasFullA && !hasFullB) return -1;
+
+    if (pA !== pB) return pA - pB;
     const scoreCandidate = (raw) => {
       let score = 0;
       if (hasStateInAddress(raw, "")) score += 50;
@@ -1536,13 +1554,19 @@ async function crawlWebsite(targetUrl) {
 function addAddressCandidate(targetList, rawText, source, isHq = false, locationType = "general", pageUrl = "", contextText = "") {
   if (!rawText || typeof rawText !== "string") return;
   const decoded = decodeHtmlEntities(rawText);
-  const cleaned = decoded
+  let cleaned = decoded
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|add|addr|location|廠址|地址|view|learn\s*more|read\s*more|see\s*more|click\s*here|find\s*out\s*more|get\s*directions|directions)\s*[:：\-–,\s]+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|floor)\b)/i, "")
     .replace(/^(?:address|add|addr|location|headquarters|head\s*office|registered\s*office|corporate\s*office|廠址|地址|view|learn\s*more|read\s*more|see\s*more|click\s*here|find\s*out\s*more|get\s*directions|directions)\s*[:：\-–]?\s*/i, "")
+    .replace(/^(?:we(?:'re|\s+are)\s+(?:at|located\s+at)|visit\s+us(?:\s+at)?|find\s+us(?:\s+at)?|our\s+location\s+is|come\s+(?:in\s+and\s+)?visit\s+us(?:\s+at)?)\s*[:,\s]*/i, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  // Strip leading promotional/intro sentence ending in ! or ? (e.g. "Come in and browse around! 14200 Washington Avenue...")
+  if (/^[^!?]{3,80}[!?]\s+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|lot|plot)\b)/i.test(cleaned)) {
+    cleaned = cleaned.replace(/^[^!?]{3,80}[!?]\s+/i, "").trim();
+  }
 
   if (cleaned.length < 8) return;
 
@@ -1827,6 +1851,26 @@ function extractMapAddresses(html, targetList, pageUrl = "") {
       }
     } catch (e) { }
   }
+
+  // 5. Modern Map & CMS widget attributes (Duda, Leaflet, Mapbox, Webflow, Squarespace, Shopify, Elementor)
+  const widgetRegex = /(?:data-address|addresstodisplay|geocompleteaddress)=["']([^"']+)["']/gi;
+  let wm;
+  while ((wm = widgetRegex.exec(html)) !== null) {
+    const rawAttr = wm[1].trim();
+    if (rawAttr.length > 8 && !/^[-\d.,\s]+$/.test(rawAttr)) {
+      addAddressCandidate(targetList, rawAttr, "map", false, "contact", pageUrl, "Map Widget");
+    }
+  }
+
+  // 6. Google Maps short-link / map anchor text (e.g. <a href="https://maps.app.goo.gl/..." ...>14200 Washington Avenue, San Leandro, CA 94578</a>)
+  const mapLinkRegex = /<a\b[^>]*href=["'](?:https?:)?\/\/(?:maps\.(?:google|app\.goo\.gl)|goo\.gl\/maps)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let mlm;
+  while ((mlm = mapLinkRegex.exec(html)) !== null) {
+    const linkText = stripHtml(mlm[1]).trim();
+    if (linkText.length >= 10 && !/^[-\d.,\s]+$/.test(linkText)) {
+      addAddressCandidate(targetList, linkText, "map", false, "contact", pageUrl, "Google Maps Link");
+    }
+  }
 }
 
 function extractMetaAddresses(html, targetList) {
@@ -1981,6 +2025,10 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
        /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
       const ctx = getContext(pm[1], defaultSource, pm[2]);
       addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
+      const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length >= 10);
+      for (const line of lines) {
+        addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType, pageUrl);
+      }
     }
   }
 }
@@ -2162,6 +2210,16 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
     const rawA = getRaw(a).toLowerCase();
     const rawB = getRaw(b).toLowerCase();
 
+    // Full Address Boost: Candidate containing City AND (State or Postcode) beats street-only fragment
+    const hasFullA = (hasStateInAddress(rawA, "") || /\b\d{4,6}\b/.test(rawA)) && evaluateCityQC(rawA, "") === "Available";
+    const hasFullB = (hasStateInAddress(rawB, "") || /\b\d{4,6}\b/.test(rawB)) && evaluateCityQC(rawB, "") === "Available";
+    if (hasFullA && !hasFullB) pA -= 4.0;
+    else if (hasFullB && !hasFullA) pB -= 4.0;
+
+    // Substring Superseded Rule: If rawB is a complete address containing rawA as a street substring, rawB wins!
+    if (rawA.length > 10 && rawB.includes(rawA) && hasFullB && !hasFullA) return 1;
+    if (rawB.length > 10 && rawA.includes(rawB) && hasFullA && !hasFullB) return -1;
+
     if (provenHomeCountry) {
       const matchA = rawA.includes(provenHomeCountry) ||
         (provenHomeCountry === "china" && /[\u4e00-\u9fa5]/.test(rawA)) ||
@@ -2186,8 +2244,20 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
     return pA - pB;
   });
 
-  const bestCandidate = sorted[0];
-  const bestRaw = getRaw(bestCandidate);
+  let bestCandidate = sorted[0];
+  let bestRaw = getRaw(bestCandidate);
+
+  // If bestCandidate is missing City or State, check if a fuller candidate exists in the list
+  if (!hasStateInAddress(bestRaw, "") || evaluateCityQC(bestRaw, "") !== "Available") {
+    const fuller = candidates.find(c => {
+      const cRaw = getRaw(c);
+      return cRaw.toLowerCase().includes(bestRaw.toLowerCase()) && (hasStateInAddress(cRaw, "") || evaluateCityQC(cRaw, "") === "Available");
+    });
+    if (fuller) {
+      bestCandidate = fuller;
+      bestRaw = getRaw(fuller);
+    }
+  }
 
   // 3. SOURCE OF TRUTH MANDATE (Correction for Problem 1):
   // The verified website candidate is the absolute source of truth!
@@ -4421,8 +4491,8 @@ function inferBusinessTypeFromEvidence(corpus, html = "") {
   if (/\b(?:industrial\s+services?|machining\s+services?|engineering\s+services?|surface\s+treatment|heat\s+treatment|calibration\s+services?|maintenance\s+and\s+repair|fabrication\s+services?|contract\s+manufacturing)\b/i.test(text)) scores["Industrial Services"] += 15;
 
   // 3. Supplier signals
-  if (/\b(?:leading\s+supplier|we\s+supply|product\s+supplier|stockist\s+and\s+supplier|supplying\s+quality)\b/i.test(text)) scores["Supplier"] += 12;
-  const sMatches = text.match(/\b(?:supplier|suppliers|supplying)\b/g);
+  if (/\b(?:leading\s+supplier|we\s+supply|product\s+supplier|stockist\s+and\s+supplier|supplying\s+quality|lumber\s*(?:yard|company|dealer)?|building\s*materials|construction\s*supplies|timber\s*merchant|hardware\s*supplies)\b/i.test(text)) scores["Supplier"] += 12;
+  const sMatches = text.match(/\b(?:supplier|suppliers|supplying|stockist|stockists|dealers?|lumberyard|lumber)\b/g);
   if (sMatches) scores["Supplier"] += sMatches.length * 3;
 
   // 4. Distributer signals
@@ -4611,10 +4681,10 @@ function checkPhysicalProductSupplier(crawlData, result) {
   ).toLowerCase();
 
   // Physical goods / tangible products markers
-  const productMarkers = /\b(?:windows|doors|conservatories|orangeries|glazing|double\s*glazing|roof\s*lanterns|shutters|blinds|fencing|gates|railings|cladding|timber|upvc|aluminium|glass|tiles|flooring|cabinets|countertops|machinery|equipment|tools|hardware|valves|pumps|pipes|fittings|fasteners|bearings|cables|wiring|packaging|plastics|textiles|steel|sheet\s*metal|fabrication|building\s*materials|construction\s*supplies|industrial\s*supplies)\b/i;
+  const productMarkers = /\b(?:windows|doors|conservatories|orangeries|glazing|double\s*glazing|roof\s*lanterns|shutters|blinds|fencing|gates|railings|cladding|timber|lumber|wood|plywood|decking|mouldings?|trim|siding|roofing|insulation|drywall|upvc|aluminium|glass|tiles|flooring|cabinets|countertops|machinery|equipment|tools|hardware|valves|pumps|pipes|fittings|fasteners|bearings|cables|wiring|packaging|plastics|textiles|steel|sheet\s*metal|fabrication|building\s*materials|construction\s*supplies|industrial\s*supplies)\b/i;
 
   // Supplier / manufacturer / distributor operational markers
-  const supplierMarkers = /\b(?:supplier|suppliers|supplying|supply\s+and\s+(?:fit|install)|fabricator|fabricators|distributor|distributer|distributors|wholesaler|wholesalers|manufacturers?|stockists?|our\s+products|product\s+range|brochure|products\s+we\s+supply)\b/i;
+  const supplierMarkers = /\b(?:supplier|suppliers|supplying|supply\s+and\s+(?:fit|install)|fabricator|fabricators|distributor|distributer|distributors|wholesaler|wholesalers|manufacturers?|stockists?|our\s+products|product\s+range|brochure|products\s+we\s+supply|dealers?|yard|lumberyard|building\s*materials|materials\s*we|we\s*carry|inventory|stocking|browse\s*around)\b/i;
 
   // Pure non-goods consumer services exclusions (restaurants, salons, legal, accounting, marketing, real estate, hotels)
   const isPureConsumerService = /\b(?:restaurant|cafe|coffee\s*shop|bistro|barber|hair\s*salon|nail\s*salon|spa|massage|tattoo|dentist|veterinary|legal\s*advice|law\s*firm|solicitors?|accountants?|bookkeeping|marketing\s*agency|seo\s*agency|real\s*estate\s*agency|estate\s*agents?|property\s*rental|hotel|motel)\b/i.test(combined);
@@ -5140,8 +5210,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = addr.replace(/(?:\s*\.\s*)+$/g, "").trim();
       // Strip trailing map UI links (e.g. "View Map", "Open Map", "Get Directions", "See on Maps")
       addr = addr.replace(/[,;\s]*(?:\b(?:view\s*map|open\s*map|open\s*in\s*maps?|get\s*directions?|see\s*on\s*maps?|google\s*maps?|directions?)\b.*)$/i, "").trim();
-      // Strip trailing country codes (e.g. ", CA", ", USA", ", UK", ", AU")
-      addr = addr.replace(/[,;\s]+\b(?:CA|USA|US|UK|AU|NZ)\b\s*$/i, "").trim();
+      // Strip trailing country codes (e.g. ", USA", ", UK", ", AU") - NEVER strip ", CA" if in United States since CA is California!
+      if (country && /united states/i.test(country)) {
+        addr = addr.replace(/[,;\s]+\b(?:USA|US)\b\s*$/i, "").trim();
+      } else {
+        addr = addr.replace(/[,;\s]+\b(?:CA|USA|US|UK|AU|NZ)\b\s*$/i, "").trim();
+      }
       // Final pass: clean postal codes, stray quotes, and punctuation
       addr = removePostalCodesCarefully(addr);
       addr = addr.replace(/["“”«»`]+/g, " ");
