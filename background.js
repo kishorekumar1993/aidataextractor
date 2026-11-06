@@ -628,7 +628,7 @@ async function handleCrawlAndExtract(rawUrl) {
   // Step 2: PRE-AI STRICT CHECKS (Prohibited Categories, Free Platforms, Subdomains, Flash & Non-English)
   // Check across target URL, final URL, page text, metadata, image tags, and stripped body content
   const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
-  const restrictedCheck = detectRestrictedKeywords(siteContent, crawlResult.mainHtml || "");
+  const restrictedCheck = detectRestrictedKeywords(siteContent, crawlResult.mainHtml || "", crawlResult.crawledPages || []);
 
   // PRE-AI CHECK 1: If Prohibited Category / Word appears anywhere on the site (text or images):
   // Rule Note 2: "Do not work on that site... make these rule strictly if any word appear make it notwroking" & "Notworking means all empty"
@@ -651,6 +651,10 @@ async function handleCrawlAndExtract(rawUrl) {
       isRestricted: true,
       isProhibitedSite: true,
       restrictedReason: restrictedCheck.reason,
+      restrictedKeyword: restrictedCheck.matchedKeyword,
+      restrictedCategory: restrictedCheck.category,
+      restrictedSourceUrl: restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl,
+      restrictedSnippet: restrictedCheck.snippet || "",
       _note: `Prohibited Category / Word Detected (${restrictedCheck.reason}) - Marked as Not Working`
     };
   }
@@ -1072,6 +1076,7 @@ async function crawlWebsite(targetUrl) {
   const allDiscoveredPhones = new Set();
   let contactLinks = [];
   let companySocials = {};
+  const crawledPages = [];
 
   try {
     let mainRes = await fetchDecodedHtml(targetUrl, {
@@ -1196,6 +1201,10 @@ async function crawlWebsite(targetUrl) {
       } catch (e) { }
     }
 
+    if (mainHtml) {
+      crawledPages.push({ url: finalUrl, html: mainHtml, text: stripHtml(mainHtml) });
+    }
+
     // Extract Footer text & Footer address candidates
     const footerMatch = mainHtml.match(/<footer[^>]*>([\s\S]*?)<\/footer>/i) ||
       mainHtml.match(/<(?:div|section)[^>]+(?:class|id)=["'][^"']*footer[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/i);
@@ -1263,6 +1272,7 @@ async function crawlWebsite(targetUrl) {
           if (cRes && cRes.ok && cRes.html) {
             const cText = cRes.html;
             contactHtml += "\n" + cText;
+            crawledPages.push({ url: cUrl, html: cText, text: stripHtml(cText) });
             const isDistributorPage = /(?:dealers?|distributors?|stockists?|resellers?|partners?)/i.test(cUrl);
             const isProfilePage = !isDistributorPage && /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
             const isContactPage = !isDistributorPage && /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)/i.test(cUrl);
@@ -1470,7 +1480,8 @@ async function crawlWebsite(targetUrl) {
     phones: Array.from(allDiscoveredPhones),
     primaryContactUrl: primaryContactUrl || (contactLinks.find(u => /\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)\b/i.test(u)) || ""),
     primaryAboutUrl: primaryAboutUrl || (contactLinks.find(u => /\b(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|profile)\b/i.test(u)) || ""),
-    companySocials
+    companySocials,
+    crawledPages
   };
 }
 
@@ -2698,13 +2709,23 @@ function extractImageAttributes(html) {
   return matches.map(m => m[1]).join(" ");
 }
 
+function extractContextSnippet(text, keyword) {
+  if (!text || !keyword) return "";
+  const clean = String(text).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const idx = clean.toLowerCase().indexOf(keyword.toLowerCase());
+  if (idx === -1) return "";
+  const start = Math.max(0, idx - 45);
+  const end = Math.min(clean.length, idx + keyword.length + 45);
+  return (start > 0 ? "..." : "") + clean.slice(start, end).trim() + (end < clean.length ? "..." : "");
+}
+
 /**
  * Checks website text and images against prohibited categories per Note 2.
  * Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
  */
-function detectRestrictedKeywords(text, html = "") {
+function detectRestrictedKeywordsSingle(text, html = "") {
   let combined = ((text || "") + " " + extractImageAttributes(html)).trim();
-  if (!combined) return { isRestricted: false, matchedKeyword: null, reason: "" };
+  if (!combined) return { isRestricted: false, matchedKeyword: null, reason: "", category: "" };
 
   // Strip HTML tags and attributes first so HTML tag/class/id attributes never create false tokens
   let cleanText = combined.replace(/<[^>]+>/g, " ");
@@ -2798,11 +2819,115 @@ function detectRestrictedKeywords(text, html = "") {
       return {
         isRestricted: true,
         matchedKeyword: m ? m[0] : "",
+        category: label,
         reason: `${label} ("${m ? m[0] : ""}")`
       };
     }
   }
-  return { isRestricted: false, matchedKeyword: null, reason: "" };
+  return { isRestricted: false, matchedKeyword: null, reason: "", category: "" };
+}
+
+/**
+ * Searches across all crawled pages to pinpoint the exact URL, matched keyword, and context snippet.
+ */
+function detectRestrictedKeywords(text, html = "", crawledPages = []) {
+  if (crawledPages && crawledPages.length > 0) {
+    for (const page of crawledPages) {
+      const pText = page.text || stripHtml(page.html || "");
+      const res = detectRestrictedKeywordsSingle(pText, page.html || "");
+      if (res.isRestricted) {
+        return {
+          ...res,
+          sourceUrl: page.url,
+          snippet: extractContextSnippet(pText, res.matchedKeyword)
+        };
+      }
+    }
+  }
+
+  const fallback = detectRestrictedKeywordsSingle(text, html);
+  if (fallback.isRestricted) {
+    return {
+      ...fallback,
+      sourceUrl: (crawledPages && crawledPages[0] && crawledPages[0].url) || "",
+      snippet: extractContextSnippet(text, fallback.matchedKeyword)
+    };
+  }
+  return { isRestricted: false, matchedKeyword: null, reason: "", category: "", sourceUrl: "", snippet: "" };
+}
+
+/**
+ * Pinpoints the exact keyword, source page URL, and context snippet supporting a business type.
+ */
+function findBusinessTypeEvidence(businessType, crawledPages = [], fallbackText = "") {
+  if (!businessType) return { keyword: "", sourceUrl: "", snippet: "" };
+
+  const patterns = {
+    "Manufacturer": [
+      /\b(?:we\s+manufacture|our\s+factory|our\s+plant|production\s+facility|manufacturing\s+facility|custom\s+fabrication|die\s+casting|injection\s+molding|cnc\s+machining|assembly\s+line)\b/i,
+      /\b(?:manufacturer|manufacturing|manufacture|fabricator|fabrication|producers?|oem|odm)\b/i,
+      /\b(?:factory|plant|works)\b/i
+    ],
+    "Industrial Services": [
+      /\b(?:industrial\s+services?|machining\s+services?|engineering\s+services?|surface\s+treatment|heat\s+treatment|calibration\s+services?|maintenance\s+and\s+repair|fabrication\s+services?|contract\s+manufacturing)\b/i
+    ],
+    "Supplier": [
+      /\b(?:leading\s+supplier|we\s+supply|product\s+supplier|stockist\s+and\s+supplier|supplying\s+quality)\b/i,
+      /\b(?:supplier|suppliers|supplying)\b/i
+    ],
+    "Distributer": [
+      /\b(?:authorized\s+distributor|authorised\s+distributor|master\s+distributor|official\s+distributor|distribution\s+network)\b/i,
+      /\b(?:distributor|distributer|distributors|distributers|distribution)\b/i
+    ],
+    "Wholesaler": [
+      /\b(?:trade\s+only|wholesale\s+prices?|bulk\s+orders?|wholesale\s+supply|wholesalers?)\b/i,
+      /\b(?:wholesaler|wholesalers|wholesale)\b/i
+    ],
+    "Exporter": [
+      /\b(?:export\s+to|worldwide\s+exporter|exporting\s+to|global\s+export)\b/i,
+      /\b(?:exporter|exporters|exporting)\b/i
+    ],
+    "Trader": [
+      /\b(?:general\s+trading|import\s+and\s+export|import\s*\/\s*export|trading\s+co(?:mpany)?)\b/i,
+      /\b(?:trader|traders|trading)\b/i
+    ]
+  };
+
+  const list = patterns[businessType] || patterns["Supplier"] || [];
+  if (crawledPages && crawledPages.length > 0) {
+    for (const regex of list) {
+      for (const page of crawledPages) {
+        const text = page.text || stripHtml(page.html || "");
+        const match = text.match(regex);
+        if (match) {
+          return {
+            keyword: match[0],
+            sourceUrl: page.url,
+            snippet: extractContextSnippet(text, match[0])
+          };
+        }
+      }
+    }
+  }
+
+  if (fallbackText) {
+    for (const regex of list) {
+      const match = fallbackText.match(regex);
+      if (match) {
+        return {
+          keyword: match[0],
+          sourceUrl: (crawledPages && crawledPages[0] && crawledPages[0].url) || "",
+          snippet: extractContextSnippet(fallbackText, match[0])
+        };
+      }
+    }
+  }
+
+  return {
+    keyword: businessType.toLowerCase(),
+    sourceUrl: (crawledPages && crawledPages[0] && crawledPages[0].url) || "",
+    snippet: ""
+  };
 }
 
 /**
@@ -4435,6 +4560,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.isRestricted = true;
     result.isProhibitedSite = true;
     result.restrictedReason = (restrictedCheck && restrictedCheck.reason) || result.restrictedReason || "Prohibited Category Detected";
+    result.restrictedKeyword = (restrictedCheck && restrictedCheck.matchedKeyword) || result.restrictedKeyword || "";
+    result.restrictedCategory = (restrictedCheck && restrictedCheck.category) || result.restrictedCategory || "";
+    result.restrictedSourceUrl = (restrictedCheck && restrictedCheck.sourceUrl) || result.restrictedSourceUrl || crawlData.finalUrl || "";
+    result.restrictedSnippet = (restrictedCheck && restrictedCheck.snippet) || result.restrictedSnippet || "";
     return result;
   }
 
@@ -4457,6 +4586,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.websiteStatus = "Not Working";
       result.isShopCartSite = true;
       result.shopCartReason = shopCartCheck.reason;
+      result.shopCartKeyword = "Shopping Cart / Direct Purchase";
+      result.shopCartSourceUrl = crawlData.finalUrl || "";
+      result.shopCartSnippet = shopCartCheck.reason || "";
       result.businessType = "";
       result.companyProfile = "";
       result.companyName = "";
@@ -4483,6 +4615,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.websiteStatus = "Not Working";
     result.isRestricted = true;
     result.restrictedReason = platformCheck.reason;
+    result.restrictedKeyword = platformCheck.reason;
+    result.restrictedSourceUrl = crawlData.finalUrl || "";
+    result.restrictedSnippet = platformCheck.reason;
   } else if (crawlData.status === "Flash" || detectFlashFormatSite(crawlData.mainHtml || "")) {
     result.websiteStatus = "Flash";
   } else if (crawlData.status === "Non English" || detectNonEnglishWithoutTranslation(crawlData.mainHtml || "", crawlData.bodyText || "")) {
@@ -4563,6 +4698,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.websiteStatus = "Not Working";
       result.isDisallowedBusinessType = true;
       result.disallowedReason = `Business Type "${result.businessType || 'Disallowed'}" outside allowed scope (Manufacturer to Wholesaler only worked on)`;
+      result.disallowedKeyword = result.businessType || "Outside Allowed Scope";
+      result.disallowedSourceUrl = crawlData.finalUrl || "";
+      result.disallowedSnippet = `Business Type detected as "${result.businessType || 'Disallowed'}" which is outside allowed scope (Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler).`;
       result.businessType = "";
       result.companyProfile = "";
       result.companyName = "";
@@ -5028,6 +5166,27 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.companyNameSource = determineCompanyNameSource(result.companyName, crawlData);
   result.primaryEmailSource = result.emailId ? resolveBestEmailSource(result.emailId, crawlData) : "";
   result.secondaryEmailSource = result.secondaryEmailId ? resolveBestEmailSource(result.secondaryEmailId, crawlData) : "";
+
+  // Business Type Evidence & Source Link
+  if (result.websiteStatus === "Working" || result.websiteStatus === "Redirect Site") {
+    const btEvidence = findBusinessTypeEvidence(result.businessType, crawlData.crawledPages, (crawlData.bodyText || "") + " " + (crawlData.mainHtml || ""));
+    result.businessTypeKeyword = btEvidence.keyword || "";
+    result.businessTypeSource = btEvidence.sourceUrl || crawlData.primaryAboutUrl || crawlData.finalUrl || "";
+    result.businessTypeSnippet = btEvidence.snippet || "";
+  }
+
+  // Company Address Source Link
+  result.companyAddressSource = (selectedCandidate && selectedCandidate.pageUrl)
+    ? selectedCandidate.pageUrl
+    : (crawlData.primaryContactUrl || crawlData.finalUrl || "");
+
+  // Carry over Restricted Site, Shop Cart, and Disallowed Evidence
+  if (restrictedCheck && restrictedCheck.isRestricted) {
+    result.restrictedKeyword = restrictedCheck.matchedKeyword || "";
+    result.restrictedCategory = restrictedCheck.category || "";
+    result.restrictedSourceUrl = restrictedCheck.sourceUrl || crawlData.finalUrl || "";
+    result.restrictedSnippet = restrictedCheck.snippet || "";
+  }
 
   return result;
 }

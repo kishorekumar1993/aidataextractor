@@ -1479,60 +1479,84 @@
   }
 
   function extractNotWorkingReason(data) {
-    if (!data) return { reason: "Website unreachable or empty response", rule: "Rule 1: Website Status" };
+    if (!data) return { reason: "Website unreachable or empty response", rule: "Rule 1: Website Status", keyword: "", link: "", snippet: "" };
 
     if (data.restrictedReason || data.isRestricted || data.isProhibitedSite) {
       return {
         reason: `Prohibited Category / Word: "${data.restrictedReason || 'Restricted Category'}" detected on site`,
-        rule: "Rule Note 2: Weapons, Defence, Military, Medicine, Medical, Hospital, Food, Porn, Aerospace, Marine, Chemicals, Animals sites are strictly prohibited. Website Status is set to Not Working with all fields empty."
+        rule: "Rule Note 2: Weapons, Defence, Military, Medicine, Medical, Hospital, Food, Porn, Aerospace, Marine, Chemicals, Animals sites are strictly prohibited. Website Status is set to Not Working with all fields empty.",
+        keyword: data.restrictedKeyword || data.restrictedReason || "",
+        link: data.restrictedSourceUrl || data._finalUrl || "",
+        snippet: data.restrictedSnippet || ""
       };
     }
 
     if (data.disallowedReason || data.isDisallowedBusinessType) {
       return {
         reason: data.disallowedReason || `Business Type "${data.businessType || 'Disallowed'}" outside allowed scope`,
-        rule: "Rule 4 & Scope: Only Manufacturer, Supplier, Distributer, Wholesaler, Exporter, Trader, and Industrial Services are worked on. Retailers, Resellers, and Service Providers must be marked Not Working."
+        rule: "Rule 4 & Scope: Only Manufacturer, Supplier, Distributer, Wholesaler, Exporter, Trader, and Industrial Services are worked on. Retailers, Resellers, and Service Providers must be marked Not Working.",
+        keyword: data.disallowedKeyword || data.businessType || "",
+        link: data.disallowedSourceUrl || data._finalUrl || "",
+        snippet: data.disallowedSnippet || ""
       };
     }
 
     if (data.shopCartReason || data.isShopCartSite) {
       return {
         reason: `Online Shopping / Retail Cart: ${data.shopCartReason || 'Shopping cart & checkout buttons detected without manufacturing evidence'}`,
-        rule: "Rule 11 & 16: E-commerce websites selling products online with cart/checkout are marked Not Working, except if the company is a verified Manufacturer."
+        rule: "Rule 11 & 16: E-commerce websites selling products online with cart/checkout are marked Not Working, except if the company is a verified Manufacturer.",
+        keyword: data.shopCartKeyword || "Shopping Cart / Direct Purchase",
+        link: data.shopCartSourceUrl || data._finalUrl || "",
+        snippet: data.shopCartSnippet || data.shopCartReason || ""
       };
     }
 
     if (data.websiteStatus === "Domain Expired") {
       return {
         reason: "Domain Expired or Server returned HTTP 404 Not Found",
-        rule: "Rule 1: If domain has expired or cannot be resolved, mark Domain Expired."
+        rule: "Rule 1: If domain has expired or cannot be resolved, mark Domain Expired.",
+        keyword: "Domain Expired",
+        link: data._finalUrl || "",
+        snippet: ""
       };
     }
 
     if (data.websiteStatus === "Non English") {
       return {
         reason: "Non-English website without English translation option",
-        rule: "Rule 12: Websites entirely in a foreign language with no English option must be marked Non English."
+        rule: "Rule 12: Websites entirely in a foreign language with no English option must be marked Non English.",
+        keyword: "Non English Language",
+        link: data._finalUrl || "",
+        snippet: ""
       };
     }
 
     if (data.websiteStatus === "Flash") {
       return {
         reason: "Flash format website without copyable text",
-        rule: "Rule 14: Flash websites without selectable text must be marked Flash."
+        rule: "Rule 14: Flash websites without selectable text must be marked Flash.",
+        keyword: "Flash Content",
+        link: data._finalUrl || "",
+        snippet: ""
       };
     }
 
     if (data.fetchError) {
       return {
         reason: `Connection / Fetch Failure: ${data.fetchError}`,
-        rule: "Instruction: If the website fails to fetch, load, or times out, mark Not Working."
+        rule: "Instruction: If the website fails to fetch, load, or times out, mark Not Working.",
+        keyword: "Unreachable / Timeout",
+        link: data._finalUrl || "",
+        snippet: ""
       };
     }
 
     return {
       reason: data._note || "Website failed quality verification or is unreachable",
-      rule: "Rule 1: If site has no verifiable business content or cannot be reached, mark Not Working."
+      rule: "Rule 1: If site has no verifiable business content or cannot be reached, mark Not Working.",
+      keyword: "",
+      link: data._finalUrl || "",
+      snippet: ""
     };
   }
 
@@ -1544,6 +1568,42 @@
     const ruleEl = document.getElementById("ai-notworking-rule-text");
     if (reasonEl) reasonEl.textContent = info.reason;
     if (ruleEl) ruleEl.textContent = info.rule;
+
+    const evidenceBox = document.getElementById("ai-notworking-evidence-box");
+    const keywordRow = document.getElementById("ai-notworking-keyword-row");
+    const keywordEl = document.getElementById("ai-notworking-keyword-text");
+    const linkRow = document.getElementById("ai-notworking-link-row");
+    const linkAnchor = document.getElementById("ai-notworking-link-anchor");
+    const snippetRow = document.getElementById("ai-notworking-snippet-row");
+
+    if (evidenceBox) {
+      const hasKeyword = !!(info.keyword && String(info.keyword).trim());
+      const hasLink = !!(info.link && String(info.link).trim());
+      const hasSnippet = !!(info.snippet && String(info.snippet).trim());
+
+      if (hasKeyword || hasLink || hasSnippet) {
+        evidenceBox.style.display = "block";
+        if (keywordRow) {
+          keywordRow.style.display = hasKeyword ? "block" : "none";
+          if (keywordEl) keywordEl.textContent = info.keyword || "";
+        }
+        if (linkRow) {
+          linkRow.style.display = hasLink ? "block" : "none";
+          if (linkAnchor) {
+            linkAnchor.href = info.link || "#";
+            linkAnchor.textContent = `🔗 ${info.link || "Open Page Link"}`;
+            linkAnchor.title = `Open source link in new tab: ${info.link || ""}`;
+          }
+        }
+        if (snippetRow) {
+          snippetRow.style.display = hasSnippet ? "block" : "none";
+          snippetRow.textContent = info.snippet ? `"...${info.snippet.replace(/^(\.\.\.)+/, '').replace(/(\.\.\.)+$/, '')}..."` : "";
+        }
+      } else {
+        evidenceBox.style.display = "none";
+      }
+    }
+
     card.style.display = "block";
   }
 
@@ -1877,6 +1937,19 @@
           </div>
           <div class="ai-notworking-reason" id="ai-notworking-reason-text"></div>
           <div class="ai-notworking-rule" id="ai-notworking-rule-text"></div>
+
+          <!-- Evidence Box: Matched Keyword, Source Link & Snippet -->
+          <div id="ai-notworking-evidence-box" style="margin-top: 6px; padding: 6px 8px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 4px; font-size: 11px; display: none;">
+            <div id="ai-notworking-keyword-row" style="margin-bottom: 4px; font-weight: 600; color: #9f1239;">
+              <span>Matched Keyword: </span><span id="ai-notworking-keyword-text" style="background: #ffe4e6; padding: 1px 5px; border-radius: 3px; color: #881337; font-family: monospace;"></span>
+            </div>
+            <div id="ai-notworking-link-row" style="margin-bottom: 4px;">
+              <span style="color: #4b5563;">Found on: </span>
+              <a id="ai-notworking-link-anchor" href="#" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline; word-break: break-all;">🔗 Open Page Link</a>
+            </div>
+            <div id="ai-notworking-snippet-row" style="color: #4b5563; font-style: italic; font-size: 10.5px; border-top: 1px dashed #fecdd3; padding-top: 3px; margin-top: 3px; line-height: 1.3;"></div>
+          </div>
+
           <div style="margin-top: 8px; display: flex; gap: 6px;">
             <button class="ai-btn-primary ai-btn-danger-light" id="ai-study-confirm-submit-btn" style="flex: 1; padding: 5px 8px; font-size: 11px; font-weight: 700; cursor: pointer; border-radius: 4px;">✓ Confirm & Submit</button>
             <button class="ai-btn-secondary" id="ai-study-dismiss-btn" style="padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: 4px;">Dismiss</button>
@@ -2262,18 +2335,40 @@
       : (data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus);
     const businessTypeVal = (isRestr || data.websiteStatus === "Not Working") ? "-" : (data.businessType || "-");
 
+    const btKeyword = (!isRestr && data.websiteStatus !== "Not Working") ? (data.businessTypeKeyword || "") : "";
+    const btLink = (!isRestr && data.websiteStatus !== "Not Working") ? (data.businessTypeSource || "") : "";
+    const btSnippet = (!isRestr && data.websiteStatus !== "Not Working") ? (data.businessTypeSnippet || "") : "";
+
     const nameLink = !isRestr ? (data.companyNameSource || data._finalUrl || "") : "";
+    const addrLink = !isRestr ? (data.companyAddressSource || "") : "";
     const primaryEmailLink = !isRestr ? (data.primaryEmailSource || "") : "";
     const secEmailLink = !isRestr ? (data.secondaryEmailSource || "") : "";
 
+    const errKeyword = (isRestr || data.websiteStatus === "Not Working")
+      ? (data.restrictedKeyword || data.disallowedKeyword || data.shopCartKeyword || "")
+      : "";
+    const errLink = (isRestr || data.websiteStatus === "Not Working")
+      ? (data.restrictedSourceUrl || data.disallowedSourceUrl || data.shopCartSourceUrl || data._finalUrl || "")
+      : "";
+    const errSnippet = (isRestr || data.websiteStatus === "Not Working")
+      ? (data.restrictedSnippet || data.disallowedSnippet || data.shopCartSnippet || "")
+      : "";
+
     const items = [
       { key: "Status", val: statusVal, isAlert: isRestr || data.websiteStatus === "Not Working" },
+      { key: "Error Keyword", val: errKeyword, isAlert: true },
+      { key: "Error Source Link", val: errLink, isLink: true },
+      { key: "Error Context", val: errSnippet ? `"...${errSnippet.replace(/^(\.\.\.)+/, '').replace(/(\.\.\.)+$/, '')}..."` : "", isSnippet: true },
       { key: "Business Type", val: businessTypeVal },
+      { key: "BT Keyword", val: btKeyword, isHighlight: true },
+      { key: "BT Source Link", val: btLink, isLink: true },
+      { key: "BT Context", val: btSnippet ? `"...${btSnippet.replace(/^(\.\.\.)+/, '').replace(/(\.\.\.)+$/, '')}..."` : "", isSnippet: true },
       { key: "Company Profile", val: isRestr ? "-" : data.companyProfile },
       { key: "Company Name", val: isRestr ? "-" : cleanCompanyName(data.companyName) },
       { key: "Name Source Link", val: nameLink, isLink: true },
       { key: "Country", val: isRestr ? "-" : toTitleCase(data.countryName) },
       { key: "Address", val: isRestr ? "-" : toTitleCase(data.companyAddress) },
+      { key: "Address Source Link", val: addrLink, isLink: true },
       { key: "State", val: isRestr ? "-" : data.state },
       { key: "City", val: isRestr ? "-" : data.city },
       { key: "Email", val: isRestr ? "-" : data.emailId },
@@ -2287,10 +2382,18 @@
     ];
 
     items.forEach(item => {
-      // Don't render empty link lines
-      if (item.key === "Name Source Link" && (!data.companyName || !item.val || isRestr)) return;
-      if (item.key === "Primary Email Link" && (!data.emailId || !item.val || isRestr)) return;
-      if (item.key === "Sec Email Link" && (!data.secondaryEmailId || data.secondaryEmailId === "(None)" || !item.val || isRestr)) return;
+      // Don't render empty optional lines
+      if (!item.val) return;
+      if (item.key === "Error Keyword" && !errKeyword) return;
+      if (item.key === "Error Source Link" && !errLink) return;
+      if (item.key === "Error Context" && !errSnippet) return;
+      if (item.key === "BT Keyword" && !btKeyword) return;
+      if (item.key === "BT Source Link" && !btLink) return;
+      if (item.key === "BT Context" && !btSnippet) return;
+      if (item.key === "Name Source Link" && (!data.companyName || isRestr)) return;
+      if (item.key === "Address Source Link" && (!data.companyAddress || data.companyAddress === "Not Available" || isRestr)) return;
+      if (item.key === "Primary Email Link" && (!data.emailId || isRestr)) return;
+      if (item.key === "Sec Email Link" && (!data.secondaryEmailId || data.secondaryEmailId === "(None)" || isRestr)) return;
 
       const row = document.createElement("div");
       row.className = "ai-preview-row";
@@ -2299,12 +2402,16 @@
       let valHtml = '';
       if (item.isLink && item.val) {
         valHtml = `<a href="${item.val}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline; font-size: 11px; word-break: break-all;" title="Open source link in new tab: ${item.val}">🔗 ${item.val}</a>`;
+      } else if (item.isSnippet && item.val) {
+        valHtml = `<span style="color: #4b5563; font-style: italic; font-size: 10.5px; word-break: break-word; line-height: 1.3;">${item.val}</span>`;
+      } else if (item.isHighlight && item.val) {
+        valHtml = `<span style="background: #e0e7ff; color: #3730a3; padding: 1px 5px; border-radius: 3px; font-weight: 600; font-size: 11px; font-family: monospace;">${item.val}</span>`;
       } else {
         valHtml = `<span class="ai-preview-val" ${valStyle} title="${item.val || ''}">${item.val || '-'}</span>`;
       }
 
       row.innerHTML = `
-        <span class="ai-preview-key" style="${item.isLink ? 'font-size: 11px; color: #4b5563; font-style: italic;' : ''}">${item.key}:</span>
+        <span class="ai-preview-key" style="${(item.isLink || item.isSnippet) ? 'font-size: 11px; color: #4b5563; font-style: italic;' : ''}">${item.key}:</span>
         ${valHtml}
       `;
       previewList.appendChild(row);
