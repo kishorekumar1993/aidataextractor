@@ -649,9 +649,9 @@ async function handleCrawlAndExtract(rawUrl) {
   }
 
   // Step 2: PRE-AI STRICT CHECKS (Prohibited Categories, Free Platforms, Subdomains, Flash & Non-English)
-  // Check across target URL, final URL, page text, metadata, image tags, and stripped body content
-  const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
-  const restrictedCheck = detectRestrictedKeywords(siteContent, crawlResult.mainHtml || "", crawlResult.crawledPages || []);
+  // Check across target URL, final URL, page text, metadata, image tags, product pages, and stripped body content
+  const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + stripHtml(crawlResult.contactHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
+  const restrictedCheck = detectRestrictedKeywords(siteContent, (crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.crawledPages || []);
 
   // PRE-AI CHECK 1: If Prohibited Category / Word appears anywhere on the site (text or images):
   // Rule Note 2: "Do not work on that site... make these rule strictly if any word appear make it notwroking" & "Notworking means all empty"
@@ -1279,6 +1279,8 @@ async function crawlWebsite(targetUrl) {
 
     // Discover Contact, About, Terms & Legal Pages
     contactLinks = discoverContactLinks(mainHtml, finalUrl);
+    // Discover Product, Catalog, Category, Services & Prohibited Category Candidate Pages
+    const productCandidates = discoverProductAndCatalogLinks(mainHtml, finalUrl);
     const fetchedUrls = new Set([finalUrl]);
 
     // PRE-AI CRAWL SHORT-CIRCUIT:
@@ -1288,9 +1290,27 @@ async function crawlWebsite(targetUrl) {
     const shouldSkipSubpages = earlyRestricted.isRestricted;
 
     if (!shouldSkipSubpages) {
-      // Pick top 3-4 distinct target subpages (1 primary contact, 1 primary about/profile, 1-2 branch/location)
+      // Pick balanced target subpages (up to 5-6 distinct subpages):
+      // 1. Any link matching high-alert restricted hints (e.g. /products/medical, /knives, /defense)
+      // 2. Top 2 contact/about links (for physical address, legal company name, profile)
+      // 3. Top 2-3 product/catalog links (for product catalog, products, and restriction verification)
       const topLinks = [];
       const seenPaths = new Set();
+
+      // (a) First: add any links flagged with prohibited / restricted hints
+      for (const item of productCandidates.filter(c => c.isRestrictedHint)) {
+        try {
+          const uPath = new URL(item.url).pathname.toLowerCase().replace(/\/$/, "");
+          if (!seenPaths.has(uPath) && !fetchedUrls.has(item.url)) {
+            seenPaths.add(uPath);
+            topLinks.push(item.url);
+            fetchedUrls.add(item.url);
+          }
+        } catch (e) { }
+      }
+
+      // (b) Add top 2 contact/about links
+      let cCount = 0;
       for (const link of contactLinks) {
         if (fetchedUrls.has(link)) continue;
         try {
@@ -1299,7 +1319,23 @@ async function crawlWebsite(targetUrl) {
           seenPaths.add(uPath);
           topLinks.push(link);
           fetchedUrls.add(link);
-          if (topLinks.length >= 3) break;
+          cCount++;
+          if (cCount >= 2) break;
+        } catch (e) { }
+      }
+
+      // (c) Add top 2-3 product/catalog links
+      let pCount = 0;
+      for (const item of productCandidates.filter(c => !c.isRestrictedHint)) {
+        if (fetchedUrls.has(item.url)) continue;
+        try {
+          const uPath = new URL(item.url).pathname.toLowerCase().replace(/\/$/, "");
+          if (seenPaths.has(uPath)) continue;
+          seenPaths.add(uPath);
+          topLinks.push(item.url);
+          fetchedUrls.add(item.url);
+          pCount++;
+          if (pCount >= 3) break;
         } catch (e) { }
       }
 
@@ -1324,15 +1360,25 @@ async function crawlWebsite(targetUrl) {
           if (cRes && cRes.ok && cRes.html) {
             const cText = cRes.html;
             contactHtml += "\n" + cText;
-            crawledPages.push({ url: cUrl, html: cText, text: stripHtml(cText) });
+            const isProductPage = /(?:products?|catalog(?:ue)?|categories|category|items?|collection|services?|solutions?)/i.test(cUrl);
+            crawledPages.push({ url: cUrl, html: cText, text: stripHtml(cText), isProductPage });
             const isDistributorPage = /(?:dealers?|distributors?|stockists?|resellers?|partners?)/i.test(cUrl);
             const isProfilePage = !isDistributorPage && /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
             const isContactPage = !isDistributorPage && /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)/i.test(cUrl);
             const isLowQualitySubpage = /(?:terms|privacy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)/i.test(cUrl);
-            const pageSource = isDistributorPage ? "distributor" : (isProfilePage ? "profile" : (isContactPage ? "contact" : "other"));
+            const pageSource = isDistributorPage ? "distributor" : (isProfilePage ? "profile" : (isContactPage ? "contact" : (isProductPage ? "product" : "other")));
 
             if (isProfilePage && !primaryAboutUrl) primaryAboutUrl = cUrl;
             if (isContactPage && !primaryContactUrl) primaryContactUrl = cUrl;
+
+            // If product page, check for products and count items
+            if (isProductPage) {
+              const subMatches = cText.match(/class=["'][^"']*(?:product-item|product-card|product-listing|catalog-item|store-item)[^"']*["']/gi) ||
+                cText.match(/<div[^>]*data-product[^>]*>/gi) || [];
+              if (subMatches.length > 0) {
+                detectedProductCount = Math.max(detectedProductCount, Math.min(subMatches.length, 3));
+              }
+            }
 
             extractEmbeddedScriptAddresses(cText, addressCandidates);
             extractMapAddresses(cText, addressCandidates);
@@ -1793,6 +1839,59 @@ function discoverContactLinks(html, baseUrl) {
 
   candidates.sort((a, b) => b.score - a.score);
   return Array.from(new Set(candidates.map(c => c.url)));
+}
+
+/**
+ * Discovers product, catalog, category, service, and prohibited category candidate links.
+ * Prioritizes any links that contain restricted keywords in their URL or anchor text.
+ */
+function discoverProductAndCatalogLinks(html, baseUrl) {
+  if (!html) return [];
+  const candidates = [];
+  const linkRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+
+  const restrictedHints = /\b(?:medical|medicine|hospital|clinic|pharma|pharmaceutical|knife|knives|weapon|weapons|gun|guns|defence|defense|military|aircraft|aviation|aerospace|marine|ships?|boats?|yachts?|chemical|chemicals|alcohol|beer|wine|brewery|distillery|animals?|pets?|dogs?|cats?|veterinary|food|bakery|meat|poultry|seafood|porn|adult|casino|gambling|vape|vaping|tobacco|cannabis|cbd|thc)\b/i;
+
+  while ((match = linkRegex.exec(html)) !== null) {
+    const raw = match[1].trim();
+    const innerText = match[2].replace(/<[^>]+>/g, "").trim().toLowerCase();
+    const rawLower = raw.toLowerCase();
+    if (!raw || /^(javascript:|mailto:|tel:|#)/i.test(raw)) continue;
+
+    let score = 0;
+    let isRestrictedHint = false;
+
+    // High alert: link URL or text mentions restricted/prohibited categories
+    if (restrictedHints.test(rawLower) || restrictedHints.test(innerText)) {
+      score += 150;
+      isRestrictedHint = true;
+    }
+
+    // Product & Catalog pages
+    if (/\b(?:products?|catalog(?:ue)?|categories|category|collection|collections|items?|goods|solutions?|services?|what-we-do|offerings|range|machinery|equipment)\b/i.test(rawLower)) score += 20;
+    if (/\b(?:products?|our\s*products?|catalog(?:ue)?|categories|category|all\s*products?|view\s*all\s*products?|services?|what\s*we\s*do|solutions?|our\s*services?|product\s*range|catalogues?)\b/i.test(innerText)) score += 25;
+
+    // Demote pagination / query params / sorting links
+    if (/[?&](?:page|p|sort|order|dir|limit|view)=/i.test(rawLower)) score -= 10;
+    // Demote low-value non-product pages
+    if (/\b(?:login|signup|cart|checkout|privacy|terms|cookie|wishlist)\b/i.test(rawLower)) score -= 30;
+
+    if (score > 0) {
+      try {
+        const resolved = new URL(raw, baseUrl);
+        const baseHost = new URL(baseUrl).hostname.replace(/^www\./i, "").toLowerCase();
+        const linkHost = resolved.hostname.replace(/^www\./i, "").toLowerCase();
+        if (linkHost !== baseHost && !linkHost.endsWith("." + baseHost)) {
+          continue;
+        }
+        candidates.push({ url: resolved.href, score, isRestrictedHint });
+      } catch (e) { }
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates;
 }
 
 function extractFooterText(html) {
@@ -2815,13 +2914,45 @@ function checkCompanyProfilePresence(html, text, profilePageText = "") {
 }
 
 /**
- * Extracts alt, title, and src attributes from image tags to detect prohibited visual content.
+ * Extracts alt, title, and link path tokens from HTML, images, and meta tags to detect prohibited content.
  */
 function extractImageAttributes(html) {
   if (!html || typeof html !== "string") return "";
-  // Only extract human-readable alt/title attributes, NOT raw src URLs (which often contain /cat/ or /categories/)
-  const matches = [...html.matchAll(/<img[^>]+(?:alt|title)=["']([^"']+)["']/gi)];
-  return matches.map(m => m[1]).join(" ");
+  const tokens = [];
+
+  // 1. Human-readable alt & title attributes on images
+  const imgMatches = [...html.matchAll(/<img[^>]+(?:alt|title)=["']([^"']+)["']/gi)];
+  for (const m of imgMatches) {
+    if (m[1]) tokens.push(m[1].trim());
+  }
+
+  // 2. Human-readable title and aria-label attributes on links and interactive elements
+  const linkMatches = [...html.matchAll(/<(?:a|button)[^>]+(?:title|aria-label)=["']([^"']+)["']/gi)];
+  for (const m of linkMatches) {
+    if (m[1]) tokens.push(m[1].trim());
+  }
+
+  // 3. Anchor link URLs pathname words (e.g. href="/products/medical-equipment" -> "medical equipment")
+  const hrefMatches = [...html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)];
+  for (const m of hrefMatches) {
+    const raw = (m[1] || "").trim();
+    if (!raw || /^(?:javascript:|mailto:|tel:|#)/i.test(raw)) continue;
+    try {
+      const p = new URL(raw, "http://localhost").pathname;
+      const words = p.replace(/[/\\_\-.]+/g, " ").trim();
+      if (words.length > 3 && !/^(?:index|home|default|main)$/i.test(words)) {
+        tokens.push(words);
+      }
+    } catch (e) { }
+  }
+
+  // 4. Meta descriptions and keywords
+  const metaMatches = [...html.matchAll(/<meta[^>]+(?:name|property)=["'](?:description|keywords|og:description|og:title)["'][^>]+content=["']([^"']+)["']/gi)];
+  for (const m of metaMatches) {
+    if (m[1]) tokens.push(m[1].trim());
+  }
+
+  return tokens.join(" ");
 }
 
 function extractContextSnippet(text, keyword) {
