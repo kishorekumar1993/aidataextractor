@@ -1783,8 +1783,8 @@ function extractMapAddresses(html, targetList, pageUrl = "") {
       const decoded = decodeURIComponent(rawUrl);
       let query = "";
 
-      // 1. Standard query parameters (?q=..., ?query=..., ?place=..., ?daddr=...)
-      const qMatch = decoded.match(/[?&](?:q|query|place|destination|daddr|saddr)=([^&"'>]+)/i);
+      // 1. Standard query parameters (?q=..., ?query=..., ?place=..., ?daddr=..., ?hnear=...)
+      const qMatch = decoded.match(/[?&](?:q|query|place|destination|daddr|saddr|hnear)=([^&"'>]+)/i);
       if (qMatch) {
         query = qMatch[1].replace(/\+/g, " ").trim();
       }
@@ -1897,8 +1897,8 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     }
   }
 
-  // 4. Class or id containing "address" or "addr" (including li, td, dd, article, section)
-  const classAddrRegex = /([\s\S]{0,600})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
+  // 4. Class or id containing "address" or "addr" or "add" (including li, td, dd, article, section)
+  const classAddrRegex = /([\s\S]{0,600})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|add\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
   let cm;
   while ((cm = classAddrRegex.exec(processedHtml)) !== null) {
     const contextStr = cm[1] + " " + cm[2];
@@ -5061,10 +5061,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = addr.replace(/(^|[,\s])(?:no\.?\s*)?(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)Number\s+\2\b/gi, '$1Number $2');
       addr = addr.replace(/(^|[,\s])Number\s+(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?\s*)?\2\b/gi, '$1Number $2');
 
-      // Repair accidental commas splitting two-syllable East Asian districts/townships
-      const eaFirstSyllables = "Yung|San|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu";
-      addr = addr.replace(new RegExp(`\\b(${eaFirstSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
-      addr = addr.replace(new RegExp(`\\b(${eaFirstSyllables})-[\\s,]+([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
+      // Repair accidental commas splitting two-syllable East Asian cities/districts/townships
+      const eaFirstSyllables = "Yung|San|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu|Kao|Gao|Tao|Kee|Miao|Yun|Chang|Hua|Peng|Kin|Lien";
+      addr = addr.replace(new RegExp(`\\b(${eaFirstSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:District|Township|County|Hsien|City))\\b`, "g"), '$1-$2');
+      addr = addr.replace(new RegExp(`\\b(${eaFirstSyllables})-[\\s,]+([A-Z][a-z]+\\s+(?:District|Township|County|Hsien|City))\\b`, "g"), '$1-$2');
+      addr = normalizeTaiwanDivisions(addr);
 
       const eaRoadSyllables = "Chung|Zhong|Hsin|Xin|Kuang|Guang|Min|San|Da|Ta|Ren|Jen|Nan|Bei|Pei|Xi|Hsi|Dong|Tung";
       addr = addr.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
@@ -5086,6 +5087,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = addr.replace(/\s+/g, " ");
       addr = toTitleCase(addr);
       addr = repairBlindlySeparatedCommas(addr);
+      addr = normalizeTaiwanDivisions(addr);
 
       // Strip trailing contact / communication fields or loose periods attached to address
       addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
@@ -5660,6 +5662,13 @@ function hasStateInAddress(addr, country) {
     }
     if (/\b(county|hsien|province)\b/i.test(lower) || /[\u7701\u7e23\u53bf]/.test(addr)) {
       return true;
+    }
+    // Provincial cities (Chiayi City, Hsinchu City) without County -> State: Not Available!
+    if (/\b(?:chiayi|hsinchu)\s+city\b/i.test(lower) && !/\b(?:chiayi|hsinchu)\s+(?:county|hsien)\b/i.test(lower)) {
+      return false;
+    }
+    if (/(?:嘉義市|新竹市)/.test(addr) && !/(?:嘉義縣|新竹縣)/.test(addr)) {
+      return false;
     }
     // All 13 official Taiwan Counties (with or without "County" / "Hsien"):
     for (const county of TAIWAN_COUNTIES) {
@@ -7062,6 +7071,74 @@ function romanizeChineseAddress(addr) {
     [/台北市/g, "Taipei City, "],
     [/臺北市/g, "Taipei City, "],
     [/新北市/g, "New Taipei City, "],
+    [/嘉義市/g, "Chiayi City, "],
+    [/嘉义市/g, "Chiayi City, "],
+    [/嘉義縣/g, "Chiayi County, "],
+    [/嘉义县/g, "Chiayi County, "],
+    [/嘉義/g, "Chiayi, "],
+    [/嘉义/g, "Chiayi, "],
+    [/新竹市/g, "Hsinchu City, "],
+    [/新竹縣/g, "Hsinchu County, "],
+    [/新竹县/g, "Hsinchu County, "],
+    [/新竹/g, "Hsinchu, "],
+    [/台中市/g, "Taichung City, "],
+    [/臺中市/g, "Taichung City, "],
+    [/台中/g, "Taichung, "],
+    [/臺中/g, "Taichung, "],
+    [/台南市/g, "Tainan City, "],
+    [/臺南市/g, "Tainan City, "],
+    [/台南/g, "Tainan, "],
+    [/臺南/g, "Tainan, "],
+    [/高雄市/g, "Kaohsiung City, "],
+    [/高雄/g, "Kaohsiung, "],
+    [/基隆市/g, "Keelung City, "],
+    [/基隆/g, "Keelung, "],
+    [/彰化縣/g, "Changhua County, "],
+    [/彰化县/g, "Changhua County, "],
+    [/彰化/g, "Changhua, "],
+    [/苗栗縣/g, "Miaoli County, "],
+    [/苗栗县/g, "Miaoli County, "],
+    [/苗栗/g, "Miaoli, "],
+    [/南投縣/g, "Nantou County, "],
+    [/南投县/g, "Nantou County, "],
+    [/南投/g, "Nantou, "],
+    [/雲林縣/g, "Yunlin County, "],
+    [/云林县/g, "Yunlin County, "],
+    [/雲林/g, "Yunlin, "],
+    [/云林/g, "Yunlin, "],
+    [/屏東縣/g, "Pingtung County, "],
+    [/屏东县/g, "Pingtung County, "],
+    [/屏東/g, "Pingtung, "],
+    [/屏东/g, "Pingtung, "],
+    [/宜蘭縣/g, "Yilan County, "],
+    [/宜兰县/g, "Yilan County, "],
+    [/宜蘭/g, "Yilan, "],
+    [/宜兰/g, "Yilan, "],
+    [/花蓮縣/g, "Hualien County, "],
+    [/花莲县/g, "Hualien County, "],
+    [/花蓮/g, "Hualien, "],
+    [/花莲/g, "Hualien, "],
+    [/台東縣/g, "Taitung County, "],
+    [/臺東縣/g, "Taitung County, "],
+    [/台东县/g, "Taitung County, "],
+    [/台東/g, "Taitung, "],
+    [/臺東/g, "Taitung, "],
+    [/台东/g, "Taitung, "],
+    [/東區/g, "East District, "],
+    [/东区/g, "East District, "],
+    [/西區/g, "West District, "],
+    [/西区/g, "West District, "],
+    [/南區/g, "South District, "],
+    [/南区/g, "South District, "],
+    [/北區/g, "North District, "],
+    [/北区/g, "North District, "],
+    [/中區/g, "Central District, "],
+    [/中区/g, "Central District, "],
+    [/後湖里/g, "Houhu Village, "],
+    [/后湖里/g, "Houhu Village, "],
+    [/保順路/g, "Baoshun Road, "],
+    [/保顺路/g, "Baoshun Road, "],
+    [/里/g, " Village, "],
 
     // Specific zones, parks, districts, entities
     [/仲恺高新区/g, "Zhongkai High-Tech Zone, "],
@@ -7160,9 +7237,74 @@ function stripBlindlyAddedNumber(addr, rawEvidence = "") {
   });
 }
 
+/**
+ * Normalizes Taiwanese cities, counties, and districts and repairs accidental commas
+ * splitting two-syllable city names (e.g. "Chia, Yi City" -> "Chiayi City", "Hsin, Chu City" -> "Hsinchu City").
+ */
+function normalizeTaiwanDivisions(addr) {
+  if (!addr || typeof addr !== "string") return addr;
+  let a = addr;
+
+  const twCities = [
+    { regex: /\b(?:New\s*)?Tai[-\s,]*[Pp]ei\s*City\b/gi, rep: (m) => /^new/i.test(m) ? "New Taipei City" : "Taipei City" },
+    { regex: /\bChia[-\s,]*[Yy]i\s*City\b/gi, rep: "Chiayi City" },
+    { regex: /\bHsin[-\s,]*[Cc]hu\s*City\b/gi, rep: "Hsinchu City" },
+    { regex: /\bTai[-\s,]*[Cc]hung\s*City\b/gi, rep: "Taichung City" },
+    { regex: /\bTai[-\s,]*[Nn]an\s*City\b/gi, rep: "Tainan City" },
+    { regex: /\bKao[-\s,]*[Hh]siung\s*City\b/gi, rep: "Kaohsiung City" },
+    { regex: /\bTao[-\s,]*[Yy]uan\s*City\b/gi, rep: "Taoyuan City" },
+    { regex: /\bKee[-\s,]*[Ll]ung\s*City\b/gi, rep: "Keelung City" },
+
+    // Counties
+    { regex: /\bChang[-\s,]*[Hh]ua\s*(?:County|Hsien)\b/gi, rep: "Changhua County" },
+    { regex: /\bYun[-\s,]*[Ll]in\s*(?:County|Hsien)\b/gi, rep: "Yunlin County" },
+    { regex: /\bMiao[-\s,]*[Ll]i\s*(?:County|Hsien)\b/gi, rep: "Miaoli County" },
+    { regex: /\bNan[-\s,]*[Tt]ou\s*(?:County|Hsien)\b/gi, rep: "Nantou County" },
+    { regex: /\bPing[-\s,]*[Tt]ung\s*(?:County|Hsien)\b/gi, rep: "Pingtung County" },
+    { regex: /\bYi[-\s,]*[Ll]an\s*(?:County|Hsien)\b/gi, rep: "Yilan County" },
+    { regex: /\bHua[-\s,]*[Ll]ien\s*(?:County|Hsien)\b/gi, rep: "Hualien County" },
+    { regex: /\bTai[-\s,]*[Tt]ung\s*(?:County|Hsien)\b/gi, rep: "Taitung County" },
+    { regex: /\bPen[-\s,]*[Gg]hu\s*(?:County|Hsien)\b/gi, rep: "Penghu County" },
+    { regex: /\bKin[-\s,]*[Mm]en\s*(?:County|Hsien)\b/gi, rep: "Kinmen County" },
+    { regex: /\bChia[-\s,]*[Yy]i\s*(?:County|Hsien)\b/gi, rep: "Chiayi County" },
+    { regex: /\bHsin[-\s,]*[Cc]hu\s*(?:County|Hsien)\b/gi, rep: "Hsinchu County" }
+  ];
+
+  for (const item of twCities) {
+    a = a.replace(item.regex, item.rep);
+  }
+
+  const twStandaloneCities = [
+    { regex: /\bChia[-\s,]+[Yy]i\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Chiayi" },
+    { regex: /\bHsin[-\s,]+[Cc]hu\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Hsinchu" },
+    { regex: /\bTai[-\s,]+[Cc]hung\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Taichung" },
+    { regex: /\bTai[-\s,]+[Nn]an\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Tainan" },
+    { regex: /\bKao[-\s,]+[Hh]siung\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Kaohsiung" },
+    { regex: /\bTao[-\s,]+[Yy]uan\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Taoyuan" },
+    { regex: /\bKee[-\s,]+[Ll]ung\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Keelung" },
+    { regex: /(?<!\bNew\s+)\bTai[-\s,]+[Pp]ei\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Taipei" },
+    { regex: /\bNew\s+Tai[-\s,]+[Pp]ei\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "New Taipei" },
+    { regex: /\bChang[-\s,]+[Hh]ua\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Changhua" },
+    { regex: /\bYun[-\s,]+[Ll]in\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Yunlin" },
+    { regex: /\bMiao[-\s,]+[Ll]i\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Miaoli" },
+    { regex: /\bNan[-\s,]+[Tt]ou\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Nantou" },
+    { regex: /\bPing[-\s,]+[Tt]ung\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Pingtung" },
+    { regex: /\bYi[-\s,]+[Ll]an\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Yilan" },
+    { regex: /\bHua[-\s,]+[Ll]ien\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Hualien" },
+    { regex: /\bTai[-\s,]+[Tt]ung\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Taitung" }
+  ];
+
+  for (const item of twStandaloneCities) {
+    a = a.replace(item.regex, item.rep);
+  }
+
+  return a;
+}
+
 function expandAddressAndStateAbbreviations(addr, country = "") {
   if (!addr) return "";
   let a = addr;
+  a = normalizeTaiwanDivisions(a);
 
   // Deduplicate repeated premise numbers early (e.g. "No. 1013 Number 1013" -> "Number 1013")
   a = a.replace(/(^|[,\s])(?:no\.?|number|#)\s*(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?|number|#)\s*\2\b/gi, '$1Number $2');
@@ -7170,10 +7312,11 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])Number\s+(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?\s*)?\2\b/gi, '$1Number $2');
   a = a.replace(/(^|[,\s])(?:no\.?\s*)?(\d+)\s+\2\b/gi, '$1$2');
 
-  // Repair accidental commas splitting two-syllable East Asian districts/townships
-  const eaFirstSyllables = "Yung|San|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu";
-  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
-  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})-[\\s,]+([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
+  // Repair accidental commas splitting two-syllable East Asian cities/districts/townships
+  const eaFirstSyllables = "Yung|San|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu|Kao|Gao|Tao|Kee|Miao|Yun|Chang|Hua|Peng|Kin|Lien";
+  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:District|Township|County|Hsien|City))\\b`, "g"), '$1-$2');
+  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})-[\\s,]+([A-Z][a-z]+\\s+(?:District|Township|County|Hsien|City))\\b`, "g"), '$1-$2');
+  a = normalizeTaiwanDivisions(a);
 
   const eaRoadSyllables = "Chung|Zhong|Hsin|Xin|Kuang|Guang|Min|San|Da|Ta|Ren|Jen|Nan|Bei|Pei|Xi|Hsi|Dong|Tung";
   a = a.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
@@ -7642,6 +7785,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
 function repairBlindlySeparatedCommas(addr) {
   if (!addr) return "";
   let a = addr;
+  a = normalizeTaiwanDivisions(a);
 
   // 1. Multi-word Industrial / Trade / Business / Science / Technology / Retail / Enterprise Parks & Estates
   const parkTypes = "Park|Estate|Zone|District|Centre|Center|Area";
@@ -7666,7 +7810,8 @@ function repairBlindlySeparatedCommas(addr) {
 
   // 3. Multi-word cities, states, counties: "West, Sussex" -> "West Sussex", "Kuala, Lumpur" -> "Kuala Lumpur"
   // Do NOT merge if the directional word is preceded by a park/estate/facility suffix (e.g. "Industrial Estate South, Durham" must NOT become "Estate South Durham")
-  a = a.replace(/(?<!\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard|Estate|Park|Zone|Area|District|Sector|Ward|Block|Building|Phase)\s+)\b(West|East|North|South|New|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La|Kuala|Hong|Batu|Johor|Petaling|Subang|Shah|George|Cape|Port|Fort|Mount|St\.?|Saint),\s+([A-Za-z0-9]+)/gi, "$1 $2");
+  const twMultiWordPrefixes = "West|East|North|South|New|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La|Kuala|Hong|Batu|Johor|Petaling|Subang|Shah|George|Cape|Port|Fort|Mount|St\.?|Saint|Yung|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu|Kao|Gao|Tao|Kee|Miao|Yun|Chang|Hua|Peng|Kin|Lien";
+  a = a.replace(new RegExp(`(?<!\\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard|Estate|Park|Zone|Area|District|Sector|Ward|Block|Building|Phase)\\s+)\\b(${twMultiWordPrefixes}),\\s+([A-Za-z0-9]+)`, "gi"), "$1 $2");
 
   // 4. Premise comma fix: "Unit 2, Argent, Trade Park" -> "Unit 2, Argent Trade Park"
   a = a.replace(/(\b(?:Unit|Suite|Lot|Plot|Building|Bldg|Level|Floor|Block|Flr|Ste|Apt)\s+[A-Za-z0-9\-\/]+),\s+([A-Za-z0-9]+),\s+([A-Za-z0-9]+\s+(?:Park|Estate|Zone|Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway)\b)/gi, "$1, $2 $3");
@@ -7680,6 +7825,7 @@ function repairBlindlySeparatedCommas(addr) {
   a = a.replace(/,\s*,+/g, ", ");
   a = a.replace(/,\s*/g, ", ");
   a = a.replace(/\s+/g, " ").trim();
+  a = normalizeTaiwanDivisions(a);
 
   return a;
 }
@@ -7694,6 +7840,7 @@ function repairBlindlySeparatedCommas(addr) {
 function ensureCommaBeforeState(addr) {
   if (!addr) return "";
   let a = addr;
+  a = normalizeTaiwanDivisions(a);
 
   // 1. Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
   // Only if NOT ALREADY followed by a comma!
@@ -7758,13 +7905,16 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(/\b((?:Township|District|County|Hsien|Borough|Parish))\s+(?!(?:Road|Highway|Route|Line)\b)([A-Z][a-z0-9\u00C0-\u024F]+)/g, "$1, $2");
 
   // 5c. Ensure comma before "X City" (handling multi-word cities like "New York City", "New Taipei City", "Salt Lake City")
-  a = a.replace(/(?<=[A-Za-z0-9\)])\s+(?<!,\s*)(?<!\b(?:New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|Salt|Lake|Ho|Chi|Minh|Kuala|Hong|San|Santa|Los|Las|El|La)\s+)\b([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)?\s+City)\b(?![\s\-]*(?:Road|Street|Avenue|Lane|Drive|Way|Place|Highway))/g, ", $1");
+  // MUST NOT insert comma inside two-syllable city names (e.g. "Chia Yi City" -> "Chia, Yi City" or "Hsin Chu City" -> "Hsin, Chu City")
+  const eaFirstSyllables = "Yung|San|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu|Kao|Gao|Tao|Kee|Miao|Yun|Chang|Hua|Peng|Kin|Lien";
+  const cityPrefixLookbehind = "New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|Salt|Lake|Ho|Chi|Minh|Kuala|Hong|San|Santa|Los|Las|El|La|" + eaFirstSyllables;
+  a = a.replace(new RegExp(`(?<=[A-Za-z0-9\\)])\\s+(?<!,\\s*)(?<!\\b(?:${cityPrefixLookbehind}|${streetSuffixes})\\s+)\\b([A-Z][a-z0-9\\u00C0-\\u024F]+(?:\\s+[A-Z][a-z0-9\\u00C0-\\u024F]+)?\\s+City)\\b(?![\\s\\-]*(?:Road|Street|Avenue|Lane|Drive|Way|Place|Highway))`, "g"), ", $1");
 
-  // Repair accidental commas splitting two-syllable East Asian districts/townships:
-  // e.g. "Yung, Kang District" -> "Yung-Kang District", "Yung-, Kang District" -> "Yung-Kang District"
-  const eaFirstSyllables = "Yung|San|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu";
-  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
-  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})-[\\s,]+([A-Z][a-z]+\\s+(?:District|Township|County|Hsien))\\b`, "g"), '$1-$2');
+  // Repair accidental commas splitting two-syllable East Asian cities/districts/townships:
+  // e.g. "Chia, Yi City" -> "Chiayi City", "Hsin, Chu City" -> "Hsinchu City", "Yung, Kang District" -> "Yung-Kang District"
+  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:District|Township|County|Hsien|City))\\b`, "g"), '$1-$2');
+  a = a.replace(new RegExp(`\\b(${eaFirstSyllables})-[\\s,]+([A-Z][a-z]+\\s+(?:District|Township|County|Hsien|City))\\b`, "g"), '$1-$2');
+  a = normalizeTaiwanDivisions(a);
 
   // Repair accidental commas splitting two-syllable street names:
   // e.g. "Chung, Hua Road" -> "Chung Hua Road", "Chung-, Hua Road" -> "Chung-Hua Road"
