@@ -4969,6 +4969,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
       addr = addr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ");
       addr = addr.replace(/[\(\)\[\]\{\}]/g, " ");
+      addr = addr.replace(/&quot;|&apos;|&#34;|&#39;/gi, " ");
+      addr = addr.replace(/["“”«»`]+/g, " ");
 
       // Strip conversational boilerplate from start of address e.g. "If you have any enquiries, require a quote or want to book a survey please feel free to call us or send us a message with your requirements Priory Windows And Conservatories 5 Burnt House Road, Whitley Bay"
       addr = addr.replace(/^(?:if\s+you\s+have\s+any\s+enquiries|require\s+a\s+quote|want\s+to\s+book\s+a\s+survey|please\s+feel\s+free\s+to\s+call\s+us|send\s+us\s+a\s+message|with\s+your\s+requirements|get\s+in\s+touch|contact\s+us\s+at)[\s\S]*?(?=\b\d+\s+[A-Za-z]|\b(?:po\s*box|unit|suite|building|floor|no\.?)\b)/i, "").trim();
@@ -5040,6 +5042,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         addr = addr.replace(countryRegex, " ");
       }
 
+      // Strip trailing contact / communication fields early before postal code removal
+      addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
+
       // Remove international postal codes carefully without stripping street numbers
       addr = removePostalCodesCarefully(addr);
 
@@ -5085,8 +5090,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Strip trailing contact / communication fields or loose periods attached to address
       addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
       addr = addr.replace(/(?:\s*\.\s*)+$/g, "").trim();
-      // Address ending MUST NOT have trailing comma or point/period
-      addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+      // Final pass: clean postal codes, stray quotes, and punctuation
+      addr = removePostalCodesCarefully(addr);
+      addr = addr.replace(/["“”«»`]+/g, " ");
+      addr = addr.replace(/^[,;.\s\-_/\\|"'“”«»`]+|[,;.\s\-_/\\|"'“”«»`]+$/g, "").trim();
+      addr = addr.replace(/\s+/g, " ");
     }
   } else {
     addr = "Not Available";
@@ -8102,6 +8110,9 @@ function removePostalCodesCarefully(addr) {
     return comma;
   });
   a = a.replace(/(\b\d+\s+)\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b\s+(?=[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, "$1");
+
+  // 10.5. Postal code directly following City / District / Township / County / Hsien / Province / Region
+  a = a.replace(/(\b(?:City|District|Township|County|Hsien|Province|Region|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
 
   // 11. Postal code at the very end of the address string (e.g. "... Campbellfield 3061", "... Mumbai - 400001", or "... Cincinnati, Ohio 45241")
   a = a.replace(/[\s,\-]+(?:\bpin(?:\s*code)?\b[\s:#\-]*)?\b\d{3,6}\b(?:\s*[.,]?\s*)$/gi, "");
