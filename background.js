@@ -600,7 +600,13 @@ async function handleCrawlAndExtract(rawUrl) {
         phoneNumber: "",
         numberOfProducts: "",
         productImages: "",
-        numberOfProductDescriptions: ""
+        numberOfProductDescriptions: "",
+        errorKeyword: "Domain Expired",
+        errorSourceUrl: targetUrl,
+        errorSnippet: "Domain Expired or Server returned HTTP 404 Not Found",
+        _finalUrl: targetUrl,
+        _originalUrl: targetUrl,
+        _note: "Domain Expired or Server returned HTTP 404 Not Found (Rule 1)"
       };
     }
 
@@ -621,6 +627,12 @@ async function handleCrawlAndExtract(rawUrl) {
       numberOfProducts: "",
       productImages: "",
       numberOfProductDescriptions: "",
+      fetchError: reason,
+      errorKeyword: "Unreachable / Failed to Fetch",
+      errorSourceUrl: targetUrl,
+      errorSnippet: reason,
+      _finalUrl: targetUrl,
+      _originalUrl: targetUrl,
       _note: `Website Unreachable / Failed to Fetch (${reason}) - Marked as Not Working`
     };
   }
@@ -633,6 +645,7 @@ async function handleCrawlAndExtract(rawUrl) {
   // PRE-AI CHECK 1: If Prohibited Category / Word appears anywhere on the site (text or images):
   // Rule Note 2: "Do not work on that site... make these rule strictly if any word appear make it notwroking" & "Notworking means all empty"
   if (restrictedCheck.isRestricted) {
+    const errorUrl = restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl;
     return {
       websiteStatus: "Not Working",
       businessType: "",
@@ -653,8 +666,13 @@ async function handleCrawlAndExtract(rawUrl) {
       restrictedReason: restrictedCheck.reason,
       restrictedKeyword: restrictedCheck.matchedKeyword,
       restrictedCategory: restrictedCheck.category,
-      restrictedSourceUrl: restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl,
+      restrictedSourceUrl: errorUrl,
       restrictedSnippet: restrictedCheck.snippet || "",
+      errorKeyword: restrictedCheck.matchedKeyword,
+      errorSourceUrl: errorUrl,
+      errorSnippet: restrictedCheck.snippet || "",
+      _finalUrl: crawlResult.finalUrl || targetUrl,
+      _originalUrl: targetUrl,
       _note: `Prohibited Category / Word Detected (${restrictedCheck.reason}) - Marked as Not Working`
     };
   }
@@ -662,6 +680,7 @@ async function handleCrawlAndExtract(rawUrl) {
   // PRE-AI CHECK 2: Rule 9 (Free platforms) & Rule 10 (Subdomains / Streaming platforms) & Rule 8 (Personal blogs)
   const platformCheck = detectDisallowedWebsitePlatformOrDomain(targetUrl, crawlResult.mainHtml || "", crawlResult.bodyText || "");
   if (platformCheck.isDisallowed) {
+    const errorUrl = crawlResult.finalUrl || targetUrl;
     return {
       websiteStatus: "Not Working",
       businessType: "",
@@ -680,12 +699,21 @@ async function handleCrawlAndExtract(rawUrl) {
       isRestricted: true,
       isProhibitedSite: true,
       restrictedReason: platformCheck.reason,
+      restrictedKeyword: platformCheck.reason,
+      restrictedSourceUrl: errorUrl,
+      restrictedSnippet: platformCheck.reason,
+      errorKeyword: platformCheck.reason,
+      errorSourceUrl: errorUrl,
+      errorSnippet: platformCheck.reason,
+      _finalUrl: errorUrl,
+      _originalUrl: targetUrl,
       _note: platformCheck.reason
     };
   }
 
   // PRE-AI CHECK 3: Rule 14: Flash format websites without copyable text
   if (detectFlashFormatSite(crawlResult.mainHtml || "")) {
+    const errorUrl = crawlResult.finalUrl || targetUrl;
     return {
       websiteStatus: "Flash",
       businessType: "",
@@ -701,12 +729,18 @@ async function handleCrawlAndExtract(rawUrl) {
       numberOfProducts: "",
       productImages: "",
       numberOfProductDescriptions: "",
+      errorKeyword: "Flash Content",
+      errorSourceUrl: errorUrl,
+      errorSnippet: "Flash Format Website - Not copyable (Rule 14)",
+      _finalUrl: errorUrl,
+      _originalUrl: targetUrl,
       _note: "Flash Format Website - Not copyable (Rule 14)"
     };
   }
 
   // PRE-AI CHECK 4: Rule 12: Non-English websites without a translation option
   if (detectNonEnglishWithoutTranslation(crawlResult.mainHtml || "", crawlResult.bodyText || "")) {
+    const errorUrl = crawlResult.finalUrl || targetUrl;
     return {
       websiteStatus: "Non English",
       businessType: "",
@@ -722,6 +756,11 @@ async function handleCrawlAndExtract(rawUrl) {
       numberOfProducts: "",
       productImages: "",
       numberOfProductDescriptions: "",
+      errorKeyword: "Non English Language",
+      errorSourceUrl: errorUrl,
+      errorSnippet: "Non-English Language Without Translation Option (Rule 12)",
+      _finalUrl: errorUrl,
+      _originalUrl: targetUrl,
       _note: "Non-English Language Without Translation Option (Rule 12)"
     };
   }
@@ -1232,7 +1271,7 @@ async function crawlWebsite(targetUrl) {
     // PRE-AI CRAWL SHORT-CIRCUIT:
     // Only skip crawling subpages if a prohibited restricted category is detected.
     // For sites with online carts, NEVER skip subpages so we can verify if the company is a Manufacturer!
-    const earlyRestricted = detectRestrictedKeywords(stripHtml(mainHtml) + " " + targetUrl, mainHtml);
+    const earlyRestricted = detectRestrictedKeywords(stripHtml(mainHtml) + " " + targetUrl, mainHtml, crawledPages);
     const shouldSkipSubpages = earlyRestricted.isRestricted;
 
     if (!shouldSkipSubpages) {
@@ -2720,6 +2759,91 @@ function extractContextSnippet(text, keyword) {
 }
 
 /**
+ * Ensures any discovered link or path is converted to a fully qualified absolute URL with http(s) protocol.
+ */
+function ensureAbsoluteUrl(rawLink, baseUrl) {
+  if (!rawLink || typeof rawLink !== "string") return baseUrl || "";
+  const trimmed = rawLink.trim();
+  if (!trimmed || /^(?:javascript:|mailto:|tel:|#)/i.test(trimmed)) return baseUrl || "";
+  try {
+    const validBase = (baseUrl && /^https?:\/\//i.test(baseUrl)) ? baseUrl : "http://localhost";
+    const resolved = new URL(trimmed, validBase);
+    if (resolved.origin === "http://localhost" && !/^https?:\/\//i.test(trimmed)) {
+      return "http://" + trimmed.replace(/^\/+/, "");
+    }
+    return resolved.href;
+  } catch (e) {
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    if (trimmed.startsWith("//")) return "https:" + trimmed;
+    if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(trimmed)) return "http://" + trimmed;
+    return baseUrl || trimmed;
+  }
+}
+
+/**
+ * Scans HTML to locate the exact anchor link or image source associated with a keyword or regex pattern.
+ * Prioritizes direct <a href="..."> navigation/catalog links over generic homepage URLs.
+ */
+function findExactEvidenceLink(html, keyword, regex, baseUrl) {
+  if (!html) return baseUrl || "";
+  const rawHtml = String(html);
+  const kw = keyword ? String(keyword).trim().toLowerCase() : "";
+
+  // 1. Direct anchor tag search: <a href="...">...keyword...</a>
+  const anchorRegex = /<a\s+[^>]*href=["']([^"'#\s]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = anchorRegex.exec(rawHtml)) !== null) {
+    const href = m[1].trim();
+    if (!href || /^(?:javascript:|mailto:|tel:|#)/i.test(href)) continue;
+    const tagHtml = m[0];
+    const textContent = m[2].replace(/<[^>]+>/g, " ").toLowerCase();
+    const hrefLower = href.toLowerCase();
+
+    const textMatch = kw && textContent.includes(kw);
+    const hrefMatch = kw && hrefLower.includes(kw);
+    const regexMatch = regex && (regex.test(textContent) || regex.test(hrefLower) || regex.test(tagHtml));
+
+    if (textMatch || hrefMatch || regexMatch) {
+      const absUrl = ensureAbsoluteUrl(href, baseUrl);
+      if (absUrl && absUrl !== baseUrl) return absUrl;
+    }
+  }
+
+  // 2. Proximity search: find <a href="..."> within 400 characters of the keyword occurrence
+  if (kw) {
+    const idx = rawHtml.toLowerCase().indexOf(kw);
+    if (idx !== -1) {
+      const start = Math.max(0, idx - 400);
+      const end = Math.min(rawHtml.length, idx + kw.length + 400);
+      const slice = rawHtml.slice(start, end);
+      const linkMatch = slice.match(/<a\s+[^>]*href=["']([^"'#\s]+)["']/i);
+      if (linkMatch && linkMatch[1]) {
+        const absUrl = ensureAbsoluteUrl(linkMatch[1].trim(), baseUrl);
+        if (absUrl && absUrl !== baseUrl) return absUrl;
+      }
+    }
+  }
+
+  // 3. Image tag search: <img src="..." alt="...keyword...">
+  if (kw) {
+    const imgRegex = /<img\s+[^>]*?(?:alt|title|src)=["'][^"']*?([^"']*?)["'][^>]*>/gi;
+    let imgM;
+    while ((imgM = imgRegex.exec(rawHtml)) !== null) {
+      const fullImg = imgM[0];
+      if (fullImg.toLowerCase().includes(kw)) {
+        const srcMatch = fullImg.match(/\bsrc=["']([^"']+)["']/i);
+        if (srcMatch && srcMatch[1]) {
+          const absUrl = ensureAbsoluteUrl(srcMatch[1].trim(), baseUrl);
+          if (absUrl) return absUrl;
+        }
+      }
+    }
+  }
+
+  return baseUrl || "";
+}
+
+/**
  * Checks website text and images against prohibited categories per Note 2.
  * Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
  */
@@ -2829,6 +2953,7 @@ function detectRestrictedKeywordsSingle(text, html = "") {
 
 /**
  * Searches across all crawled pages to pinpoint the exact URL, matched keyword, and context snippet.
+ * Prioritizes deep anchor/product links in HTML over generic homepage URLs.
  */
 function detectRestrictedKeywords(text, html = "", crawledPages = []) {
   if (crawledPages && crawledPages.length > 0) {
@@ -2836,9 +2961,10 @@ function detectRestrictedKeywords(text, html = "", crawledPages = []) {
       const pText = page.text || stripHtml(page.html || "");
       const res = detectRestrictedKeywordsSingle(pText, page.html || "");
       if (res.isRestricted) {
+        const exactLink = findExactEvidenceLink(page.html || "", res.matchedKeyword, null, page.url);
         return {
           ...res,
-          sourceUrl: page.url,
+          sourceUrl: exactLink || page.url,
           snippet: extractContextSnippet(pText, res.matchedKeyword)
         };
       }
@@ -2847,9 +2973,11 @@ function detectRestrictedKeywords(text, html = "", crawledPages = []) {
 
   const fallback = detectRestrictedKeywordsSingle(text, html);
   if (fallback.isRestricted) {
+    const pageUrl = (crawledPages && crawledPages[0] && crawledPages[0].url) || "";
+    const exactLink = findExactEvidenceLink(html, fallback.matchedKeyword, null, pageUrl);
     return {
       ...fallback,
-      sourceUrl: (crawledPages && crawledPages[0] && crawledPages[0].url) || "",
+      sourceUrl: exactLink || pageUrl,
       snippet: extractContextSnippet(text, fallback.matchedKeyword)
     };
   }
@@ -2858,6 +2986,7 @@ function detectRestrictedKeywords(text, html = "", crawledPages = []) {
 
 /**
  * Pinpoints the exact keyword, source page URL, and context snippet supporting a business type.
+ * Prioritizes deep anchor links (e.g. /about, /manufacturing, /factory) over generic homepage URLs.
  */
 function findBusinessTypeEvidence(businessType, crawledPages = [], fallbackText = "") {
   if (!businessType) return { keyword: "", sourceUrl: "", snippet: "" };
@@ -2900,9 +3029,10 @@ function findBusinessTypeEvidence(businessType, crawledPages = [], fallbackText 
         const text = page.text || stripHtml(page.html || "");
         const match = text.match(regex);
         if (match) {
+          const exactLink = findExactEvidenceLink(page.html || "", match[0], regex, page.url);
           return {
             keyword: match[0],
-            sourceUrl: page.url,
+            sourceUrl: exactLink || page.url,
             snippet: extractContextSnippet(text, match[0])
           };
         }
@@ -2914,9 +3044,11 @@ function findBusinessTypeEvidence(businessType, crawledPages = [], fallbackText 
     for (const regex of list) {
       const match = fallbackText.match(regex);
       if (match) {
+        const pageUrl = (crawledPages && crawledPages[0] && crawledPages[0].url) || "";
+        const exactLink = findExactEvidenceLink(fallbackText, match[0], regex, pageUrl);
         return {
           keyword: match[0],
-          sourceUrl: (crawledPages && crawledPages[0] && crawledPages[0].url) || "",
+          sourceUrl: exactLink || pageUrl,
           snippet: extractContextSnippet(fallbackText, match[0])
         };
       }
@@ -4543,6 +4675,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     String(result.businessType || "").toLowerCase() === "restricted site" ||
     !!result.isProhibitedSite;
   if (isProhibited) {
+    const errorUrl = (restrictedCheck && restrictedCheck.sourceUrl) || result.restrictedSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
     result.websiteStatus = "Not Working";
     result.businessType = "";
     result.companyProfile = "";
@@ -4562,8 +4695,13 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.restrictedReason = (restrictedCheck && restrictedCheck.reason) || result.restrictedReason || "Prohibited Category Detected";
     result.restrictedKeyword = (restrictedCheck && restrictedCheck.matchedKeyword) || result.restrictedKeyword || "";
     result.restrictedCategory = (restrictedCheck && restrictedCheck.category) || result.restrictedCategory || "";
-    result.restrictedSourceUrl = (restrictedCheck && restrictedCheck.sourceUrl) || result.restrictedSourceUrl || crawlData.finalUrl || "";
+    result.restrictedSourceUrl = errorUrl;
     result.restrictedSnippet = (restrictedCheck && restrictedCheck.snippet) || result.restrictedSnippet || "";
+    result.errorKeyword = result.restrictedKeyword;
+    result.errorSourceUrl = errorUrl;
+    result.errorSnippet = result.restrictedSnippet;
+    result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    result._originalUrl = crawlData.originalUrl || "";
     return result;
   }
 
@@ -4583,12 +4721,19 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result._cartAllowedForManufacturer = true;
     } else {
       // Non-manufacturer with online purchase / cart -> Not Working!
+      const shopLink = findExactEvidenceLink((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), "shop", /\b(?:shop|store|cart|basket|checkout)\b/i, crawlData.finalUrl || crawlData.originalUrl || "");
+      const cartUrl = shopLink || crawlData.finalUrl || crawlData.originalUrl || "";
       result.websiteStatus = "Not Working";
       result.isShopCartSite = true;
       result.shopCartReason = shopCartCheck.reason;
       result.shopCartKeyword = "Shopping Cart / Direct Purchase";
-      result.shopCartSourceUrl = crawlData.finalUrl || "";
+      result.shopCartSourceUrl = cartUrl;
       result.shopCartSnippet = shopCartCheck.reason || "";
+      result.errorKeyword = result.shopCartKeyword;
+      result.errorSourceUrl = cartUrl;
+      result.errorSnippet = result.shopCartSnippet;
+      result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+      result._originalUrl = crawlData.originalUrl || "";
       result.businessType = "";
       result.companyProfile = "";
       result.companyName = "";
@@ -4695,12 +4840,19 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.isDisallowedBusinessType = false;
     } else {
       // Business Type is Service Provider, Online Shopping, Restricted Site, Other, or unknown -> Mark Not Working!
+      const serviceLink = findExactEvidenceLink((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), result.businessType, null, crawlData.finalUrl || crawlData.originalUrl || "");
+      const disUrl = serviceLink || crawlData.primaryAboutUrl || crawlData.finalUrl || crawlData.originalUrl || "";
       result.websiteStatus = "Not Working";
       result.isDisallowedBusinessType = true;
       result.disallowedReason = `Business Type "${result.businessType || 'Disallowed'}" outside allowed scope (Manufacturer to Wholesaler only worked on)`;
       result.disallowedKeyword = result.businessType || "Outside Allowed Scope";
-      result.disallowedSourceUrl = crawlData.finalUrl || "";
+      result.disallowedSourceUrl = disUrl;
       result.disallowedSnippet = `Business Type detected as "${result.businessType || 'Disallowed'}" which is outside allowed scope (Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler).`;
+      result.errorKeyword = result.disallowedKeyword;
+      result.errorSourceUrl = disUrl;
+      result.errorSnippet = result.disallowedSnippet;
+      result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+      result._originalUrl = crawlData.originalUrl || "";
       result.businessType = "";
       result.companyProfile = "";
       result.companyName = "";
@@ -5184,8 +5336,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (restrictedCheck && restrictedCheck.isRestricted) {
     result.restrictedKeyword = restrictedCheck.matchedKeyword || "";
     result.restrictedCategory = restrictedCheck.category || "";
-    result.restrictedSourceUrl = restrictedCheck.sourceUrl || crawlData.finalUrl || "";
+    result.restrictedSourceUrl = restrictedCheck.sourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
     result.restrictedSnippet = restrictedCheck.snippet || "";
+  }
+
+  result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+  result._originalUrl = crawlData.originalUrl || "";
+
+  if (result.websiteStatus === "Not Working") {
+    result.errorSourceUrl = result.errorSourceUrl || result.restrictedSourceUrl || result.disallowedSourceUrl || result.shopCartSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
+    result.errorKeyword = result.errorKeyword || result.restrictedKeyword || result.disallowedKeyword || result.shopCartKeyword || result.restrictedReason || "";
+    result.errorSnippet = result.errorSnippet || result.restrictedSnippet || result.disallowedSnippet || result.shopCartSnippet || result._note || "";
   }
 
   return result;

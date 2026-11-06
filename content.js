@@ -1478,85 +1478,120 @@
     }
   }
 
+  /**
+   * Formats any URL into a safe, absolute, clickable http/https link that opens reliably in a browser tab.
+   */
+  function formatClickableUrl(url, fallbackBase) {
+    const raw = (url && typeof url === "string") ? url.trim() : "";
+    const base = (fallbackBase && typeof fallbackBase === "string") ? fallbackBase.trim() : "";
+    if (!raw || /^(?:javascript:|mailto:|tel:|#)/i.test(raw)) {
+      if (!base || /^(?:javascript:|mailto:|tel:|#)/i.test(base)) return "";
+      return /^https?:\/\//i.test(base) ? base : "http://" + base;
+    }
+    try {
+      const validBase = (base && /^https?:\/\//i.test(base)) ? base : "http://localhost";
+      const resolved = new URL(raw, validBase);
+      if (resolved.origin === "http://localhost" && !/^https?:\/\//i.test(raw)) {
+        return "http://" + raw.replace(/^\/+/, "");
+      }
+      return resolved.href;
+    } catch (e) {
+      if (/^https?:\/\//i.test(raw)) return raw;
+      if (raw.startsWith("//")) return "https:" + raw;
+      if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(raw)) return "http://" + raw;
+      return base || raw;
+    }
+  }
+
   function extractNotWorkingReason(data) {
     if (!data) return { reason: "Website unreachable or empty response", rule: "Rule 1: Website Status", keyword: "", link: "", snippet: "" };
 
+    const siteBaseUrl = data._finalUrl || data._originalUrl || (typeof getTargetUrl === "function" ? getTargetUrl() : "");
+
     if (data.restrictedReason || data.isRestricted || data.isProhibitedSite) {
+      const rawLink = data.restrictedSourceUrl || data.errorSourceUrl || siteBaseUrl;
       return {
         reason: `Prohibited Category / Word: "${data.restrictedReason || 'Restricted Category'}" detected on site`,
         rule: "Rule Note 2: Weapons, Defence, Military, Medicine, Medical, Hospital, Food, Porn, Aerospace, Marine, Chemicals, Animals sites are strictly prohibited. Website Status is set to Not Working with all fields empty.",
-        keyword: data.restrictedKeyword || data.restrictedReason || "",
-        link: data.restrictedSourceUrl || data._finalUrl || "",
-        snippet: data.restrictedSnippet || ""
+        keyword: data.restrictedKeyword || data.errorKeyword || data.restrictedReason || "",
+        link: formatClickableUrl(rawLink, siteBaseUrl),
+        snippet: data.restrictedSnippet || data.errorSnippet || ""
       };
     }
 
     if (data.disallowedReason || data.isDisallowedBusinessType) {
+      const rawLink = data.disallowedSourceUrl || data.errorSourceUrl || siteBaseUrl;
       return {
         reason: data.disallowedReason || `Business Type "${data.businessType || 'Disallowed'}" outside allowed scope`,
         rule: "Rule 4 & Scope: Only Manufacturer, Supplier, Distributer, Wholesaler, Exporter, Trader, and Industrial Services are worked on. Retailers, Resellers, and Service Providers must be marked Not Working.",
-        keyword: data.disallowedKeyword || data.businessType || "",
-        link: data.disallowedSourceUrl || data._finalUrl || "",
-        snippet: data.disallowedSnippet || ""
+        keyword: data.disallowedKeyword || data.errorKeyword || data.businessType || "",
+        link: formatClickableUrl(rawLink, siteBaseUrl),
+        snippet: data.disallowedSnippet || data.errorSnippet || ""
       };
     }
 
     if (data.shopCartReason || data.isShopCartSite) {
+      const rawLink = data.shopCartSourceUrl || data.errorSourceUrl || siteBaseUrl;
       return {
         reason: `Online Shopping / Retail Cart: ${data.shopCartReason || 'Shopping cart & checkout buttons detected without manufacturing evidence'}`,
         rule: "Rule 11 & 16: E-commerce websites selling products online with cart/checkout are marked Not Working, except if the company is a verified Manufacturer.",
-        keyword: data.shopCartKeyword || "Shopping Cart / Direct Purchase",
-        link: data.shopCartSourceUrl || data._finalUrl || "",
+        keyword: data.shopCartKeyword || data.errorKeyword || "Shopping Cart / Direct Purchase",
+        link: formatClickableUrl(rawLink, siteBaseUrl),
         snippet: data.shopCartSnippet || data.shopCartReason || ""
       };
     }
 
     if (data.websiteStatus === "Domain Expired") {
+      const rawLink = data.errorSourceUrl || siteBaseUrl;
       return {
         reason: "Domain Expired or Server returned HTTP 404 Not Found",
         rule: "Rule 1: If domain has expired or cannot be resolved, mark Domain Expired.",
-        keyword: "Domain Expired",
-        link: data._finalUrl || "",
-        snippet: ""
+        keyword: data.errorKeyword || "Domain Expired",
+        link: formatClickableUrl(rawLink, siteBaseUrl),
+        snippet: data.errorSnippet || "Domain Expired or Server returned HTTP 404 Not Found"
       };
     }
 
     if (data.websiteStatus === "Non English") {
+      const rawLink = data.errorSourceUrl || siteBaseUrl;
       return {
         reason: "Non-English website without English translation option",
         rule: "Rule 12: Websites entirely in a foreign language with no English option must be marked Non English.",
-        keyword: "Non English Language",
-        link: data._finalUrl || "",
-        snippet: ""
+        keyword: data.errorKeyword || "Non English Language",
+        link: formatClickableUrl(rawLink, siteBaseUrl),
+        snippet: data.errorSnippet || "Non-English Language Without Translation Option (Rule 12)"
       };
     }
 
     if (data.websiteStatus === "Flash") {
+      const rawLink = data.errorSourceUrl || siteBaseUrl;
       return {
         reason: "Flash format website without copyable text",
         rule: "Rule 14: Flash websites without selectable text must be marked Flash.",
-        keyword: "Flash Content",
-        link: data._finalUrl || "",
-        snippet: ""
+        keyword: data.errorKeyword || "Flash Content",
+        link: formatClickableUrl(rawLink, siteBaseUrl),
+        snippet: data.errorSnippet || "Flash Format Website - Not copyable (Rule 14)"
       };
     }
 
     if (data.fetchError) {
+      const rawLink = data.errorSourceUrl || siteBaseUrl;
       return {
         reason: `Connection / Fetch Failure: ${data.fetchError}`,
         rule: "Instruction: If the website fails to fetch, load, or times out, mark Not Working.",
-        keyword: "Unreachable / Timeout",
-        link: data._finalUrl || "",
-        snippet: ""
+        keyword: data.errorKeyword || "Unreachable / Timeout",
+        link: formatClickableUrl(rawLink, siteBaseUrl),
+        snippet: data.errorSnippet || data.fetchError
       };
     }
 
+    const rawLink = data.errorSourceUrl || siteBaseUrl;
     return {
       reason: data._note || "Website failed quality verification or is unreachable",
       rule: "Rule 1: If site has no verifiable business content or cannot be reached, mark Not Working.",
-      keyword: "",
-      link: data._finalUrl || "",
-      snippet: ""
+      keyword: data.errorKeyword || "",
+      link: formatClickableUrl(rawLink, siteBaseUrl),
+      snippet: data.errorSnippet || ""
     };
   }
 
@@ -1590,9 +1625,9 @@
         if (linkRow) {
           linkRow.style.display = hasLink ? "block" : "none";
           if (linkAnchor) {
-            linkAnchor.href = info.link || "#";
-            linkAnchor.textContent = `🔗 ${info.link || "Open Page Link"}`;
-            linkAnchor.title = `Open source link in new tab: ${info.link || ""}`;
+            linkAnchor.href = info.link;
+            linkAnchor.textContent = `🔗 ${info.link}`;
+            linkAnchor.title = `Open source link in new tab: ${info.link}`;
           }
         }
         if (snippetRow) {
@@ -1747,6 +1782,12 @@
           numberOfProducts: "",
           productImages: "",
           numberOfProductDescriptions: "",
+          fetchError: errorMsg,
+          errorKeyword: "Unreachable / Failed to Fetch",
+          errorSourceUrl: targetUrl,
+          errorSnippet: errorMsg,
+          _finalUrl: targetUrl,
+          _originalUrl: targetUrl,
           _note: `Unreachable / Failed to fetch: ${errorMsg}`
         };
         fillFormFields(notWorkingData);
@@ -2335,23 +2376,28 @@
       : (data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus);
     const businessTypeVal = (isRestr || data.websiteStatus === "Not Working") ? "-" : (data.businessType || "-");
 
+    const siteBaseUrl = data._finalUrl || data._originalUrl || (typeof getTargetUrl === "function" ? getTargetUrl() : "");
+
     const btKeyword = (!isRestr && data.websiteStatus !== "Not Working") ? (data.businessTypeKeyword || "") : "";
-    const btLink = (!isRestr && data.websiteStatus !== "Not Working") ? (data.businessTypeSource || "") : "";
+    const btLink = (!isRestr && data.websiteStatus !== "Not Working") ? formatClickableUrl(data.businessTypeSource, siteBaseUrl) : "";
     const btSnippet = (!isRestr && data.websiteStatus !== "Not Working") ? (data.businessTypeSnippet || "") : "";
 
-    const nameLink = !isRestr ? (data.companyNameSource || data._finalUrl || "") : "";
-    const addrLink = !isRestr ? (data.companyAddressSource || "") : "";
-    const primaryEmailLink = !isRestr ? (data.primaryEmailSource || "") : "";
-    const secEmailLink = !isRestr ? (data.secondaryEmailSource || "") : "";
+    const nameLink = !isRestr ? formatClickableUrl(data.companyNameSource || siteBaseUrl, siteBaseUrl) : "";
+    const addrLink = !isRestr ? formatClickableUrl(data.companyAddressSource, siteBaseUrl) : "";
+    const primaryEmailLink = !isRestr ? formatClickableUrl(data.primaryEmailSource, siteBaseUrl) : "";
+    const secEmailLink = !isRestr ? formatClickableUrl(data.secondaryEmailSource, siteBaseUrl) : "";
 
     const errKeyword = (isRestr || data.websiteStatus === "Not Working")
-      ? (data.restrictedKeyword || data.disallowedKeyword || data.shopCartKeyword || "")
+      ? (data.errorKeyword || data.restrictedKeyword || data.disallowedKeyword || data.shopCartKeyword || "")
+      : "";
+    const errLinkRaw = (isRestr || data.websiteStatus === "Not Working")
+      ? (data.errorSourceUrl || data.restrictedSourceUrl || data.disallowedSourceUrl || data.shopCartSourceUrl || siteBaseUrl || "")
       : "";
     const errLink = (isRestr || data.websiteStatus === "Not Working")
-      ? (data.restrictedSourceUrl || data.disallowedSourceUrl || data.shopCartSourceUrl || data._finalUrl || "")
+      ? formatClickableUrl(errLinkRaw, siteBaseUrl)
       : "";
     const errSnippet = (isRestr || data.websiteStatus === "Not Working")
-      ? (data.restrictedSnippet || data.disallowedSnippet || data.shopCartSnippet || "")
+      ? (data.errorSnippet || data.restrictedSnippet || data.disallowedSnippet || data.shopCartSnippet || "")
       : "";
 
     const items = [
