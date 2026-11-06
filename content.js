@@ -1504,57 +1504,111 @@
   }
 
   function extractNotWorkingReason(data) {
-    if (!data) return { reason: "Website unreachable or empty response", rule: "Rule 1: Website Status", keyword: "", link: "", snippet: "" };
+    if (!data) return {
+      category: "Unreachable",
+      badge: "UNREACHABLE",
+      badgeBg: "#fee2e2",
+      badgeColor: "#991b1b",
+      reason: "Website unreachable or empty response",
+      rule: "Rule 1: If site has no verifiable business content or cannot be reached, mark Not Working.",
+      keyword: "",
+      link: "",
+      snippet: ""
+    };
 
     const siteBaseUrl = data._finalUrl || data._originalUrl || (typeof getTargetUrl === "function" ? getTargetUrl() : "");
 
+    // 1. Prohibited Category / Word Check (Highest Priority Rule Note 2)
     if (data.restrictedReason || data.isRestricted || data.isProhibitedSite) {
       const rawLink = data.restrictedSourceUrl || data.errorSourceUrl || siteBaseUrl;
+      const cat = data.restrictedCategory || data.restrictedReason || "Prohibited Category";
+      const kw = data.restrictedKeyword || data.errorKeyword || "";
       return {
-        reason: `Prohibited Category / Word: "${data.restrictedReason || 'Restricted Category'}" detected on site`,
+        category: "Prohibited Category",
+        badge: `PROHIBITED: ${String(cat).toUpperCase()}`,
+        badgeBg: "#fee2e2",
+        badgeColor: "#991b1b",
+        reason: `Prohibited Category Detected: "${cat}"${kw && kw.toLowerCase() !== cat.toLowerCase() ? ` (matched "${kw}")` : ""} found on website`,
         rule: "Rule Note 2: Weapons, Defence, Military, Medicine, Medical, Hospital, Food, Porn, Aerospace, Marine, Chemicals, Animals sites are strictly prohibited. Website Status is set to Not Working with all fields empty.",
-        keyword: data.restrictedKeyword || data.errorKeyword || data.restrictedReason || "",
+        keyword: kw || cat,
         link: formatClickableUrl(rawLink, siteBaseUrl),
-        snippet: data.restrictedSnippet || data.errorSnippet || ""
+        snippet: data.restrictedSnippet || data.errorSnippet || `Prohibited category "${cat}" detected on the website.`
       };
     }
 
+    // 2. Disallowed Business Type (Rule 4: Scope restrictions)
     if (data.disallowedReason || data.isDisallowedBusinessType) {
       const rawLink = data.disallowedSourceUrl || data.errorSourceUrl || siteBaseUrl;
+      const bt = data.businessType || data.disallowedKeyword || "Outside Scope";
       return {
-        reason: data.disallowedReason || `Business Type "${data.businessType || 'Disallowed'}" outside allowed scope`,
+        category: "Disallowed Business Type",
+        badge: `DISALLOWED: ${String(bt).toUpperCase()}`,
+        badgeBg: "#f3e8ff",
+        badgeColor: "#6b21a8",
+        reason: data.disallowedReason || `Business Type "${bt}" is outside allowed work scope`,
         rule: "Rule 4 & Scope: Only Manufacturer, Supplier, Distributer, Wholesaler, Exporter, Trader, and Industrial Services are worked on. Retailers, Resellers, and Service Providers must be marked Not Working.",
-        keyword: data.disallowedKeyword || data.errorKeyword || data.businessType || "",
+        keyword: data.disallowedKeyword || data.errorKeyword || bt,
         link: formatClickableUrl(rawLink, siteBaseUrl),
-        snippet: data.disallowedSnippet || data.errorSnippet || ""
+        snippet: data.disallowedSnippet || data.errorSnippet || `Business Type classified as "${bt}". Non-industrial services, retailers, and consumer resellers must be marked Not Working.`
       };
     }
 
+    // 3. Online Shopping Cart / Retail Store (Rule 11 & 16)
     if (data.shopCartReason || data.isShopCartSite) {
       const rawLink = data.shopCartSourceUrl || data.errorSourceUrl || siteBaseUrl;
       return {
+        category: "Online Shopping Cart",
+        badge: "ONLINE SHOPPING / CART",
+        badgeBg: "#ffedd5",
+        badgeColor: "#9a3412",
         reason: `Online Shopping / Retail Cart: ${data.shopCartReason || 'Shopping cart & checkout buttons detected without manufacturing evidence'}`,
         rule: "Rule 11 & 16: E-commerce websites selling products online with cart/checkout are marked Not Working, except if the company is a verified Manufacturer.",
         keyword: data.shopCartKeyword || data.errorKeyword || "Shopping Cart / Direct Purchase",
         link: formatClickableUrl(rawLink, siteBaseUrl),
-        snippet: data.shopCartSnippet || data.shopCartReason || ""
+        snippet: data.shopCartSnippet || data.shopCartReason || "Direct online consumer checkout detected on website without manufacturing evidence."
       };
     }
 
+    // 4. Free Platform / Subdomain (Rules 9 & 10)
+    if (data.errorCategory === "Free Platform / Subdomain" || (data.restrictedReason && /platform|wix|wordpress|blogspot|weebly|subdomain/i.test(data.restrictedReason))) {
+      const rawLink = data.errorSourceUrl || siteBaseUrl;
+      return {
+        category: "Free Platform / Subdomain",
+        badge: "FREE PLATFORM / SUBDOMAIN",
+        badgeBg: "#fef3c7",
+        badgeColor: "#92400e",
+        reason: data.restrictedReason || "Website hosted on free platform or disallowed non-root subdomain",
+        rule: "Rules 9 & 10: Free hosted platforms (Wix, WordPress, Blogspot, etc.) and non-root streaming subdomains must be marked Not Working.",
+        keyword: data.errorKeyword || data.restrictedKeyword || "Free Platform",
+        link: formatClickableUrl(rawLink, siteBaseUrl),
+        snippet: data.errorSnippet || data.restrictedSnippet || "Website hosted on disallowed free platform or media subdomain."
+      };
+    }
+
+    // 5. Domain Expired (Rule 1)
     if (data.websiteStatus === "Domain Expired") {
       const rawLink = data.errorSourceUrl || siteBaseUrl;
       return {
-        reason: "Domain Expired or Server returned HTTP 404 Not Found",
-        rule: "Rule 1: If domain has expired or cannot be resolved, mark Domain Expired.",
+        category: "Domain Expired",
+        badge: "DOMAIN EXPIRED / 404",
+        badgeBg: "#f1f5f9",
+        badgeColor: "#475569",
+        reason: "Domain Expired, Parked Domain, or Server returned HTTP 404 Not Found",
+        rule: "Rule 1: If domain has expired, is parked, or cannot be resolved, mark Domain Expired.",
         keyword: data.errorKeyword || "Domain Expired",
         link: formatClickableUrl(rawLink, siteBaseUrl),
-        snippet: data.errorSnippet || "Domain Expired or Server returned HTTP 404 Not Found"
+        snippet: data.errorSnippet || "Domain expired or web server returned HTTP 404 Not Found."
       };
     }
 
+    // 6. Non English (Rule 12)
     if (data.websiteStatus === "Non English") {
       const rawLink = data.errorSourceUrl || siteBaseUrl;
       return {
+        category: "Non English",
+        badge: "NON-ENGLISH",
+        badgeBg: "#e0e7ff",
+        badgeColor: "#3730a3",
         reason: "Non-English website without English translation option",
         rule: "Rule 12: Websites entirely in a foreign language with no English option must be marked Non English.",
         keyword: data.errorKeyword || "Non English Language",
@@ -1563,9 +1617,14 @@
       };
     }
 
+    // 7. Flash Format (Rule 14)
     if (data.websiteStatus === "Flash") {
       const rawLink = data.errorSourceUrl || siteBaseUrl;
       return {
+        category: "Flash Format",
+        badge: "FLASH FORMAT",
+        badgeBg: "#fae8ff",
+        badgeColor: "#86198f",
         reason: "Flash format website without copyable text",
         rule: "Rule 14: Flash websites without selectable text must be marked Flash.",
         keyword: data.errorKeyword || "Flash Content",
@@ -1574,24 +1633,39 @@
       };
     }
 
+    // 8. Fetch Error / Connection Timeout / Unreachable
     if (data.fetchError) {
+      let cleanErr = data.fetchError;
+      if (/listener indicated an asynchronous response|message channel closed/i.test(cleanErr)) {
+        cleanErr = "Server connection timed out or background worker took too long to respond. The site may be slow, offline, or blocking requests.";
+      }
       const rawLink = data.errorSourceUrl || siteBaseUrl;
       return {
-        reason: `Connection / Fetch Failure: ${data.fetchError}`,
+        category: "Unreachable / Timeout",
+        badge: "UNREACHABLE / TIMEOUT",
+        badgeBg: "#fee2e2",
+        badgeColor: "#991b1b",
+        reason: `Connection / Fetch Failure: ${cleanErr}`,
         rule: "Instruction: If the website fails to fetch, load, or times out, mark Not Working.",
         keyword: data.errorKeyword || "Unreachable / Timeout",
         link: formatClickableUrl(rawLink, siteBaseUrl),
-        snippet: data.errorSnippet || data.fetchError
+        snippet: data.errorSnippet || cleanErr
       };
     }
 
+    // 9. Generic Not Working / No Business Content
     const rawLink = data.errorSourceUrl || siteBaseUrl;
+    const reasonText = data.notWorkingReason || data._note || "Website has no verifiable business products, physical address, or services";
     return {
-      reason: data._note || "Website failed quality verification or is unreachable",
+      category: "No Business Content",
+      badge: "NO BUSINESS CONTENT",
+      badgeBg: "#fef3c7",
+      badgeColor: "#92400e",
+      reason: reasonText,
       rule: "Rule 1: If site has no verifiable business content or cannot be reached, mark Not Working.",
-      keyword: data.errorKeyword || "",
+      keyword: data.errorKeyword || "No Verifiable Content",
       link: formatClickableUrl(rawLink, siteBaseUrl),
-      snippet: data.errorSnippet || ""
+      snippet: data.errorSnippet || "Website has no verifiable catalog, company profile, or physical business address."
     };
   }
 
@@ -1601,8 +1675,16 @@
     const info = extractNotWorkingReason(data);
     const reasonEl = document.getElementById("ai-notworking-reason-text");
     const ruleEl = document.getElementById("ai-notworking-rule-text");
+    const badgeEl = document.getElementById("ai-notworking-category-badge");
     if (reasonEl) reasonEl.textContent = info.reason;
     if (ruleEl) ruleEl.textContent = info.rule;
+
+    if (badgeEl) {
+      badgeEl.textContent = info.badge || "NOT WORKING";
+      badgeEl.style.background = info.badgeBg || "#fee2e2";
+      badgeEl.style.color = info.badgeColor || "#991b1b";
+      badgeEl.style.border = `1px solid ${info.badgeColor || '#991b1b'}`;
+    }
 
     const evidenceBox = document.getElementById("ai-notworking-evidence-box");
     const keywordRow = document.getElementById("ai-notworking-keyword-row");
@@ -1632,7 +1714,19 @@
         }
         if (snippetRow) {
           snippetRow.style.display = hasSnippet ? "block" : "none";
-          snippetRow.textContent = info.snippet ? `"...${info.snippet.replace(/^(\.\.\.)+/, '').replace(/(\.\.\.)+$/, '')}..."` : "";
+          if (info.snippet) {
+            let rawSnippet = String(info.snippet).replace(/^(\.\.\.)+/, '').replace(/(\.\.\.)+$/, '').trim();
+            // Highlight the matched keyword in the snippet if present
+            if (info.keyword && info.keyword.length >= 2) {
+              const escapedKw = info.keyword.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+              try {
+                rawSnippet = rawSnippet.replace(new RegExp(`(\\b${escapedKw}\\b|${escapedKw})`, "gi"), '<mark style="background: #fef08a; color: #854d0e; padding: 1px 4px; border-radius: 3px; font-weight: 700;">$1</mark>');
+              } catch (e) {}
+            }
+            snippetRow.innerHTML = `"...${rawSnippet}..."`;
+          } else {
+            snippetRow.innerHTML = "";
+          }
         }
       } else {
         evidenceBox.style.display = "none";
@@ -1972,9 +2066,12 @@
 
         <!-- Dedicated Not Working Study Card with reason & rule -->
         <div id="ai-notworking-study-card" class="ai-notworking-card" style="display: none;">
-          <div class="ai-notworking-header">
-            <span>🚫</span>
-            <span>NOT WORKING STUDY & VERIFICATION</span>
+          <div class="ai-notworking-header" style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px;">
+            <div style="display: flex; align-items: center; gap: 5px;">
+              <span>🚫</span>
+              <span style="font-weight: 700; letter-spacing: 0.5px;">NOT WORKING STUDY</span>
+            </div>
+            <span id="ai-notworking-category-badge" class="ai-notworking-badge"></span>
           </div>
           <div class="ai-notworking-reason" id="ai-notworking-reason-text"></div>
           <div class="ai-notworking-rule" id="ai-notworking-rule-text"></div>
@@ -1982,13 +2079,13 @@
           <!-- Evidence Box: Matched Keyword, Source Link & Snippet -->
           <div id="ai-notworking-evidence-box" style="margin-top: 6px; padding: 6px 8px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 4px; font-size: 11px; display: none;">
             <div id="ai-notworking-keyword-row" style="margin-bottom: 4px; font-weight: 600; color: #9f1239;">
-              <span>Matched Keyword: </span><span id="ai-notworking-keyword-text" style="background: #ffe4e6; padding: 1px 5px; border-radius: 3px; color: #881337; font-family: monospace;"></span>
+              <span>Trigger / Keyword: </span><span id="ai-notworking-keyword-text" style="background: #ffe4e6; padding: 1px 5px; border-radius: 3px; color: #881337; font-family: monospace;"></span>
             </div>
             <div id="ai-notworking-link-row" style="margin-bottom: 4px;">
               <span style="color: #4b5563;">Found on: </span>
               <a id="ai-notworking-link-anchor" href="#" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline; word-break: break-all;">🔗 Open Page Link</a>
             </div>
-            <div id="ai-notworking-snippet-row" style="color: #4b5563; font-style: italic; font-size: 10.5px; border-top: 1px dashed #fecdd3; padding-top: 3px; margin-top: 3px; line-height: 1.3;"></div>
+            <div id="ai-notworking-snippet-row" style="color: #374151; font-style: italic; font-size: 11px; border-top: 1px dashed #fecdd3; padding-top: 4px; margin-top: 4px; line-height: 1.35;"></div>
           </div>
 
           <div style="margin-top: 8px; display: flex; gap: 6px;">

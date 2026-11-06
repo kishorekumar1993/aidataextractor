@@ -610,7 +610,10 @@ async function handleCrawlAndExtract(rawUrl) {
       };
     }
 
-    const reason = crawlResult.fetchError || "Site unreachable or returned empty HTML";
+    let reason = crawlResult.fetchError || "Site unreachable or returned empty HTML";
+    if (/listener indicated an asynchronous response|message channel closed/i.test(reason)) {
+      reason = "Connection timed out while loading the website server. The site took too long to respond or is offline.";
+    }
     console.warn(`[AI Assistant] Failed to fetch ${targetUrl}: ${reason}. Marking as Not Working.`);
     return {
       websiteStatus: "Not Working",
@@ -628,12 +631,13 @@ async function handleCrawlAndExtract(rawUrl) {
       productImages: "",
       numberOfProductDescriptions: "",
       fetchError: reason,
-      errorKeyword: "Unreachable / Failed to Fetch",
+      errorCategory: "Unreachable / Connection Failure",
+      errorKeyword: "Connection Timeout / Unreachable",
       errorSourceUrl: targetUrl,
       errorSnippet: reason,
       _finalUrl: targetUrl,
       _originalUrl: targetUrl,
-      _note: `Website Unreachable / Failed to Fetch (${reason}) - Marked as Not Working`
+      _note: `Website Unreachable (${reason}) - Marked as Not Working (Rule 1)`
     };
   }
 
@@ -4759,18 +4763,39 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (platformCheck.isDisallowed) {
     result.websiteStatus = "Not Working";
     result.isRestricted = true;
+    result.errorCategory = "Free Platform / Subdomain";
     result.restrictedReason = platformCheck.reason;
     result.restrictedKeyword = platformCheck.reason;
-    result.restrictedSourceUrl = crawlData.finalUrl || "";
+    result.restrictedSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
     result.restrictedSnippet = platformCheck.reason;
+    result.errorKeyword = platformCheck.reason;
+    result.errorSourceUrl = result.restrictedSourceUrl;
+    result.errorSnippet = platformCheck.reason;
   } else if (crawlData.status === "Flash" || detectFlashFormatSite(crawlData.mainHtml || "")) {
     result.websiteStatus = "Flash";
+    result.errorCategory = "Flash Format";
+    result.errorKeyword = "Flash Content";
+    result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    result.errorSnippet = "Flash Format Website - Not copyable (Rule 14)";
   } else if (crawlData.status === "Non English" || detectNonEnglishWithoutTranslation(crawlData.mainHtml || "", crawlData.bodyText || "")) {
     result.websiteStatus = "Non English";
+    result.errorCategory = "Non English";
+    result.errorKeyword = "Foreign Language";
+    result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    result.errorSnippet = "Non-English Language Without Translation Option (Rule 12)";
   } else if (crawlData.status === "Domain Expired") {
     result.websiteStatus = "Domain Expired";
+    result.errorCategory = "Domain Expired";
+    result.errorKeyword = "Domain Expired";
+    result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    result.errorSnippet = "Domain Expired or Server returned HTTP 404 Not Found (Rule 1)";
   } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working") {
     result.websiteStatus = crawlData.status || "Not Working";
+    result.errorCategory = crawlData.fetchError ? "Unreachable / Timeout" : "No Business Content";
+    result.errorKeyword = crawlData.fetchError ? "Connection Failed" : "No Verifiable Content";
+    result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    result.errorSnippet = crawlData.fetchError || "Website returned empty content or has no verifiable business products";
+    result.notWorkingReason = result.errorSnippet;
   } else if (isRedirectSite) {
     result.websiteStatus = "Redirect Site";
   } else if (!isDiffDomain && (result.websiteStatus === "Redirect Site" || result.websiteStatus === "Redirect")) {
