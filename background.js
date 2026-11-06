@@ -1171,12 +1171,12 @@ async function crawlWebsite(targetUrl) {
     }
 
     httpStatus = mainRes.status || 0;
-    if (mainRes.redirected) {
+    if (mainRes.url && mainRes.url.trim().length > 0) {
       finalUrl = mainRes.url;
-      if (isRedirectDomain(targetUrl, finalUrl)) {
-        redirected = true;
-        status = "Redirect Site";
-      }
+    }
+    if (isRedirectDomain(targetUrl, finalUrl)) {
+      redirected = true;
+      status = "Redirect Site";
     }
 
     if (!mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status)) {
@@ -1192,14 +1192,16 @@ async function crawlWebsite(targetUrl) {
 
     mainHtml = mainRes.html || "";
 
-    // Check for client-side HTML Meta Refresh or JS location redirects
+    // Check for client-side HTML Meta Refresh, JS location redirects, or cross-domain canonical links
     if (mainHtml) {
       const metaRefreshMatch = mainHtml.match(/<meta[^>]*http-equiv=["']?refresh["']?[^>]*content=["']?[^"'>]*url=['"]?([^'">\s;]+)/i);
-      const jsRedirectMatch = (!metaRefreshMatch && stripHtml(mainHtml).length < 400)
-        ? mainHtml.match(/(?:window\.)?location(?:\.href|\.replace)?\s*=\s*['"]([^'"]+)['"]/i)
-        : null;
+      const jsRedirectMatch = mainHtml.match(/(?:window\.)?location(?:\.href|\.replace)?\s*=\s*['"]([^'"]+)['"]/i);
+      const canonicalMatch = mainHtml.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
 
-      const clientRedirectHref = (metaRefreshMatch && metaRefreshMatch[1]) || (jsRedirectMatch && jsRedirectMatch[1]);
+      const clientRedirectHref = (metaRefreshMatch && metaRefreshMatch[1]) ||
+        (jsRedirectMatch && jsRedirectMatch[1]) ||
+        (canonicalMatch && canonicalMatch[1]);
+
       if (clientRedirectHref && !clientRedirectHref.startsWith("#")) {
         try {
           const resolvedClientUrl = new URL(clientRedirectHref, finalUrl).href;
@@ -4314,15 +4316,8 @@ function isRedirectDomain(origUrl, finalUrl) {
   try {
     const origRoot = extractRootDomain(origUrl);
     const finalRoot = extractRootDomain(finalUrl);
-    if (origRoot && finalRoot && origRoot === finalRoot) {
-      return false;
-    }
-    const origStem = extractDomainStem(origUrl);
-    const finalStem = extractDomainStem(finalUrl);
-    if (origStem && finalStem && origStem === finalStem) {
-      return false;
-    }
-    return !!(origRoot && finalRoot && origRoot !== finalRoot);
+    if (!origRoot || !finalRoot) return false;
+    return origRoot !== finalRoot;
   } catch (e) {
     return false;
   }

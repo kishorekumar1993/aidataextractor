@@ -2484,9 +2484,10 @@
 
     const isDisallowed = !!data.isDisallowedBusinessType;
     const isRestr = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowed);
+    const isRedirect = data.websiteStatus === "Redirect Site" || data.websiteStatus === "Redirect";
     const statusVal = isRestr
       ? `Not Working (${data.disallowedReason || data.restrictedReason || "Prohibited Category"})`
-      : (data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus);
+      : (data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : (isRedirect ? `Redirect Site` : data.websiteStatus));
     const businessTypeVal = (isRestr || data.websiteStatus === "Not Working") ? "-" : (data.businessType || "-");
 
     const siteBaseUrl = data._finalUrl || data._originalUrl || (typeof getTargetUrl === "function" ? getTargetUrl() : "");
@@ -2513,8 +2514,13 @@
       ? (data.errorSnippet || data.restrictedSnippet || data.disallowedSnippet || data.shopCartSnippet || "")
       : "";
 
+    const redirectDestLink = (isRedirect && data._finalUrl && data._finalUrl !== data._originalUrl)
+      ? formatClickableUrl(data._finalUrl, siteBaseUrl)
+      : "";
+
     const items = [
-      { key: "Status", val: statusVal, isAlert: isRestr || data.websiteStatus === "Not Working" },
+      { key: "Status", val: statusVal, isAlert: isRestr || data.websiteStatus === "Not Working", isHighlight: isRedirect },
+      { key: "Redirected To", val: redirectDestLink, isLink: true },
       { key: "Error Keyword", val: errKeyword, isAlert: true },
       { key: "Error Source Link", val: errLink, isLink: true },
       { key: "Error Context", val: errSnippet ? `"...${errSnippet.replace(/^(\.\.\.)+/, '').replace(/(\.\.\.)+$/, '')}..."` : "", isSnippet: true },
