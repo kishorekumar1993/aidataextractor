@@ -698,13 +698,18 @@ async function handleCrawlAndExtract(rawUrl) {
   crawlResult.shopCartCheck = shopCartCheck;
 
   let extractedData;
-  try {
-    extractedData = await analyzeWithGemini(crawlResult, apiKey, model, restrictedCheck);
-    extractedData._note = `AI Powered by Gemini (${model})`;
-  } catch (aiErr) {
-    console.warn("Gemini API error, falling back to local deterministic rule engine:", aiErr);
+  if (!apiKey || !apiKey.trim()) {
     extractedData = heuristicExtraction(crawlResult, restrictedCheck);
-    extractedData._note = "Analyzed via Local Rule Engine (Gemini error: " + aiErr.message + ")";
+    extractedData._note = "Analyzed via Local Rule Engine";
+  } else {
+    try {
+      extractedData = await analyzeWithGemini(crawlResult, apiKey, model, restrictedCheck);
+      extractedData._note = `AI Powered by Gemini (${model})`;
+    } catch (aiErr) {
+      console.warn("Gemini API error, falling back to local deterministic rule engine:", aiErr);
+      extractedData = heuristicExtraction(crawlResult, restrictedCheck);
+      extractedData._note = "Analyzed via Local Rule Engine (Gemini error: " + aiErr.message + ")";
+    }
   }
 
   // Step 3: Strictly enforce State, City, Country, and Products based on instructions
@@ -818,8 +823,9 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   name = name.replace(/^[^<>\n]*>/g, "").trim();
   name = name.replace(/<[^>]+>/g, "").replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
 
-  // Strip leading copyright indicators like "© 2024", "(c) 2024", "Copyright 2024"
+  // Strip leading copyright indicators like "© 2024", "(c) 2024", "Copyright 2024", or standalone year numbers
   name = name.replace(/^(?:(?:©|\(c\)|&copy;|copyright)\s*(?:\d{4}(?:\s*[-–\/]\s*\d{4})?)?\s*(?:by)?|(?:\d{4}\s+)?(?:©|\(c\)|&copy;)\s*(?:\d{4})?\s*(?:by)?)\s*/i, "").trim();
+  name = name.replace(/^(?:\d{4}|\b\d{2})\s+(?=[A-Z\u4e00-\u9fa5])/i, "").trim();
 
   // Remove special characters from the beginning per Rule 4
   name = name.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
@@ -6205,15 +6211,40 @@ function preferOfficialCompanyName(name, crawlData) {
     }
     if (companyNamesMatch(current, official)) score += 80;
 
-    // Boost candidate that retains country designation (e.g. USA, UK, Taiwan) if domain or current name has that country
-    const domainOrBrandHasCountry = /(?:[-_.]|\b)(?:usa|us|taiwan|uk|australia|india|germany|america|americas)\b/i.test(domain) ||
-      /\b(?:usa|u\.s\.a\.|taiwan|uk|u\.k\.|australia|india|germany|america|americas)\b/i.test(current);
-    if (domainOrBrandHasCountry) {
-      const offHasCountry = /\b(?:usa|u\.s\.a\.|taiwan|uk|u\.k\.|australia|india|germany|america|americas)\b/i.test(official);
-      if (offHasCountry) {
-        score += 80;
-      } else {
-        score -= 50; // Penalize foreign/parent entity that drops the specific country branch designation
+    // Boost candidate that retains country designation ONLY if it matches the specific country of the domain or current name
+    const countryTokens = [
+      { id: "usa", regex: /\b(?:usa|u\.s\.a\.|america|americas)\b|[-_.]us[-_.]/i },
+      { id: "taiwan", regex: /\b(?:taiwan|r\.?o\.?c\.?)\b|[-_.]tw[-_.]/i },
+      { id: "uk", regex: /\b(?:uk|u\.k\.|great\s*britain|england)\b|[-_.]uk[-_.]/i },
+      { id: "australia", regex: /\b(?:australia|aus)\b|[-_.]au[-_.]/i },
+      { id: "china", regex: /\b(?:china|prc)\b|[-_.]cn[-_.]/i },
+      { id: "germany", regex: /\b(?:germany|deutschland)\b|[-_.]de[-_.]/i },
+      { id: "india", regex: /\b(?:india)\b|[-_.]in[-_.]/i }
+    ];
+
+    for (const cToken of countryTokens) {
+      const domainMatches = cToken.regex.test(domain) || cToken.regex.test(current);
+      if (domainMatches) {
+        const offMatches = cToken.regex.test(official);
+        if (offMatches) {
+          score += 80;
+        }
+      }
+    }
+
+    // Boost candidate matching copyright text
+    if (copyrightName && (offNorm === normalizeNameForComparison(copyrightName) || companyNamesMatch(copyrightName, official))) {
+      score += 100;
+    }
+
+    // Headquarters alignment: if explicit headquarters candidate was found, boost official candidate associated with HQ!
+    const hqCandidates = (crawlData && crawlData.addressCandidates || []).filter(c => c && (c.isHeadquarters || c.locationType === "headquarters"));
+    if (hqCandidates.length > 0) {
+      for (const hq of hqCandidates) {
+        const hqText = ((typeof hq === "object" ? hq.raw : hq) + " " + ((hq && hq.contextText) || "")).toLowerCase();
+        if (offNorm && (hqText.includes(offNorm) || hqText.includes(offNorm.slice(0, 15)))) {
+          score += 120;
+        }
       }
     }
 

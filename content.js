@@ -54,22 +54,30 @@
   let showFloatingWidget = true;
   let showInlineBtn = true;
   let autoQueueEnabled = true;
+  let autoSubmitNotWorkingEnabled = false; // Default OFF so user can study Not Working sites
+  let pendingAutoSubmitTimer = null;
+  let currentNotWorkingData = null;
   let isAutoQueuePipelineActive = false;
   let autoQueuePollTimer = null;
   let isBatchNotWorkingActive = false;
   let batchNotWorkingRemaining = 0; // -1 for ALL, or positive count like 10
 
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true, autoQueueEnabled: true }, (res) => {
+    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true, autoQueueEnabled: true, autoSubmitNotWorkingEnabled: false }, (res) => {
       if (res) {
         showFloatingWidget = res.showFloatingWidget !== false;
         showInlineBtn = res.showInlineBtn !== false;
         if (res.autoQueueEnabled !== undefined) {
           autoQueueEnabled = !!res.autoQueueEnabled;
         }
+        if (typeof res.autoSubmitNotWorkingEnabled === "boolean") {
+          autoSubmitNotWorkingEnabled = res.autoSubmitNotWorkingEnabled;
+        }
       }
       const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
       if (widgetToggle) widgetToggle.checked = autoQueueEnabled;
+      const notWorkingToggle = document.getElementById("ai-auto-submit-notworking-toggle");
+      if (notWorkingToggle) notWorkingToggle.checked = autoSubmitNotWorkingEnabled;
       ensureAiCrawlButtonsVisible();
     });
 
@@ -285,7 +293,7 @@
 
     // 1. Direct ID mappings matching https://kishorekumar1993.github.io/dataextraction/ & test replica
     elements.websiteUrl = document.getElementById("inputWebsiteName") || document.getElementById("website-name") || findWebsiteNameInput();
-    elements.websiteStatus = document.getElementById("selectWebsiteStatus") || 
+    elements.websiteStatus = document.getElementById("selectWebsiteStatus") ||
       document.getElementById("website-status") ||
       document.querySelector("select[name*='status']") ||
       document.querySelector("select[id*='status']") ||
@@ -293,7 +301,7 @@
 
     if (!elements.websiteStatus) {
       const allSelects = Array.from(document.querySelectorAll("select"));
-      elements.websiteStatus = allSelects.find(s => 
+      elements.websiteStatus = allSelects.find(s =>
         Array.from(s.options).some(o => (o.text || o.value || "").trim().toLowerCase() === "not working")
       ) || allSelects.find(s => {
         const firstOpt = (s.options[0]?.text || "").toLowerCase().trim();
@@ -943,7 +951,7 @@
 
     // Helper to ensure next pending URL is loaded from queue
     const loadNextFromQueue = () => {
-      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") || 
+      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") ||
         Array.from(document.querySelectorAll("button, a")).find(b => (b.textContent || "").toLowerCase().includes("from queue"));
       if (fromQueueBtn) {
         console.log("[AI Assistant] Triggering 'From Queue' to load next pending URL...");
@@ -1039,9 +1047,9 @@
 
     // Helper to find the Submit button
     const findSubmitButton = () => {
-      return document.getElementById("btnSubmitForm") || 
-        document.getElementById("btnSubmit") || 
-        document.getElementById("submitForm") || 
+      return document.getElementById("btnSubmitForm") ||
+        document.getElementById("btnSubmit") ||
+        document.getElementById("submitForm") ||
         document.getElementById("btn-submit") ||
         document.getElementById("submit") ||
         document.querySelector('button[type="submit"]') ||
@@ -1213,9 +1221,9 @@
     // select the respective status and clear/leave empty ALL other fields!
     // NOTE: "Redirect Site" is a WORKING website that redirected to a new domain (Rule 13).
     // All 14 fields MUST be filled with the company data from the final redirected URL!
-    const isNonWorkingStatus = data.websiteStatus && 
-      data.websiteStatus !== "Working" && 
-      data.websiteStatus !== "Redirect Site" && 
+    const isNonWorkingStatus = data.websiteStatus &&
+      data.websiteStatus !== "Working" &&
+      data.websiteStatus !== "Redirect Site" &&
       data.websiteStatus !== "Redirect";
     if (isNonWorkingStatus || isProhibitedOrRestricted) {
       const targetStatus = isProhibitedOrRestricted ? "Not Working" : (data.websiteStatus || "Not Working");
@@ -1226,10 +1234,31 @@
         }
       }
 
-      // Per instruction: automatically confirm modal & submit record for Not Working!
+      // Display detailed Not Working Study Card & reason
+      if (targetStatus === "Not Working" || isNonWorkingStatus) {
+        currentNotWorkingData = data;
+        showNotWorkingStudyCard(data);
+      }
+
+      // Check auto-submit toggle: Only auto-submit if user enabled it!
       if (targetStatus === "Not Working") {
         const currentUrl = getTargetUrl();
-        autoSubmitNotWorking(currentUrl);
+        if (autoSubmitNotWorkingEnabled) {
+          updateStatus("⚠️ Status set to Not Working. Auto-submitting in 3s... (Click 'Stop Auto-Submit' to study)", "warning");
+          if (pendingAutoSubmitTimer) clearTimeout(pendingAutoSubmitTimer);
+          pendingAutoSubmitTimer = setTimeout(() => {
+            pendingAutoSubmitTimer = null;
+            autoSubmitNotWorking(currentUrl);
+          }, 3000);
+        } else {
+          // Auto-submit is OFF so user can review and study
+          if (pendingAutoSubmitTimer) {
+            clearTimeout(pendingAutoSubmitTimer);
+            pendingAutoSubmitTimer = null;
+          }
+          const studyInfo = extractNotWorkingReason(data);
+          updateStatus(`🚫 NOT WORKING: ${studyInfo.reason}. Auto-submit is STOPPED so you can study.`, "error");
+        }
       }
 
       // Clear all other fields (leave empty string / default placeholder)
@@ -1440,6 +1469,80 @@
     }
   }
 
+  function extractNotWorkingReason(data) {
+    if (!data) return { reason: "Website unreachable or empty response", rule: "Rule 1: Website Status" };
+
+    if (data.restrictedReason || data.isRestricted || data.isProhibitedSite) {
+      return {
+        reason: `Prohibited Category / Word: "${data.restrictedReason || 'Restricted Category'}" detected on site`,
+        rule: "Rule Note 2: Weapons, Defence, Military, Medicine, Medical, Hospital, Food, Porn, Aerospace, Marine, Chemicals, Animals sites are strictly prohibited. Website Status is set to Not Working with all fields empty."
+      };
+    }
+
+    if (data.disallowedReason || data.isDisallowedBusinessType) {
+      return {
+        reason: data.disallowedReason || `Business Type "${data.businessType || 'Disallowed'}" outside allowed scope`,
+        rule: "Rule 4 & Scope: Only Manufacturer, Supplier, Distributer, Wholesaler, Exporter, Trader, and Industrial Services are worked on. Retailers, Resellers, and Service Providers must be marked Not Working."
+      };
+    }
+
+    if (data.shopCartReason || data.isShopCartSite) {
+      return {
+        reason: `Online Shopping / Retail Cart: ${data.shopCartReason || 'Shopping cart & checkout buttons detected without manufacturing evidence'}`,
+        rule: "Rule 11 & 16: E-commerce websites selling products online with cart/checkout are marked Not Working, except if the company is a verified Manufacturer."
+      };
+    }
+
+    if (data.websiteStatus === "Domain Expired") {
+      return {
+        reason: "Domain Expired or Server returned HTTP 404 Not Found",
+        rule: "Rule 1: If domain has expired or cannot be resolved, mark Domain Expired."
+      };
+    }
+
+    if (data.websiteStatus === "Non English") {
+      return {
+        reason: "Non-English website without English translation option",
+        rule: "Rule 12: Websites entirely in a foreign language with no English option must be marked Non English."
+      };
+    }
+
+    if (data.websiteStatus === "Flash") {
+      return {
+        reason: "Flash format website without copyable text",
+        rule: "Rule 14: Flash websites without selectable text must be marked Flash."
+      };
+    }
+
+    if (data.fetchError) {
+      return {
+        reason: `Connection / Fetch Failure: ${data.fetchError}`,
+        rule: "Instruction: If the website fails to fetch, load, or times out, mark Not Working."
+      };
+    }
+
+    return {
+      reason: data._note || "Website failed quality verification or is unreachable",
+      rule: "Rule 1: If site has no verifiable business content or cannot be reached, mark Not Working."
+    };
+  }
+
+  function showNotWorkingStudyCard(data) {
+    const card = document.getElementById("ai-notworking-study-card");
+    if (!card) return;
+    const info = extractNotWorkingReason(data);
+    const reasonEl = document.getElementById("ai-notworking-reason-text");
+    const ruleEl = document.getElementById("ai-notworking-rule-text");
+    if (reasonEl) reasonEl.textContent = info.reason;
+    if (ruleEl) ruleEl.textContent = info.rule;
+    card.style.display = "block";
+  }
+
+  function hideNotWorkingStudyCard() {
+    const card = document.getElementById("ai-notworking-study-card");
+    if (card) card.style.display = "none";
+  }
+
   function showRestrictedBanner(reason) {
     let banner = document.getElementById("ai-restricted-banner");
     if (!banner) {
@@ -1511,7 +1614,7 @@
     let targetUrl = getTargetUrl();
     if (!targetUrl) {
       // Try to load pending URL from queue if input is empty
-      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") || 
+      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") ||
         Array.from(document.querySelectorAll("button, a")).find(b => (b.textContent || "").toLowerCase().includes("from queue"));
       if (fromQueueBtn) {
         fromQueueBtn.click();
@@ -1593,8 +1696,8 @@
         const msg = data.isShopCartSite
           ? `⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Status set to Not Working (auto-submitting...).`
           : (data.isDisallowedBusinessType
-              ? `⚠️ ${data.disallowedReason || "Business Type outside allowed scope (Manufacturer to Wholesaler only)"}. Status set to Not Working (auto-submitting...).`
-              : `⚠️ Website Status set to Not Working (all other fields cleared; auto-submitting...).`);
+            ? `⚠️ ${data.disallowedReason || "Business Type outside allowed scope (Manufacturer to Wholesaler only)"}. Status set to Not Working (auto-submitting...).`
+            : `⚠️ Website Status set to Not Working (all other fields cleared; auto-submitting...).`);
         updateStatus(msg, "warning");
       } else {
         // CRITICAL INSTRUCTION: "if working site stop to submit button"
@@ -1602,9 +1705,9 @@
         stopAutoQueuePipeline(data.websiteStatus === "Redirect Site" ? "Redirect Site found" : "Working site found");
 
         // Highlight Submit button and scroll into view for user's manual review
-        const submitBtn = document.getElementById("btnSubmitForm") || 
-          document.getElementById("btnSubmit") || 
-          document.getElementById("submitForm") || 
+        const submitBtn = document.getElementById("btnSubmitForm") ||
+          document.getElementById("btnSubmit") ||
+          document.getElementById("submitForm") ||
           document.querySelector('button[type="submit"], input[type="submit"]') ||
           Array.from(document.querySelectorAll('button, input[type="button"]')).find(b => {
             const t = (b.textContent || b.value || "").trim().toLowerCase();
@@ -1723,17 +1826,43 @@
           </label>
         </div>
 
-        <!-- Separate options requested by user -->
+        <div class="ai-widget-auto-row" style="margin-top: 4px;">
+          <span>🛑 Auto-submit Not Working:</span>
+          <label class="ai-widget-switch" title="Automatically submit Not Working records. Leave OFF to pause and study Not Working sites.">
+            <input type="checkbox" id="ai-auto-submit-notworking-toggle" ${autoSubmitNotWorkingEnabled ? "checked" : ""}>
+            <span class="ai-widget-slider"></span>
+          </label>
+        </div>
+
+        <!-- Stop & Batch Controls -->
         <div class="ai-secondary-actions" style="margin-top: 5px;">
-          <button class="ai-btn-secondary ai-btn-danger-light" id="ai-batch-10-btn" title="Automatically mark 10 queue sites as Not Working and auto-submit">⚡ Auto 10 Not Working</button>
-          <button class="ai-btn-secondary ai-btn-danger-light" id="ai-submit-notworking-btn" title="Immediately mark current site as Not Working and submit">🚫 Submit 1 Not Working</button>
+          <button class="ai-btn-secondary ai-btn-stop" id="ai-stop-auto-submit-btn" style="flex: 1.2;" title="Immediately stop auto-submission so you can study this Not Working site">🛑 Stop Auto-Submit</button>
+          <button class="ai-btn-secondary ai-btn-danger-light" id="ai-submit-notworking-btn" style="flex: 1;" title="Immediately mark current site as Not Working and submit">🚫 Submit 1</button>
         </div>
 
         <div class="ai-secondary-actions" style="margin-top: 3px;">
-          <button class="ai-btn-secondary ai-btn-danger-dark" id="ai-batch-all-btn" title="Automatically submit ALL pending sites in queue as Not Working">⚡ Submit ALL Not Working</button>
+          <button class="ai-btn-secondary ai-btn-danger-light" id="ai-batch-10-btn" title="Automatically mark 10 queue sites as Not Working and auto-submit">⚡ Auto 10 Not Working</button>
+          <button class="ai-btn-secondary ai-btn-danger-dark" id="ai-batch-all-btn" title="Automatically submit ALL pending sites in queue as Not Working">⚡ Submit ALL</button>
+        </div>
+
+        <div class="ai-secondary-actions" style="margin-top: 3px;">
           <button class="ai-btn-secondary" id="ai-pause-pipeline-btn" style="display: none; color: #dc2626; border-color: #fca5a5; background-color: #fef2f2; font-weight: 600;" title="Pause Auto-Queue Pipeline">⏸️ Stop</button>
           <button class="ai-btn-secondary" id="ai-fill-cached-btn" title="Re-apply prefilled values">Fill Form</button>
           <button class="ai-btn-secondary" id="ai-clear-btn" title="Clear highlighted fields">Reset Form</button>
+        </div>
+
+        <!-- Dedicated Not Working Study Card with reason & rule -->
+        <div id="ai-notworking-study-card" class="ai-notworking-card" style="display: none;">
+          <div class="ai-notworking-header">
+            <span>🚫</span>
+            <span>NOT WORKING STUDY & VERIFICATION</span>
+          </div>
+          <div class="ai-notworking-reason" id="ai-notworking-reason-text"></div>
+          <div class="ai-notworking-rule" id="ai-notworking-rule-text"></div>
+          <div style="margin-top: 8px; display: flex; gap: 6px;">
+            <button class="ai-btn-primary ai-btn-danger-light" id="ai-study-confirm-submit-btn" style="flex: 1; padding: 5px 8px; font-size: 11px; font-weight: 700; cursor: pointer; border-radius: 4px;">✓ Confirm & Submit</button>
+            <button class="ai-btn-secondary" id="ai-study-dismiss-btn" style="padding: 5px 8px; font-size: 11px; cursor: pointer; border-radius: 4px;">Dismiss</button>
+          </div>
         </div>
 
         <div id="ai-status-container" class="ai-status-bar ai-status-idle">
@@ -1777,6 +1906,60 @@
           widget.classList.remove("ai-minimized");
           if (minBtn) minBtn.textContent = "−";
         }
+      });
+    }
+
+    const stopAutoSubmitBtn = document.getElementById("ai-stop-auto-submit-btn");
+    if (stopAutoSubmitBtn) {
+      stopAutoSubmitBtn.addEventListener("click", () => {
+        if (pendingAutoSubmitTimer) {
+          clearTimeout(pendingAutoSubmitTimer);
+          pendingAutoSubmitTimer = null;
+        }
+        autoSubmitNotWorkingEnabled = false;
+        const toggleEl = document.getElementById("ai-auto-submit-notworking-toggle");
+        if (toggleEl) toggleEl.checked = false;
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+          chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: false });
+        }
+        stopAutoQueuePipeline("User stopped auto-submit for study");
+        stopBatchNotWorking("User stopped auto-submit for study");
+        updateStatus("🛑 Auto-Submit STOPPED! You can now review and study the Not Working site.", "warning");
+      });
+    }
+
+    const autoSubmitNotWorkingToggle = document.getElementById("ai-auto-submit-notworking-toggle");
+    if (autoSubmitNotWorkingToggle) {
+      autoSubmitNotWorkingToggle.checked = autoSubmitNotWorkingEnabled;
+      autoSubmitNotWorkingToggle.addEventListener("change", () => {
+        autoSubmitNotWorkingEnabled = autoSubmitNotWorkingToggle.checked;
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+          chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: autoSubmitNotWorkingToggle.checked });
+        }
+        if (!autoSubmitNotWorkingEnabled) {
+          if (pendingAutoSubmitTimer) {
+            clearTimeout(pendingAutoSubmitTimer);
+            pendingAutoSubmitTimer = null;
+          }
+          updateStatus("🛑 Auto-Submit Not Working turned OFF (Study mode active)", "idle");
+        } else {
+          updateStatus("⚡ Auto-Submit Not Working turned ON", "idle");
+        }
+      });
+    }
+
+    const studyConfirmBtn = document.getElementById("ai-study-confirm-submit-btn");
+    if (studyConfirmBtn) {
+      studyConfirmBtn.addEventListener("click", () => {
+        const currentUrl = getTargetUrl();
+        autoSubmitNotWorking(currentUrl);
+      });
+    }
+
+    const studyDismissBtn = document.getElementById("ai-study-dismiss-btn");
+    if (studyDismissBtn) {
+      studyDismissBtn.addEventListener("click", () => {
+        hideNotWorkingStudyCard();
       });
     }
 
@@ -2056,7 +2239,7 @@
 
     const isDisallowed = !!data.isDisallowedBusinessType;
     const isRestr = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowed);
-    const statusVal = isRestr 
+    const statusVal = isRestr
       ? `Not Working (${data.disallowedReason || data.restrictedReason || "Prohibited Category"})`
       : (data.isShopCartSite ? `${data.websiteStatus} (Purchase / Cart detected)` : data.websiteStatus);
     const businessTypeVal = (isRestr || data.websiteStatus === "Not Working") ? "-" : (data.businessType || "-");
