@@ -451,10 +451,40 @@ const RECOGNIZED_TOWNS = [
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "CRAWL_AND_EXTRACT") {
+    // Keep MV3 service worker alive while crawling
+    let keepAlive = setInterval(() => {
+      try { chrome.runtime.getPlatformInfo(() => {}); } catch (e) { }
+    }, 3500);
+
+    // Bounded safety timeout so we never hit Chrome's 30-second message channel port timeout
+    let finished = false;
+    const timeoutId = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      clearInterval(keepAlive);
+      console.warn("[Background] Crawl reached safety boundary. Returning fallback result before port closes.");
+      try {
+        const fallback = heuristicExtraction({ originalUrl: request.url, finalUrl: request.url, status: "Working", emails: [], phones: [] }, { isRestricted: false });
+        sendResponse({ success: true, data: fallback });
+      } catch (err) {
+        sendResponse({ success: false, error: "Crawl timeout" });
+      }
+    }, 24000);
+
     handleCrawlAndExtract(request.url)
-      .then(result => sendResponse({ success: true, data: result }))
+      .then(result => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeoutId);
+        clearInterval(keepAlive);
+        sendResponse({ success: true, data: result });
+      })
       .catch(error => {
-        console.warn("[Background] handleCrawlAndExtract caught error. Marking as Not Working:", error.message);
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeoutId);
+        clearInterval(keepAlive);
+        console.warn("[Background] handleCrawlAndExtract caught error:", error.message);
         sendResponse({
           success: true,
           data: {
@@ -737,7 +767,7 @@ function isAntiBotChallenge(html, status) {
  */
 async function fetchDecodedHtml(url, options = {}) {
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 15000;
+  const timeoutMs = options.timeoutMs || 10000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -921,8 +951,8 @@ function extractLegalCandidatesFromHtml(html) {
     if (m[1]) addCleanCandidate(m[1].trim());
   }
 
-  // Pattern 3: Explicit legal suffix preceded by capitalized words (horizontal spaces only to avoid cross-line/inline link merging)
-  const generalLegalRegex = /\b((?:[A-Z0-9][a-zA-Z0-9&.'\-]*(?:[^\S\r\n]+[A-Z0-9][a-zA-Z0-9&.'\-]*){0,5})[^\S\r\n]+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))\b/g;
+  // Pattern 3: Explicit legal suffix preceded by capitalized words (horizontal spaces only to avoid cross-line/inline link merging, supporting optional comma)
+  const generalLegalRegex = /\b((?:[A-Z0-9][a-zA-Z0-9&.'\-]*(?:[^\S\r\n]+[A-Z0-9][a-zA-Z0-9&.'\-]*){0,5})(?:,[^\S\r\n]*|[^\S\r\n]+)(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka)(?:\.|\b))/gi;
   while ((m = generalLegalRegex.exec(text)) !== null) {
     const cand = m[1].trim();
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
@@ -1453,6 +1483,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   const cleaned = decoded
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
+    .replace(/^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|add|addr|location|廠址|地址|view|learn\s*more|read\s*more|see\s*more|click\s*here|find\s*out\s*more|get\s*directions|directions)\s*[:：\-–,\s]+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|floor)\b)/i, "")
     .replace(/^(?:address|add|addr|location|headquarters|head\s*office|registered\s*office|corporate\s*office|廠址|地址|view|learn\s*more|read\s*more|see\s*more|click\s*here|find\s*out\s*more|get\s*directions|directions)\s*[:：\-–]?\s*/i, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -2067,7 +2098,8 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
   // 2. Sort candidates strictly by priority hierarchy:
   // - Explicit Headquarters (Tier 1)
   // - Candidates matching provenHomeCountry get a -4.0 boost over overseas branch offices
-  // - Overseas / foreign branch offices get demoted (+4.0) so a US sales office on a foreign site NEVER outranks home HQ
+  // - English candidates matching provenHomeCountry get an additional -6.0 boost
+  // - Overseas / foreign branch offices get demoted (+10.0) so a US/foreign sales office NEVER outranks home HQ
   const sorted = [...candidates].sort((a, b) => {
     let pA = (typeof a === "object" && a.priority !== undefined) ? a.priority : 6;
     let pB = (typeof b === "object" && b.priority !== undefined) ? b.priority : 6;
@@ -2084,6 +2116,16 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
 
       if (matchA && !matchB) pA -= 4.0;
       else if (matchB && !matchA) pB -= 4.0;
+
+      // Penalize foreign branches located outside the home country
+      const countryA = detectCountryFromAddress(rawA);
+      const countryB = detectCountryFromAddress(rawB);
+      if (countryA && countryA.toLowerCase() !== provenHomeCountry) pA += 10.0;
+      if (countryB && countryB.toLowerCase() !== provenHomeCountry) pB += 10.0;
+
+      // Boost English candidate that matches the home country
+      if (matchA && a.isEnglish) pA -= 6.0;
+      if (matchB && b.isEnglish) pB -= 6.0;
     }
     return pA - pB;
   });
@@ -2105,6 +2147,12 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
   // Case B: The verified website candidate is in non-Latin script (e.g. Chinese):
   // -> If Gemini provided an English translation, verify that Gemini faithfully translates bestRaw:
   if (geminiAddr && geminiAddr.length >= 5 && !/^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim()) && !/[\u4e00-\u9fa5]/.test(geminiAddr)) {
+    // Foreign country conflict rejection: If Gemini returned an address in a foreign country (e.g. USA for Chinese company), reject Gemini!
+    const geminiCountry = detectCountryFromAddress(geminiAddr);
+    if (geminiCountry && provenHomeCountry && geminiCountry.toLowerCase() !== provenHomeCountry) {
+      return { address: bestRaw, selectedCandidate: bestCandidate };
+    }
+
     const candComp = extractAddressComponents(bestRaw);
     const geminiComp = extractAddressComponents(geminiAddr);
 
@@ -3335,7 +3383,8 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck) 
     ? crawlData.addressCandidates.map((c, idx) => {
       const typeLabel = c.isHeadquarters ? "HEADQUARTERS / HEAD OFFICE" : (c.locationType ? c.locationType.toUpperCase() : "LOCATION");
       const langLabel = c.isEnglish ? "English" : "Local Language";
-      return `${idx + 1}. [${typeLabel} (${langLabel}, Source: ${c.source})]: ${c.raw}`;
+      const romanized = !c.isEnglish && /[\u4e00-\u9fa5]/.test(c.raw) ? ` -> Romanized English: ${romanizeChineseAddress(c.raw)}` : "";
+      return `${idx + 1}. [${typeLabel} (${langLabel}, Source: ${c.source})]: ${c.raw}${romanized}`;
     }).join("\n")
     : ((crawlData.detectedAddresses || []).join("\n") || "(No physical address candidates extracted from static HTML)");
 
@@ -4602,7 +4651,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // Remove trailing special characters (symbols, dashes, colons, semicolons, commas, slashes, quotes)
   compName = compName.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
   compName = compName.replace(/\.{2,}$/g, ".");
-  compName = compName.replace(/[^a-zA-Z0-9.\u00C0-\u024F]+$/gu, "").trim();
+  compName = compName.replace(/[^\p{L}\p{N}.)]+$/gu, "").trim();
   compName = compName.replace(/(?<![\p{L}\p{N}])\.+$/gu, "").trim();
   compName = compName.replace(/[,;]+$/g, "").trim();
   compName = compName.replace(/\s+/g, " ").trim();
@@ -4633,6 +4682,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
       // Strip conversational boilerplate from start of address e.g. "If you have any enquiries, require a quote or want to book a survey please feel free to call us or send us a message with your requirements Priory Windows And Conservatories 5 Burnt House Road, Whitley Bay"
       addr = addr.replace(/^(?:if\s+you\s+have\s+any\s+enquiries|require\s+a\s+quote|want\s+to\s+book\s+a\s+survey|please\s+feel\s+free\s+to\s+call\s+us|send\s+us\s+a\s+message|with\s+your\s+requirements|get\s+in\s+touch|contact\s+us\s+at)[\s\S]*?(?=\b\d+\s+[A-Za-z]|\b(?:po\s*box|unit|suite|building|floor|no\.?)\b)/i, "").trim();
+
+      // Strip office, department, branch, or headquarters label prefix at start of address
+      // e.g. "Toronto Corporate Head Office:, 40 Edilcan Drive, Concord, Ontario" -> "40 Edilcan Drive, Concord, Ontario"
+      const officePrefixRegex = /^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|direcci[oó]n|ubicaci[oó]n)\s*[:：\-–,\s]+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|floor)\b)/i;
+      addr = addr.replace(officePrefixRegex, "").trim();
 
       if (compName && addr.toLowerCase().startsWith(compName.toLowerCase())) {
         addr = addr.slice(compName.length).trim();
@@ -4739,7 +4793,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = repairBlindlySeparatedCommas(addr);
 
       // Strip trailing contact / communication fields or loose periods attached to address
-      addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
+      addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
       addr = addr.replace(/(?:\s*\.\s*)+$/g, "").trim();
       // Address ending MUST NOT have trailing comma or point/period
       addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
@@ -4795,6 +4849,32 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     else country = "England";
   }
   result.countryName = toTitleCase(country.trim());
+
+  // Cross-Country Conflict Guard: Ensure Company Address does not point to an overseas branch in a different country!
+  if (country && country.length >= 2 && addr && addr !== "Not Available") {
+    const addrCountry = detectCountryFromAddress(addr);
+    if (addrCountry && addrCountry.toLowerCase() !== country.toLowerCase()) {
+      const domesticCandidate = (crawlData.addressCandidates || []).find(c => {
+        const cRaw = typeof c === "object" ? c.raw : c;
+        const cCountry = detectCountryFromAddress(cRaw);
+        if (cCountry && cCountry.toLowerCase() === country.toLowerCase()) return true;
+        if (country.toLowerCase() === "china" && /[\u4e00-\u9fa5]/.test(cRaw)) return true;
+        if (country.toLowerCase() === "taiwan" && (cRaw.toLowerCase().includes("taiwan") || /[\u4e00-\u9fa5]/.test(cRaw))) return true;
+        return false;
+      });
+      if (domesticCandidate) {
+        let domRaw = typeof domesticCandidate === "object" ? domesticCandidate.raw : domesticCandidate;
+        if (/[\u4e00-\u9fa5]/.test(domRaw)) {
+          domRaw = romanizeChineseAddress(domRaw);
+        }
+        domRaw = expandAddressAndStateAbbreviations(domRaw, country);
+        domRaw = removePostalCodesCarefully(domRaw);
+        domRaw = toTitleCase(domRaw);
+        addr = domRaw.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+        result.companyAddress = addr;
+      }
+    }
+  }
 
   // 7. State: Validated based on presence of State / Province / County / Hsien / Region or Capital
   if (!addr || addr.length < 8 || addr.toLowerCase() === "not available") {
@@ -6233,6 +6313,10 @@ function preferOfficialCompanyName(name, crawlData) {
       else if (offNorm.startsWith(domainStem) || domainStem.startsWith(offNorm)) score += 70;
       else if (offNorm.includes(domainStem) || domainStem.includes(offNorm)) score += 50;
     }
+    // Boost English candidate matching domain when current is in Chinese/non-Latin
+    if (/[\u4e00-\u9fa5]/.test(current) && domainStem && offNorm.includes(domainStem)) {
+      score += 70;
+    }
     if (companyNamesMatch(current, official)) score += 80;
 
     // Boost candidate that retains country designation ONLY if it matches the specific country of the domain or current name
@@ -6533,7 +6617,11 @@ function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
       crawlData && crawlData.copyrightText,
       crawlData && crawlData.title,
       crawlData && (crawlData.legalCompanyCandidates || []).join(" "),
-      crawlData && crawlData.mainHtml
+      crawlData && crawlData.mainHtml,
+      crawlData && crawlData.contactHtml,
+      crawlData && crawlData.contactPageText,
+      crawlData && crawlData.bodyText,
+      crawlData && crawlData.combinedText
     ].filter(Boolean).join(" ");
 
     const escBase = base.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
@@ -6648,15 +6736,15 @@ function romanizeChineseAddress(addr) {
     [/新北市/g, "New Taipei City, "],
 
     // Specific zones, parks, districts, entities
-    [/仲恺高新区/g, "Zhongkai Hi-Tech Zone, "],
+    [/仲恺高新区/g, "Zhongkai High-Tech Zone, "],
     [/仲恺/g, "Zhongkai "],
-    [/东江高新科技产业园/g, "Dongjiang Hi-Tech Industrial Park, "],
+    [/东江高新科技产业园/g, "Dongjiang High-Tech Industrial Park, "],
     [/东江/g, "Dongjiang "],
-    [/高新科技产业园/g, "Hi-Tech Industrial Park, "],
-    [/高新技术产业开发区/g, "Hi-Tech Industrial Development Zone, "],
-    [/高新科技园/g, "Hi-Tech Park, "],
-    [/高新技术园区/g, "Hi-Tech Industrial Zone, "],
-    [/高新区/g, "Hi-Tech Zone, "],
+    [/高新科技产业园/g, "High-Tech Industrial Park, "],
+    [/高新技术产业开发区/g, "High-Tech Industrial Development Zone, "],
+    [/高新科技园/g, "High-Tech Park, "],
+    [/高新技术园区/g, "High-Tech Industrial Zone, "],
+    [/高新区/g, "High-Tech Zone, "],
     [/科技工业园/g, "Science & Technology Industrial Park, "],
     [/工业园区/g, "Industrial Park, "],
     [/工业园/g, "Industrial Park, "],
@@ -6681,7 +6769,10 @@ function romanizeChineseAddress(addr) {
     [/漕宝路/g, "Caobao Road, "],
     [/宜山路/g, "Yishan Road, "],
     [/新埔六街/g, "Xinpu 6th Street, "],
-    [/惠泽大道/g, "Huize Road, "],
+    [/草堤路/g, "Caoti Road, "],
+    [/大里區/g, "Dali District, "],
+    [/大里区/g, "Dali District, "],
+    [/惠泽大道/g, "Huize Avenue, "],
     [/惠泽路/g, "Huize Road, "],
     [/惠泽/g, "Huize "],
 
@@ -6691,7 +6782,7 @@ function romanizeChineseAddress(addr) {
     [/街/g, " Street, "],
     [/巷/g, " Lane, "],
     [/弄/g, " Alley, "],
-    [/(\d+)\s*[号號]/g, "$1, "],
+    [/(\d+)\s*[号號]/g, "Number $1, "],
     [/([A-Za-z0-9]+)\s*[幢栋棟]/g, "Building $1, "],
     [/([A-Za-z0-9]+)\s*[层樓楼]/g, "Floor $1, "],
     [/([A-Za-z0-9]+)\s*[室房]/g, "Room $1, "],
@@ -6733,7 +6824,7 @@ function romanizeChineseAddress(addr) {
 function stripBlindlyAddedNumber(addr, rawEvidence = "") {
   if (!addr || !/\bNumber\s+\d+/i.test(addr)) return addr;
   return addr.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    const rawRegex = new RegExp('(?:\\b(?:no|nos|nº|numero|num|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b', 'i');
+    const rawRegex = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
     if (rawEvidence && rawRegex.test(rawEvidence)) {
       return match;
     }
@@ -7863,7 +7954,7 @@ function detectCountryFromAddress(address) {
 
   // 1. Explicit country mentioned in the physical address text
   if (/\b(south\s*africa)\b/i.test(lower)) return "South Africa";
-  if (/\b(taiwan|r\.?o\.?c\.?)\b/i.test(lower)) return "Taiwan";
+  if (/\b(taiwan|r\.?o\.?c\.?)\b/i.test(lower) || /(?:臺灣|台灣|臺北|台北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|彰化|苗栗|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江|大里區|草堤路)/.test(address)) return "Taiwan";
   if (/\b(england)\b/i.test(lower)) return "England";
   if (/\b(scotland)\b/i.test(lower)) return "Scotland";
   if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(lower)) return "Wales";
