@@ -1478,6 +1478,43 @@ async function crawlWebsite(targetUrl) {
           }
         }
       }
+      // Double check for secondary email: if fewer than 2 corporate emails discovered so far,
+      // concurrently fetch up to 2 additional contact/about/support subpages from contactLinks
+      if (allDiscoveredEmails.size < 2 && contactLinks && contactLinks.length > 0) {
+        const extraLinks = [];
+        for (const link of contactLinks) {
+          if (!fetchedUrls.has(link)) {
+            fetchedUrls.add(link);
+            extraLinks.push(link);
+            if (extraLinks.length >= 2) break;
+          }
+        }
+        if (extraLinks.length > 0) {
+          const extraResults = await Promise.allSettled(
+            extraLinks.map(cUrl => fetchDecodedHtml(cUrl, {
+              timeoutMs: 2000,
+              headers: {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+              }
+            }))
+          );
+          for (let i = 0; i < extraLinks.length; i++) {
+            const cUrl = extraLinks[i];
+            const settled = extraResults[i];
+            if (settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
+              const cText = settled.value.html;
+              contactHtml += "\n" + cText;
+              for (const em of extractEmailsFromHtml(cText, finalUrl)) {
+                allDiscoveredEmails.add(em);
+                updateEmailSource(emailSourceMap, em, cUrl, finalUrl, targetUrl);
+              }
+              const pagePhoneLinks = [...cText.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
+              for (const p of pagePhoneLinks) allDiscoveredPhones.add(p);
+            }
+          }
+        }
+      }
     }
 
     // Merge Contact text
@@ -2655,8 +2692,8 @@ function isUnwantedEmail(email) {
   if (/^(?:icon|logo|image|img|pic|photo|asset|banner|file|avatar|bg|font|theme|bundle|chunk|main|vendor|webpack)@/i.test(em)) return true;
   if (/@\d+x\./i.test(em)) return true; // e.g. logo@2x.png
 
-  // Administrative / automated / privacy / non-contact prefixes
-  if (/^(?:noreply|no-reply|donotreply|do-not-reply|postmaster|hostmaster|abuse|mailer-daemon|bounce|unsubscribe|notification|notifications|alert|alerts|security|dpo|gdpr|privacy|compliance|legal|copyright|dmca|terms|feedback|careers|job|jobs|hiring|recruiting|investor|investors|press|media|sentry|git|npm)@/i.test(em)) return true;
+  // Administrative / automated / bounce / non-contact prefixes (preserves department emails like sales, support, careers, jobs, press, media, hr, feedback, office)
+  if (/^(?:noreply|no-reply|donotreply|do-not-reply|postmaster|hostmaster|abuse|mailer-daemon|bounce|unsubscribe|notification|notifications|alert|alerts|sentry|git|npm|dpo)@/i.test(em)) return true;
 
   // Placeholder / dummy emails
   if (/^(?:user|email|name|test|sample|placeholder|yourname|youremail|username|example|domain|contact|admin|info)@(?:example|domain|test|sample|email|placeholder|yoursite|mysite|mycompany|yourcompany|company|website|sitename)\./i.test(em)) return true;
@@ -2767,26 +2804,41 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     } catch (e) { }
   }
 
-  // 4. Decode mailto: links (including mailto:user@domain.com?subject=...)
-  const mailtoMatches = [...html.matchAll(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)].map(m => m[1]);
-  for (const em of mailtoMatches) {
-    const cleanedEm = em.toLowerCase().trim();
-    if (!isUnwantedEmail(cleanedEm)) {
-      candidateEmails.add(cleanedEm);
+  // 4. Decode all mailto: links (including multiple comma/semicolon separated emails and ?cc= / ?bcc= parameters)
+  const mailtoBlocks = [...html.matchAll(/(?:href=["']|data-[a-z0-9_-]*=["'])\s*mailto:([^"'>\s]+)/gi)];
+  for (const mb of mailtoBlocks) {
+    try {
+      const decodedMailto = decodeURIComponent(mb[1]).replace(/%40|&#64;/gi, "@");
+      const subEmails = decodedMailto.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+      for (const se of subEmails) {
+        const cleanSe = se.toLowerCase().trim();
+        if (isValidCorporateEmail(cleanSe) && !isUnwantedEmail(cleanSe)) {
+          candidateEmails.add(cleanSe);
+        }
+      }
+    } catch (e) { }
+  }
+
+  // 5. Extract emails from data attributes, hidden inputs, meta tags, and structured attributes
+  const attrMatches = [...html.matchAll(/(?:data-[a-z0-9_-]*(?:email|mail|contact)|value|content|title|alt)=["']([a-zA-Z0-9._%+-]+(?:@|%40|&#64;)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
+  for (const am of attrMatches) {
+    const rawEm = am[1].replace(/%40|&#64;/gi, "@").toLowerCase().trim();
+    if (isValidCorporateEmail(rawEm) && !isUnwantedEmail(rawEm)) {
+      candidateEmails.add(rawEm);
     }
   }
 
-  // 5. Extract emails from JSON-LD, script hydration, and social profile JSON before stripping scripts
-  const scriptJsonEmailMatches = [...html.matchAll(/"(?:email|emailAddress|e-mail|mail|text)"\s*:\s*["']([a-zA-Z0-9._%+-]+(?:@|\\u0040|%40)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
-  for (const sjm of scriptJsonEmailMatches) {
-    const em = sjm[1].replace(/\\u0040/gi, "@").replace(/%40/gi, "@").toLowerCase().trim();
-    if (isValidCorporateEmail(em) && !isUnwantedEmail(em)) {
-      candidateEmails.add(em);
+  // 6. Extract emails from JSON-LD, script hydration, Next.js / Nuxt state, and social profile JSON before stripping scripts
+  const scriptMatches = [...html.matchAll(/[a-zA-Z0-9._%+-]+(?:@|\\u0040|%40)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)];
+  for (const sm of scriptMatches) {
+    const emClean = sm[0].replace(/\\u0040|%40/gi, "@").toLowerCase().trim();
+    if (isValidCorporateEmail(emClean) && !isUnwantedEmail(emClean)) {
+      candidateEmails.add(emClean);
     }
   }
 
-  // 6. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
-  // Strip <script> and <style> tags to avoid capturing error tracking (e.g. Wix Sentry DSNs), analytics tokens, and bundle code
+  // 7. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
+  // Strip <script> and <style> tags to avoid capturing error tracking, analytics tokens, and bundle code
   const emailSearchText = html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
@@ -2812,6 +2864,16 @@ function extractEmailsFromHtml(html, hostDomain = "") {
       }
     }
     candidateEmails.add(em);
+  }
+
+  // Also match on tag-stripped text to catch emails split by inline formatting tags (e.g. <span>sales</span>@<span>domain</span>)
+  const strippedText = stripHtml(emailSearchText);
+  const textEmails = strippedText.match(emailRegex) || [];
+  for (let em of textEmails) {
+    em = em.toLowerCase().trim();
+    if (isValidCorporateEmail(em) && !isUnwantedEmail(em)) {
+      candidateEmails.add(em);
+    }
   }
 
   const uniqueEmails = [];
@@ -4262,7 +4324,7 @@ CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME
 - MANDATORY PHONE NUMBER QC RULE:
   * "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
 - MANDATORY EMAIL QC RULE:
-  * "Primary email and secondary emails should NOT be the same. Emails can be found in any place on the website or company social media like LinkedIn and Facebook. If only one email exists, secondaryEmailId MUST be empty string \"\"."
+  * "Primary email and secondary emails should NOT be the same. Emails can be found in any place on the website or company social media like LinkedIn and Facebook. If a secondary email is available, double-check and ALWAYS take it. If only one email exists across the entire website and social channels, secondaryEmailId MUST be empty string \"\"."
 - CRITICAL "NUMBER" EXPANSION RULE ("if No come only expand and do with out coming dont put blankly number"):
   * ONLY expand to "Number" if the original address explicitly contains "No.", "No", "NO.", "Nos.", "Nº", or "#" (e.g. "No. 56-106, Zhangma St." -> "Number 56-106, Zhangma Street", "NO. 12" -> "Number 12").
   * If the original address does NOT contain "No" or "No." (e.g. it is just "18 Kuang Fu North Road", "40 Sarah Street", "12 Stephen Road", "46 Market Hill"), DO NOT put "Number"! Output "18 Kuang Fu North Road" (NEVER put "Number" if "No" was not in the original text!).
@@ -4646,11 +4708,13 @@ EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE & SOCIAL CHANNELS):
    * Extract the main corporate, general business, or headquarters contact email (e.g. info@..., contact@..., enquiries@..., sales@..., or main corporate domain email).
    * Check official website pages first. If NO email is found on the website pages, check official company LinkedIn or Facebook profiles.
    * Never leave emailId blank if a valid corporate email exists anywhere in the crawled content or social profiles.
-4. Secondary Email (secondaryEmailId) - CRITICAL QC RULE:
-   * secondaryEmailId is for an ALTERNATE, DISTINCT corporate email (e.g. different department such as sales@..., support@..., service@..., export@..., accounts@..., hr@..., admin@..., or a branch/personnel email).
+4. Secondary Email (secondaryEmailId) - CRITICAL QC RULE (DOUBLE CHECK & ALWAYS TAKE IF AVAILABLE):
+   * DOUBLE CHECK FOR SECONDARY EMAIL: "If a secondary email is available, double-check and ALWAYS take it. Primary and secondary emails should NOT be the same."
+   * Review the "All Corporate Emails Discovered on Website" list provided below:
+     - If this list contains 2 or more distinct corporate emails, secondaryEmailId MUST be populated with the second distinct corporate email (different department or person, e.g. sales@..., support@..., service@..., export@..., accounts@..., hr@..., admin@..., careers@..., office@..., or a branch/personnel email).
+     - DO NOT leave secondaryEmailId blank if an alternate corporate email is available on the website or official LinkedIn/Facebook!
    * secondaryEmailId MUST be different and distinct from emailId.
-   * If two or more distinct corporate emails exist on the website or official LinkedIn/Facebook pages, secondaryEmailId MUST be populated with the second distinct email.
-   * If the website and social media contain ONLY ONE email address, secondaryEmailId MUST be "" (empty string). NEVER duplicate the primary email or invent a fake one.
+   * If and ONLY if the website and social media contain just ONE single email address across all pages and evidence, return "" (empty string). NEVER duplicate the primary email or invent a fake one.
 5. Strict Email Anti-Artifact & Anti-Hallucination Rules:
    * NEVER extract scraping, legal, or privacy policy artifacts like "collected@www...", "posted@...", "sent@...", "accessed@...", or any email containing "www." in the domain.
    * NEVER invent, hallucinate, or guess email addresses. Only extract genuine corporate emails explicitly present in the website or official company LinkedIn/Facebook pages.
@@ -5958,7 +6022,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
   result.emailId = email;
 
-  // 10. Secondary Email ID (Strict Quality Control: only genuine corporate alternate from same domain or Facebook/LinkedIn company source)
+  // 10. Secondary Email ID (Double Check: if secondary email is available, ALWAYS take it!)
   let secEmail = (result.secondaryEmailId || "").trim().toLowerCase();
   const primHost = email ? (email.split("@")[1] || "").toLowerCase() : "";
 
@@ -5971,35 +6035,41 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     return false;
   };
 
-  // If Gemini provided a secondary email, validate it strictly
+  // If Gemini provided a secondary email, validate it
   if (secEmail) {
     if (
       secEmail === email ||
       !isValidCorporateEmail(secEmail) ||
-      isUnwantedEmail(secEmail) ||
-      !isCompanyDomainEmail(secEmail)
+      isUnwantedEmail(secEmail)
     ) {
+      secEmail = "";
+    } else if (!isCompanyDomainEmail(secEmail) && !crawlEmails.includes(secEmail)) {
+      // Reject only if it's completely unverified (neither matching company domain nor discovered in crawl HTML/socials)
       secEmail = "";
     }
   }
 
-  // Fallback ONLY to a verified distinct alternate corporate email from the SAME company domain discovered during crawl.
-  // NEVER force an unwanted, external, or non-domain email if the site only has one email!
+  // Double Check Fallback: If secondary email is missing/empty, take any verified distinct corporate email discovered during crawl!
   if (!secEmail && email) {
-    const cleanCrawlAlternates = crawlEmails.filter(e => {
+    // Priority 1: distinct corporate email from same company domain
+    let cand = crawlEmails.find(e => {
       const emLower = (e || "").trim().toLowerCase();
-      if (!emLower || emLower === email || !isValidCorporateEmail(emLower) || isUnwantedEmail(emLower)) {
-        return false;
-      }
-      return isCompanyDomainEmail(emLower);
+      return emLower && emLower !== email && isValidCorporateEmail(emLower) && !isUnwantedEmail(emLower) && isCompanyDomainEmail(emLower);
     });
-
-    if (cleanCrawlAlternates.length > 0) {
-      secEmail = cleanCrawlAlternates[0];
+    // Priority 2: any distinct corporate email discovered on website/socials during crawl (e.g. branch, sister brand, ISP, or social channel email)
+    if (!cand) {
+      cand = crawlEmails.find(e => {
+        const emLower = (e || "").trim().toLowerCase();
+        return emLower && emLower !== email && isValidCorporateEmail(emLower) && !isUnwantedEmail(emLower);
+      });
+    }
+    if (cand) {
+      secEmail = cand;
     }
   }
 
-  if (secEmail === email || !isValidCorporateEmail(secEmail) || isUnwantedEmail(secEmail) || !isCompanyDomainEmail(secEmail)) {
+  // Final QC: secondary email must be valid and strictly distinct from primary email
+  if (secEmail === email || !isValidCorporateEmail(secEmail) || isUnwantedEmail(secEmail)) {
     secEmail = "";
   }
   result.secondaryEmailId = secEmail;
