@@ -42,30 +42,48 @@
 
       await ensureServiceWorkerAwake();
 
-      // Use persistent port connection for long-running CRAWL_AND_EXTRACT tasks (prevents MV3 message channel closure)
+      // Use persistent port connection with heartbeat for CRAWL_AND_EXTRACT tasks (prevents MV3 message channel closure)
       if (message.action === "CRAWL_AND_EXTRACT" && chrome.runtime.connect) {
         try {
           const port = chrome.runtime.connect({ name: "ai-crawl-port" });
           let portResolved = false;
+          let pingInterval = setInterval(() => {
+            if (portResolved) return;
+            try {
+              port.postMessage({ action: "PING" });
+            } catch (e) {
+              clearInterval(pingInterval);
+            }
+          }, 3000);
+
+          function cleanupPort() {
+            if (pingInterval) {
+              clearInterval(pingInterval);
+              pingInterval = null;
+            }
+            try { port.disconnect(); } catch (e) { }
+          }
 
           const portTimer = setTimeout(() => {
             if (portResolved) return;
             portResolved = true;
-            try { port.disconnect(); } catch (e) { }
+            cleanupPort();
             sendMessageDirect(message, retryCount).then(resolve);
-          }, 28000);
+          }, 24000);
 
           port.onMessage.addListener((res) => {
+            if (res && res.action === "PONG") return; // Keepalive pong
             if (portResolved) return;
             portResolved = true;
             clearTimeout(portTimer);
-            try { port.disconnect(); } catch (e) { }
+            cleanupPort();
             resolve(res);
           });
 
           port.onDisconnect.addListener(() => {
             if (portResolved) return;
             clearTimeout(portTimer);
+            cleanupPort();
             sendMessageDirect(message, retryCount).then(resolve);
           });
 

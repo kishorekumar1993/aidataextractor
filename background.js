@@ -461,18 +461,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "CRAWL_AND_EXTRACT") {
-    // Keep MV3 service worker alive while crawling
+    // Keep MV3 service worker alive while crawling using storage keepalive
     let keepAlive = setInterval(() => {
-      try { chrome.runtime.getPlatformInfo(() => {}); } catch (e) { }
-    }, 2500);
+      try {
+        if (chrome && chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({ _sw_beat: Date.now() }, () => {});
+        }
+      } catch (e) { }
+    }, 2000);
 
-    // Bounded safety timeout: 28s prevents permanent stalls while allowing full AI processing
+    // Bounded safety timeout: 20s (well before Chrome's 30s message channel deadline)
     let finished = false;
     const timeoutId = setTimeout(() => {
       if (finished) return;
       finished = true;
       clearInterval(keepAlive);
-      console.warn("[Background] Crawl reached safety boundary (28s). Returning timeout Not Working result before port closes.");
+      console.warn("[Background] Crawl reached safety boundary (20s). Returning timeout Not Working result before channel closes.");
       try {
         const timeoutNotWorking = {
           websiteStatus: "Not Working",
@@ -492,17 +496,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           errorCategory: "Unreachable / Timeout",
           errorKeyword: "Connection Timeout / Unresponsive",
           errorSourceUrl: request.url,
-          errorSnippet: "Website took longer than 28 seconds to respond or server is unresponsive (Rule 1).",
-          notWorkingReason: "Website took longer than 28 seconds to respond or server is unresponsive (Rule 1).",
+          errorSnippet: "Website took longer than 20 seconds to respond or server is unresponsive (Rule 1).",
+          notWorkingReason: "Website took longer than 20 seconds to respond or server is unresponsive (Rule 1).",
           _finalUrl: request.url,
           _originalUrl: request.url,
           _note: "Crawl timeout reached safety boundary - Marked as Not Working (Rule 1)"
         };
         sendResponse({ success: true, data: timeoutNotWorking });
       } catch (err) {
-        sendResponse({ success: false, error: "Crawl timeout" });
+        try { sendResponse({ success: false, error: "Crawl timeout" }); } catch (e) { }
       }
-    }, 28000);
+    }, 20000);
 
     handleCrawlAndExtract(request.url)
       .then(result => {
@@ -510,7 +514,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         finished = true;
         clearTimeout(timeoutId);
         clearInterval(keepAlive);
-        sendResponse({ success: true, data: result });
+        try { sendResponse({ success: true, data: result }); } catch (e) { }
       })
       .catch(error => {
         if (finished) return;
@@ -518,53 +522,66 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         clearTimeout(timeoutId);
         clearInterval(keepAlive);
         console.warn("[Background] handleCrawlAndExtract caught error:", error.message);
-        sendResponse({
-          success: true,
-          data: {
-            websiteStatus: "Not Working",
-            businessType: "",
-            companyProfile: "",
-            companyName: "",
-            countryName: "",
-            companyAddress: "",
-            state: "",
-            city: "",
-            emailId: "",
-            secondaryEmailId: "",
-            phoneNumber: "",
-            numberOfProducts: "",
-            productImages: "",
-            numberOfProductDescriptions: "",
-            _note: `Unreachable / Failed to Fetch (${error.message || "Site error"}) - Marked as Not Working`
-          }
-        });
+        try {
+          sendResponse({
+            success: true,
+            data: {
+              websiteStatus: "Not Working",
+              businessType: "",
+              companyProfile: "",
+              companyName: "",
+              countryName: "",
+              companyAddress: "",
+              state: "",
+              city: "",
+              emailId: "",
+              secondaryEmailId: "",
+              phoneNumber: "",
+              numberOfProducts: "",
+              productImages: "",
+              numberOfProductDescriptions: "",
+              _note: `Unreachable / Failed to Fetch (${error.message || "Site error"}) - Marked as Not Working`
+            }
+          });
+        } catch (e) { }
       });
     return true;
   }
 
   if (request.action === "TEST_API_KEY") {
     testGeminiApiKey(request.apiKey || DEFAULT_API_KEY, request.model || DEFAULT_MODEL)
-      .then(res => sendResponse(res))
-      .catch(err => sendResponse({ success: false, error: err.message }));
+      .then(res => { try { sendResponse(res); } catch (e) { } })
+      .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
     return true;
   }
 });
 
-// Port-based long-lived channel support for Chrome MV3
+// Port-based long-lived channel support with safe heartbeat for Chrome MV3
 if (chrome && chrome.runtime && chrome.runtime.onConnect) {
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name === "ai-crawl-port") {
+      let isDisconnected = false;
+      port.onDisconnect.addListener(() => {
+        isDisconnected = true;
+      });
+
       port.onMessage.addListener(async (msg) => {
         if (msg.action === "PING") {
-          try { port.postMessage({ action: "PONG" }); } catch (e) { }
+          if (!isDisconnected) {
+            try { port.postMessage({ action: "PONG" }); } catch (e) { }
+          }
           return;
         }
         if (msg.action === "CRAWL_AND_EXTRACT") {
           try {
             const result = await handleCrawlAndExtract(msg.url);
-            port.postMessage({ success: true, data: result });
+            if (!isDisconnected) {
+              try { port.postMessage({ success: true, data: result }); } catch (e) { }
+            }
           } catch (err) {
-            port.postMessage({ success: false, error: err.message });
+            if (!isDisconnected) {
+              try { port.postMessage({ success: false, error: err.message }); } catch (e) { }
+            }
           }
         }
       });
@@ -880,7 +897,7 @@ function isAntiBotChallenge(html, status) {
  */
 async function fetchDecodedHtml(url, options = {}) {
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 10000;
+  const timeoutMs = options.timeoutMs || 5000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -1190,7 +1207,7 @@ async function crawlWebsite(targetUrl) {
 
   try {
     let mainRes = await fetchDecodedHtml(targetUrl, {
-      timeoutMs: 8000,
+      timeoutMs: 5000,
       headers: {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1352,14 +1369,14 @@ async function crawlWebsite(targetUrl) {
     const shouldSkipSubpages = earlyRestricted.isRestricted;
 
     if (!shouldSkipSubpages) {
-      // Pick balanced target subpages (up to 5-6 distinct subpages):
+      // Pick balanced target subpages (max 2-3 distinct subpages for fast crawl):
       // 1. Any link matching high-alert restricted hints (e.g. /products/medical, /knives, /defense)
-      // 2. Top 2 contact/about links (for physical address, legal company name, profile)
-      // 3. Top 2-3 product/catalog links (for product catalog, products, and restriction verification)
+      // 2. Top contact/about link (for physical address, legal company name, profile)
+      // 3. Top product/catalog link (for product catalog, products, and restriction verification)
       const topLinks = [];
       const seenPaths = new Set();
 
-      // (a) First: add any links flagged with prohibited / restricted hints
+      // (a) First: add any links flagged with prohibited / restricted hints (max 1)
       for (const item of productCandidates.filter(c => c.isRestrictedHint)) {
         try {
           const uPath = new URL(item.url).pathname.toLowerCase().replace(/\/$/, "");
@@ -1367,12 +1384,12 @@ async function crawlWebsite(targetUrl) {
             seenPaths.add(uPath);
             topLinks.push(item.url);
             fetchedUrls.add(item.url);
+            break;
           }
         } catch (e) { }
       }
 
-      // (b) Add top 2 contact/about links
-      let cCount = 0;
+      // (b) Add top contact/about link (max 1 for high speed)
       for (const link of contactLinks) {
         if (fetchedUrls.has(link)) continue;
         try {
@@ -1381,13 +1398,11 @@ async function crawlWebsite(targetUrl) {
           seenPaths.add(uPath);
           topLinks.push(link);
           fetchedUrls.add(link);
-          cCount++;
-          if (cCount >= 2) break;
+          break;
         } catch (e) { }
       }
 
-      // (c) Add top 2-3 product/catalog links
-      let pCount = 0;
+      // (c) Add top product/catalog link (max 1 for high speed)
       for (const item of productCandidates.filter(c => !c.isRestrictedHint)) {
         if (fetchedUrls.has(item.url)) continue;
         try {
@@ -1396,16 +1411,15 @@ async function crawlWebsite(targetUrl) {
           seenPaths.add(uPath);
           topLinks.push(item.url);
           fetchedUrls.add(item.url);
-          pCount++;
-          if (pCount >= 3) break;
+          break;
         } catch (e) { }
       }
 
       if (topLinks.length > 0) {
-        // High-speed concurrent parallel fetching of candidate subpages
+        // High-speed concurrent parallel fetching of candidate subpages (3s timeout)
         const subpageResults = await Promise.allSettled(
           topLinks.map(cUrl => fetchDecodedHtml(cUrl, {
-            timeoutMs: 4500,
+            timeoutMs: 3000,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -4492,7 +4506,7 @@ Return ONLY valid JSON matching this schema:
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${apiKey}`;
     try {
       const abortCtrl = new AbortController();
-      const abortTimer = setTimeout(() => abortCtrl.abort(), 6500);
+      const abortTimer = setTimeout(() => abortCtrl.abort(), 5000);
       let response;
       try {
         response = await fetch(url, {
@@ -4850,14 +4864,16 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
   let websiteStatus = (shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working");
 
-  // Rule 1: If website has 0 products and no address and no inferred business evidence, mark Not Working!
-  if (!address && prodCount === "0" && !inferredBusiness) {
+  // Rule 1: If website has 0 products and no address or no verifiable contact information, mark Not Working!
+  const hasContactEvidence = !!(address || emailId || phoneNumber);
+  const isZeroProdUnverifiable = (!address && prodCount === "0") || (!hasContactEvidence && prodCount === "0");
+  if (isZeroProdUnverifiable) {
     websiteStatus = "Not Working";
   }
 
   // CRITICAL RULE: "Notworking means all empty"
   if (websiteStatus === "Not Working") {
-    const isZeroProdReason = (!address && prodCount === "0" && !inferredBusiness);
+    const isZeroProdReason = isZeroProdUnverifiable;
     const reasonMsg = isZeroProdReason
       ? "Website has 0 products and no verifiable catalog or physical address (Rule 1)."
       : (crawlData.fetchError || "Website has no verifiable business products, physical address, or services.");
@@ -5194,7 +5210,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   } else {
     // Check if the business actually sells or supplies physical products (e.g. windows, doors, conservatories, materials, equipment, supplies)
     const isPhysicalSupplier = checkPhysicalProductSupplier(crawlData, result);
-    if (isPhysicalSupplier) {
+    const hasAnyRealContent = !!(result.companyAddress || (result.numberOfProducts && result.numberOfProducts !== "0") || (crawlData && crawlData.detectedProductCount > 0) || result.emailId || result.phoneNumber);
+    if (isPhysicalSupplier && hasAnyRealContent) {
       result.businessType = "Supplier";
       if (!result.websiteStatus || result.websiteStatus === "Working") {
         result.websiteStatus = isRedirectSite ? "Redirect Site" : "Working";
