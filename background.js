@@ -462,10 +462,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (finished) return;
       finished = true;
       clearInterval(keepAlive);
-      console.warn("[Background] Crawl reached safety boundary. Returning fallback result before port closes.");
+      console.warn("[Background] Crawl reached safety boundary. Returning timeout Not Working result before port closes.");
       try {
-        const fallback = heuristicExtraction({ originalUrl: request.url, finalUrl: request.url, status: "Working", emails: [], phones: [] }, { isRestricted: false });
-        sendResponse({ success: true, data: fallback });
+        const timeoutNotWorking = {
+          websiteStatus: "Not Working",
+          businessType: "",
+          companyProfile: "",
+          companyName: "",
+          countryName: "",
+          companyAddress: "",
+          state: "",
+          city: "",
+          emailId: "",
+          secondaryEmailId: "",
+          phoneNumber: "",
+          numberOfProducts: "",
+          productImages: "",
+          numberOfProductDescriptions: "",
+          errorCategory: "Unreachable / Timeout",
+          errorKeyword: "Connection Timeout / Unresponsive",
+          errorSourceUrl: request.url,
+          errorSnippet: "Website took longer than 24 seconds to respond or server is unresponsive (Rule 1).",
+          notWorkingReason: "Website took longer than 24 seconds to respond or server is unresponsive (Rule 1).",
+          _finalUrl: request.url,
+          _originalUrl: request.url,
+          _note: "Crawl timeout reached safety boundary - Marked as Not Working (Rule 1)"
+        };
+        sendResponse({ success: true, data: timeoutNotWorking });
       } catch (err) {
         sendResponse({ success: false, error: "Crawl timeout" });
       }
@@ -941,7 +964,7 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   // 3. Strip trailing marketing taglines / SEO categories if corporate legal suffix is already present
   // e.g. "Danzer UK Limited - Timber Merchants Suppliers of Hardwoods" -> "Danzer UK Limited"
   // e.g. "YUKIWA SEIKO USA INC. Drill Chucks, Tool Holder..." -> "YUKIWA SEIKO USA INC."
-  const legalSuffixCutoff = /\b(Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada|Sociedad\s*An[oó]nima)\b(?:\s*[-–—|:•·,]\s*|\s+(?:Drill|Tool|Rotary|Spring|Chucks|Holder|Tables|Collets|Manufacturer|Supplier|Wholesaler|Distributor|Products|Services|Solutions|Store|Shop|Leading|Specialists|Machining|Precision|Online|Official)\b|\.\s+[A-Z]).*$/i;
+  const legalSuffixCutoff = /\b(Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company,\s*Limited|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada|Sociedad\s*An[oó]nima|Joint\s+Stock\s+Company|Societas\s+Europaea|Limitada|Ltda\.?|P?JSC|Spółka\s+z\s+ograniczoną\s+odpowiedzialnością|Besloten\s+Vennootschap|Naamloze\s+Vennootschap|Societ[aà]\s+per\s+Azioni|Societ[aà]\s+a\s+Responsabilit[aà]\s+Limitata|Aktiebolag|Aksjeselskap|Osakeyhtiö)\b(?:\s*[-–—|:•·,]\s*|\s+(?:Drill|Tool|Rotary|Spring|Chucks|Holder|Tables|Collets|Manufacturer|Supplier|Wholesaler|Distributor|Products|Services|Solutions|Store|Shop|Leading|Specialists|Machining|Precision|Online|Official)\b|\.\s+[A-Z]).*$/i;
   name = name.replace(legalSuffixCutoff, "$1");
 
   // 4. Strip trailing SEO taglines even without separator if starts with " - Manufacturer of...", " | Suppliers of..."
@@ -1192,8 +1215,10 @@ async function crawlWebsite(targetUrl) {
         status = "Domain Expired";
         fetchError = "Site returned HTTP 404 Not Found";
       } else if (mainRes.status === 403 || mainRes.status === 401 || isAntiBotChallenge(mainRes.html, mainRes.status)) {
+        status = "Not Working";
         fetchError = `Site access restricted / blocked (HTTP ${mainRes.status || 403} Security Check / Forbidden)`;
       } else {
+        status = "Not Working";
         fetchError = mainRes.error || `Connection failed or empty response (HTTP ${mainRes.status || 0})`;
       }
     }
@@ -4262,8 +4287,56 @@ COMPANY NAME RULES (Rule 4):
      * Inc, Inc. -> Incorporated
      * LLC, L.L.C. -> Limited Liability Company
      * LLP, L.L.P. -> Limited Liability Partnership
+     * LP, L.P. -> Limited Partnership
+     * PLLC, P.L.L.C. -> Professional Limited Liability Company
      * Co, Co. -> Company
      * Corp, Corp. -> Corporation
+     * Co., Ltd., Co. Ltd. -> Company, Limited (always include comma before Limited!)
+     * Mfg., Mfg -> Manufacturing
+     * Mfr., Mfrs. -> Manufacturer, Manufacturers
+     * Ind., Inds., Indust. -> Industries / Industrial
+     * Intl., Intl, Int'l -> International
+     * Natl., Natl, Nat'l -> National
+     * Tech., Technol., Tech -> Technology / Technologies
+     * Engg., Eng., Engr. -> Engineering
+     * Dev., Devel. -> Development
+     * Sys., Syst. -> Systems
+     * Prod., Prods. -> Products
+     * Equip., Eqpt. -> Equipment
+     * Svcs., Svc., Serv. -> Services
+     * Soln., Solns. -> Solutions
+     * Assoc., Assocs. -> Associates
+     * Grp., Grp -> Group
+     * Chem., Chems. -> Chemicals / Chemical
+     * Elec., Elect. -> Electronics / Electrical
+     * Auto., Auto -> Automotive / Automation
+     * Dist., Distrib. -> Distribution / Distributors
+     * Fab., Fab -> Fabrication
+     * Mach., Mach -> Machinery
+     * Pkg., Pack. -> Packaging
+     * Mgmt., Mgt. -> Management
+     * Comm., Comms. -> Communications
+     * Lab., Labs. -> Laboratories
+     * Mat., Matl. -> Materials
+     * Appl., App. -> Applied
+     * Adv., Adv -> Advanced
+     * Gen., Gen -> General
+     * Std., Std -> Standard
+     * Env., Envr. -> Environmental
+     * Trans., Transp. -> Transportation / Transport
+     * Log., Logist. -> Logistics
+     * Const., Constr. -> Construction
+     * Pharm., Pharm -> Pharmaceuticals
+     * Agri., Agric. -> Agricultural
+     * Telecom. -> Telecommunications
+     * JSC, PJSC, OJSC -> Joint Stock Company, Public Joint Stock Company, Open Joint Stock Company
+     * Ltda., Ltda -> Limitada
+     * S.A. de C.V. -> Sociedad Anónima de Capital Variable
+     * S. de R.L. de C.V. -> Sociedad de Responsabilidad Limitada de Capital Variable
+     * SE -> Societas Europaea
+     * s.r.o. -> společnost s ručením omezeným
+     * d.o.o. -> društvo s ograničenom odgovornošću
+     * Kft. -> Korlátolt Felelősségű Társaság
 5. EXTRACT TRUE BRAND & COMPLETE LEGAL NAME (NEVER MARKETING SLOGANS OR INCOMPLETE DESCRIPTORS):
    - You MUST analyze ALL website pages (About Us, Company Profile, Terms & Conditions, Privacy Policy, Legal / Impressum, and official registration numbers like ABN/ACN).
    - If an official registered corporate name with prefix, suffix, and category exists anywhere on the site (e.g. "Custom Flatpack Proprietary Limited" / "Custom Flatpack Pty Ltd"), you MUST output that FULL official registered name! NEVER output an incomplete brand or marketing name like "Custom Flat Packs".
@@ -5023,7 +5096,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
     result.errorSnippet = "Domain Expired or Server returned HTTP 404 Not Found (Rule 1)";
   } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working") {
-    result.websiteStatus = crawlData.status || "Not Working";
+    result.websiteStatus = (crawlData.status && crawlData.status !== "Working") ? crawlData.status : "Not Working";
     result.errorCategory = crawlData.fetchError ? "Unreachable / Timeout" : "No Business Content";
     result.errorKeyword = crawlData.fetchError ? "Connection Failed" : "No Verifiable Content";
     result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
@@ -5330,7 +5403,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
       // Remove unwanted comma between street/building number and street name
       // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
-      addr = addr.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
+      addr = addr.replace(/(\b(?:Number|No\.?|#)\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1 $2');
+      addr = addr.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
 
       // Strip leading list/index numbers before company names in address only if followed by a separate street address number (e.g. "138 U.S. Tsubaki Industrial, LLC 250 Kirby Drive...")
       addr = addr.replace(/^\d{1,4}\s+([A-Z].*?\b(?:LLC|Inc\.?|Corp\.?|Ltd\.?|Limited)\b)(?=\s+\d+\s+[A-Z])/i, (m, g) => g);
@@ -5360,6 +5434,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
       // Final pass: clean postal codes, stray quotes, and punctuation
       addr = removePostalCodesCarefully(addr);
+      addr = addr.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "").trim();
+      addr = addr.replace(/(\b(?:City|District|Township|County|Hsien|Village|Li|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
+      addr = addr.replace(/\bChia,\s*Yi\s*City\b/gi, "Chiayi City");
+      addr = addr.replace(/\bChia[-\s,]*[Yy]i\s*City\b/gi, "Chiayi City");
+      addr = normalizeTaiwanDivisions(addr);
+      addr = repairBlindlySeparatedCommas(addr);
       addr = addr.replace(/["“”«»`]+/g, " ");
       // Strictly enforce: No special characters or invisible symbols at the beginning (FIRST) or end (LAST)
       addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
@@ -6817,7 +6897,7 @@ function evaluateCityQC(address, country) {
 }
 
 const LEGAL_SUFFIX_CAPTURE =
-  "((?:[\\(\\[]?\\s*(?:pty|pte|pvt|sdn|bhd|co\\.?|corp\\.?|inc\\.?|llc|llp|pllc|gmbh|sa|bv|nv|ag|kg|oy|ab|as|m|malaysia)\\s*[\\)\\]]?[\\s,]*){0,3}(?:ltd\\.?|limited|inc\\.?|incorporated|bhd\\.?|berhad|sdn[\\.\\s]+bhd\\.?|sendirian\\s*berhad|llc|pllc|llp|gmbh(?:\\s*(?:&|\\+|und|and|u\\.)\\s*co\\.?\\s*kg)?|gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+haftung(?:\\s+and\\s+compagnie\\s+kommanditgesellschaft)?|aktiengesellschaft|kommanditgesellschaft|ag|kg|s\\.?r\\.?l\\.?s?|s\\.?p\\.?a\\.?|s\\.?l\\.?u?\\.?|s\\.?a\\.?u?\\.?|sociedad\\s*limitada|sociedad\\s*an[oó]nima|tbk\\.?|terbuka|plc\\.?|corp\\.?|corporation|company\\s+limited|proprietary\\s+limited|private\\s+limited|besloten\\s*vennootschap|b\\.?v\\.?|n\\.?v\\.?))";
+  "((?:[\\(\\[]?\\s*(?:pty|pte|pvt|sdn|bhd|co\\.?|corp\\.?|inc\\.?|llc|llp|pllc|gmbh|sa|bv|nv|ag|kg|oy|ab|as|m|malaysia)\\s*[\\)\\]]?[\\s,]*){0,3}(?:ltd\\.?|limited|inc\\.?|incorporated|bhd\\.?|berhad|sdn[\\.\\s]+bhd\\.?|sendirian\\s*berhad|llc|pllc|llp|gmbh(?:\\s*(?:&|\\+|und|and|u\\.)\\s*co\\.?\\s*kg)?|gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+haftung(?:\\s+and\\s+compagnie\\s+kommanditgesellschaft)?|aktiengesellschaft|kommanditgesellschaft|ag|kg|s\\.?r\\.?l\\.?s?|s\\.?p\\.?a\\.?|s\\.?l\\.?u?\\.?|s\\.?a\\.?u?\\.?|sociedad\\s*limitada|sociedad\\s*an[oó]nima|tbk\\.?|terbuka|plc\\.?|corp\\.?|corporation|company\\s+limited|proprietary\\s+limited|private\\s+limited|besloten\\s*vennootschap|b\\.?v\\.?|n\\.?v\\.?|joint\\s+stock\\s+company|societas\\s+europaea|limitada|ltda\\.?|p?jsc|sro|doo|kft))";
 
 function companyEvidenceCorpus(crawlData) {
   if (!crawlData) return "";
@@ -6860,7 +6940,7 @@ function hasCompleteLegalSuffix(name) {
   // Indonesian prefixes
   if (/^(?:PT|P\.T\.|CV|C\.V\.|UD|U\.D\.|Perseroan\s+Terbatas)\b/i.test(n)) return true;
   // Complete forms across countries
-  return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|berhad|perkongsian\s+liabiliti\s+terhad|limited\s+liability\s+(?:company|partnership)|gesellschaft\s+mit\s+beschr[äa]nkter\s+haftung|aktiengesellschaft|kommanditgesellschaft|offene\s+handelsgesellschaft|unternehmergesellschaft|eingetragener\s+kaufmann|sociedad\s+limitada|sociedad\s+an[oó]nima|societ[aà]\s+(?:a\s+responsabilit[aà]\s+limitata|per\s+azioni|in\s+accomandita\s+semplice|in\s+nome\s+collettivo)|soci[eé]t[eé]\s+(?:[aà]\s+responsabilit[eé]\s+limit[eé]e|par\s+actions\s+simplifi[eé]e)|besloten\s+vennootschap|naamloze\s+vennootschap|sp[oó][lł]ka\s+z\s+ograniczon[aą]\s+odpowiedzialno[sś]ci[aą]|aktiebolag|aksjeselskap|osakeyhti[oö]|terbuka|tbk|gmbh|ag|kg|llc|llp|pllc|ltd|inc|plc|corp|corporation)\b/i.test(n);
+  return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|berhad|perkongsian\s+liabiliti\s+terhad|limited\s+liability\s+(?:company|partnership)|gesellschaft\s+mit\s+beschr[äa]nkter\s+haftung|aktiengesellschaft|kommanditgesellschaft|offene\s+handelsgesellschaft|unternehmergesellschaft|eingetragener\s+kaufmann|sociedad\s+limitada|sociedad\s+an[oó]nima|societ[aà]\s+(?:a\s+responsabilit[aà]\s+limitata|per\s+azioni|in\s+accomandita\s+semplice|in\s+nome\s+collettivo)|soci[eé]t[eé]\s+(?:[aà]\s+responsabilit[eé]\s+limit[eé]e|par\s+actions\s+simplifi[eé]e)|besloten\s+vennootschap|naamloze\s+vennootschap|sp[oó][lł]ka\s+z\s+ograniczon[aą]\s+odpowiedzialno[sś]ci[aą]|aktiebolag|aksjeselskap|osakeyhti[oö]|terbuka|tbk|gmbh|ag|kg|llc|llp|pllc|ltd|inc|plc|corp|corporation|joint\s+stock\s+company|societas\s+europaea|limitada|společnost\s+s\s+ručením\s+omezeným|društvo\s+s\s+ograničenom\s+odgovornošću|korlátolt\s+felelősségű\s+társaság|jsc|pjsc|ojsc|cjsc|sro|doo|kft|ltda|aps)\b/i.test(n);
 }
 
 function companyNamesMatch(a, b) {
@@ -7135,7 +7215,17 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
   n = n.replace(/[\(\)\[\]\{\}]/g, " ");
 
-  // 3. Indonesia entities (prefix and suffix)
+  // 3. Multi-word Latin American corporate entities (must run before simple S.A.)
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*b[\.\s]*de[\.\s]*c[\.\s]*v|sab\s+de\s+cv)\b\.?/gi, "Sociedad Anónima Bursátil de Capital Variable");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*de[\.\s]*c[\.\s]*v|sa\s+de\s+cv)\b\.?/gi, "Sociedad Anónima de Capital Variable");
+  n = n.replace(/\b(?:s[\.\s]*de[\.\s]*r[\.\s]*l[\.\s]*de[\.\s]*c[\.\s]*v|s\s+de\s+rl\s+de\s+cv)\b\.?/gi, "Sociedad de Responsabilidad Limitada de Capital Variable");
+  n = n.replace(/\b(?:s[\.\s]*de[\.\s]*r[\.\s]*l|s\s+de\s+rl)\b\.?/gi, "Sociedad de Responsabilidad Limitada");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*p[\.\s]*i[\.\s]*de[\.\s]*c[\.\s]*v|sapi\s+de\s+cv)\b\.?/gi, "Sociedad Anónima Promotora de Inversión de Capital Variable");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*c|sac)\b\.?$/gi, "Sociedad Anónima Cerrada");
+  n = n.replace(/\b(?:e[\.\s]*i[\.\s]*r[\.\s]*l|eirl)\b\.?/gi, "Empresa Individual de Responsabilidad Limitada");
+  n = n.replace(/\b(?:c[\.\s]*a|ca)\b\.?$/gi, "Compañía Anónima");
+
+  // 4. Indonesia entities (prefix and suffix)
   n = n.replace(/(^|[\s,])(?:pt|p\.t\.)\b\.?\s+/gi, "$1Perseroan Terbatas ");
   n = n.replace(/\b(?:pt|p\.t\.)\b\.?$/gi, "Perseroan Terbatas");
   n = n.replace(/(^|[\s,])(?:cv|c\.v\.)\b\.?\s+/gi, "$1Commanditaire Vennootschap ");
@@ -7145,18 +7235,19 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/(^|[\s,])(?:pd|p\.d\.)\b\.?\s+/gi, "$1Perusahaan Daerah ");
   n = n.replace(/\b(?:tbk)\b\.?/gi, "Terbuka");
 
-  // 4. Malaysia entities
+  // 5. Malaysia entities
   n = n.replace(/\bsdn[\.\s]+bhd\.?\b/gi, "Sendirian Berhad");
   n = n.replace(/\bsdn\s*bhd\.?\b/gi, "Sendirian Berhad");
   n = n.replace(/\bsdn\b\.?/gi, "Sendirian");
   n = n.replace(/\bbhd\b\.?/gi, "Berhad");
   n = n.replace(/\bplt\b\.?/gi, "Perkongsian Liabiliti Terhad");
 
-  // 5. Germany / Austria / Switzerland (DACH)
+  // 6. Germany / Austria / Switzerland (DACH)
   n = n.replace(/\bgmbh\s*(?:&|\+|und|and|u\.)\s*co\.?\s*kg\.?\b/gi, "Gesellschaft mit beschränkter Haftung and Compagnie Kommanditgesellschaft");
   n = n.replace(/\bgmbh\s*(?:&|\+|und|and|u\.)\s*co\.?\b/gi, "Gesellschaft mit beschränkter Haftung and Compagnie");
   n = n.replace(/\b(?:g[\.\s]*m[\.\s]*b[\.\s]*h|gmbh)\b\.?/gi, "Gesellschaft mit beschränkter Haftung");
   n = n.replace(/\b(?:u[\.\s]*g|ug)\s*(?:\(haftungsbeschr[äa]nkt\)|haftungsbeschr[äa]nkt)?\b\.?/gi, "Unternehmergesellschaft haftungsbeschränkt");
+  n = n.replace(/\b(?:k[\.\s]*g[\.\s]*a[\.\s]*a|kgaa)\b\.?/gi, "Kommanditgesellschaft auf Aktien");
   n = n.replace(/\b(?:a[\.\s]*g|ag)\b\.?$/gi, "Aktiengesellschaft");
   n = n.replace(/\b(?:a[\.\s]*g|ag)\b\.?\s+(?=(?:und|and|co|kg)\b)/gi, "Aktiengesellschaft ");
   if (/germany|deutschland|austria|[öo]sterreich|switzerland|schweiz/i.test(country) || /\b(?:ag|a\.g\.)\b\.?$/i.test(n)) {
@@ -7168,7 +7259,7 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:e[\.\s]*k|ek)\b\.?$/gi, "eingetragener Kaufmann");
   n = n.replace(/\b(?:e[\.\s]*v|ev)\b\.?$/gi, "eingetragener Verein");
 
-  // 6. Italian entities
+  // 7. Italian entities
   n = n.replace(/\b(?:s[\.\s]*r[\.\s]*l[\.\s]*s|srls)\b/gi, "Società a Responsabilità Limitata Semplificata");
   n = n.replace(/\b(?:s[\.\s]*c[\.\s]*a[\.\s]*r[\.\s]*l|scarl)\b/gi, "Società Cooperativa a Responsabilità Limitata");
   n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p[\.\s]*a|scpa)\b/gi, "Società Cooperativa per Azioni");
@@ -7178,63 +7269,171 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b/gi, "Società in Accomandita Semplice");
   n = n.replace(/\bs[\.\s]*s[\.\s]*\b/gi, "Società Semplice ");
 
-  // 7. Spanish entities
+  // 8. Spanish & Latin America entities
   n = n.replace(/\b(?:s[\.\s]*l[\.\s]*u\.?|slu)\b/gi, "Sociedad Limitada Unipersonal");
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*u\.?|sau)\b/gi, "Sociedad Anónima Unipersonal");
   n = n.replace(/\b(?:s[\.\s]+l|s\.l\.?|sl)\b\.?/gi, "Sociedad Limitada");
   n = n.replace(/\b(?:s[\.\s]+a|s\.a\.?|sa)\b\.?/gi, "Sociedad Anónima");
   n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p\.?|scp)\b/gi, "Sociedad Civil Privada");
   n = n.replace(/\b(?:s[\.\s]*coop\.?|scoop)\b/gi, "Sociedad Cooperativa");
+  n = n.replace(/\b(?:l[\.\s]*t[\.\s]*d[\.\s]*a|ltda)\b\.?/gi, "Limitada");
 
-  // 8. France & Belgium
+  // 9. France & Belgium
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*r[\.\s]*l|sarl)\b/gi, "Société à Responsabilité Limitée");
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s[\.\s]*u|sasu)\b/gi, "Société par Actions Simplifiée Unipersonnelle");
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b/gi, "Société par Actions Simplifiée");
+  n = n.replace(/\b(?:s[\.\s]*p[\.\s]*r[\.\s]*l|sprl)\b/gi, "Société Privée à Responsabilité Limitée");
+  n = n.replace(/\b(?:b[\.\s]*v[\.\s]*b[\.\s]*a|bvba)\b/gi, "Besloten Vennootschap met Beperkte Aansprakelijkheid");
 
-  // 9. Netherlands & Belgium
+  // 10. Netherlands & Belgium
   n = n.replace(/\b(?:b[\.\s]*v\.?|bv)\b/gi, "Besloten Vennootschap");
   n = n.replace(/\b(?:n[\.\s]*v\.?|nv)\b/gi, "Naamloze Vennootschap");
+  n = n.replace(/\b(?:v[\.\s]*o[\.\s]*f\.?|vof)\b/gi, "Vennootschap onder Firma");
 
-  // 10. Poland
+  // 11. Poland
   n = n.replace(/\b(?:sp\.?\s*z\s*o\.?\s*o\.?|sp[oó][lł]ka\s+z\s+o\.?o\.?)\b/gi, "Spółka z ograniczoną odpowiedzialnością");
 
-  // 11. Nordics
+  // 12. Eastern Europe & Russia (Joint Stock Companies)
+  n = n.replace(/\b(?:p[\.\s]*j[\.\s]*s[\.\s]*c|pjsc)\b\.?/gi, "Public Joint Stock Company");
+  n = n.replace(/\b(?:o[\.\s]*j[\.\s]*s[\.\s]*c|ojsc)\b\.?/gi, "Open Joint Stock Company");
+  n = n.replace(/\b(?:c[\.\s]*j[\.\s]*s[\.\s]*c|cjsc)\b\.?/gi, "Closed Joint Stock Company");
+  n = n.replace(/\b(?:j[\.\s]*s[\.\s]*c|jsc)\b\.?/gi, "Joint Stock Company");
+
+  // 13. Czechia, Slovakia, Hungary, Balkans
+  n = n.replace(/\b(?:spol\.?\s*s\s*r\.?o\.?|s[\.\s]*r[\.\s]*o\.?|sro)\b/gi, "společnost s ručením omezeným");
+  n = n.replace(/\b(?:a[\.\s]*s\.?|akc\.?\s*spol\.?)\b(?!\s+(?:de\s+c\.?v\.?))/gi, "akciová společnost");
+  n = n.replace(/\b(?:d[\.\s]*o[\.\s]*o\.?|doo)\b/gi, "društvo s ograničenom odgovornošću");
+  n = n.replace(/\b(?:k[\.\s]*f[\.\s]*t\.?|kft)\b/gi, "Korlátolt Felelősségű Társaság");
+  n = n.replace(/\b(?:z[\.\s]*r[\.\s]*t\.?|zrt)\b/gi, "Zártkörűen működő Részvénytársaság");
+  n = n.replace(/\b(?:n[\.\s]*y[\.\s]*r[\.\s]*t\.?|nyrt)\b/gi, "Nyilvánosan működő Részvénytársaság");
+
+  // 14. Nordics
   n = n.replace(/\b(?:aktiebolag|ab)\b\.?$/gi, "Aktiebolag");
   n = n.replace(/\b(?:aksjeselskap|as)\b\.?$/gi, "Aksjeselskap");
   n = n.replace(/\b(?:osakeyhti[oö]|oy)\b\.?$/gi, "Osakeyhtiö");
+  n = n.replace(/\b(?:oyj)\b\.?$/gi, "Julkinen Osakeyhtiö");
+  n = n.replace(/\b(?:anpartsselskab|aps)\b\.?$/gi, "Anpartsselskab");
 
-  // 12. Australia & South Africa
-  n = n.replace(/\bpty\.?\s*ltd(?:\.|\b)/gi, "Proprietary Limited");
+  // 15. Australia & South Africa
+  n = n.replace(/\bpty[\.\s]*ltd(?:\.|\b)/gi, "Proprietary Limited");
   n = n.replace(/\bpty(?:\.|\b)/gi, "Proprietary");
 
-  // 13. Singapore, India, UK
-  n = n.replace(/\bpte\.?\s*ltd(?:\.|\b)/gi, "Private Limited");
-  n = n.replace(/\bpvt\.?\s*ltd(?:\.|\b)/gi, "Private Limited");
+  // 16. Singapore, India, UK
+  n = n.replace(/\bpte[\.\s]*ltd(?:\.|\b)/gi, "Private Limited");
+  n = n.replace(/\bpvt[\.\s]*ltd(?:\.|\b)/gi, "Private Limited");
   n = n.replace(/\bpte(?:\.|\b)/gi, "Private");
   n = n.replace(/\bpvt(?:\.|\b)/gi, "Private");
   n = n.replace(/\bplc(?:\.|\b)/gi, "Public Limited Company");
+  n = n.replace(/\bcic(?:\.|\b)/gi, "Community Interest Company");
+  n = n.replace(/\bdac(?:\.|\b)/gi, "Designated Activity Company");
 
-  // 14. United States & Global
+  // 17. Pan-European
+  n = n.replace(/\b(?:s[\.\s]*e|se)\b\.?$/gi, "Societas Europaea");
+
+  // 18. Common Business, Technical, and Industry Word Abbreviations in Company Names
+  // Manufacturing / Makers
+  n = n.replace(/\bmfg[\.\s]*co[\.\s]*,?[\.\s]*ltd(?:\.|\b)/gi, "Manufacturing Company, Limited");
   n = n.replace(/\bmfg(?:\.|\b)/gi, "Manufacturing");
   n = n.replace(/\bmfrs(?:\.|\b)/gi, "Manufacturers");
   n = n.replace(/\bmfr(?:\.|\b)/gi, "Manufacturer");
+
+  // Industries / Industrial
+  n = n.replace(/\bind[\.\s]*co[\.\s]*,?[\.\s]*ltd(?:\.|\b)/gi, "Industries Company, Limited");
+  n = n.replace(/\bindust[\.\s]*co[\.\s]*,?[\.\s]*ltd(?:\.|\b)/gi, "Industries Company, Limited");
+  n = n.replace(/\binds(?:\.|\b)/gi, "Industries");
+  n = n.replace(/\bindust(?:\.|\b)/gi, "Industries");
+  n = n.replace(/\bind\b\.?\s*(?=(?:services?|solutions?|suppl(?:y|ies)|products?|equipment|park|estate|zone|area)\b)/gi, "Industrial ");
+  n = n.replace(/\bind(?:\.|\b)/gi, "Industries");
+
+  // International / National
+  n = n.replace(/\b(?:int['’]?l|intl)\b\.?/gi, "International");
+  n = n.replace(/\b(?:nat['’]?l|natl)\b\.?/gi, "National");
+
+  // Technology / Technologies
+  n = n.replace(/\btechs(?:\.|\b)/gi, "Technologies");
+  n = n.replace(/\b(?:technol|tech)\b\.?/gi, "Technology");
+
+  // Engineering
+  n = n.replace(/\b(?:engg|engr|eng)\b\.?\s*(?=(?:works|solutions?|services?|systems?|products?|co|company|corp|ltd|limited|inc|llc)\b)/gi, "Engineering ");
+  n = n.replace(/\b(?:engg|engr)\b\.?/gi, "Engineering");
+
+  // Equipment, Products, Systems, Development
+  n = n.replace(/\b(?:eqpt|equip)\b\.?/gi, "Equipment");
+  n = n.replace(/\bprods(?:\.|\b)/gi, "Products");
+  n = n.replace(/\bprod(?:\.|\b)/gi, "Products");
+  n = n.replace(/\b(?:syst|sys)\b\.?/gi, "Systems");
+  n = n.replace(/\b(?:devel|dev)\b\.?/gi, "Development");
+
+  // Services, Solutions, Associates, Group
+  n = n.replace(/\b(?:svcs|svc|serv)\b\.?/gi, "Services");
+  n = n.replace(/\b(?:solns|soln|sols)\b\.?/gi, "Solutions");
+  n = n.replace(/\b(?:assocs|assoc)\b\.?/gi, "Associates");
+  n = n.replace(/\bgrp\b\.?/gi, "Group");
+
+  // Chemical, Electrical / Electronics, Automotive, Automation
+  n = n.replace(/\bchems(?:\.|\b)/gi, "Chemicals");
+  n = n.replace(/\bchem\b\.?\s*(?=(?:ind|industries|co|company|corp|ltd|limited|inc|llc|products?|supplies)\b)/gi, "Chemical ");
+  n = n.replace(/\bchem(?:\.|\b)/gi, "Chemicals");
+  n = n.replace(/\b(?:elect|elec)\b\.?\s*(?=(?:and|&|engineering|services?|supplies)\b)/gi, "Electrical ");
+  n = n.replace(/\b(?:elect|elec)\b\.?/gi, "Electronics");
+  n = n.replace(/\bauto\b\.?\s*(?=(?:parts?|components?|industr(?:y|ies)|vehicles?)\b)/gi, "Automotive ");
+  n = n.replace(/\bauto\b\.?\s*(?=(?:systems?|solutions?|engineering)\b)/gi, "Automation ");
+
+  // Distribution, Fabrication, Machinery, Packaging
+  n = n.replace(/\b(?:distrib|dist)\b\.?\s*(?=(?:co|company|corp|ltd|limited|inc|llc|of)\b)/gi, "Distributors ");
+  n = n.replace(/\b(?:distrib|dist)\b\.?/gi, "Distribution");
+  n = n.replace(/\bfab\b\.?/gi, "Fabrication");
+  n = n.replace(/\bmach\b\.?/gi, "Machinery");
+  n = n.replace(/\b(?:pkg|pack)\b\.?/gi, "Packaging");
+
+  // Management, Communications, Laboratories, Materials
+  n = n.replace(/\b(?:mgmt|mgt)\b\.?/gi, "Management");
+  n = n.replace(/\b(?:comms|comm)\b\.?/gi, "Communications");
+  n = n.replace(/\b(?:labs|lab)\b\.?/gi, "Laboratories");
+  n = n.replace(/\b(?:matl|mat)\b\.?/gi, "Materials");
+
+  // Technical prefixes
+  n = n.replace(/\bappl\b\.?\s*(?=(?:technol|tech|sciences?|systems?|materials?|engineering)\b)/gi, "Applied ");
+  n = n.replace(/\badv\b\.?\s*(?=(?:technol|tech|materials?|systems?|engineering|solutions?)\b)/gi, "Advanced ");
+  n = n.replace(/\bgen\b\.?\s*(?=(?:electric|motors?|trading|commercial|engineering|industries)\b)/gi, "General ");
+  n = n.replace(/\bstd\b\.?\s*(?=(?:products?|engineering|parts?|fasteners?)\b)/gi, "Standard ");
+  n = n.replace(/\b(?:envr|env)\b\.?\s*(?=(?:solutions?|services?|systems?|engineering)\b)/gi, "Environmental ");
+  n = n.replace(/\b(?:transp|trans)\b\.?\s*(?=(?:solutions?|services?|systems?|logistics?)\b)/gi, "Transportation ");
+  n = n.replace(/\b(?:logist|log)\b\.?\s*(?=(?:solutions?|services?|systems?)\b)/gi, "Logistics ");
+  n = n.replace(/\b(?:constr|const)\b\.?\s*(?=(?:solutions?|services?|systems?|materials?|equipment|co|company|ltd|corp|inc)\b)/gi, "Construction ");
+  n = n.replace(/\bpharm\b\.?/gi, "Pharmaceuticals");
+  n = n.replace(/\btelecom\b\.?/gi, "Telecommunications");
+
+  // 19. United States & Global Legal Entities (must run after Mfg/Ind compound rules)
   n = n.replace(/\bpllc(?:\.|\b)/gi, "Professional Limited Liability Company");
   n = n.replace(/\bllp(?:\.|\b)/gi, "Limited Liability Partnership");
   n = n.replace(/\bllc(?:\.|\b)/gi, "Limited Liability Company");
   n = n.replace(/\bl\.?l\.?c(?:\.|\b)/gi, "Limited Liability Company");
   n = n.replace(/\blp(?:\.|\b)/gi, "Limited Partnership");
   n = n.replace(/\bl\.?p(?:\.|\b)/gi, "Limited Partnership");
-  n = n.replace(/\bco\.?\s*,?\s*ltd(?:\.|\b)/gi, "Company, Limited");
+
+  // "Co., Ltd." variations (Taiwan, China, Japan, Korea, Global)
+  n = n.replace(/\bco[\.\s]*,[\.\s]*ltd\b\.?/gi, "Company, Limited");
+  n = n.replace(/\bco[\.\s]+ltd\b\.?/gi, "Company, Limited");
   n = n.replace(/\bCompany\s+Limited\b/gi, "Company, Limited");
+
   n = n.replace(/\bltd(?:\.|\b)/gi, "Limited");
+  n = n.replace(/\bl\.?t\.?d(?:\.|\b)/gi, "Limited");
   n = n.replace(/\binc(?:\.|\b)/gi, "Incorporated");
+  n = n.replace(/\bi\.?n\.?c(?:\.|\b)/gi, "Incorporated");
   n = n.replace(/\bcorp(?:\.|\b)/gi, "Corporation");
+  n = n.replace(/\bc\.?o\.?r\.?p(?:\.|\b)/gi, "Corporation");
   n = n.replace(/\bco(?:\.|\b)/gi, "Company");
+  n = n.replace(/\bc\.?o(?:\.|\b)/gi, "Company");
 
   // Clean semicolons and normalize commas without stripping dots and commas per Rule 4
   n = n.replace(/;+/g, " ");
   n = n.replace(/\s*,\s*/g, ", ");
   n = n.replace(/\s+/g, " ").trim();
+
+  // Strip trailing dot if attached directly to corporate suffix (e.g. "Limited." -> "Limited", "Incorporated." -> "Incorporated")
+  n = n.replace(/\b(Company,\s*Limited|Limited|Incorporated|Corporation|Company|Proprietary\s*Limited|Private\s*Limited|Sendirian\s*Berhad|Berhad|Aktiengesellschaft|Gesellschaft\s*mit\s*beschränkter\s*Haftung|Sociedad\s*Anónima|Sociedad\s*Limitada|Società\s*per\s*Azioni|Società\s*a\s*Responsabilità\s*Limitata|Société\s*Anonyme|Société\s*à\s*Responsabilité\s*Limitée|Limitada)\.+$/gi, "$1");
+
   return n;
 }
 
@@ -8695,7 +8894,7 @@ function toTitleCase(str) {
   if (!str) return "";
   const upperAcronyms = new Set([
     "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
-    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "SDN", "BHD", "LTD", "PLC", "LLC", "INC", "CORP", "TP"
+    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP"
   ]);
   let s = str.replace(/['’`]\s*s\b/gi, "'s");
   // Every word starts with a Capital letter per QC instruction: "All words come start with Captial make it"
