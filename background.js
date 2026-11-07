@@ -4056,7 +4056,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     countryName: {
       type: "STRING",
-      description: "Full country name in Title Case (e.g. United States Of America, United Kingdom, Canada, Australia, Taiwan, India)"
+      description: "Standardized official country name in Title Case (e.g. Czechia, Turkiye, United States Of America, United Kingdom, Canada, Australia, Taiwan, India). For Czech Republic always return Czechia."
     },
     companyAddress: {
       type: "STRING",
@@ -4584,10 +4584,32 @@ COMPANY NAME RULES (Rule 4):
    - Strip marketing taglines or product category descriptors attached after the legal suffix (e.g. "Danzer UK Limited - Timber Merchants Suppliers of Hardwoods" -> "Danzer UK Limited").
 
 COUNTRY NAME VALIDATION RULES:
-1. Country Name MUST be taken DIRECTLY from the physical address on the website. Expand "Taiwan, R.O.C." to "Taiwan".
+1. Country Name MUST be taken DIRECTLY from the physical address on the website.
 2. STRICTLY DO NOT guess or infer from domain name or URL extension (e.g. do NOT guess from .com.tw, .tw, .co.za).
-3. For the United States, you MUST return the full official name "United States Of America" (NEVER return just "United States" or "USA").
-4. For Turkey / Türkiye / Republic of Turkey / Republic of Turkiye, you MUST return "Turkiye" (spelled "Turkiye").
+3. STANDARDIZED OFFICIAL COUNTRY NAMES (GLOBAL MANDATE - APPLIES GLOBALLY TO ALL COUNTRIES):
+   - For Czech Republic / Czech / Česká republika / Česko, you MUST return "Czechia" (NEVER return "Czech Republic").
+   - For Turkey / Türkiye / Republic of Turkey / Republic of Turkiye, you MUST return "Turkiye" (spelled "Turkiye").
+   - For the United States / USA / US / U.S.A., you MUST return the full official name "United States Of America" (NEVER return just "United States" or "USA").
+   - For the United Kingdom / Great Britain / UK / Britain, you MUST return "United Kingdom".
+   - For Taiwan / Taiwan, R.O.C. / Republic of China, you MUST return "Taiwan".
+   - For South Korea / Korea / Republic of Korea / ROK, you MUST return "South Korea".
+   - For Swaziland, you MUST return "Eswatini".
+   - For North Macedonia / Macedonia / FYROM, you MUST return "North Macedonia".
+   - For Myanmar / Burma, you MUST return "Myanmar".
+   - For Netherlands / Holland, you MUST return "Netherlands".
+   - For Ivory Coast / Côte d'Ivoire, you MUST return "Cote D'Ivoire".
+   - For East Timor / Timor-Leste, you MUST return "Timor-Leste".
+   - For Cape Verde / Cabo Verde, you MUST return "Cabo Verde".
+   - For Vietnam / Viet Nam, you MUST return "Vietnam".
+   - For Brunei / Brunei Darussalam, you MUST return "Brunei".
+   - For Syria / Syrian Arab Republic, you MUST return "Syria".
+   - For Laos / Lao People's Democratic Republic, you MUST return "Laos".
+   - For Russia / Russian Federation, you MUST return "Russia".
+   - For Iran / Islamic Republic of Iran, you MUST return "Iran".
+   - For Moldova / Republic of Moldova, you MUST return "Moldova".
+   - For Tanzania / United Republic of Tanzania, you MUST return "Tanzania".
+   - For Bolivia / Plurinational State of Bolivia, you MUST return "Bolivia".
+   - For Venezuela / Bolivarian Republic of Venezuela, you MUST return "Venezuela".
 
 EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE & SOCIAL CHANNELS):
 1. Comprehensive Full-Website Email Analysis:
@@ -5070,7 +5092,7 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     businessType: inferredBusiness,
     companyProfile: crawlData.hasCompanyProfile ? "Available" : "Not Available",
     companyName: companyName,
-    countryName: country,
+    countryName: normalizeCountryName(country),
     companyAddress: address,
     state: hasState ? "Available" : "Not Available",
     city: hasCity ? "Available" : "Not Available",
@@ -5252,7 +5274,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       .replace(/^[^\p{L}\p{N}]+/gu, "")
       .replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "")
       .trim();
-    result.countryName = String(result.countryName || "").trim();
+    result.countryName = normalizeCountryName(result.countryName);
+    if (!result.countryName && result.companyAddress) {
+      result.countryName = detectCountryFromAddress(result.companyAddress);
+    }
     result.businessType = String(result.businessType || "").trim();
     result.companyProfile = String(result.companyProfile || "").trim();
     result.state = String(result.state || "").trim();
@@ -5534,29 +5559,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
 
   // 4. Country Name: Full official country name, Title Case
-  let country = (result.countryName || "").trim();
-  country = country.replace(/[\(\)\[\]\{\}]/g, " ");
-
-  if (country && country.length >= 2) {
-    const cTrim = country.trim();
-    if (/taiwan/i.test(country) || /r\.?o\.?c\.?/i.test(country)) country = "Taiwan";
-    else if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(cTrim)) country = "United States Of America";
-    else if (/^(?:united\s*kingdom|great\s*britain|uk)$/i.test(cTrim)) country = "United Kingdom";
-    else if (/england/i.test(cTrim)) country = "England";
-    else if (/scotland/i.test(cTrim)) country = "Scotland";
-    else if (/wales/i.test(cTrim)) country = "Wales";
-    else if (/northern\s*ireland/i.test(cTrim)) country = "Northern Ireland";
-    else if (/italy|italia/i.test(country)) country = "Italy";
-    else if (/spain|espa[nñ]a/i.test(country)) country = "Spain";
-    else if (/\b(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)\b/i.test(country)) country = "Turkiye";
-    else if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(country) || /^(?:my|mys)$/i.test(cTrim)) country = "Malaysia";
-    else if (/\b(?:indonesia|republik\s*indonesia|republic\s*of\s*indonesia)\b/i.test(country) || /^(?:id|idn|ri)$/i.test(cTrim)) country = "Indonesia";
-    else if (/\b(?:new\s*zealand|aotearoa)\b/i.test(country) || /^(?:nz|nzl)$/i.test(cTrim)) country = "New Zealand";
-    else if (/australia/i.test(country) || /^au$/i.test(cTrim)) country = "Australia";
-    else if (/south\s*africa/i.test(country) || /^za$/i.test(cTrim)) country = "South Africa";
-    else if (/germany|deutschland/i.test(country) || /^de$/i.test(cTrim)) country = "Germany";
-    else if (/singapore/i.test(country) || /^sg$/i.test(cTrim)) country = "Singapore";
-    else if (/thailand/i.test(country) || /^th$/i.test(cTrim)) country = "Thailand";
+  let country = normalizeCountryName(result.countryName || "");
+  if (!country && result.companyAddress) {
+    country = detectCountryFromAddress(result.companyAddress);
   }
 
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
@@ -5786,37 +5791,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       else if (/\.(?:nz|co\.nz|org\.nz|net\.nz|gen\.nz|ac\.nz|govt\.nz)(?:[:\/\?]|$)/i.test(urlStr)) country = "New Zealand";
     }
   }
-  const trimmedCountry = country.trim();
-  if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(trimmedCountry)) {
-    country = "United States Of America";
-  } else if (/^(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)$/i.test(trimmedCountry)) {
-    country = "Turkiye";
-  } else if (/\b(?:new\s*zealand|aotearoa)\b/i.test(trimmedCountry) || /^(?:nz|nzl)$/i.test(trimmedCountry)) {
-    country = "New Zealand";
-  } else if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(trimmedCountry) || /^(?:my|mys)$/i.test(trimmedCountry)) {
-    country = "Malaysia";
-  } else if (/\b(?:indonesia|republic\s*of\s*indonesia|republik\s*indonesia)\b/i.test(trimmedCountry) || /^(?:id|idn|ri)$/i.test(trimmedCountry)) {
-    country = "Indonesia";
-  } else if (/\btaiwan\b/i.test(trimmedCountry) || /r\.?o\.?c\.?/i.test(trimmedCountry)) {
-    country = "Taiwan";
-  } else if (/australia/i.test(trimmedCountry) || /^au$/i.test(trimmedCountry)) {
-    country = "Australia";
-  } else if (/south\s*africa/i.test(trimmedCountry) || /^za$/i.test(trimmedCountry)) {
-    country = "South Africa";
-  } else if (/germany|deutschland/i.test(trimmedCountry) || /^de$/i.test(trimmedCountry)) {
-    country = "Germany";
-  } else if (/singapore/i.test(trimmedCountry) || /^sg$/i.test(trimmedCountry)) {
-    country = "Singapore";
-  } else if (/thailand/i.test(trimmedCountry) || /^th$/i.test(trimmedCountry)) {
-    country = "Thailand";
-  } else if (/spain|espa[nñ]a/i.test(trimmedCountry) || /^es$/i.test(trimmedCountry)) {
-    country = "Spain";
-  } else if (/italy|italia/i.test(trimmedCountry) || /^it$/i.test(trimmedCountry)) {
-    country = "Italy";
-  } else if (/^(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)$/i.test(trimmedCountry)) {
-    country = "United Kingdom";
-  }
-  result.countryName = toTitleCase(country.trim());
+  country = normalizeCountryName(country);
+  result.countryName = country;
 
   // Helper for cross-country equivalence (UK constituent nations, USA variants)
   const isSameOrConstituentCountry = (c1, c2) => {
@@ -9293,6 +9269,295 @@ function decodeHtmlEntities(str) {
 }
 
 /**
+ * Standardizes country names globally per official QC mandate.
+ * E.g., "Czech Republic" -> "Czechia", "Turkey" -> "Turkiye", "USA" -> "United States Of America"
+ */
+function normalizeCountryName(country) {
+  if (!country || typeof country !== "string") return "";
+  let c = country.trim().replace(/[\(\)\[\]\{\}]/g, " ").replace(/\s+/g, " ").trim();
+  if (c.length < 2) return c;
+
+  const lower = c.toLowerCase();
+  const unaccented = lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // 1. Czech Republic -> Czechia (Mandatory QC Rule)
+  if (/\b(?:czech\s*republic|ceska\s*republika|cesko|czechia)\b/i.test(unaccented) || /^czech(?:ia)?$/i.test(unaccented)) {
+    return "Czechia";
+  }
+
+  // 2. Turkey / Türkiye -> Turkiye
+  if (/\b(?:turkey|turkiye|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented)) {
+    return "Turkiye";
+  }
+
+  // 3. United States -> United States Of America
+  if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?|the\s*united\s*states)$/i.test(unaccented) || /\bunited\s*states\s*of\s*america\b/i.test(unaccented)) {
+    return "United States Of America";
+  }
+
+  // 4. Taiwan
+  if (/taiwan/i.test(unaccented) || /r\.?o\.?c\.?/i.test(unaccented) || /republic\s*of\s*china/i.test(unaccented)) {
+    return "Taiwan";
+  }
+
+  // 5. United Kingdom & Constituent Countries
+  if (/^(?:united\s*kingdom|great\s*britain|uk|u\.k\.|britain)$/i.test(unaccented)) {
+    return "United Kingdom";
+  }
+  if (/^england$/i.test(unaccented)) return "England";
+  if (/^scotland$/i.test(unaccented)) return "Scotland";
+  if (/^wales$/i.test(unaccented)) return "Wales";
+  if (/^northern\s*ireland$/i.test(unaccented)) return "Northern Ireland";
+
+  // 6. South Korea
+  if (/\b(?:south\s*korea|korea,\s*republic\s*of|republic\s*of\s*korea|korea\s*republic|rok)\b/i.test(unaccented) || /^korea$/i.test(unaccented)) {
+    return "South Korea";
+  }
+
+  // 7. Swaziland -> Eswatini
+  if (/\b(?:swaziland|eswatini|kingdom\s*of\s*eswatini)\b/i.test(unaccented)) {
+    return "Eswatini";
+  }
+
+  // 8. North Macedonia (Macedonia / FYROM)
+  if (/\b(?:macedonia|north\s*macedonia|republic\s*of\s*north\s*macedonia|fyrom)\b/i.test(unaccented)) {
+    return "North Macedonia";
+  }
+
+  // 9. Myanmar (Burma)
+  if (/\b(?:burma|myanmar|republic\s*of\s*the\s*union\s*of\s*myanmar)\b/i.test(unaccented)) {
+    return "Myanmar";
+  }
+
+  // 10. Netherlands (Holland)
+  if (/\b(?:netherlands|holland|the\s*netherlands|kingdom\s*of\s*the\s*netherlands)\b/i.test(unaccented)) {
+    return "Netherlands";
+  }
+
+  // 11. Cote D'Ivoire (Ivory Coast)
+  if (/\b(?:ivory\s*coast|cote\s*d['’]ivoire|cote\s*divoire)\b/i.test(unaccented)) {
+    return "Cote D'Ivoire";
+  }
+
+  // 12. Timor-Leste (East Timor)
+  if (/\b(?:east\s*timor|timor[\s-]leste)\b/i.test(unaccented)) {
+    return "Timor-Leste";
+  }
+
+  // 13. Cabo Verde (Cape Verde)
+  if (/\b(?:cape\s*verde|cabo\s*verde)\b/i.test(unaccented)) {
+    return "Cabo Verde";
+  }
+
+  // 14. Vietnam
+  if (/\b(?:viet\s*nam|vietnam|socialist\s*republic\s*of\s*vietnam)\b/i.test(unaccented)) {
+    return "Vietnam";
+  }
+
+  // 15. Brunei
+  if (/\b(?:brunei\s*darussalam|brunei)\b/i.test(unaccented)) {
+    return "Brunei";
+  }
+
+  // 16. Syria
+  if (/\b(?:syrian\s*arab\s*republic|syria)\b/i.test(unaccented)) {
+    return "Syria";
+  }
+
+  // 17. Laos
+  if (/\b(?:lao\s*people['’]?s\s*democratic\s*republic|laos)\b/i.test(unaccented)) {
+    return "Laos";
+  }
+
+  // 18. Russia
+  if (/\b(?:russian\s*federation|russia)\b/i.test(unaccented)) {
+    return "Russia";
+  }
+
+  // 19. Iran
+  if (/\b(?:islamic\s*republic\s*of\s*iran|iran)\b/i.test(unaccented)) {
+    return "Iran";
+  }
+
+  // 20. Moldova
+  if (/\b(?:republic\s*of\s*moldova|moldova)\b/i.test(unaccented)) {
+    return "Moldova";
+  }
+
+  // 21. Tanzania
+  if (/\b(?:united\s*republic\s*of\s*tanzania|tanzania)\b/i.test(unaccented)) {
+    return "Tanzania";
+  }
+
+  // 22. Bolivia
+  if (/\b(?:plurinational\s*state\s*of\s*bolivia|bolivia)\b/i.test(unaccented)) {
+    return "Bolivia";
+  }
+
+  // 23. Venezuela
+  if (/\b(?:bolivarian\s*republic\s*of\s*venezuela|venezuela)\b/i.test(unaccented)) {
+    return "Venezuela";
+  }
+
+  // 24. New Zealand
+  if (/\b(?:new\s*zealand|aotearoa)\b/i.test(unaccented) || /^(?:nz|nzl)$/i.test(unaccented)) {
+    return "New Zealand";
+  }
+
+  // 25. Malaysia
+  if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(unaccented) || /^(?:my|mys)$/i.test(unaccented)) {
+    return "Malaysia";
+  }
+
+  // 26. Indonesia
+  if (/\b(?:indonesia|republik\s*indonesia|republic\s*of\s*indonesia)\b/i.test(unaccented) || /^(?:id|idn|ri)$/i.test(unaccented)) {
+    return "Indonesia";
+  }
+
+  // 27. South Africa
+  if (/\b(?:south\s*africa)\b/i.test(unaccented) || /^(?:za|rsa)$/i.test(unaccented)) {
+    return "South Africa";
+  }
+
+  // 28. Germany
+  if (/\b(?:germany|deutschland)\b/i.test(unaccented) || /^(?:de|deu)$/i.test(unaccented)) {
+    return "Germany";
+  }
+
+  // 29. Italy
+  if (/\b(?:italy|italia)\b/i.test(unaccented) || /^(?:it|ita)$/i.test(unaccented)) {
+    return "Italy";
+  }
+
+  // 30. Spain
+  if (/\b(?:spain|espana)\b/i.test(unaccented) || /^(?:es|esp)$/i.test(unaccented)) {
+    return "Spain";
+  }
+
+  // 31. Australia
+  if (/\b(?:australia)\b/i.test(unaccented) || /^(?:au|aus)$/i.test(unaccented)) {
+    return "Australia";
+  }
+
+  // 32. Singapore
+  if (/\b(?:singapore)\b/i.test(unaccented) || /^(?:sg|sgp)$/i.test(unaccented)) {
+    return "Singapore";
+  }
+
+  // 33. Thailand
+  if (/\b(?:thailand)\b/i.test(unaccented) || /^(?:th|tha)$/i.test(unaccented)) {
+    return "Thailand";
+  }
+
+  // 34. Canada
+  if (/\b(?:canada)\b/i.test(unaccented) || /^(?:ca|can)$/i.test(unaccented)) {
+    return "Canada";
+  }
+
+  // 35. India
+  if (/\b(?:india)\b/i.test(unaccented) || /^(?:in|ind)$/i.test(unaccented)) {
+    return "India";
+  }
+
+  // 36. France
+  if (/\b(?:france)\b/i.test(unaccented) || /^(?:fr|fra)$/i.test(unaccented)) {
+    return "France";
+  }
+
+  // 37. China
+  if (/\b(?:china|people['’]?s\s*republic\s*of\s*china|prc)\b/i.test(unaccented) || /^(?:cn|chn)$/i.test(unaccented)) {
+    return "China";
+  }
+
+  // 38. Japan
+  if (/\b(?:japan|nippon|nihon)\b/i.test(unaccented) || /^(?:jp|jpn)$/i.test(unaccented)) {
+    return "Japan";
+  }
+
+  // 39. Switzerland
+  if (/\b(?:switzerland|schweiz|suisse|svizzera)\b/i.test(unaccented) || /^(?:ch|che)$/i.test(unaccented)) {
+    return "Switzerland";
+  }
+
+  // 40. Ireland
+  if (/\b(?:ireland|republic\s*of\s*ireland|eire)\b/i.test(unaccented) || /^(?:ie|irl)$/i.test(unaccented)) {
+    return "Ireland";
+  }
+
+  // 41. United Arab Emirates
+  if (/\b(?:united\s*arab\s*emirates|uae)\b/i.test(unaccented) || /^(?:ae|are)$/i.test(unaccented)) {
+    return "United Arab Emirates";
+  }
+
+  // 42. Saudi Arabia
+  if (/\b(?:saudi\s*arabia|kingdom\s*of\s*saudi\s*arabia|ksa)\b/i.test(unaccented) || /^(?:sa|sau)$/i.test(unaccented)) {
+    return "Saudi Arabia";
+  }
+
+  // 43. Brazil
+  if (/\b(?:brazil|brasil)\b/i.test(unaccented) || /^(?:br|bra)$/i.test(unaccented)) {
+    return "Brazil";
+  }
+
+  // 44. Mexico
+  if (/\b(?:mexico)\b/i.test(unaccented) || /^(?:mx|mex)$/i.test(unaccented)) {
+    return "Mexico";
+  }
+
+  // 45. Poland
+  if (/\b(?:poland|polska)\b/i.test(unaccented) || /^(?:pl|pol)$/i.test(unaccented)) {
+    return "Poland";
+  }
+
+  // 46. Austria
+  if (/\b(?:austria|osterreich|oesterreich)\b/i.test(unaccented) || /^(?:at|aut)$/i.test(unaccented)) {
+    return "Austria";
+  }
+
+  // 47. Belgium
+  if (/\b(?:belgium|belgie|belgique)\b/i.test(unaccented) || /^(?:be|bel)$/i.test(unaccented)) {
+    return "Belgium";
+  }
+
+  // 48. Sweden
+  if (/\b(?:sweden|sverige)\b/i.test(unaccented) || /^(?:se|swe)$/i.test(unaccented)) {
+    return "Sweden";
+  }
+
+  // 49. Norway
+  if (/\b(?:norway|norge)\b/i.test(unaccented) || /^(?:no|nor)$/i.test(unaccented)) {
+    return "Norway";
+  }
+
+  // 50. Denmark
+  if (/\b(?:denmark|danmark)\b/i.test(unaccented) || /^(?:dk|dnk)$/i.test(unaccented)) {
+    return "Denmark";
+  }
+
+  // 51. Finland
+  if (/\b(?:finland|suomi)\b/i.test(unaccented) || /^(?:fi|fin)$/i.test(unaccented)) {
+    return "Finland";
+  }
+
+  // 52. Portugal
+  if (/\b(?:portugal)\b/i.test(unaccented) || /^(?:pt|prt)$/i.test(unaccented)) {
+    return "Portugal";
+  }
+
+  // 53. Greece
+  if (/\b(?:greece|hellas)\b/i.test(unaccented) || /^(?:gr|grc)$/i.test(unaccented)) {
+    return "Greece";
+  }
+
+  // 54. Philippines
+  if (/\b(?:philippines|pilipinas)\b/i.test(unaccented) || /^(?:ph|phl)$/i.test(unaccented)) {
+    return "Philippines";
+  }
+
+  return toTitleCase(c);
+}
+
+/**
  * Determines Country Name EXCLUSIVELY from the physical address string.
  * Strictly NEVER checks or guesses from the domain name or URL extension.
  */
@@ -9301,6 +9566,7 @@ function detectCountryFromAddress(address) {
   const lower = address.toLowerCase();
 
   // 1. Explicit country mentioned in the physical address text
+  if (/\b(?:czech\s*republic|ceska\s*republika|česká\s*republika|cesko|česko|czechia)\b/i.test(lower)) return "Czechia";
   if (/\b(south\s*africa)\b/i.test(lower)) return "South Africa";
   if (/\b(taiwan|r\.?o\.?c\.?)\b/i.test(lower) || /(?:臺灣|台灣|臺北|台北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|彰化|苗栗|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江|大里區|草堤路)/.test(address)) return "Taiwan";
   if (/\b(england)\b/i.test(lower)) return "England";
@@ -9328,6 +9594,9 @@ function detectCountryFromAddress(address) {
   if (/\b(t[uü]rkiye|turkey|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)\b/i.test(lower)) return "Turkiye";
   //.
   // 2. Definitive administrative regions/towns explicitly appearing in physical address
+  if (/\b(?:prague|praha|brno|ostrava|plzen|plzeň|olomouc|liberec|ceske\s*budejovice|české\s*budějovice|hradec\s*kralove|hradec\s*králové|usti\s*nad\s*labem|pardubice|zlin|zlín|havirov|kladno|most|karvina|opava|frydek-mistek)\b/i.test(lower)) {
+    return "Czechia";
+  }
   if (/\b(taoyuan\s*hsien|taoyuan|yangmei|taipei|new\s*taipei|kaohsiung|taichung|tainan|hsinchu)\b/i.test(lower)) {
     return "Taiwan";
   }
@@ -9407,6 +9676,7 @@ function detectCountryFromAddress(address) {
   if (/\b(wellington)\b/i.test(lower) && !/\b(?:mount|mt\.?)\s+wellington\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "wellington")) return "New Zealand";
   if (/\b(kuala\s*lumpur|putrajaya)\b/i.test(lower)) return "Malaysia";
   if (/\b(jakarta|dki\s*jakarta|nusantara)\b/i.test(lower)) return "Indonesia";
+  if (/\b(prague|praha)\b/i.test(lower)) return "Czechia";
 
   return "";
 }
