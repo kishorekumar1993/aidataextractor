@@ -832,6 +832,7 @@ async function handleCrawlAndExtract(rawUrl) {
     try {
       extractedData = await analyzeWithGemini(crawlResult, apiKey, model, restrictedCheck);
       extractedData._note = `AI Powered by Gemini (${model})`;
+      extractedData._isFromAi = true;
     } catch (aiErr) {
       console.warn("Gemini API error, falling back to local deterministic rule engine:", aiErr);
       extractedData = heuristicExtraction(crawlResult, restrictedCheck);
@@ -4732,50 +4733,20 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
     throw lastError || new Error("All Gemini models failed to return structured data");
   }
 
-  const crawlEmails = (crawlData.emails || []).map(e => String(e).trim().toLowerCase());
-  const isGenericWebmail = (e) => /@(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|aol|mail|zoho|proton|protonmail)\.com$/i.test(e);
-  let geminiHostDomain = "";
-  try {
-    const rawUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-    if (rawUrl) geminiHostDomain = new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
-  } catch (e) { }
-
-  // 1. Validate primary email from Gemini
-  let primaryEm = (parsed.emailId || "").trim().toLowerCase();
-  if (primaryEm && isGenericWebmail(primaryEm) && !crawlEmails.includes(primaryEm)) {
-    primaryEm = "";
+  // If Gemini provided primary email, keep it! Only fill from crawl if empty
+  if (!parsed.emailId || !parsed.emailId.trim()) {
+    parsed.emailId = crawlEmails.find(e => isValidCorporateEmail(e)) || crawlEmails[0] || "";
   }
-  if (primaryEm && !crawlEmails.includes(primaryEm)) {
-    const emHost = (primaryEm.split("@")[1] || "").toLowerCase();
-    if (!geminiHostDomain || (emHost !== geminiHostDomain && !emHost.endsWith("." + geminiHostDomain))) {
-      primaryEm = "";
-    }
+  // If Gemini provided secondary email, keep it! Only fill from crawl if empty
+  if (!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) {
+    const second = crawlEmails.find(e => isValidCorporateEmail(e) && e !== parsed.emailId);
+    parsed.secondaryEmailId = second || "";
   }
-  if (!primaryEm || !isValidCorporateEmail(primaryEm)) {
-    primaryEm = crawlEmails.find(e => isValidCorporateEmail(e)) || "";
-  }
-  parsed.emailId = primaryEm;
-
-  // 2. Validate secondary email from Gemini
-  let secEm = (parsed.secondaryEmailId || "").trim().toLowerCase();
-  if (secEm && isGenericWebmail(secEm) && !crawlEmails.includes(secEm)) {
-    secEm = "";
-  }
-  if (secEm && !crawlEmails.includes(secEm)) {
-    const secHost = (secEm.split("@")[1] || "").toLowerCase();
-    if (!geminiHostDomain || (secHost !== geminiHostDomain && !secHost.endsWith("." + geminiHostDomain))) {
-      secEm = "";
-    }
-  }
-  if (!secEm || secEm === primaryEm || !isValidCorporateEmail(secEm)) {
-    const second = crawlEmails.find(e => isValidCorporateEmail(e) && e !== primaryEm);
-    secEm = second || "";
-  }
-  if (secEm === primaryEm || !isValidCorporateEmail(secEm)) secEm = "";
-  parsed.secondaryEmailId = secEm;
+  // If Gemini provided phone, keep it! Only fill from crawl if empty
   if (!parsed.phoneNumber && crawlData.phones && crawlData.phones.length > 0) {
     parsed.phoneNumber = crawlData.phones[0];
   }
+  parsed._isFromAi = true;
 
   return parsed;
 }
@@ -5246,6 +5217,45 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.errorSnippet = result.restrictedSnippet;
     result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
     result._originalUrl = crawlData.originalUrl || "";
+    return result;
+  }
+
+  // 2. Authoritative API Ground Truth: When Gemini API provided the extraction, use the API response directly!
+  if (data._isFromAi) {
+    result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    result._originalUrl = crawlData.originalUrl || "";
+    if (result.websiteStatus === "Not Working") {
+      result.businessType = "";
+      result.companyProfile = "";
+      result.companyName = "";
+      result.countryName = "";
+      result.companyAddress = "";
+      result.state = "";
+      result.city = "";
+      result.emailId = "";
+      result.secondaryEmailId = "";
+      result.phoneNumber = "";
+      result.numberOfProducts = "";
+      result.productImages = "";
+      result.numberOfProductDescriptions = "";
+      return result;
+    }
+
+    // Preserve Gemini's exact extracted fields directly without local heuristic mutation
+    result.companyName = decodeHtmlEntities(String(result.companyName || "").trim());
+    result.companyAddress = decodeHtmlEntities(String(result.companyAddress || "").trim());
+    result.countryName = String(result.countryName || "").trim();
+    result.businessType = String(result.businessType || "").trim();
+    result.companyProfile = String(result.companyProfile || "").trim();
+    result.state = String(result.state || "").trim();
+    result.city = String(result.city || "").trim();
+    result.emailId = String(result.emailId || "").trim();
+    result.secondaryEmailId = String(result.secondaryEmailId || "").trim();
+    result.phoneNumber = String(result.phoneNumber || "").trim().replace(/\D/g, "").replace(/^0+/, "");
+    result.numberOfProducts = String(result.numberOfProducts || "").trim();
+    result.productImages = String(result.productImages || "").trim();
+    result.numberOfProductDescriptions = String(result.numberOfProductDescriptions || "").trim();
+
     return result;
   }
 

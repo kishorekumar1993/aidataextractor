@@ -1403,10 +1403,10 @@
       }
     } catch (e) { console.warn("Error setting companyProfile:", e); }
 
-    // 4. Company Name (Rule 4: Full form, remove brackets, preserve country, commas & dots, clean boundary special chars)
+    // 4. Company Name (Rule 4: When from Gemini API, prefill exact API response without alteration)
     try {
       if (elements.companyName && data.companyName) {
-        const formattedName = cleanCompanyName(data.companyName);
+        const formattedName = data._isFromAi ? String(data.companyName).trim() : cleanCompanyName(data.companyName);
         if (setInputValue(elements.companyName, formattedName)) {
           highlightField(elements.companyName);
           filledCount++;
@@ -1414,22 +1414,25 @@
       }
     } catch (e) { console.warn("Error setting companyName:", e); }
 
-    // 5. Country Name (All words start with Capital)
+    // 5. Country Name (When from Gemini API, prefill exact API response)
     try {
       if (elements.countryName && data.countryName) {
-        let formattedCountry = toTitleCase(data.countryName);
-        if (/united\s*states/i.test(formattedCountry) || /^usa?$/i.test(formattedCountry.trim())) {
-          formattedCountry = "United States Of America";
-        } else if (/\b(?:turkey|t[uü]rkiye)\b/i.test(formattedCountry)) {
-          formattedCountry = "Turkiye";
-        } else if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(formattedCountry) || /^(?:my|mys)$/i.test(formattedCountry.trim())) {
-          formattedCountry = "Malaysia";
-        } else if (/\b(?:indonesia|republic\s*of\s*indonesia|republik\s*indonesia)\b/i.test(formattedCountry) || /^(?:id|idn|ri)$/i.test(formattedCountry.trim())) {
-          formattedCountry = "Indonesia";
-        } else if (/\b(?:new\s*zealand|aotearoa)\b/i.test(formattedCountry) || /^(?:nz|nzl)$/i.test(formattedCountry.trim())) {
-          formattedCountry = "New Zealand";
-        } else if (/\b(?:united\s*kingdom|great\s*britain|uk)\b/i.test(formattedCountry)) {
-          formattedCountry = "United Kingdom";
+        let formattedCountry = String(data.countryName).trim();
+        if (!data._isFromAi) {
+          formattedCountry = toTitleCase(formattedCountry);
+          if (/united\s*states/i.test(formattedCountry) || /^usa?$/i.test(formattedCountry.trim())) {
+            formattedCountry = "United States Of America";
+          } else if (/\b(?:turkey|t[uü]rkiye)\b/i.test(formattedCountry)) {
+            formattedCountry = "Turkiye";
+          } else if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(formattedCountry) || /^(?:my|mys)$/i.test(formattedCountry.trim())) {
+            formattedCountry = "Malaysia";
+          } else if (/\b(?:indonesia|republic\s*of\s*indonesia|republik\s*indonesia)\b/i.test(formattedCountry) || /^(?:id|idn|ri)$/i.test(formattedCountry.trim())) {
+            formattedCountry = "Indonesia";
+          } else if (/\b(?:new\s*zealand|aotearoa)\b/i.test(formattedCountry) || /^(?:nz|nzl)$/i.test(formattedCountry.trim())) {
+            formattedCountry = "New Zealand";
+          } else if (/\b(?:united\s*kingdom|great\s*britain|uk)\b/i.test(formattedCountry)) {
+            formattedCountry = "United Kingdom";
+          }
         }
         const isSelect = elements.countryName.tagName && elements.countryName.tagName.toLowerCase() === "select";
         const success = isSelect ? setSelectValue(elements.countryName, formattedCountry) : setInputValue(elements.countryName, formattedCountry);
@@ -1440,34 +1443,36 @@
       }
     } catch (e) { console.warn("Error setting countryName:", e); }
 
-    // 6. Company Address (Ensure comma before state, address ending must not have comma or point, and all words start with Capital)
+    // 6. Company Address (When from Gemini API, prefill exact API response directly)
     try {
       if (elements.companyAddress && data.companyAddress) {
         let cleanAddress = String(data.companyAddress).trim();
-        // Strip corporate registration disclaimers & statutory registered office disclaimers
-        cleanAddress = cleanAddress.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
-        cleanAddress = cleanAddress.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
+        if (!data._isFromAi) {
+          // Strip corporate registration disclaimers & statutory registered office disclaimers
+          cleanAddress = cleanAddress.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
+          cleanAddress = cleanAddress.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
 
-        // Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
-        cleanAddress = cleanAddress.replace(/(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+((?:pt\s*)?[A-Za-z0-9\-\/]+(?:\s*(?:&|and|,)\s*(?:pt\s*)?[A-Za-z0-9\-\/]+)*)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi, "$1$2 $3, ");
-        // Ensure comma after street types when followed by word
-        const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)";
-        const nonStreetLookahead = "(?!\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext|Road|Street|Avenue|Lane|Drive|Place|Close|Court|Terrace|Cres|Dr|Rd|St|Ave|Ln|Blvd|Hwy|Ct|Pl)\\b)";
-        const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)`, "g");
-        cleanAddress = cleanAddress.replace(streetSepRegex, "$1, $2");
-        cleanAddress = cleanAddress.replace(/\s+,/g, ",").replace(/,\s*,/g, ", ").replace(/,\s*/g, ", ");
-        // Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
-        // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
-        cleanAddress = cleanAddress.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)\b)/gi, "$1$2 $3");
-        // Repair accidental comma splitting two-syllable East Asian cities
-        cleanAddress = cleanAddress.replace(/\bChia,\s*Yi\s*City\b/gi, "Chiayi City");
-        cleanAddress = cleanAddress.replace(/\bChia[-\s,]*[Yy]i\s*City\b/gi, "Chiayi City");
-        cleanAddress = cleanAddress.replace(/\bHsin,\s*Chu\s*City\b/gi, "Hsinchu City");
-        cleanAddress = cleanAddress.replace(/\bHsin[-\s,]*[Cc]hu\s*City\b/gi, "Hsinchu City");
-        // Strip trailing postal codes (3 to 6 digits at the end of address string)
-        cleanAddress = cleanAddress.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "");
-        cleanAddress = cleanAddress.replace(/(\b(?:City|District|Township|County|Hsien|Village|Li|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
-        cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+          // Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
+          cleanAddress = cleanAddress.replace(/(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+((?:pt\s*)?[A-Za-z0-9\-\/]+(?:\s*(?:&|and|,)\s*(?:pt\s*)?[A-Za-z0-9\-\/]+)*)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi, "$1$2 $3, ");
+          // Ensure comma after street types when followed by word
+          const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)";
+          const nonStreetLookahead = "(?!\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext|Road|Street|Avenue|Lane|Drive|Place|Close|Court|Terrace|Cres|Dr|Rd|St|Ave|Ln|Blvd|Hwy|Ct|Pl)\\b)";
+          const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)`, "g");
+          cleanAddress = cleanAddress.replace(streetSepRegex, "$1, $2");
+          cleanAddress = cleanAddress.replace(/\s+,/g, ",").replace(/,\s*,/g, ", ").replace(/,\s*/g, ", ");
+          // Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
+          // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
+          cleanAddress = cleanAddress.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)\b)/gi, "$1$2 $3");
+          // Repair accidental comma splitting two-syllable East Asian cities
+          cleanAddress = cleanAddress.replace(/\bChia,\s*Yi\s*City\b/gi, "Chiayi City");
+          cleanAddress = cleanAddress.replace(/\bChia[-\s,]*[Yy]i\s*City\b/gi, "Chiayi City");
+          cleanAddress = cleanAddress.replace(/\bHsin,\s*Chu\s*City\b/gi, "Hsinchu City");
+          cleanAddress = cleanAddress.replace(/\bHsin[-\s,]*[Cc]hu\s*City\b/gi, "Hsinchu City");
+          // Strip trailing postal codes (3 to 6 digits at the end of address string)
+          cleanAddress = cleanAddress.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "");
+          cleanAddress = cleanAddress.replace(/(\b(?:City|District|Township|County|Hsien|Village|Li|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
+          cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+        }
         if (setInputValue(elements.companyAddress, cleanAddress)) {
           highlightField(elements.companyAddress);
           filledCount++;
@@ -1955,20 +1960,8 @@
 
     isCrawlingInProgress = true;
 
-    isAutoQueuePipelineActive = true;
-    if (autoQueueEnabled && !isBatchNotWorkingActive) {
-      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({
-          autoQueuePipeline: {
-            active: true,
-            lastSubmittedUrl: getTargetUrl() || "",
-            updatedAt: Date.now()
-          }
-        });
-      }
-      const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
-      if (pauseBtn) pauseBtn.style.display = "inline-flex";
-    }
+    // Single crawl & fill: ensure auto-queue loop is stopped so API is never called repeatedly
+    stopAutoQueuePipeline("Manual crawl initiated");
     let targetUrl = getTargetUrl();
     if (!targetUrl) {
       // Try to load pending URL from queue if input is empty
