@@ -22,10 +22,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const toggleInlineBtn = document.getElementById("toggle-inline-btn");
   const btnOpenTestPortal = document.getElementById("btn-open-test-portal");
 
+  const DEPRECATED_MODELS = new Set([
+    "gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro",
+    "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash-latest"
+  ]);
+
   // Load existing settings or pre-configure defaults
   chrome.storage.sync.get(["apiKey", "model", "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"], (res) => {
     apiKeyInput.value = res.apiKey || DEFAULT_API_KEY;
-    modelSelect.value = res.model || DEFAULT_MODEL;
+    let savedModel = res.model || DEFAULT_MODEL;
+    if (DEPRECATED_MODELS.has(savedModel)) {
+      savedModel = "gemini-3.5-flash-lite";
+      try { chrome.storage.sync.set({ model: "gemini-3.5-flash-lite" }); } catch (e) { }
+    }
+    modelSelect.value = savedModel;
     toggleStrictFilter.checked = res.strictFilter !== undefined ? res.strictFilter : true;
     if (toggleAutoQueue) {
       toggleAutoQueue.checked = res.autoQueueEnabled !== undefined ? res.autoQueueEnabled : true;

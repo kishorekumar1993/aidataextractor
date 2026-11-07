@@ -13,6 +13,11 @@ const DEFAULT_MODEL =
   (typeof self !== "undefined" && self.ENV && self.ENV.DEFAULT_MODEL) ||
   "gemini-3.5-flash-lite";
 
+const DEPRECATED_MODELS = new Set([
+  "gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro",
+  "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash-latest"
+]);
+
 // Primary prohibited core industries per Instruction Sheet Note 2
 // Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
 const RESTRICTED_PATTERNS = [
@@ -461,13 +466,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       try { chrome.runtime.getPlatformInfo(() => {}); } catch (e) { }
     }, 2500);
 
-    // Bounded safety timeout: 15s guarantees sendResponse fires well before Chrome's 30s message channel deadline!
+    // Bounded safety timeout: 28s prevents permanent stalls while allowing full AI processing
     let finished = false;
     const timeoutId = setTimeout(() => {
       if (finished) return;
       finished = true;
       clearInterval(keepAlive);
-      console.warn("[Background] Crawl reached safety boundary (15s). Returning timeout Not Working result before port closes.");
+      console.warn("[Background] Crawl reached safety boundary (28s). Returning timeout Not Working result before port closes.");
       try {
         const timeoutNotWorking = {
           websiteStatus: "Not Working",
@@ -487,8 +492,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           errorCategory: "Unreachable / Timeout",
           errorKeyword: "Connection Timeout / Unresponsive",
           errorSourceUrl: request.url,
-          errorSnippet: "Website took longer than 15 seconds to respond or server is unresponsive (Rule 1).",
-          notWorkingReason: "Website took longer than 15 seconds to respond or server is unresponsive (Rule 1).",
+          errorSnippet: "Website took longer than 28 seconds to respond or server is unresponsive (Rule 1).",
+          notWorkingReason: "Website took longer than 28 seconds to respond or server is unresponsive (Rule 1).",
           _finalUrl: request.url,
           _originalUrl: request.url,
           _note: "Crawl timeout reached safety boundary - Marked as Not Working (Rule 1)"
@@ -497,7 +502,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (err) {
         sendResponse({ success: false, error: "Crawl timeout" });
       }
-    }, 15000);
+    }, 28000);
 
     handleCrawlAndExtract(request.url)
       .then(result => {
@@ -634,7 +639,11 @@ async function handleCrawlAndExtract(rawUrl) {
 
   const settings = await chrome.storage.sync.get(["apiKey", "model"]);
   const apiKey = (settings.apiKey && settings.apiKey.trim()) ? settings.apiKey.trim() : DEFAULT_API_KEY;
-  const model = settings.model || DEFAULT_MODEL;
+  let model = (settings.model && settings.model.trim()) ? settings.model.trim() : DEFAULT_MODEL;
+  if (DEPRECATED_MODELS.has(model)) {
+    model = "gemini-3.5-flash-lite";
+    try { chrome.storage.sync.set({ model: "gemini-3.5-flash-lite" }); } catch (e) { }
+  }
 
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
   const crawlResult = await crawlWebsite(targetUrl);
@@ -4467,19 +4476,14 @@ Return ONLY valid JSON matching this schema:
   //   "gemini-flash-lite-latest"
   // ].filter((m, i, arr) => m && arr.indexOf(m) === i);
   const candidateModels = [
-    modelName,
-
-    // Latest Gemini models
+    (modelName && !DEPRECATED_MODELS.has(modelName)) ? modelName : "gemini-3.5-flash-lite",
+    "gemini-3.5-flash-lite",
     "gemini-3.8-flash",
     "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-
-    // Gemini 2.5 alternatives
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro"
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
+    "gemini-flash-lite-latest",
+    "gemini-2.5-flash-lite"
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i && !DEPRECATED_MODELS.has(m));
 
   let lastError = null;
   let parsed = null;
@@ -4488,7 +4492,7 @@ Return ONLY valid JSON matching this schema:
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${apiKey}`;
     try {
       const abortCtrl = new AbortController();
-      const abortTimer = setTimeout(() => abortCtrl.abort(), 4500);
+      const abortTimer = setTimeout(() => abortCtrl.abort(), 6500);
       let response;
       try {
         response = await fetch(url, {
@@ -9090,18 +9094,14 @@ function extractLikelyAddress(text) {
 
 async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
   const modelsToTry = [
-    modelName,
-    // Latest Gemini models
+    (modelName && !DEPRECATED_MODELS.has(modelName)) ? modelName : "gemini-3.5-flash-lite",
+    "gemini-3.5-flash-lite",
     "gemini-3.8-flash",
     "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-
-    // Gemini 2.5 alternatives
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro"
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
+    "gemini-flash-lite-latest",
+    "gemini-2.5-flash-lite"
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i && !DEPRECATED_MODELS.has(m));
 
   let lastError = null;
 

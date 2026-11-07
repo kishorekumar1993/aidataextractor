@@ -53,7 +53,7 @@
             portResolved = true;
             try { port.disconnect(); } catch (e) { }
             sendMessageDirect(message, retryCount).then(resolve);
-          }, 16000);
+          }, 28000);
 
           port.onMessage.addListener((res) => {
             if (portResolved) return;
@@ -1927,8 +1927,8 @@
       quickBtn.innerHTML = "⏳ Crawling...";
     }
 
-    // Safety timeout: ensure buttons are NEVER permanently disabled (25s)
-    const safetyTimer = setTimeout(resetCrawlButtons, 25000);
+    // Safety timeout: ensure buttons are NEVER permanently disabled (30s)
+    const safetyTimer = setTimeout(resetCrawlButtons, 30000);
 
     try {
       const response = await sendRuntimeMessage({ action: "CRAWL_AND_EXTRACT", url: targetUrl });
