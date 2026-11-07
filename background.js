@@ -11,7 +11,7 @@ const DEFAULT_API_KEY =
 const DEFAULT_MODEL =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
   (typeof self !== "undefined" && self.ENV && self.ENV.DEFAULT_MODEL) ||
-  "gemini-1.5-flash";
+  "gemini-3.5-flash-lite";
 
 // Primary prohibited core industries per Instruction Sheet Note 2
 // Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
@@ -4468,10 +4468,18 @@ Return ONLY valid JSON matching this schema:
   // ].filter((m, i, arr) => m && arr.indexOf(m) === i);
   const candidateModels = [
     modelName,
-    "gemini-1.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-pro"
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i).slice(0, 2);
+
+    // Latest Gemini models
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+
+    // Gemini 2.5 alternatives
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro"
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 
   let lastError = null;
   let parsed = null;
@@ -9083,10 +9091,17 @@ function extractLikelyAddress(text) {
 async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
   const modelsToTry = [
     modelName,
-    "gemini-1.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-pro"
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i).slice(0, 2);
+    // Latest Gemini models
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+
+    // Gemini 2.5 alternatives
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-pro"
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 
   let lastError = null;
 
