@@ -180,9 +180,9 @@
 
     <div class="sample-bar">
       <span>💡 Try Quick Sample URLs:</span>
-      <span class="sample-pill" onclick="loadSample('http://www.teflexplastics.co.za')">Teflex Plastics</span>
-      <span class="sample-pill" onclick="loadSample('https://www.apple.com')">Apple Inc.</span>
-      <span class="sample-pill" onclick="loadSample('https://www.rolls-royce.com')">Rolls-Royce (Restricted Aircraft/Marine)</span>
+      <span class="sample-pill" data-url="http://www.teflexplastics.co.za">Teflex Plastics</span>
+      <span class="sample-pill" data-url="https://www.apple.com">Apple Inc.</span>
+      <span class="sample-pill" data-url="https://www.rolls-royce.com">Rolls-Royce (Restricted Aircraft/Marine)</span>
     </div>
 
     <form id="data-entry-form">
@@ -192,7 +192,7 @@
           <label for="website-name">Website Name:</label>
           <div class="input-row">
             <input type="text" id="website-name" name="website_name" value="http://www.teflexplastics.co.za">
-            <button type="button" class="btn-click-here" onclick="window.open(document.getElementById('website-name').value, '_blank')">click here</button>
+            <button type="button" class="btn-click-here">click here</button>
           </div>
         </div>
 
@@ -324,19 +324,7 @@
     </form>
   </div>
 
-  <script>
-    function loadSample(url) {
-      const input = document.getElementById('website-name');
-      input.value = url;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    document.getElementById('data-entry-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      alert('Form submitted successfully!');
-    });
-  </script>
+  <script src="test_portal.js"></script>
 </body>
 </html>
 
