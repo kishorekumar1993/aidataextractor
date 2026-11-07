@@ -2309,13 +2309,15 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   while ((pm = pAddrRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(pm[1]);
     if (raw.length >= 15 && raw.length <= 400 &&
-      (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|marg|nagar|estate|colony|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
+      (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|marg|nagar|estate|colony|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|piazza|strasse|straße|str\b|gasse|weg|platz|rue|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|zona\s*industriale|gewerbegebiet|zone\s*industrielle|parc\s*d['’]activit[eé]s|kawasan\s*industri|taman\s*perindustrian|jalan|jl\b|lorong|solok|mukim|daerah|amphoe|tambon|barangay|ulica|ul\b|n[aá]m[eě]st[ií]|t[rř][ií]da|alej|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
         /(?:大道|路|街|巷|弄|号|號|工业区|工业园|产业园|高新区)/.test(raw) ||
-        /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja|maharashtra|mumbai|delhi|bangalore|karnataka|tamil\s*nadu|chennai|gujarat|ahmedabad|kolkata|hyderabad|pune)\b/i.test(raw)) &&
-      (/\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|factory\s*\d+|level\s*\d+|floor\s*\d+|ist\s*floor|1st\s*floor|2nd\s*floor|3rd\s*floor|gpo\s*box)\b/i.test(raw) ||
+        /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja|maharashtra|mumbai|delhi|bangalore|karnataka|tamil\s*nadu|chennai|gujarat|ahmedabad|kolkata|hyderabad|pune|selangor|johor|penang|perak|kedah|pahang|jihomoravsk[yý]|st[rř]edo[cč]esk[yý]|praha|brno|ostrava|plze[nň]|mazowieckie|ma[lł]opolskie|[sś]l[aą]skie|wielkopolskie|dolno[sś]l[aą]skie|bavaria|bayern|hessen|nordrhein-westfalen|baden-w[uü]rttemberg|sachsen)\b/i.test(raw)) &&
+      (/\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|plot\s*\d+|factory\s*\d+|level\s*\d+|floor\s*\d+|ist\s*floor|1st\s*floor|2nd\s*floor|3rd\s*floor|gpo\s*box)\b/i.test(raw) ||
        /\d+\s*[号號]/.test(raw) ||
        /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(raw) ||
-       /\b\d{6}\b/.test(raw) ||
+       /\b\d{3}\s*\d{2}\b/.test(raw) ||
+       /\b\d{2}-\d{3}\b/.test(raw) ||
+       /\b\d{4,6}\b/.test(raw) ||
        /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
       const beforeText = processedHtml.slice(Math.max(0, pm.index - 500), pm.index);
       const ctx = getContext(beforeText, defaultSource, pm[1]);
@@ -4356,9 +4358,25 @@ ADDRESS EXTRACTION PRIORITY (CRITICAL QC REQUIREMENT):
 5. STRICTLY STRIP REGISTRATION CLAUSES FROM ADDRESS:
    - NEVER output legal disclaimers like "Registered in England : 11743582., Registered Office :" in companyAddress.
    - companyAddress MUST only contain clean physical address components: Premise/Building, Street, Locality/Town/City, and State.
-4. Address Formatting (Rule 6) - COMPLETE PHYSICAL ADDRESS PRESERVATION:
-   - TAKE THE COMPLETE PHYSICAL ADDRESS: Retain street address, locality/suburb, town/city, AND State / Province / Territory!
-   - STRICTLY DO NOT DROP OR STRIP STATE / PROVINCE / REGION! (e.g. For "40 Sarah St, Campbellfield VIC 3061.", you MUST KEEP the state "Victoria": "40 Sarah Street, Campbellfield, Victoria").
+4. Address Formatting (Rule 6) - COMPLETE PHYSICAL ADDRESS PRESERVATION (GLOBAL MANDATE FOR ALL COUNTRIES WORLDWIDE):
+   - MANDATORY GLOBAL COMPLETE ADDRESS RULE ("some country address coming incomplete - address should support and take all country addresses completely"):
+     * You MUST extract the COMPLETE physical address for ALL countries worldwide. NEVER return an incomplete, partial, or truncated address!
+     * NEVER cut off or omit any part of the address. Retain every single structural address component:
+       1. Premise / Building Name / Suite / Unit / Floor / Level / Block / Lot / Plot / Factory / Workshop / Survey Number / Gate Number / Shed / Bay.
+       2. Industrial Estate / Business Park / Trading Estate / Science Park / Free Zone / Special Economic Zone / Technology Park / Polígono Industrial / Zona Industriale / Gewerbegebiet / Kawasan Industri / Taman Perindustrian.
+       3. Street number and Street / Road / Avenue / Boulevard / Way / Drive / Lane / Highway / Route / Strasse / Rue / Via / Calle / Jalan / Chome.
+       4. Suburb / Locality / Ward / Neighborhood / Village / Town / Township / Sub-district / District / Municipality / Borough / Taluk / Tehsil / Mukim / Amphoe / Barangay / Sector.
+       5. City / Metropolitan Area.
+       6. State / Province / Territory / County / Shire / Canton / Prefecture / Bundesland / Region / Division / Department / Voivodeship / Oblast / Emirate / Governorate.
+   - CRITICAL CONTINENTAL EUROPE & INTERNATIONAL POSTAL CODE RULE:
+     * In Continental Europe (Germany, Austria, Switzerland, France, Italy, Spain, Netherlands, Belgium, Poland, Czechia, Sweden, Norway, Denmark, etc.), postal codes are placed BEFORE the city name (e.g. "80333 München", "75008 Paris", "28013 Madrid", "602 00 Brno", "00-838 Warszawa").
+     * When stripping postal codes, REMOVE ONLY the postal code digits/code!
+     * NEVER truncate, cut off, or discard the City, Municipality, District, or State that follows the postal code!
+     * Example: "Musterstraße 12, 80333 München, Bayern" -> "Musterstrasse 12, München, Bayern" (München and Bayern MUST be kept!).
+     * Example: "Rue de la Paix 10, 75002 Paris, Île-de-France" -> "Rue De La Paix 10, Paris, Île-De-France" (Paris and Île-de-France MUST be kept!).
+     * Example: "Calle Mayor 4, 28013 Madrid" -> "Calle Mayor 4, Madrid" (Madrid MUST be kept!).
+     * Example: "Křenová 75, 602 00 Brno, Jihomoravský Kraj" -> "Křenová 75, Brno, Jihomoravský Kraj" (Brno and Jihomoravský Kraj MUST be kept!).
+     * Example: "Number 20-2, Xinxing Street, Shulin District, New Taipei City" -> KEEP ALL components!
    - STRICT INITIAL STREET NUMBER & PREMISE PRESERVATION:
      * NEVER drop or strip the leading building / street / premise number or identifier (e.g. "12110 Best Place" -> MUST KEEP "12110", "40 Sarah Street" -> MUST KEEP "40", "18 Kuang Fu North Road" -> MUST KEEP "18"). A standalone number at the beginning of an address followed by a street name is the STREET NUMBER, NOT a postal code! You MUST retain the initial building/street number!
      * NEVER drop or strip "Lot" or "Plot" identifiers (e.g. "Lot 45, Jalan Kemajuan" -> MUST KEEP "Lot 45", "Plot 12, Phase II" -> MUST KEEP "Plot 12"). "Lot" and "Plot" are primary premise addresses in industrial zones and estates globally!
@@ -4372,13 +4390,13 @@ ADDRESS EXTRACTION PRIORITY (CRITICAL QC REQUIREMENT):
        - NEVER insert commas BETWEEN words of a multi-word Industrial / Business / Trade Park, Trading Estate, or Zone name! (e.g. "Argent Trade Park" is ONE park name, NEVER "Argent, Trade, Park" or "Argent, Trade Park"! "Westwood Business Park", "Cambridge Science Park", "Prologis Park").
        - NEVER insert commas BETWEEN words of a multi-word Street Name or Highway! (e.g. "Pump Lane" NEVER "Pump, Lane", "Great Western Highway" NEVER "Great, Western, Highway", "Old Country Road" NEVER "Old, Country, Road").
        - NEVER insert commas BETWEEN building/street numbers and street names! (e.g. "604 Progress Drive" NEVER "604, Progress Drive", "12110 Best Place" NEVER "12110, Best Place").
-       - NEVER insert commas BETWEEN words of a multi-word City or County! (e.g. "West Sussex" NEVER "West, Sussex", "Kuala Lumpur" NEVER "Kuala, Lumpur", "New York" NEVER "New, York").
+       - NEVER insert commas BETWEEN words of a multi-word City or County! (e.g. "West Sussex" NEVER "West, Sussex", "Kuala Lumpur" NEVER "Kuala, Lumpur", "New York" NEVER "New, York", "New Taipei City" NEVER "New, Taipei City").
    - ADDRESS ENDING CRITICAL QC RULE: Address ending MUST NOT have a comma (,) or point/period (.). It should be empty of trailing punctuation (e.g. "40 Sarah Street, Campbellfield, Victoria", NEVER end with "." or ",").
    - REMOVE ONLY:
-     * Postal codes / ZIP codes that follow the city/state (e.g. "OH 45241" -> strip 45241, "VIC 3061" -> strip 3061). DO NOT strip the initial street number!
-     * Country name (e.g. Australia, South Africa, United States, Taiwan, R.O.C., Turkiye).
+     * Postal codes / ZIP codes (e.g. "OH 45241" -> strip 45241, "VIC 3061" -> strip 3061, "602 00 Brno" -> strip 602 00). DO NOT strip the initial street number!
+     * Country name (e.g. Australia, South Africa, United States, Taiwan, R.O.C., Turkiye, Czechia).
      * Company name.
-   - EXPAND ALL ABBREVIATIONS TO FULL WORDS:
+   - EXPAND ALL ABBREVIATIONS TO FULL WORDS GLOBALLY:
      * Compass / Directional prefixes & suffixes: E. / E -> East (e.g. "301 E. Marquardt Drive" -> "301 East Marquardt Drive"), W. / W -> West, N. / N -> North, S. / S -> South, NE / N.E. -> Northeast, NW / N.W. -> Northwest, SE / S.E. -> Southeast, SW / S.W. -> Southwest.
      * Street types: St -> Street, Rd -> Road, Ave -> Avenue, Cnr -> Corner, Dr -> Drive, Blvd -> Boulevard, Ln -> Lane, Ct -> Court, Pl -> Place, Hwy -> Highway, Cres -> Crescent, Pde -> Parade, Tce/Ter -> Terrace, Cl -> Close, Sq -> Square, Pkwy -> Parkway, Cir -> Circle, Gr/Gv -> Grove, Mews -> Mews, Way -> Way, Wlk -> Walk, Gdns -> Gardens, Esp -> Esplanade, Crst -> Crest, Prom -> Promenade, Rte -> Route, Tpke -> Turnpike, Ctr -> Centre, Aly -> Alley, Arc -> Arcade, Bnd -> Bend, Brg -> Bridge, Byp -> Bypass, Cswy -> Causeway, Cmn -> Common, Xing -> Crossing, Ext -> Extension, Fwy -> Freeway, Grn -> Green, Holw -> Hollow, Jct -> Junction, Knl -> Knoll, Lndg -> Landing, Mdw/Mdws -> Meadow/Meadows, Ml/Mls -> Mill/Mills, Mt -> Mount, Oval -> Oval, Pass -> Pass, Path -> Path, Pike -> Pike, Plz -> Plaza, Pt -> Point, Rdg -> Ridge, Rnch -> Ranch, Row -> Row, Run -> Run, Shr -> Shore, Spg/Spgs -> Spring/Springs, Sta -> Station, Strm -> Stream, Sumit/Smt -> Summit, Trce -> Trace, Trl -> Trail, Tunl -> Tunnel, Via -> Via, Vis -> Vista, Whf -> Wharf, No. -> Number, Nr -> Near.
      * Units / Buildings / Floors: Ste -> Suite, Apt -> Apartment, Bldg -> Building, Flr -> Floor, Dept -> Department, Rm -> Room, POB / PO Box -> Post Office Box.
@@ -5707,9 +5725,15 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = compName.replace(/['’`]\s*s\b/gi, "'s");
   compName = cleanCompanyPrefixesAndSuffixes(compName);
 
-  // Prefer the fuller official name (copyright / JSON-LD) ONLY when AI output was missing a legal suffix or empty
+  // Prefer the fuller official name (copyright / JSON-LD / legal candidates) when AI output was missing a legal suffix, empty, or fails to match the domain
   const hasSuffix = hasCompleteLegalSuffix(compName) || /\b(?:limited|ltd|incorporated|incorporation|inc|corporation|corp|llc|llp|pllc|plc|gmbh|ag|kg|sa|sl|srl|bv|nv|co|company|holdings|group)\b/i.test(compName);
-  if (!compName || !hasSuffix) {
+  const dStem = cleanDomainStem((crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "");
+  const dStemNorm = normalizeNameForComparison(dStem);
+  const curNormComp = normalizeNameForComparison(compName);
+  const compMatchesDomain = dStemNorm && (curNormComp.includes(dStemNorm) || dStemNorm.includes(curNormComp));
+  const hasLegalCandidates = crawlData && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0;
+
+  if (!compName || !hasSuffix || (!compMatchesDomain && hasLegalCandidates)) {
     compName = preferOfficialCompanyName(compName, crawlData);
     compName = restoreLegalSuffixIfOmitted(compName, crawlData);
     compName = decodeHtmlEntities(compName);
@@ -7445,6 +7469,9 @@ function preferOfficialCompanyName(name, crawlData) {
   const title = (crawlData && crawlData.title) || "";
   const domain = (crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "";
   const domainStem = cleanDomainStem(domain);
+  const dStemNorm = normalizeNameForComparison(domainStem);
+  const curNorm = normalizeNameForComparison(current);
+  const curMatchesDomain = dStemNorm && (curNorm.includes(dStemNorm) || dStemNorm.includes(curNorm));
   const legalCandidates = ((crawlData && crawlData.legalCompanyCandidates) || []).map(c => cleanCompanyPrefixesAndSuffixes(c)).filter(Boolean);
 
   // 1. If the current name is an SEO marketing slogan or tagline, replace it with the true brand
@@ -7483,16 +7510,26 @@ function preferOfficialCompanyName(name, crawlData) {
       else if (offNorm.startsWith(curNorm) || curNorm.startsWith(offNorm)) score += 80;
       else if (offNorm.includes(curNorm) || curNorm.includes(offNorm)) score += 60;
     }
-    if (domainStem && offNorm) {
-      if (offNorm === domainStem) score += 90;
-      else if (offNorm.startsWith(domainStem) || domainStem.startsWith(offNorm)) score += 70;
-      else if (offNorm.includes(domainStem) || domainStem.includes(offNorm)) score += 50;
+    if (dStemNorm && offNorm) {
+      if (offNorm === dStemNorm) score += 90;
+      else if (offNorm.startsWith(dStemNorm) || dStemNorm.startsWith(offNorm)) score += 70;
+      else if (offNorm.includes(dStemNorm) || dStemNorm.includes(offNorm)) score += 50;
+    }
+    // If AI extracted name fails to match domain stem, but this official candidate matches domain stem:
+    if (!curMatchesDomain && dStemNorm && (offNorm.includes(dStemNorm) || dStemNorm.includes(offNorm))) {
+      score += 120;
     }
     // Boost English candidate matching domain when current is in Chinese/non-Latin
-    if (/[\u4e00-\u9fa5]/.test(current) && domainStem && offNorm.includes(domainStem)) {
+    if (/[\u4e00-\u9fa5]/.test(current) && dStemNorm && offNorm.includes(dStemNorm)) {
       score += 70;
     }
     if (companyNamesMatch(current, official)) score += 80;
+
+    // Boost candidate matching website page title
+    const titleNorm = normalizeNameForComparison(title);
+    if (titleNorm && offNorm && (titleNorm.includes(offNorm) || offNorm.includes(titleNorm))) {
+      score += 80;
+    }
 
     // Boost candidate that retains country designation ONLY if it matches the specific country of the domain or current name
     const countryTokens = [
@@ -9179,20 +9216,17 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
 }
 
 /**
- * Carefully strips postal codes while strictly preserving street numbers and states.
+ * Carefully strips postal codes while strictly preserving street numbers, cities, and states globally.
  */
 function removePostalCodesCarefully(addr) {
   if (!addr) return "";
   let a = addr;
 
-  // Common street suffixes across English and international addresses
-  const streetSuffixPattern = "\\b(?:street|road|avenue|lane|drive|way|place|court|terrace|boulevard|highway|parkway|crescent|close|walk|row|parade|circuit|square|esplanade|mews|alley|st|rd|ave|ln|dr|pl|ct|tce|blvd|hwy|pkwy|cres|cl|sq)\\b";
+  const streetSuffixPattern = "\\b(?:street|road|avenue|lane|drive|way|place|court|terrace|boulevard|highway|parkway|crescent|close|walk|row|parade|circuit|square|esplanade|mews|alley|st|rd|ave|ln|dr|pl|ct|tce|blvd|hwy|pkwy|cres|cl|sq|strasse|straße|str|rue|via|viale|calle|ulica|ul|namesti|náměstí|avenida|avda|jalan|jl)\\b";
+  const premisePrefixPattern = "\\b(?:suite|unit|bldg|building|floor|fl|rm|room|dept|apartment|apt|flat|lot|plot|block|blk|level|shed|warehouse|factory|p\\.?o\\.?\\s*box|no\\.?|nos\\.?|number|#)\\b";
 
-  // Premise / Unit prefixes
-  const premisePrefixPattern = "\\b(?:suite|unit|bldg|building|floor|fl|rm|room|dept|apartment|apt|flat|lot|block|blk|level|shed|warehouse|factory|p\\.?o\\.?\\s*box)\\b";
-
-  // 1. Explicitly labeled postal codes at start (e.g. 'Zip 45241, 12110 Best Place' or 'Postal Code: 30543, No. 18...')
-  a = a.replace(/^\s*(?:zip(?:\s*code)?|postal(?:\s*code)?|postcode|pincode|pin|plz|cap|cp|cedex)\s*[:#\-]?\s*\d{3,6}[\s,]+/gi, "");
+  // 1. Explicitly labeled postal codes (e.g. 'Zip 45241, 12110 Best Place', 'Postal Code: 30543', 'PLZ: 80333', 'PSČ: 602 00', 'CP: 28013')
+  a = a.replace(/(?:^|[\s,]+)(?:zip(?:\s*code)?|postal(?:\s*code)?|postcode|pincode|pin|plz|cap|cp|cedex|psč|psc)\s*[:#\-]?\s*(?:\d{4,6}|\d{3}\s*\d{2}|\d{2}-\d{3})[\s,]+/gi, ", ");
 
   // 2. Leading postal code directly touching Chinese characters (e.g. '30543新竹縣...')
   a = a.replace(/^\s*(\d{3,6})(?=[\u4e00-\u9fa5])/g, "");
@@ -9203,42 +9237,55 @@ function removePostalCodesCarefully(addr) {
   // 4. Leading postal code preceding administrative region keyword (e.g. '504 Changhua County, Taiwan')
   a = a.replace(/^\s*\d{3,6}[\s,]+(?=[A-Za-z]+(?:\s+[A-Za-z]+)?\s+(?:county|hsien|province|region|prefecture)\b)/gi, "");
 
-  // NOTE: A standalone number at the start of an address followed by a street name (e.g. '12110 Best Place',
-  // '1450 Broadway', '4500 Industrial Parkway', '100 Main Street') is 100% THE STREET / BUILDING NUMBER.
+  // NOTE: A standalone number at the start of an address followed by a street name is 100% THE STREET / BUILDING NUMBER.
   // It MUST NEVER be stripped!
 
-  // 5. UK Postcodes (e.g. SW1A 1AA, EC1A 1BB, W1A 0AX, M1 1AE)
+  // 5. UK Postcodes (e.g. SW1A 1AA, EC1A 1BB, W1A 0AX, M1 1AE, CM9 4PX)
   a = a.replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/gi, " ");
 
-  // 6. Spanish & European prefixed postal codes (e.g. ES-28014, E-28014, ES 28014)
-  a = a.replace(/\b(?:ES|E|IT|FR|DE|NL|BE|AT|CH)[-\s]?\d{4,5}\b/gi, " ");
+  // 6. European country-prefixed postal codes (e.g. ES-28014, CZ-60200, DE-80333, FR-75002, PL-00-838)
+  a = a.replace(/\b(?:ES|E|IT|FR|DE|NL|BE|AT|CH|CZ|PL|SE|NO|DK)[-\s]?(?:\d{4,5}|\d{3}\s*\d{2}|\d{2}-\d{3})\b/gi, " ");
 
   // 7. Canadian Postcodes (e.g. M5V 2T6, K1A 0B1)
   a = a.replace(/\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/gi, " ");
 
-  // 8. US ZIP+4 (e.g. 90210-1234)
+  // 8. Dutch Postcodes with 2 letters (e.g. 1015 CW)
+  a = a.replace(/\b\d{4}\s*[A-Z]{2}\b/g, " ");
+
+  // 9. US ZIP+4 (e.g. 90210-1234)
   a = a.replace(/\b\d{5}-\d{4}\b/g, " ");
 
-  // 9. Postal code directly following State name / abbreviation (e.g. "VIC 3061", "Victoria 3061", "TX 78701", "Madrid 28001")
-  const allStatesPostalRegex = "\\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New\\s*Hampshire|New\\s*Jersey|New\\s*Mexico|New\\s*York|North\\s*Carolina|North\\s*Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\\s*Island|South\\s*Carolina|South\\s*Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West\\s*Virginia|Wisconsin|Wyoming|District\\s*Of\\s*Columbia|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC|Ontario|Quebec|British Columbia|Alberta|Gauteng|ON|QC|BC|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo)\\b[\\s,]*";
+  // 10. Polish postal codes (e.g. 00-838)
+  a = a.replace(/\b\d{2}-\d{3}\b/g, " ");
+
+  // 11. Czech / Slovak / Swedish spaced 5-digit postal codes (e.g. 602 00, 110 00) before city
+  a = a.replace(/(,\s*)\b\d{3}\s+\d{2}\b\s*(?=,?\s+[\p{L}])/gu, "$1");
+
+  // 12. Postal code directly following State name / abbreviation / province globally
+  const allStatesPostalRegex = "\\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New\\s*Hampshire|New\\s*Jersey|New\\s*Mexico|New\\s*York|North\\s*Carolina|North\\s*Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\\s*Island|South\\s*Carolina|South\\s*Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West\\s*Virginia|Wisconsin|Wyoming|District\\s*Of\\s*Columbia|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC|Ontario|Quebec|British Columbia|Alberta|Gauteng|ON|QC|BC|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo|Selangor|Johor|Penang|Perak|Kedah|Pahang|Negeri Sembilan|Melaka|Terengganu|Kelantan|Sarawak|Sabah|Perlis)\\b[\\s,]*";
   a = a.replace(new RegExp(`(${allStatesPostalRegex})\\b\\d{4,6}\\b`, "gi"), "$1");
 
-  // 10. Postal code before a city/town after comma (e.g. "..., 81750 Masai, Johor")
+  // 13. Postal code before a city/town after comma (e.g. "..., 81750 Masai, Johor", "..., 75002 Paris")
   // MUST NOT strip street numbers if preceded by Unit/Suite/Building or followed by a street suffix!
-  a = a.replace(/(,\s*)\b\d{4,6}\b\s*(?=,?\s+([A-Za-zÁÉÍÓÚáéíóúÑñ]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñ]+)*))/g, (match, comma, rest) => {
-    if (new RegExp(streetSuffixPattern, "i").test(rest)) return match;
+  a = a.replace(/(,\s*)\b\d{4,6}\b\s*(?=,?\s+([\p{L}]+(?:\s+[\p{L}]+)*))/gu, (match, comma, rest) => {
+    if (new RegExp(streetSuffixPattern, "iu").test(rest)) return match;
     const preComma = a.slice(0, a.indexOf(match));
-    if (new RegExp(premisePrefixPattern, "i").test(preComma)) return match;
+    if (new RegExp(premisePrefixPattern, "iu").test(preComma)) return match;
     return comma;
   });
-  a = a.replace(/(\b\d+\s+)\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b\s+(?=[A-Za-zÁÉÍÓÚáéíóúÑñ])/g, "$1");
+  a = a.replace(/(\b\d+\s+)\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b\s+(?=[\p{L}])/gu, "$1");
 
-  // 10.5. Postal code directly following City / District / Township / County / Hsien / Province / Region
+  // 14. Postal code directly following City / District / Township / County / Hsien / Province / Region
   a = a.replace(/(\b(?:City|District|Township|County|Hsien|Province|Region|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
 
-  // 11. Postal code at the very end of the address string (e.g. "... Campbellfield 3061", "... Mumbai - 400001", or "... Cincinnati, Ohio 45241")
-  a = a.replace(/[\s,\-]+(?:\bpin(?:\s*code)?\b[\s:#\-]*)?\b\d{3,6}\b(?:\s*[.,]?\s*)$/gi, "");
+  // 15. Postal code at the very end of the address string (e.g. "... Campbellfield 3061", "... Mumbai - 400001", or "... Cincinnati, Ohio 45241")
+  a = a.replace(/[\s,\-]+(?:\bpin(?:\s*code)?\b[\s:#\-]*)?\b(?:\d{4,6}|\d{3}\s*\d{2}|\d{2}-\d{3})\b(?:\s*[.,]?\s*)$/gi, "");
   a = a.replace(/\s*-\s*\b\d{4,6}\b(?=[\s,]|$)/g, "");
+
+  // Clean double commas and spaces
+  a = a.replace(/,\s*,+/g, ",");
+  a = a.replace(/\s+/g, " ");
+  a = a.replace(/^,\s*/, "").replace(/[,\s]+$/, "");
 
   return a;
 }
