@@ -1338,7 +1338,7 @@
     if (!str || typeof str !== "string") return "";
     const upperAcronyms = new Set([
       "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
-      "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "SDN", "BHD", "LTD", "PLC", "LLC", "INC", "CORP"
+      "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA"
     ]);
     let s = str.replace(/['’`]\s*s\b/gi, "'s");
     return s.replace(/[\p{L}\p{N}]+/gu, function (word, offset, fullStr) {
@@ -1810,10 +1810,10 @@
       }
     } catch (e) { console.warn("Error setting companyProfile:", e); }
 
-    // 4. Company Name (Rule 4: Special character should not start and should not end)
+    // 4. Company Name (Rule: All words start with Capital letter, Special character should not start and should not end)
     try {
       if (elements.companyName && data.companyName) {
-        let formattedName = data._isFromAi ? String(data.companyName).trim() : cleanCompanyName(data.companyName);
+        let formattedName = toTitleCase(cleanCompanyName(data.companyName) || String(data.companyName).trim());
         // Rule: Special character should not start and should not end
         formattedName = formattedName.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N}]+$/gu, "").trim();
         if (setInputValue(elements.companyName, formattedName)) {
@@ -1823,10 +1823,10 @@
       }
     } catch (e) { console.warn("Error setting companyName:", e); }
 
-    // 5. Country Name (When from Gemini API, prefill exact API response)
+    // 5. Country Name (Rule: All words start with Capital letter)
     try {
       if (elements.countryName && data.countryName) {
-        let formattedCountry = normalizeCountryName(String(data.countryName).trim());
+        let formattedCountry = toTitleCase(normalizeCountryName(String(data.countryName).trim()));
         const isSelect = elements.countryName.tagName && elements.countryName.tagName.toLowerCase() === "select";
         const success = isSelect ? setSelectValue(elements.countryName, formattedCountry) : setInputValue(elements.countryName, formattedCountry);
         if (success) {
@@ -1836,7 +1836,7 @@
       }
     } catch (e) { console.warn("Error setting countryName:", e); }
 
-    // 6. Company Address (When from Gemini API, prefill exact API response directly)
+    // 6. Company Address (Rule: All words start with Capital letter, Special character should not start and should not end)
     try {
       if (elements.companyAddress && data.companyAddress) {
         let cleanAddress = String(data.companyAddress).trim();
@@ -1866,6 +1866,8 @@
           cleanAddress = cleanAddress.replace(/(\b(?:City|District|Township|County|Hsien|Village|Li|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
           cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
         }
+        // Rule: All words in companyAddress MUST start with a Capital letter (Title Case)
+        cleanAddress = toTitleCase(cleanAddress);
         // Rule: Special character should not start and should not end
         cleanAddress = cleanAddress.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
         if (setInputValue(elements.companyAddress, cleanAddress)) {
@@ -3083,9 +3085,9 @@
       { key: "BT Source Link", val: btLink, isLink: true },
       { key: "BT Context", val: btSnippet ? `"...${btSnippet.replace(/^(\.\.\.)+/, '').replace(/(\.\.\.)+$/, '')}..."` : "", isSnippet: true },
       { key: "Company Profile", val: isRestr ? "-" : data.companyProfile },
-      { key: "Company Name", val: isRestr ? "-" : cleanCompanyName(data.companyName) },
+      { key: "Company Name", val: isRestr ? "-" : toTitleCase(cleanCompanyName(data.companyName) || data.companyName) },
       { key: "Name Source Link", val: nameLink, isLink: true },
-      { key: "Country", val: isRestr ? "-" : normalizeCountryName(data.countryName) },
+      { key: "Country", val: isRestr ? "-" : toTitleCase(normalizeCountryName(data.countryName)) },
       { key: "Address", val: isRestr ? "-" : toTitleCase(data.companyAddress) },
       { key: "Address Source Link", val: addrLink, isLink: true },
       { key: "State", val: isRestr ? "-" : data.state },

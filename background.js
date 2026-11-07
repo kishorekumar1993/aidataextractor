@@ -4052,15 +4052,15 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyName: {
       type: "STRING",
-      description: "Official corporate name with expanded legal abbreviations (e.g. Company, Limited, Corporation, Manufacturing, Incorporated, Proprietary Limited)"
+      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, Wang Ruey Industrial Company Limited, Danzer UK Limited)."
     },
     countryName: {
       type: "STRING",
-      description: "Standardized official country name in Title Case (e.g. Czechia, Turkiye, United States Of America, United Kingdom, Canada, Australia, Taiwan, India). For Czech Republic always return Czechia."
+      description: "Standardized official country name in Title Case where EVERY single word starts with a Capital letter (e.g. Czechia, Turkiye, United States Of America, United Kingdom, Canada, Australia, Taiwan, India). For Czech Republic always return Czechia."
     },
     companyAddress: {
       type: "STRING",
-      description: "Clean physical headquarters/main address in Title Case without phone numbers, emails, or postal/zip codes"
+      description: "Clean physical headquarters/main address in Title Case where EVERY single word starts with a Capital letter (e.g. Number 53-5, Pocheng Road, Yuanshan Township, Yilan County, Number 20-2, Xinxing Street, Shulin District, New Taipei City)."
     },
     state: {
       type: "STRING",
@@ -4249,11 +4249,14 @@ BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
   - YOU MUST MARK "websiteStatus": "Not Working"!
   - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": "businessType": "", "companyProfile": "", "companyName": "", "countryName": "", "companyAddress": "", "state": "", "city": "", "emailId": "", "secondaryEmailId": "", "phoneNumber": "", "numberOfProducts": "", "productImages": "", "numberOfProductDescriptions": ""!
 
-CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALWAYS TARGET ENGLISH & TITLE CASE):
-- CRITICAL CAPITALIZATION QC RULE ("All words come start with Captial make it"):
-  Every word in "companyName", "companyAddress", and "countryName" MUST start with a Capital letter (Title Case).
-  E.g. "United States Of America" (with capital 'Of'), "46 Market Hill, Maldon, Essex", "Empire West Incorporated", "Danzer UK Limited", "City Of Industry, California".
-  Do NOT leave small words like "of", "and", "in" in lowercase. Capitalize every single word!
+CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME, COMPANY ADDRESS, COUNTRY MUST START WITH CAPITAL LETTER):
+- MANDATORY CAPITALIZATION QC RULE ("In Company Name, Company Address, Country All the words start with Capital letter"):
+  EVERY SINGLE WORD in "companyName", "companyAddress", and "countryName" MUST start with a Capital letter (Title Case).
+  * In "companyName": Capitalize every single word! E.g. "Inter Outstanding Electronics Incorporated", "Wang Ruey Industrial Company Limited", "Web Rack Industrial Company Limited", "Danzer UK Limited".
+  * In "companyAddress": Capitalize every single word! E.g. "Number 53-5, Pocheng Road, Yuanshan Township, Yilan County", "Number 20-2, Xinxing Street, Shulin District, New Taipei City", "46 Market Hill, Maldon, Essex", "123 Main Street, Suite 400", "City Of Industry, California".
+  * In "countryName": Capitalize every single word! E.g. "United States Of America" (with capital 'Of'), "United Kingdom", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye".
+  * STRICT PROHIBITION: Do NOT leave small words, prepositions, or conjunctions in lowercase! Words like "Of", "And", "In", "At", "By", "For", "With", "On", "The", "De", "Du" MUST be capitalized with their first letter uppercase (e.g. "United States Of America", "City Of Industry", "Bank Of China").
+  * Special characters MUST NOT start and MUST NOT end "companyName" or "companyAddress".
 - CRITICAL "NUMBER" EXPANSION RULE ("if No come only expand and do with out coming dont put blankly number"):
   * ONLY expand to "Number" if the original address explicitly contains "No.", "No", "NO.", "Nos.", "Nº", or "#" (e.g. "No. 56-106, Zhangma St." -> "Number 56-106, Zhangma Street", "NO. 12" -> "Number 12").
   * If the original address does NOT contain "No" or "No." (e.g. it is just "18 Kuang Fu North Road", "40 Sarah Street", "12 Stephen Road", "46 Market Hill"), DO NOT put "Number"! Output "18 Kuang Fu North Road" (NEVER put "Number" if "No" was not in the original text!).
@@ -4582,11 +4585,15 @@ COMPANY NAME RULES (Rule 4):
    - NEVER prefix the company name with navigation or call-to-action words like "Contact ", "Contact Us ", "About ", "Welcome to ", "Home - ", "Visit ", "Get In Touch With ", "Connect With ", "Policy ", "Submit ", "Scroll to Top ", "Privacy Notice of ", "Copyright ", etc.
    - Example: If a page heading says "Contact Danzer UK Limited", the official company name is "Danzer UK Limited" (NEVER "Contact Danzer UK Limited").
    - Strip marketing taglines or product category descriptors attached after the legal suffix (e.g. "Danzer UK Limited - Timber Merchants Suppliers of Hardwoods" -> "Danzer UK Limited").
+7. MANDATORY CAPITALIZATION & SPECIAL CHARACTER RULES FOR COMPANY NAME:
+   - EVERY SINGLE WORD in companyName MUST start with a Capital letter (Title Case). E.g. "Inter Outstanding Electronics Incorporated", "Wang Ruey Industrial Company Limited".
+   - Special characters MUST NOT start and MUST NOT end the company name.
 
 COUNTRY NAME VALIDATION RULES:
 1. Country Name MUST be taken DIRECTLY from the physical address on the website.
 2. STRICTLY DO NOT guess or infer from domain name or URL extension (e.g. do NOT guess from .com.tw, .tw, .co.za).
-3. STANDARDIZED OFFICIAL COUNTRY NAMES (GLOBAL MANDATE - APPLIES GLOBALLY TO ALL COUNTRIES):
+3. MANDATORY CAPITALIZATION: EVERY SINGLE WORD in countryName MUST start with a Capital letter (e.g. "United States Of America" with capital 'Of', "United Kingdom", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye").
+4. STANDARDIZED OFFICIAL COUNTRY NAMES (GLOBAL MANDATE - APPLIES GLOBALLY TO ALL COUNTRIES):
    - For Czech Republic / Czech / Česká republika / Česko, you MUST return "Czechia" (NEVER return "Czech Republic").
    - For Turkey / Türkiye / Republic of Turkey / Republic of Turkiye, you MUST return "Turkiye" (spelled "Turkiye").
    - For the United States / USA / US / U.S.A., you MUST return the full official name "United States Of America" (NEVER return just "United States" or "USA").
@@ -5264,19 +5271,20 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     // Ensure abbreviation expansions are applied (e.g. "Co., Ltd." -> "Company, Limited", "Co. Ltd" -> "Company Limited")
     compName = expandCompanyAbbreviations(compName, result.countryName || "");
 
+    // Rule: All words in companyName, companyAddress, and countryName MUST start with a Capital letter
     // Rule: Special character should not start and should not end
-    result.companyName = compName
+    result.companyName = toTitleCase(compName)
       .replace(/^[^\p{L}\p{N}]+/gu, "")
       .replace(/[^\p{L}\p{N}]+$/gu, "")
       .trim();
 
-    result.companyAddress = decodeHtmlEntities(String(result.companyAddress || "").trim())
+    result.companyAddress = toTitleCase(decodeHtmlEntities(String(result.companyAddress || "").trim()))
       .replace(/^[^\p{L}\p{N}]+/gu, "")
       .replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "")
       .trim();
-    result.countryName = normalizeCountryName(result.countryName);
+    result.countryName = toTitleCase(normalizeCountryName(result.countryName));
     if (!result.countryName && result.companyAddress) {
-      result.countryName = detectCountryFromAddress(result.companyAddress);
+      result.countryName = toTitleCase(detectCountryFromAddress(result.companyAddress));
     }
     result.businessType = String(result.businessType || "").trim();
     result.companyProfile = String(result.companyProfile || "").trim();
@@ -5777,7 +5785,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   } else {
     addr = "Not Available";
   }
-  result.companyAddress = addr;
+  result.companyAddress = toTitleCase(addr);
 
   // Infer country strictly from physical address evidence if missing
   if (!country || country.length < 2) {
@@ -5791,7 +5799,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       else if (/\.(?:nz|co\.nz|org\.nz|net\.nz|gen\.nz|ac\.nz|govt\.nz)(?:[:\/\?]|$)/i.test(urlStr)) country = "New Zealand";
     }
   }
-  country = normalizeCountryName(country);
+  country = toTitleCase(normalizeCountryName(country));
   result.countryName = country;
 
   // Helper for cross-country equivalence (UK constituent nations, USA variants)
@@ -9231,10 +9239,10 @@ function toTitleCase(str) {
   if (!str) return "";
   const upperAcronyms = new Set([
     "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
-    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP"
+    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA"
   ]);
   let s = str.replace(/['’`]\s*s\b/gi, "'s");
-  // Every word starts with a Capital letter per QC instruction: "All words come start with Captial make it"
+  // Every word starts with a Capital letter per QC instruction: "All words start with Capital letter"
   return s.replace(/[\p{L}\p{N}]+/gu, function (word, offset, fullStr) {
     if (offset > 0 && fullStr[offset - 1] === "'" && word.toLowerCase() === "s") {
       return "s";
@@ -9242,10 +9250,6 @@ function toTitleCase(str) {
     const upper = word.toUpperCase();
     if (upperAcronyms.has(upper)) return upper;
     if (/^GmbH$/i.test(word)) return "GmbH";
-    // Retain 2-4 letter uppercase acronyms like TP, SNC, PP, etc.
-    if (/^[A-Z]{2,4}$/.test(word) && !/^(?:AND|THE|FOR|WITH|FROM|OUT)$/i.test(word)) {
-      return word;
-    }
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });
 }
