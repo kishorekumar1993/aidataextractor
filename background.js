@@ -1492,11 +1492,12 @@ async function crawlWebsite(targetUrl) {
     const allCrawlText = mainHtml + "\n" + contactHtml;
     companySocials = extractOfficialSocialLinks(allCrawlText);
 
-    // High-speed smart social check: if email is missing on website (Rule: website check, if not available check Facebook)
-    // Rule: Details & Addresses MUST be taken strictly from website only! Social (Facebook) is used for email if missing on website.
-    if (allDiscoveredEmails.size === 0) {
-      const socialUrl = companySocials.facebook || companySocials.linkedin;
-      if (socialUrl && !fetchedUrls.has(socialUrl)) {
+    // High-speed smart social check: if email is missing or fewer than 2 distinct emails found on website,
+    // check company's official Facebook and LinkedIn pages for primary/secondary emails.
+    const socialCandidates = [companySocials.facebook, companySocials.linkedin].filter(Boolean);
+    if (allDiscoveredEmails.size < 2 && socialCandidates.length > 0) {
+      for (const socialUrl of socialCandidates) {
+        if (!socialUrl || fetchedUrls.has(socialUrl)) continue;
         fetchedUrls.add(socialUrl);
         try {
           const sRes = await fetchDecodedHtml(socialUrl, {
@@ -1512,22 +1513,23 @@ async function crawlWebsite(targetUrl) {
             }
           });
           if (sRes && sRes.ok && sRes.html) {
-            // Un-escape Facebook JSON Unicode email obfuscation (\u0040 and %40)
-            const decodedFbHtml = sRes.html.replace(/\\u0040/g, "@").replace(/%40/g, "@");
-            const rawFbMatches = decodedFbHtml.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-            for (const em of rawFbMatches) {
+            // Un-escape Facebook/LinkedIn JSON Unicode email obfuscation (\u0040 and %40)
+            const decodedSocialHtml = sRes.html.replace(/\\u0040/g, "@").replace(/%40/g, "@");
+            const rawSocialMatches = decodedSocialHtml.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+            for (const em of rawSocialMatches) {
               const cleanEm = em.toLowerCase().trim();
               if (isValidCorporateEmail(cleanEm) && !isUnwantedEmail(cleanEm)) {
                 allDiscoveredEmails.add(cleanEm);
                 updateEmailSource(emailSourceMap, cleanEm, socialUrl, finalUrl, targetUrl);
               }
             }
-            for (const em of extractEmailsFromHtml(decodedFbHtml, finalUrl)) {
+            for (const em of extractEmailsFromHtml(decodedSocialHtml, finalUrl)) {
               allDiscoveredEmails.add(em);
               updateEmailSource(emailSourceMap, em, socialUrl, finalUrl, targetUrl);
             }
           }
         } catch (e) { }
+        if (allDiscoveredEmails.size >= 2) break;
       }
     }
   } catch (err) {
@@ -4074,11 +4076,11 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     emailId: {
       type: "STRING",
-      description: "Primary domain-matched corporate contact email address"
+      description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook)"
     },
     secondaryEmailId: {
       type: "STRING",
-      description: "Secondary distinct corporate email (different department or person), or empty string if none"
+      description: "Secondary distinct corporate email from anywhere on website or company social media (LinkedIn, Facebook). STRICTLY MUST NOT be the same as emailId. If only one email exists, return empty string \"\"."
     },
     phoneNumber: {
       type: "STRING",
@@ -4259,6 +4261,8 @@ CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME
   * Special characters MUST NOT start and MUST NOT end "companyName" or "companyAddress".
 - MANDATORY PHONE NUMBER QC RULE:
   * "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
+- MANDATORY EMAIL QC RULE:
+  * "Primary email and secondary emails should NOT be the same. Emails can be found in any place on the website or company social media like LinkedIn and Facebook. If only one email exists, secondaryEmailId MUST be empty string \"\"."
 - CRITICAL "NUMBER" EXPANSION RULE ("if No come only expand and do with out coming dont put blankly number"):
   * ONLY expand to "Number" if the original address explicitly contains "No.", "No", "NO.", "Nos.", "Nº", or "#" (e.g. "No. 56-106, Zhangma St." -> "Number 56-106, Zhangma Street", "NO. 12" -> "Number 12").
   * If the original address does NOT contain "No" or "No." (e.g. it is just "18 Kuang Fu North Road", "40 Sarah Street", "12 Stephen Road", "46 Market Hill"), DO NOT put "Number"! Output "18 Kuang Fu North Road" (NEVER put "Number" if "No" was not in the original text!).
@@ -4621,29 +4625,35 @@ COUNTRY NAME VALIDATION RULES:
    - For Venezuela / Bolivarian Republic of Venezuela, you MUST return "Venezuela".
 
 EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE & SOCIAL CHANNELS):
-1. Comprehensive Full-Website Email Analysis:
-   - Thoroughly examine the entire website content provided (Homepage body, Contact Us page, About Us page, Careers page, Company Profile, Branch locations, and Footer).
-   - Review all corporate emails discovered during crawling (from website and official Facebook page): ${crawlData.emails.join(", ") || "(None)"}
-2. Primary Email (emailId):
-   - Extract the primary corporate, general business, or headquarters contact email (e.g. info@..., contact@..., enquiries@..., hr@..., sales@..., or main corporate domain email).
-3. Facebook & Official Social Email Rule (APPLICABLE TO BOTH PRIMARY & SECONDARY EMAIL):
-   - Check official website pages first.
-   - If NO email is found on the website pages, check the company's official Facebook page or social media evidence. If a valid corporate email is discovered on Facebook, populate it as emailId!
-   - If the website already has one email, check Facebook for a second distinct corporate email and populate it as secondaryEmailId!
-   - Never leave emailId blank if a valid corporate email is available in the crawled emails list or Facebook evidence!
+1. Primary and Secondary Emails MUST NEVER BE THE SAME:
+   * CRITICAL QC RULE: "Primary email and secondary emails should NOT be the same. Emails can be found in any place on the website or company social media like LinkedIn and Facebook. If only one email exists, secondaryEmailId MUST be empty string \"\"."
+   * emailId and secondaryEmailId STRICTLY CANNOT be identical. Under NO circumstances should secondaryEmailId duplicate emailId.
+   * If only ONE corporate email is found across the website and social media, set emailId to that email, and set secondaryEmailId to "" (empty string).
+2. Comprehensive Email Search Scope (Any Place in Website or Social Media):
+   * Look for emails in ANY PLACE on the website:
+     - Header, Navigation bar, and Homepage body
+     - Contact Us, Get In Touch, and Inquiry pages
+     - About Us, Company Profile, Leadership, and Team pages
+     - Careers, Jobs, and HR pages
+     - Support, Customer Service, Helpdesk, and Warranty pages
+     - Branches, Global Offices, Factories, and Regional Contact sections
+     - Footer, Copyright block, Legal, Terms of Service, and Privacy Policy
+     - Downloadable catalogs, Brochures, Product Spec Sheets, and PDFs
+   * Look for emails in Company Official Social Media:
+     - Company official LinkedIn page
+     - Company official Facebook page
+3. Primary Email (emailId):
+   * Extract the main corporate, general business, or headquarters contact email (e.g. info@..., contact@..., enquiries@..., sales@..., or main corporate domain email).
+   * Check official website pages first. If NO email is found on the website pages, check official company LinkedIn or Facebook profiles.
+   * Never leave emailId blank if a valid corporate email exists anywhere in the crawled content or social profiles.
 4. Secondary Email (secondaryEmailId) - CRITICAL QC RULE:
-   - YOU MUST ANALYZE THE COMPLETE WEBSITE AND SOCIAL EVIDENCE TO IDENTIFY ANY SECONDARY OR ALTERNATE CORPORATE EMAIL.
-   - Look for department emails (e.g. sales@..., support@..., service@..., export@..., accounts@..., marketing@..., hr@..., admin@...), branch emails, or alternate personnel/contact emails found anywhere on the site or Facebook.
-   - If two or more distinct valid corporate emails exist, secondaryEmailId MUST be populated with the second distinct email.
-   - secondaryEmailId MUST be different and distinct from emailId (never output identical emails in both fields).
-   - CRITICAL ANTI-HALLUCINATION RULE:
-     * ONLY extract emails that are explicitly written on the crawled website or official Facebook page.
-     * NEVER invent, guess, hallucinate, or output personal email addresses (such as @gmail.com, @yahoo.com, @hotmail.com, @outlook.com, @icloud.com) that do not appear anywhere in the website content!
-     * If the website and Facebook only have ONE email address (or All Corporate Emails Discovered list has only 1 email), return "" for secondaryEmailId. NEVER invent or populate a second email!
-   - Return "" ONLY if the entire website and Facebook contain just one single email address.
-5. STRICT EMAIL ANTI-ARTIFACT QC RULE:
-   - NEVER extract scraping, legal, or privacy policy artifacts like "collected@www...", "posted@...", "sent@...", "accessed@...", or any email containing "www." in the domain.
-   - ONLY extract genuine corporate contact emails.
+   * secondaryEmailId is for an ALTERNATE, DISTINCT corporate email (e.g. different department such as sales@..., support@..., service@..., export@..., accounts@..., hr@..., admin@..., or a branch/personnel email).
+   * secondaryEmailId MUST be different and distinct from emailId.
+   * If two or more distinct corporate emails exist on the website or official LinkedIn/Facebook pages, secondaryEmailId MUST be populated with the second distinct email.
+   * If the website and social media contain ONLY ONE email address, secondaryEmailId MUST be "" (empty string). NEVER duplicate the primary email or invent a fake one.
+5. Strict Email Anti-Artifact & Anti-Hallucination Rules:
+   * NEVER extract scraping, legal, or privacy policy artifacts like "collected@www...", "posted@...", "sent@...", "accessed@...", or any email containing "www." in the domain.
+   * NEVER invent, hallucinate, or guess email addresses. Only extract genuine corporate emails explicitly present in the website or official company LinkedIn/Facebook pages.
 
 PHONE NUMBER RULES (CRITICAL QC REQUIREMENT):
 - MANDATORY QC RULE:
@@ -4779,6 +4789,10 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
   if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
     parsed.secondaryEmailId = "";
   }
+  // QC Rule: Primary email and secondary email MUST NOT be the same!
+  if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
+    parsed.secondaryEmailId = "";
+  }
 
   // Safely fallback to crawled emails/phones only if missing from Gemini
   const crawlEmails = (crawlData && Array.isArray(crawlData.emails) ? crawlData.emails : []).map(e => String(e).trim().toLowerCase());
@@ -4788,6 +4802,9 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
   if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) && crawlEmails.length > 1) {
     const second = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
     parsed.secondaryEmailId = second || "";
+  }
+  if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
+    parsed.secondaryEmailId = "";
   }
   if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
     parsed.phoneNumber = crawlData.phones[0];
@@ -5308,6 +5325,24 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.emailId = String(result.emailId || "").trim();
     result.secondaryEmailId = String(result.secondaryEmailId || "").trim();
     if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(result.secondaryEmailId)) {
+      result.secondaryEmailId = "";
+    }
+    // QC Rule: Primary email and secondary email MUST NOT be the same!
+    if (result.secondaryEmailId && result.emailId && result.secondaryEmailId.toLowerCase() === result.emailId.toLowerCase()) {
+      result.secondaryEmailId = "";
+    }
+    // If secondaryEmailId is empty or duplicate, attempt to find a distinct corporate email from crawlData
+    if (!result.secondaryEmailId && crawlData && Array.isArray(crawlData.emails) && crawlData.emails.length > 0) {
+      const primLower = (result.emailId || "").toLowerCase();
+      const distinctCand = crawlData.emails.find(e => {
+        const eClean = String(e || "").trim();
+        return eClean && eClean.toLowerCase() !== primLower && isValidCorporateEmail(eClean) && !isUnwantedEmail(eClean);
+      });
+      if (distinctCand) {
+        result.secondaryEmailId = distinctCand.trim();
+      }
+    }
+    if (result.secondaryEmailId && result.emailId && result.secondaryEmailId.toLowerCase() === result.emailId.toLowerCase()) {
       result.secondaryEmailId = "";
     }
     // QC Rule: Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero.

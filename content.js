@@ -2037,12 +2037,17 @@
       }
     } catch (e) { console.warn("Error setting emailId:", e); }
 
-    // 10. Secondary Email ID
+    // 10. Secondary Email ID (QC Rule: primary and secondary emails MUST NOT be the same)
     try {
       if (elements.secondaryEmailId) {
         try { elements.secondaryEmailId.setAttribute("autocomplete", "off"); } catch (e) { }
-        setInputValue(elements.secondaryEmailId, data.secondaryEmailId || "");
-        if (data.secondaryEmailId) highlightField(elements.secondaryEmailId);
+        let secEmail = String(data.secondaryEmailId || "").trim();
+        const primEmail = String(data.emailId || "").trim().toLowerCase();
+        if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(secEmail) || secEmail.toLowerCase() === primEmail) {
+          secEmail = "";
+        }
+        setInputValue(elements.secondaryEmailId, secEmail);
+        if (secEmail) highlightField(elements.secondaryEmailId);
         filledCount++;
       }
     } catch (e) { console.warn("Error setting secondaryEmailId:", e); }
@@ -3217,8 +3222,8 @@
       { key: "City", val: isRestr ? "-" : data.city },
       { key: "Email", val: isRestr ? "-" : data.emailId },
       { key: "Primary Email Link", val: primaryEmailLink, isLink: true },
-      { key: "Secondary Email", val: isRestr ? "-" : (data.secondaryEmailId || "(None)") },
-      { key: "Sec Email Link", val: secEmailLink, isLink: true },
+      { key: "Secondary Email", val: isRestr ? "-" : ((data.secondaryEmailId && data.secondaryEmailId.trim().toLowerCase() !== String(data.emailId || "").trim().toLowerCase()) ? data.secondaryEmailId : "(None)") },
+      { key: "Sec Email Link", val: (data.secondaryEmailId && data.secondaryEmailId.trim().toLowerCase() !== String(data.emailId || "").trim().toLowerCase()) ? secEmailLink : "", isLink: true },
       { key: "Phone", val: isRestr ? "-" : cleanPhoneNumber(data.phoneNumber, data.countryName) },
       { key: "No. Products", val: isRestr ? "-" : data.numberOfProducts },
       { key: "Product Images", val: isRestr ? "-" : data.productImages },
@@ -3237,7 +3242,7 @@
       if (item.key === "Name Source Link" && (!data.companyName || isRestr)) return;
       if (item.key === "Address Source Link" && (!data.companyAddress || data.companyAddress === "Not Available" || isRestr)) return;
       if (item.key === "Primary Email Link" && (!data.emailId || isRestr)) return;
-      if (item.key === "Sec Email Link" && (!data.secondaryEmailId || data.secondaryEmailId === "(None)" || isRestr)) return;
+      if (item.key === "Sec Email Link" && (!data.secondaryEmailId || data.secondaryEmailId === "(None)" || data.secondaryEmailId.trim().toLowerCase() === String(data.emailId || "").trim().toLowerCase() || !item.val || isRestr)) return;
 
       const row = document.createElement("div");
       row.className = "ai-preview-row";
