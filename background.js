@@ -1178,6 +1178,120 @@ function extractOfficialSocialLinks(html) {
 }
 
 /**
+ * Option A: Live DOM & Rendered Visual Text Extraction via Browser Tab.
+ * Leverages the browser engine to execute client-side JavaScript (React/Vue/Shopify/Angular),
+ * unpack obfuscated elements, and extract document.body.innerText & Schema.org JSON-LD.
+ */
+async function extractRenderedDomViaTab(targetUrl) {
+  if (typeof chrome === "undefined" || !chrome.tabs || !chrome.scripting) {
+    return null;
+  }
+
+  let createdTabId = null;
+  let targetTabId = null;
+
+  try {
+    const urlObj = new URL(targetUrl);
+    const domainStem = extractDomainStem(targetUrl);
+    const tabs = await chrome.tabs.query({});
+    const existing = tabs.find(t => {
+      try {
+        if (!t.url || !t.url.startsWith("http")) return false;
+        const h = new URL(t.url).hostname.toLowerCase();
+        return h === urlObj.hostname.toLowerCase() || (domainStem && h.includes(domainStem));
+      } catch (e) { return false; }
+    });
+
+    if (existing && existing.id) {
+      targetTabId = existing.id;
+    } else {
+      const tab = await chrome.tabs.create({ url: targetUrl, active: false });
+      createdTabId = tab.id;
+      targetTabId = tab.id;
+
+      // Wait up to 3 seconds for page and client-side JS to render
+      await new Promise((resolve) => {
+        let isDone = false;
+        const timer = setTimeout(() => {
+          if (!isDone) { isDone = true; resolve(); }
+        }, 3000);
+
+        function checkStatus(tabId, info) {
+          if (tabId === targetTabId && (info.status === "complete" || info.title)) {
+            if (!isDone) {
+              isDone = true;
+              clearTimeout(timer);
+              try { chrome.tabs.onUpdated.removeListener(checkStatus); } catch (e) { }
+              setTimeout(resolve, 350);
+            }
+          }
+        }
+        chrome.tabs.onUpdated.addListener(checkStatus);
+      });
+    }
+
+    const injectionResults = await chrome.scripting.executeScript({
+      target: { tabId: targetTabId },
+      func: () => {
+        const finalUrl = window.location.href;
+        const title = document.title || "";
+        const metaDesc = document.querySelector('meta[name="description"]')?.content || "";
+        const ogSiteName = document.querySelector('meta[property="og:site_name"]')?.content || "";
+        const canonical = document.querySelector('link[rel="canonical"]')?.href || "";
+
+        const jsonLdScripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+          .map(s => {
+            try { return JSON.parse(s.innerText); } catch (e) { return null; }
+          })
+          .filter(Boolean);
+
+        const renderedText = (document.body ? document.body.innerText : "")
+          .replace(/\r\n/g, "\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .slice(0, 15000);
+
+        const footerEl = document.querySelector("footer, [id*='footer'], [class*='footer']");
+        const footerText = footerEl ? footerEl.innerText.slice(0, 2500) : "";
+
+        const candidateLinks = Array.from(document.querySelectorAll("a[href]"))
+          .map(a => ({ text: (a.innerText || "").trim(), href: a.href }))
+          .filter(l => l.text && l.href && /^(http|https):/i.test(l.href))
+          .filter(l => /(?:contact|about|profile|product|catalog|service)/i.test(l.href) || /(?:contact|about|profile|product|catalog|service)/i.test(l.text))
+          .slice(0, 15);
+
+        const productItems = document.querySelectorAll("[data-product], [class*='product-item'], [class*='product-card'], [class*='product-listing'], [class*='catalog-item'], .product, .woocommerce-loop-product");
+        const productImages = document.querySelectorAll("img[src*='product'], img[alt*='product'], [class*='product'] img");
+
+        return {
+          finalUrl,
+          title,
+          metaDesc,
+          ogSiteName,
+          canonical,
+          jsonLd: jsonLdScripts.slice(0, 5),
+          renderedText,
+          footerText,
+          candidateLinks,
+          liveProductCount: Math.min(productItems.length, 3),
+          liveImageCount: Math.min(productImages.length, 3),
+          htmlSnapshot: document.documentElement ? document.documentElement.outerHTML.slice(0, 60000) : ""
+        };
+      }
+    });
+
+    const domPayload = injectionResults?.[0]?.result;
+    return domPayload || null;
+  } catch (err) {
+    console.warn("[Background] Live DOM tab extraction skipped:", err.message);
+    return null;
+  } finally {
+    if (createdTabId) {
+      try { await chrome.tabs.remove(createdTabId); } catch (e) { }
+    }
+  }
+}
+
+/**
  * Deep crawls homepage, handles HTML <frameset>/<frame>, contact pages, footer, JSON-LD, products.
  */
 async function crawlWebsite(targetUrl) {
@@ -1204,6 +1318,35 @@ async function crawlWebsite(targetUrl) {
   let contactLinks = [];
   let companySocials = {};
   const crawledPages = [];
+
+  // OPTION A: Attempt Live Rendered DOM extraction via browser tab
+  let liveDom = null;
+  try {
+    liveDom = await extractRenderedDomViaTab(targetUrl);
+  } catch (e) {
+    liveDom = null;
+  }
+
+  if (liveDom && liveDom.renderedText) {
+    console.log(`[AI Assistant] Option A Live DOM rendered text retrieved for: ${targetUrl}`);
+    mainHtml = liveDom.htmlSnapshot || liveDom.renderedText;
+    finalUrl = liveDom.finalUrl || targetUrl;
+    if (isRedirectDomain(targetUrl, finalUrl)) {
+      redirected = true;
+      status = "Redirect Site";
+    }
+    footerText = liveDom.footerText || "";
+    if (footerText) extractHtmlAddresses(footerText, addressCandidates, "footer");
+    if (liveDom.renderedText) {
+      extractHtmlAddresses(liveDom.renderedText, addressCandidates, "contact");
+      if (liveDom.jsonLd && liveDom.jsonLd.length > 0) {
+        extractJsonLdAddresses(JSON.stringify(liveDom.jsonLd), addressCandidates);
+      }
+    }
+    if (liveDom.candidateLinks && liveDom.candidateLinks.length > 0) {
+      contactLinks = liveDom.candidateLinks.map(l => l.href);
+    }
+  }
 
   try {
     let mainRes = await fetchDecodedHtml(targetUrl, {
@@ -1666,7 +1809,9 @@ async function crawlWebsite(targetUrl) {
     primaryContactUrl: primaryContactUrl || (contactLinks.find(u => /\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)\b/i.test(u)) || ""),
     primaryAboutUrl: primaryAboutUrl || (contactLinks.find(u => /\b(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|profile)\b/i.test(u)) || ""),
     companySocials,
-    crawledPages
+    crawledPages,
+    renderedText: (liveDom && liveDom.renderedText) || (mainHtml ? stripHtml(mainHtml).slice(0, 15000) : ""),
+    jsonLd: (liveDom && liveDom.jsonLd) || []
   };
 }
 
@@ -3940,6 +4085,108 @@ function detectPurchaseOrShoppingCart(html = "", text = "") {
 }
 
 /**
+ * Option A: Gemini Structured Outputs Schema.
+ * Guarantees that every field returned by Gemini adheres strictly to exact data types and enum constraints.
+ */
+const GEMINI_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    websiteStatus: {
+      type: "STRING",
+      enum: ["Working", "Not Working", "Redirect Site"],
+      description: "Working if operational physical goods company; Not Working if dead, 404, 0 products, or prohibited; Redirect Site if redirected to different domain"
+    },
+    businessType: {
+      type: "STRING",
+      enum: [
+        "Manufacturer",
+        "Industrial Services",
+        "Exporter",
+        "Trader",
+        "Distributer",
+        "Supplier",
+        "Wholesaler",
+        "Service Provider",
+        "Online Shopping",
+        "Restricted Site",
+        "Other"
+      ],
+      description: "Business scope classification. Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler are allowed working types."
+    },
+    companyProfile: {
+      type: "STRING",
+      enum: ["Available", "Not Available"],
+      description: "Available if dedicated company overview/profile/history text exists; else Not Available"
+    },
+    companyName: {
+      type: "STRING",
+      description: "Official corporate name with expanded legal abbreviations (e.g. Company, Limited, Corporation, Manufacturing, Incorporated, Proprietary Limited)"
+    },
+    countryName: {
+      type: "STRING",
+      description: "Full country name in Title Case (e.g. United States Of America, United Kingdom, Canada, Australia, Taiwan, India)"
+    },
+    companyAddress: {
+      type: "STRING",
+      description: "Clean physical headquarters/main address in Title Case without phone numbers, emails, or postal/zip codes"
+    },
+    state: {
+      type: "STRING",
+      enum: ["Available", "Not Available"],
+      description: "Available if state/province is identifiable in address; else Not Available"
+    },
+    city: {
+      type: "STRING",
+      enum: ["Available", "Not Available"],
+      description: "Available if city/town is identifiable in address; else Not Available"
+    },
+    emailId: {
+      type: "STRING",
+      description: "Primary domain-matched corporate contact email address"
+    },
+    secondaryEmailId: {
+      type: "STRING",
+      description: "Secondary distinct corporate email (different department or person), or empty string if none"
+    },
+    phoneNumber: {
+      type: "STRING",
+      description: "Contact phone number digits only (without country code or leading 0)"
+    },
+    numberOfProducts: {
+      type: "STRING",
+      enum: ["0", "1", "2", "3"],
+      description: "Number of physical product items/catalog offerings identified (capped at 3)"
+    },
+    productImages: {
+      type: "STRING",
+      enum: ["0", "1", "2", "3"],
+      description: "Number of physical product images identified (capped at 3)"
+    },
+    numberOfProductDescriptions: {
+      type: "STRING",
+      enum: ["0", "1", "2", "3"],
+      description: "Number of physical product descriptions identified (capped at 3)"
+    }
+  },
+  required: [
+    "websiteStatus",
+    "businessType",
+    "companyProfile",
+    "companyName",
+    "countryName",
+    "companyAddress",
+    "state",
+    "city",
+    "emailId",
+    "secondaryEmailId",
+    "phoneNumber",
+    "numberOfProducts",
+    "productImages",
+    "numberOfProductDescriptions"
+  ]
+};
+
+/**
  * Prompts Google Gemini with complete, uncorrupted website content and strict QC instructions.
  */
 async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck) {
@@ -4449,7 +4696,7 @@ Product Items / Units Detected: ${crawlData.detectedProductCount}
 Product Images Detected: ${crawlData.detectedImageCount}
 Product Descriptions Detected: ${crawlData.detectedDescCount}
 
-DEDICATED COMPANY PROFILE / ABOUT US CONTENT:
+${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD STRUCTURED BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd, null, 2)}\n\n` : ""}${crawlData.renderedText ? `TRUE RENDERED VISUAL TEXT (LIVE BROWSER DOM):\n${crawlData.renderedText.slice(0, 8000)}\n\n` : ""}DEDICATED COMPANY PROFILE / ABOUT US CONTENT:
 ${crawlData.profilePageText || "(No dedicated company profile page text found)"}
 
 PHYSICAL ADDRESS CANDIDATES FOUND ON WEBSITE (PRIMARY EVIDENCE IN PRIORITY ORDER):
@@ -4463,32 +4710,8 @@ ${crawlData.footerText || "(No separate footer text found)"}
 
 PAGE BODY TEXT:
 ${crawlData.bodyText.slice(0, 4000)}
-
-Return ONLY valid JSON matching this schema:
-{
-  "websiteStatus": "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash Site" | "Redirect Site",
-  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other",
-  "companyProfile": "Available" | "Not Available",
-  "companyName": "string",
-  "countryName": "string",
-  "companyAddress": "string",
-  "state": "Available" | "Not Available",
-  "city": "Available" | "Not Available",
-  "emailId": "string",
-  "secondaryEmailId": "string",
-  "phoneNumber": "string",
-  "numberOfProducts": "3" | "2" | "1" | "0",
-  "productImages": "3" | "2" | "1" | "0",
-  "numberOfProductDescriptions": "3" | "2" | "1" | "0"
-}
 `;
 
-  // const candidateModels = [
-  //   modelName,
-  //   "gemini-2.5-flash-lite",
-  //   "gemini-3.5-flash-lite",
-  //   "gemini-flash-lite-latest"
-  // ].filter((m, i, arr) => m && arr.indexOf(m) === i);
   const candidateModels = [
     (modelName && !DEPRECATED_MODELS.has(modelName)) ? modelName : "gemini-3.5-flash-lite",
     "gemini-3.5-flash-lite",
@@ -4517,7 +4740,8 @@ Return ONLY valid JSON matching this schema:
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
               temperature: 0.1,
-              responseMimeType: "application/json"
+              responseMimeType: "application/json",
+              responseSchema: GEMINI_RESPONSE_SCHEMA
             }
           })
         });
@@ -4541,7 +4765,12 @@ Return ONLY valid JSON matching this schema:
 
       const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
       parsed = JSON.parse(cleaned);
-      if (parsed) break;
+      if (parsed) {
+        if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
+          parsed.secondaryEmailId = "";
+        }
+        break;
+      }
     } catch (err) {
       console.warn(`Model ${modelToTry} attempt failed:`, err.message);
       lastError = err;

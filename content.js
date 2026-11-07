@@ -2712,7 +2712,62 @@
         });
         return true;
       }
+      if (message && message.action === "EXTRACT_LIVE_DOM") {
+        try {
+          const domPayload = extractLiveDomPayload();
+          sendResponse({ success: true, data: domPayload });
+        } catch (e) {
+          sendResponse({ success: false, error: e.message });
+        }
+        return true;
+      }
     });
+  }
+
+  // Option A: Extract live rendered visual DOM, Schema.org JSON-LD, and metadata from active tab
+  function extractLiveDomPayload() {
+    const finalUrl = window.location.href;
+    const title = document.title || "";
+    const metaDesc = document.querySelector('meta[name="description"]')?.content || "";
+    const ogSiteName = document.querySelector('meta[property="og:site_name"]')?.content || "";
+    const canonical = document.querySelector('link[rel="canonical"]')?.href || "";
+
+    const jsonLdScripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+      .map(s => {
+        try { return JSON.parse(s.innerText); } catch (e) { return null; }
+      })
+      .filter(Boolean);
+
+    const renderedText = (document.body ? document.body.innerText : "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .slice(0, 15000);
+
+    const footerEl = document.querySelector("footer, [id*='footer'], [class*='footer']");
+    const footerText = footerEl ? footerEl.innerText.slice(0, 2500) : "";
+
+    const candidateLinks = Array.from(document.querySelectorAll("a[href]"))
+      .map(a => ({ text: (a.innerText || "").trim(), href: a.href }))
+      .filter(l => l.text && l.href && /^(http|https):/i.test(l.href))
+      .filter(l => /(?:contact|about|profile|product|catalog|service)/i.test(l.href) || /(?:contact|about|profile|product|catalog|service)/i.test(l.text))
+      .slice(0, 15);
+
+    const productItems = document.querySelectorAll("[data-product], [class*='product-item'], [class*='product-card'], [class*='product-listing'], [class*='catalog-item'], .product, .woocommerce-loop-product");
+    const productImages = document.querySelectorAll("img[src*='product'], img[alt*='product'], [class*='product'] img");
+
+    return {
+      finalUrl,
+      title,
+      metaDesc,
+      ogSiteName,
+      canonical,
+      jsonLd: jsonLdScripts.slice(0, 5),
+      renderedText,
+      footerText,
+      candidateLinks,
+      liveProductCount: Math.min(productItems.length, 3),
+      liveImageCount: Math.min(productImages.length, 3)
+    };
   }
 
 })();
