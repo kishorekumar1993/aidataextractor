@@ -1342,37 +1342,9 @@ async function crawlWebsite(targetUrl) {
   let companySocials = {};
   const crawledPages = [];
 
-  // OPTION A: Attempt Live Rendered DOM extraction via browser tab
-  let liveDom = null;
+  let mainRes = null;
   try {
-    liveDom = await extractRenderedDomViaTab(targetUrl);
-  } catch (e) {
-    liveDom = null;
-  }
-
-  if (liveDom && liveDom.renderedText) {
-    console.log(`[AI Assistant] Option A Live DOM rendered text retrieved for: ${targetUrl}`);
-    mainHtml = liveDom.htmlSnapshot || liveDom.renderedText;
-    finalUrl = liveDom.finalUrl || targetUrl;
-    if (isRedirectDomain(targetUrl, finalUrl)) {
-      redirected = true;
-      status = "Redirect Site";
-    }
-    footerText = liveDom.footerText || "";
-    if (footerText) extractHtmlAddresses(footerText, addressCandidates, "footer");
-    if (liveDom.renderedText) {
-      extractHtmlAddresses(liveDom.renderedText, addressCandidates, "contact");
-      if (liveDom.jsonLd && liveDom.jsonLd.length > 0) {
-        extractJsonLdAddresses(JSON.stringify(liveDom.jsonLd), addressCandidates);
-      }
-    }
-    if (liveDom.candidateLinks && liveDom.candidateLinks.length > 0) {
-      contactLinks = liveDom.candidateLinks.map(l => l.href);
-    }
-  }
-
-  try {
-    let mainRes = await fetchDecodedHtml(targetUrl, {
+    mainRes = await fetchDecodedHtml(targetUrl, {
       timeoutMs: 5000,
       headers: {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -1429,20 +1401,24 @@ async function crawlWebsite(targetUrl) {
       status = "Redirect Site";
     }
 
-    if (!mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status)) {
-      if (mainRes.status === 404) {
+    if (mainRes.html && mainRes.html.trim().length > 0) {
+      mainHtml = mainRes.html;
+    }
+
+    if (!mainRes || !mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status)) {
+      if (mainRes && mainRes.status === 404) {
         status = "Domain Expired";
         fetchError = "Site returned HTTP 404 Not Found";
-      } else if (mainRes.status === 403 || mainRes.status === 401 || isAntiBotChallenge(mainRes.html, mainRes.status)) {
+      } else if (mainRes && (mainRes.status === 403 || mainRes.status === 401 || isAntiBotChallenge(mainRes.html, mainRes.status))) {
         status = "Not Working";
         fetchError = `Site access restricted / blocked (HTTP ${mainRes.status || 403} Security Check / Forbidden)`;
       } else {
         status = "Not Working";
-        fetchError = mainRes.error || `Connection failed or empty response (HTTP ${mainRes.status || 0})`;
+        fetchError = (mainRes && mainRes.error) || fetchError || `Connection failed or empty response (HTTP ${(mainRes && mainRes.status) || 0})`;
       }
     }
 
-    mainHtml = mainRes.html || "";
+    mainHtml = (mainRes && mainRes.html) || "";
 
     // Check for client-side HTML Meta Refresh, JS location redirects, or cross-domain canonical links
     if (mainHtml) {
@@ -5162,11 +5138,18 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   const topCandidate = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
     ? crawlData.addressCandidates[0]
     : null;
-  const address = topCandidate
+  let address = topCandidate
     ? (typeof topCandidate === "object" ? topCandidate.raw : topCandidate)
     : extractLikelyAddress(crawlData.contactPageText || crawlData.footerText || text);
+  if (address) {
+    address = address.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
+    address = address.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
+  }
 
-  const country = detectCountryFromAddress(address);
+  let country = detectCountryFromAddress(address);
+  if (/^(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)$/i.test((country || "").trim())) {
+    country = "United Kingdom";
+  }
   const emailId = crawlData.emails.length > 0 ? crawlData.emails[0] : "";
   let targetDomain = "";
   try {

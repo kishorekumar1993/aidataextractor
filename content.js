@@ -32,8 +32,8 @@
     });
   }
 
-  // Resilient message sender with dual-channel (persistent port + sendMessage fallback) preventing port disconnects
-  function sendRuntimeMessage(message, retryCount = 2) {
+  // Resilient, non-looping message sender for MV3 service worker
+  function sendRuntimeMessage(message) {
     return new Promise(async (resolve) => {
       if (!isExtensionAlive()) {
         showReloadBanner();
@@ -42,78 +42,12 @@
 
       await ensureServiceWorkerAwake();
 
-      // Use persistent port connection with heartbeat for CRAWL_AND_EXTRACT tasks (prevents MV3 message channel closure)
-      if (message.action === "CRAWL_AND_EXTRACT" && chrome.runtime.connect) {
-        try {
-          const port = chrome.runtime.connect({ name: "ai-crawl-port" });
-          let portResolved = false;
-          let pingInterval = setInterval(() => {
-            if (portResolved) return;
-            try {
-              port.postMessage({ action: "PING" });
-            } catch (e) {
-              clearInterval(pingInterval);
-            }
-          }, 3000);
-
-          function cleanupPort() {
-            if (pingInterval) {
-              clearInterval(pingInterval);
-              pingInterval = null;
-            }
-            try { port.disconnect(); } catch (e) { }
-          }
-
-          const portTimer = setTimeout(() => {
-            if (portResolved) return;
-            portResolved = true;
-            cleanupPort();
-            sendMessageDirect(message, retryCount).then(resolve);
-          }, 45000);
-
-          port.onMessage.addListener((res) => {
-            if (res && res.action === "PONG") return; // Keepalive pong
-            if (portResolved) return;
-            portResolved = true;
-            clearTimeout(portTimer);
-            cleanupPort();
-            resolve(res);
-          });
-
-          port.onDisconnect.addListener(() => {
-            if (portResolved) return;
-            clearTimeout(portTimer);
-            cleanupPort();
-            sendMessageDirect(message, retryCount).then(resolve);
-          });
-
-          port.postMessage(message);
-          return;
-        } catch (e) {
-          // Port connect failed, fallback to sendMessage
-        }
-      }
-
-      sendMessageDirect(message, retryCount).then(resolve);
-    });
-  }
-
-  function sendMessageDirect(message, retryCount) {
-    return new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage(message, (response) => {
           if (chrome.runtime.lastError) {
             const err = chrome.runtime.lastError.message || "Unknown error";
             if (err.includes("Extension context invalidated")) {
               showReloadBanner();
-              return resolve({ success: false, error: err, isExtensionError: true });
-            }
-            if (retryCount > 0 && (err.includes("message channel closed") || err.includes("Could not establish connection"))) {
-              console.log(`[AI Assistant] Service worker reconnecting (${err}). Retrying in 500ms (${retryCount} retries left)...`);
-              setTimeout(() => {
-                sendRuntimeMessage(message, retryCount - 1).then(resolve);
-              }, 500);
-              return;
             }
             return resolve({ success: false, error: err, isExtensionError: true });
           }
@@ -194,7 +128,23 @@
     initAssistant();
   }
 
+  function isDataEntryPage() {
+    return !!(
+      document.getElementById("inputWebsiteName") ||
+      document.getElementById("website-name") ||
+      document.getElementById("btnLoadNextQueueUrl") ||
+      document.getElementById("selectWebsiteStatus") ||
+      document.getElementById("website-status") ||
+      document.getElementById("btnClickHere") ||
+      document.querySelector("input[id*='Website'], select[id*='WebsiteStatus'], [id*='inputWebsite']") ||
+      (window.location.href && window.location.href.includes("dataextraction"))
+    );
+  }
+
   function initAssistant() {
+    if (!isDataEntryPage()) {
+      return;
+    }
     ensureAiCrawlButtonsVisible();
     attachFieldObservers();
 
@@ -555,6 +505,13 @@
     if (!element) return false;
     const targetClean = String(targetValue).trim().toLowerCase();
 
+    const isZero = targetClean === "0" || targetClean === "zero";
+    const isOne = targetClean === "one" || targetClean === "1";
+    const isTwo = targetClean === "two" || targetClean === "2";
+    const isThree = targetClean === "three" || targetClean === "3";
+    const isAvailable = targetClean === "available";
+    const isNotAvailable = targetClean === "not available";
+
     if (element.tagName && element.tagName.toLowerCase() === "select") {
       let matchedIndex = -1;
 
@@ -585,13 +542,6 @@
 
       // 2. Symbolic & Numeric mapping (Supports 0, 1, 2, 3 options as in https://kishorekumar1993.github.io/dataextraction/)
       if (matchedIndex === -1) {
-        const isZero = targetClean === "0" || targetClean === "zero";
-        const isOne = targetClean === "one" || targetClean === "1";
-        const isTwo = targetClean === "two" || targetClean === "2";
-        const isThree = targetClean === "three" || targetClean === "3";
-        const isAvailable = targetClean === "available";
-        const isNotAvailable = targetClean === "not available";
-
         for (let i = 0; i < element.options.length; i++) {
           const opt = element.options[i];
           const val = (opt.value || "").trim().toLowerCase();
@@ -633,6 +583,11 @@
 
           if (isAvailable) {
             if ((val.includes("available") || txt.includes("available")) && !val.includes("not") && !txt.includes("not")) {
+              matchedIndex = i;
+              break;
+            }
+          } else if (isNotAvailable) {
+            if (val.includes("not available") || txt.includes("not available") || (txt.includes("not") && txt.includes("avail"))) {
               matchedIndex = i;
               break;
             }
@@ -701,6 +656,26 @@
             const val = (opt.value || "").trim().toLowerCase();
             const txt = (opt.text || "").trim().toLowerCase();
             if (val === "usa" || txt === "usa" || val === "us" || txt === "us" || val === "united states" || txt === "united states" || val === "united states of america" || txt === "united states of america") {
+              matchedIndex = i;
+              break;
+            }
+          }
+        } else if (targetClean === "united kingdom" || targetClean === "uk" || targetClean === "great britain") {
+          for (let i = 0; i < element.options.length; i++) {
+            const opt = element.options[i];
+            const val = (opt.value || "").trim().toLowerCase();
+            const txt = (opt.text || "").trim().toLowerCase();
+            if (val === "united kingdom" || txt === "united kingdom" || val === "uk" || txt === "uk" || val === "great britain" || txt === "great britain" || val === "england" || txt === "england") {
+              matchedIndex = i;
+              break;
+            }
+          }
+        } else if (targetClean === "england") {
+          for (let i = 0; i < element.options.length; i++) {
+            const opt = element.options[i];
+            const val = (opt.value || "").trim().toLowerCase();
+            const txt = (opt.text || "").trim().toLowerCase();
+            if (val === "england" || txt === "england" || val === "united kingdom" || txt === "united kingdom" || val === "uk" || txt === "uk" || val === "great britain" || txt === "great britain") {
               matchedIndex = i;
               break;
             }
@@ -1373,158 +1348,192 @@
     }
 
     // 1. Website Status
-    if (elements.websiteStatus && data.websiteStatus) {
-      if (setSelectValue(elements.websiteStatus, data.websiteStatus)) {
-        highlightField(elements.websiteStatus);
-        filledCount++;
-      }
-    }
-
-    // 2. Business Type
-    if (elements.businessType && data.businessType) {
-      if (setSelectValue(elements.businessType, data.businessType)) {
-        highlightField(elements.businessType);
-        filledCount++;
-      }
-    }
-
-    // 3. Company Profile
-    if (elements.companyProfile && data.companyProfile) {
-      if (setSelectValue(elements.companyProfile, data.companyProfile)) {
-        highlightField(elements.companyProfile);
-        filledCount++;
-      }
-    }
-
-    // 4. Company Name (Rule 4: Full form, remove brackets, preserve country, commas & dots, clean boundary special chars)
-    if (elements.companyName && data.companyName) {
-      const formattedName = cleanCompanyName(data.companyName);
-      if (setInputValue(elements.companyName, formattedName)) {
-        highlightField(elements.companyName);
-        filledCount++;
-      }
-    }
-
-    // 5. Country Name (All words start with Capital)
-    if (elements.countryName && data.countryName) {
-      let formattedCountry = toTitleCase(data.countryName);
-      if (/united\s*states/i.test(formattedCountry) || /^usa?$/i.test(formattedCountry.trim())) {
-        formattedCountry = "United States Of America";
-      } else if (/\b(?:turkey|t[uü]rkiye)\b/i.test(formattedCountry)) {
-        formattedCountry = "Turkiye";
-      } else if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(formattedCountry) || /^(?:my|mys)$/i.test(formattedCountry.trim())) {
-        formattedCountry = "Malaysia";
-      } else if (/\b(?:indonesia|republic\s*of\s*indonesia|republik\s*indonesia)\b/i.test(formattedCountry) || /^(?:id|idn|ri)$/i.test(formattedCountry.trim())) {
-        formattedCountry = "Indonesia";
-      } else if (/\b(?:new\s*zealand|aotearoa)\b/i.test(formattedCountry) || /^(?:nz|nzl)$/i.test(formattedCountry.trim())) {
-        formattedCountry = "New Zealand";
-      }
-      const isSelect = elements.countryName.tagName && elements.countryName.tagName.toLowerCase() === "select";
-      const success = isSelect ? setSelectValue(elements.countryName, formattedCountry) : setInputValue(elements.countryName, formattedCountry);
-      if (success) {
-        highlightField(elements.countryName);
-        filledCount++;
-      }
-    }
-
-    // 6. Company Address (Ensure comma before state, address ending must not have comma or point, and all words start with Capital)
-    if (elements.companyAddress && data.companyAddress) {
-      let cleanAddress = String(data.companyAddress).trim();
-      // Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
-      cleanAddress = cleanAddress.replace(/(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+((?:pt\s*)?[A-Za-z0-9\-\/]+(?:\s*(?:&|and|,)\s*(?:pt\s*)?[A-Za-z0-9\-\/]+)*)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi, "$1$2 $3, ");
-      // Ensure comma after street types when followed by word
-      const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)";
-      const nonStreetLookahead = "(?!\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext|Road|Street|Avenue|Lane|Drive|Place|Close|Court|Terrace|Cres|Dr|Rd|St|Ave|Ln|Blvd|Hwy|Ct|Pl)\\b)";
-      const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)`, "g");
-      cleanAddress = cleanAddress.replace(streetSepRegex, "$1, $2");
-      cleanAddress = cleanAddress.replace(/\s+,/g, ",").replace(/,\s*,/g, ", ").replace(/,\s*/g, ", ");
-      // Remove comma between street/building number and street name (including hyphenated street names)
-      cleanAddress = cleanAddress.replace(/(\b(?:Number|No\.?|#)\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)\b)/gi, "$1 $2");
-      // Repair accidental comma splitting two-syllable East Asian cities
-      cleanAddress = cleanAddress.replace(/\bChia,\s*Yi\s*City\b/gi, "Chiayi City");
-      cleanAddress = cleanAddress.replace(/\bChia[-\s,]*[Yy]i\s*City\b/gi, "Chiayi City");
-      cleanAddress = cleanAddress.replace(/\bHsin,\s*Chu\s*City\b/gi, "Hsinchu City");
-      cleanAddress = cleanAddress.replace(/\bHsin[-\s,]*[Cc]hu\s*City\b/gi, "Hsinchu City");
-      // Strip trailing postal codes (3 to 6 digits at the end of address string)
-      cleanAddress = cleanAddress.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "");
-      cleanAddress = cleanAddress.replace(/(\b(?:City|District|Township|County|Hsien|Village|Li|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
-      cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
-      if (setInputValue(elements.companyAddress, cleanAddress)) {
-        highlightField(elements.companyAddress);
-        filledCount++;
-      }
-    }
-
-    // 7. State
-    if (elements.state && data.state) {
-      if (setSelectValue(elements.state, data.state)) {
-        highlightField(elements.state);
-        filledCount++;
-      }
-    }
-
-    // 8. City
-    if (elements.city && data.city) {
-      if (setSelectValue(elements.city, data.city)) {
-        highlightField(elements.city);
-        filledCount++;
-      }
-    }
-
-    // 9. Email ID
-    if (elements.emailId && data.emailId) {
-      if (setInputValue(elements.emailId, data.emailId)) {
-        highlightField(elements.emailId);
-        filledCount++;
-      }
-    }
-
-    // 10. Secondary Email ID
-    if (elements.secondaryEmailId) {
-      try { elements.secondaryEmailId.setAttribute("autocomplete", "off"); } catch (e) { }
-      setInputValue(elements.secondaryEmailId, data.secondaryEmailId || "");
-      if (data.secondaryEmailId) highlightField(elements.secondaryEmailId);
-      filledCount++;
-    }
-
-    // 11. Phone Number: digits only, remove country code, no toll-free, never start with zero
-    if (elements.phoneNumber && data.phoneNumber) {
-      let cleanPhone = String(data.phoneNumber).trim().replace(/\D/g, "").replace(/^0+/, "");
-      // Strictly reject toll-free numbers
-      if (/^(?:800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902|0800|0808|0500)/.test(cleanPhone)) {
-        cleanPhone = "";
-      }
-      if (cleanPhone && !cleanPhone.startsWith("0")) {
-        if (setInputValue(elements.phoneNumber, cleanPhone)) {
-          highlightField(elements.phoneNumber);
+    try {
+      if (elements.websiteStatus && data.websiteStatus) {
+        if (setSelectValue(elements.websiteStatus, data.websiteStatus)) {
+          highlightField(elements.websiteStatus);
           filledCount++;
         }
       }
-    }
+    } catch (e) { console.warn("Error setting websiteStatus:", e); }
+
+    // 2. Business Type
+    try {
+      if (elements.businessType && data.businessType) {
+        if (setSelectValue(elements.businessType, data.businessType)) {
+          highlightField(elements.businessType);
+          filledCount++;
+        }
+      }
+    } catch (e) { console.warn("Error setting businessType:", e); }
+
+    // 3. Company Profile
+    try {
+      if (elements.companyProfile && data.companyProfile) {
+        if (setSelectValue(elements.companyProfile, data.companyProfile)) {
+          highlightField(elements.companyProfile);
+          filledCount++;
+        }
+      }
+    } catch (e) { console.warn("Error setting companyProfile:", e); }
+
+    // 4. Company Name (Rule 4: Full form, remove brackets, preserve country, commas & dots, clean boundary special chars)
+    try {
+      if (elements.companyName && data.companyName) {
+        const formattedName = cleanCompanyName(data.companyName);
+        if (setInputValue(elements.companyName, formattedName)) {
+          highlightField(elements.companyName);
+          filledCount++;
+        }
+      }
+    } catch (e) { console.warn("Error setting companyName:", e); }
+
+    // 5. Country Name (All words start with Capital)
+    try {
+      if (elements.countryName && data.countryName) {
+        let formattedCountry = toTitleCase(data.countryName);
+        if (/united\s*states/i.test(formattedCountry) || /^usa?$/i.test(formattedCountry.trim())) {
+          formattedCountry = "United States Of America";
+        } else if (/\b(?:turkey|t[uü]rkiye)\b/i.test(formattedCountry)) {
+          formattedCountry = "Turkiye";
+        } else if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(formattedCountry) || /^(?:my|mys)$/i.test(formattedCountry.trim())) {
+          formattedCountry = "Malaysia";
+        } else if (/\b(?:indonesia|republic\s*of\s*indonesia|republik\s*indonesia)\b/i.test(formattedCountry) || /^(?:id|idn|ri)$/i.test(formattedCountry.trim())) {
+          formattedCountry = "Indonesia";
+        } else if (/\b(?:new\s*zealand|aotearoa)\b/i.test(formattedCountry) || /^(?:nz|nzl)$/i.test(formattedCountry.trim())) {
+          formattedCountry = "New Zealand";
+        } else if (/\b(?:united\s*kingdom|great\s*britain|uk)\b/i.test(formattedCountry)) {
+          formattedCountry = "United Kingdom";
+        }
+        const isSelect = elements.countryName.tagName && elements.countryName.tagName.toLowerCase() === "select";
+        const success = isSelect ? setSelectValue(elements.countryName, formattedCountry) : setInputValue(elements.countryName, formattedCountry);
+        if (success) {
+          highlightField(elements.countryName);
+          filledCount++;
+        }
+      }
+    } catch (e) { console.warn("Error setting countryName:", e); }
+
+    // 6. Company Address (Ensure comma before state, address ending must not have comma or point, and all words start with Capital)
+    try {
+      if (elements.companyAddress && data.companyAddress) {
+        let cleanAddress = String(data.companyAddress).trim();
+        // Strip corporate registration disclaimers & statutory registered office disclaimers
+        cleanAddress = cleanAddress.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
+        cleanAddress = cleanAddress.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
+
+        // Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
+        cleanAddress = cleanAddress.replace(/(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+((?:pt\s*)?[A-Za-z0-9\-\/]+(?:\s*(?:&|and|,)\s*(?:pt\s*)?[A-Za-z0-9\-\/]+)*)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi, "$1$2 $3, ");
+        // Ensure comma after street types when followed by word
+        const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)";
+        const nonStreetLookahead = "(?!\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext|Road|Street|Avenue|Lane|Drive|Place|Close|Court|Terrace|Cres|Dr|Rd|St|Ave|Ln|Blvd|Hwy|Ct|Pl)\\b)";
+        const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)`, "g");
+        cleanAddress = cleanAddress.replace(streetSepRegex, "$1, $2");
+        cleanAddress = cleanAddress.replace(/\s+,/g, ",").replace(/,\s*,/g, ", ").replace(/,\s*/g, ", ");
+        // Remove comma between street/building number and street name (including hyphenated street names)
+        cleanAddress = cleanAddress.replace(/(\b(?:Number|No\.?|#)\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)\b)/gi, "$1 $2");
+        // Repair accidental comma splitting two-syllable East Asian cities
+        cleanAddress = cleanAddress.replace(/\bChia,\s*Yi\s*City\b/gi, "Chiayi City");
+        cleanAddress = cleanAddress.replace(/\bChia[-\s,]*[Yy]i\s*City\b/gi, "Chiayi City");
+        cleanAddress = cleanAddress.replace(/\bHsin,\s*Chu\s*City\b/gi, "Hsinchu City");
+        cleanAddress = cleanAddress.replace(/\bHsin[-\s,]*[Cc]hu\s*City\b/gi, "Hsinchu City");
+        // Strip trailing postal codes (3 to 6 digits at the end of address string)
+        cleanAddress = cleanAddress.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "");
+        cleanAddress = cleanAddress.replace(/(\b(?:City|District|Township|County|Hsien|Village|Li|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
+        cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+        if (setInputValue(elements.companyAddress, cleanAddress)) {
+          highlightField(elements.companyAddress);
+          filledCount++;
+        }
+      }
+    } catch (e) { console.warn("Error setting companyAddress:", e); }
+
+    // 7. State
+    try {
+      if (elements.state && data.state) {
+        if (setSelectValue(elements.state, data.state)) {
+          highlightField(elements.state);
+          filledCount++;
+        }
+      }
+    } catch (e) { console.warn("Error setting state:", e); }
+
+    // 8. City
+    try {
+      if (elements.city && data.city) {
+        if (setSelectValue(elements.city, data.city)) {
+          highlightField(elements.city);
+          filledCount++;
+        }
+      }
+    } catch (e) { console.warn("Error setting city:", e); }
+
+    // 9. Email ID
+    try {
+      if (elements.emailId && data.emailId) {
+        if (setInputValue(elements.emailId, data.emailId)) {
+          highlightField(elements.emailId);
+          filledCount++;
+        }
+      }
+    } catch (e) { console.warn("Error setting emailId:", e); }
+
+    // 10. Secondary Email ID
+    try {
+      if (elements.secondaryEmailId) {
+        try { elements.secondaryEmailId.setAttribute("autocomplete", "off"); } catch (e) { }
+        setInputValue(elements.secondaryEmailId, data.secondaryEmailId || "");
+        if (data.secondaryEmailId) highlightField(elements.secondaryEmailId);
+        filledCount++;
+      }
+    } catch (e) { console.warn("Error setting secondaryEmailId:", e); }
+
+    // 11. Phone Number: digits only, remove country code, no toll-free, never start with zero
+    try {
+      if (elements.phoneNumber && data.phoneNumber) {
+        let cleanPhone = String(data.phoneNumber).trim().replace(/\D/g, "").replace(/^0+/, "");
+        // Strictly reject toll-free numbers
+        if (/^(?:800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902|0800|0808|0500)/.test(cleanPhone)) {
+          cleanPhone = "";
+        }
+        if (cleanPhone && !cleanPhone.startsWith("0")) {
+          if (setInputValue(elements.phoneNumber, cleanPhone)) {
+            highlightField(elements.phoneNumber);
+            filledCount++;
+          }
+        }
+      }
+    } catch (e) { console.warn("Error setting phoneNumber:", e); }
 
     // 12. Number of Products
-    if (elements.numberOfProducts && data.numberOfProducts !== undefined && data.numberOfProducts !== null) {
-      if (setSelectValue(elements.numberOfProducts, data.numberOfProducts)) {
-        highlightField(elements.numberOfProducts);
-        filledCount++;
+    try {
+      if (elements.numberOfProducts && data.numberOfProducts !== undefined && data.numberOfProducts !== null) {
+        if (setSelectValue(elements.numberOfProducts, data.numberOfProducts)) {
+          highlightField(elements.numberOfProducts);
+          filledCount++;
+        }
       }
-    }
+    } catch (e) { console.warn("Error setting numberOfProducts:", e); }
 
     // 13. Product Images
-    if (elements.productImages && data.productImages !== undefined && data.productImages !== null) {
-      if (setSelectValue(elements.productImages, data.productImages)) {
-        highlightField(elements.productImages);
-        filledCount++;
+    try {
+      if (elements.productImages && data.productImages !== undefined && data.productImages !== null) {
+        if (setSelectValue(elements.productImages, data.productImages)) {
+          highlightField(elements.productImages);
+          filledCount++;
+        }
       }
-    }
+    } catch (e) { console.warn("Error setting productImages:", e); }
 
     // 14. Number of Product Descriptions
-    if (elements.numberOfProductDescriptions && data.numberOfProductDescriptions !== undefined && data.numberOfProductDescriptions !== null) {
-      if (setSelectValue(elements.numberOfProductDescriptions, data.numberOfProductDescriptions)) {
-        highlightField(elements.numberOfProductDescriptions);
-        filledCount++;
+    try {
+      if (elements.numberOfProductDescriptions && data.numberOfProductDescriptions !== undefined && data.numberOfProductDescriptions !== null) {
+        if (setSelectValue(elements.numberOfProductDescriptions, data.numberOfProductDescriptions)) {
+          highlightField(elements.numberOfProductDescriptions);
+          filledCount++;
+        }
       }
-    }
+    } catch (e) { console.warn("Error setting numberOfProductDescriptions:", e); }
 
     return { filledCount };
   }
@@ -1904,12 +1913,20 @@
     }, 12000);
   }
 
+  let isCrawlingInProgress = false;
+
   async function triggerCrawlAndFill() {
+    if (isCrawlingInProgress) {
+      console.log("[AI Assistant] Crawl already active. Ignoring duplicate request.");
+      return;
+    }
     if (!isExtensionAlive()) {
       showReloadBanner();
       updateStatus("Please refresh page (F5) to reconnect", "warning");
       return;
     }
+
+    isCrawlingInProgress = true;
 
     isAutoQueuePipelineActive = true;
     if (autoQueueEnabled && !isBatchNotWorkingActive) {
@@ -2105,6 +2122,7 @@
         updateStatus(`⚠️ Failed to fetch website (${err.message}). Status set to Not Working (auto-submitting...).`, "warning");
       }
     } finally {
+      isCrawlingInProgress = false;
       clearTimeout(safetyTimer);
       resetCrawlButtons();
     }
