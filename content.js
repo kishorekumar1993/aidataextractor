@@ -109,7 +109,7 @@
               return resolve({ success: false, error: err, isExtensionError: true });
             }
             if (retryCount > 0 && (err.includes("message channel closed") || err.includes("Could not establish connection"))) {
-              console.warn(`[AI Assistant] Service worker reconnecting (${err}). Retrying in 500ms (${retryCount} retries left)...`);
+              console.log(`[AI Assistant] Service worker reconnecting (${err}). Retrying in 500ms (${retryCount} retries left)...`);
               setTimeout(() => {
                 sendRuntimeMessage(message, retryCount - 1).then(resolve);
               }, 500);
@@ -1964,7 +1964,7 @@
 
         if (isExtError) {
           // Internal Chrome extension communication glitch: DO NOT mark the site as Not Working!
-          console.warn("[AI Assistant] Extension service worker communication issue:", errorMsg);
+          console.log("[AI Assistant] Extension service worker communication issue:", errorMsg);
           updateStatus(`⚠️ Extension background busy (${errorMsg}). Please click AI Crawl & Fill again.`, "warning");
           return;
         }

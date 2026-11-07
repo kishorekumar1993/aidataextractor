@@ -470,13 +470,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (e) { }
     }, 2000);
 
-    // Bounded safety timeout: 20s (well before Chrome's 30s message channel deadline)
+    // Bounded safety timeout: 24s (well before Chrome's 30s message channel deadline)
     let finished = false;
     const timeoutId = setTimeout(() => {
       if (finished) return;
       finished = true;
       clearInterval(keepAlive);
-      console.warn("[Background] Crawl reached safety boundary (20s). Returning timeout Not Working result before channel closes.");
+      console.warn("[Background] Crawl reached safety boundary (24s). Returning timeout Not Working result before channel closes.");
       try {
         const timeoutNotWorking = {
           websiteStatus: "Not Working",
@@ -496,8 +496,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           errorCategory: "Unreachable / Timeout",
           errorKeyword: "Connection Timeout / Unresponsive",
           errorSourceUrl: request.url,
-          errorSnippet: "Website took longer than 45 seconds to respond or server is unresponsive (Rule 1).",
-          notWorkingReason: "Website took longer than 45 seconds to respond or server is unresponsive (Rule 1).",
+          errorSnippet: "Website took longer than 24 seconds to respond or server is unresponsive (Rule 1).",
+          notWorkingReason: "Website took longer than 24 seconds to respond or server is unresponsive (Rule 1).",
           _finalUrl: request.url,
           _originalUrl: request.url,
           _note: "Crawl timeout reached safety boundary - Marked as Not Working (Rule 1)"
@@ -506,7 +506,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (err) {
         try { sendResponse({ success: false, error: "Crawl timeout" }); } catch (e) { }
       }
-    }, 45000);
+    }, 24000);
 
     handleCrawlAndExtract(request.url)
       .then(result => {
@@ -579,10 +579,14 @@ if (chrome && chrome.runtime && chrome.runtime.onConnect) {
           return;
         }
         if (msg.action === "CRAWL_AND_EXTRACT") {
-          // Actively keep service worker alive during the crawl + AI processing
+          // Actively keep service worker alive during the crawl + AI processing using storage keepalive
           portKeepAlive = setInterval(() => {
-            try { chrome.runtime.getPlatformInfo(() => { }); } catch (e) { }
-          }, 4000);
+            try {
+              if (chrome && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.set({ _sw_beat: Date.now() }, () => {});
+              }
+            } catch (e) { }
+          }, 2000);
 
           try {
             const result = await handleCrawlAndExtract(msg.url);
@@ -1551,7 +1555,8 @@ async function crawlWebsite(targetUrl) {
         } catch (e) { }
       }
 
-      // (b) Add top contact/about link (max 1 for high speed)
+      // (b) Add top contact/about/career links (max 3 for high speed & full coverage)
+      let contactCount = 0;
       for (const link of contactLinks) {
         if (fetchedUrls.has(link)) continue;
         try {
@@ -1560,7 +1565,8 @@ async function crawlWebsite(targetUrl) {
           seenPaths.add(uPath);
           topLinks.push(link);
           fetchedUrls.add(link);
-          break;
+          contactCount++;
+          if (contactCount >= 3) break;
         } catch (e) { }
       }
 
@@ -1668,29 +1674,37 @@ async function crawlWebsite(targetUrl) {
     const allCrawlText = mainHtml + "\n" + contactHtml;
     companySocials = extractOfficialSocialLinks(allCrawlText);
 
-    // High-speed smart social check: ONLY if secondary email is still missing (< 2 emails discovered)
-    // Rule: Details & Addresses MUST be taken strictly from website only! Social is ONLY for secondary email if missing.
+    // High-speed smart social check: if primary email or secondary email is missing (< 2 emails discovered)
+    // Rule: Details & Addresses MUST be taken strictly from website only! Social (Facebook) is used for email if missing or for secondary email.
     if (allDiscoveredEmails.size < 2) {
       const socialUrl = companySocials.facebook || companySocials.linkedin;
       if (socialUrl && !fetchedUrls.has(socialUrl)) {
         fetchedUrls.add(socialUrl);
         try {
-          let sUrl = socialUrl;
-          if (/facebook\.com/i.test(socialUrl)) {
-            const cleanFb = socialUrl.replace(/\/$/, "");
-            sUrl = cleanFb.includes("/about")
-              ? cleanFb.replace(/www\.facebook\.com/i, "m.facebook.com")
-              : cleanFb.replace(/www\.facebook\.com/i, "m.facebook.com") + "/about";
-          }
-          const sRes = await fetchDecodedHtml(sUrl, {
-            timeoutMs: 3000,
+          const sRes = await fetchDecodedHtml(socialUrl, {
+            timeoutMs: 3500,
             headers: {
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1"
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Sec-Fetch-Dest": "document",
+              "Sec-Fetch-Mode": "navigate",
+              "Sec-Fetch-Site": "none",
+              "Sec-Fetch-User": "?1",
+              "Upgrade-Insecure-Requests": "1"
             }
           });
           if (sRes && sRes.ok && sRes.html) {
-            for (const em of extractEmailsFromHtml(sRes.html, finalUrl)) {
+            // Un-escape Facebook JSON Unicode email obfuscation (\u0040 and %40)
+            const decodedFbHtml = sRes.html.replace(/\\u0040/g, "@").replace(/%40/g, "@");
+            const rawFbMatches = decodedFbHtml.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+            for (const em of rawFbMatches) {
+              const cleanEm = em.toLowerCase().trim();
+              if (isValidCorporateEmail(cleanEm) && !isUnwantedEmail(cleanEm)) {
+                allDiscoveredEmails.add(cleanEm);
+                updateEmailSource(emailSourceMap, cleanEm, socialUrl, finalUrl, targetUrl);
+              }
+            }
+            for (const em of extractEmailsFromHtml(decodedFbHtml, finalUrl)) {
               allDiscoveredEmails.add(em);
               updateEmailSource(emailSourceMap, em, socialUrl, finalUrl, targetUrl);
             }
@@ -2080,7 +2094,9 @@ function discoverContactLinks(html, baseUrl) {
     if (/\b(team|our-team|staff|management|people|leadership)\b/i.test(rawLower)) score += 6;
     if (/\b(locations|branches|branch|offices|stores)\b/i.test(rawLower)) score += 6;
     if (/\b(dealers|distributors|stockists|resellers|partners)\b/i.test(rawLower) || /\b(dealers|distributors|stockists|resellers|partners)\b/i.test(innerText)) score -= 10;
-    if (/\b(feedback|complaints|careers|jobs|directory)\b/i.test(rawLower)) score += 5;
+    if (/\b(careers|career|jobs|job|employment|work-with-us|join-our-team)\b/i.test(rawLower)) score += 9;
+    if (/\b(careers|career|jobs|employment|work\s*with\s*us|join\s*our\s*team)\b/i.test(innerText)) score += 9;
+    if (/\b(feedback|complaints|directory)\b/i.test(rawLower)) score += 5;
     if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us)\b/i.test(innerText)) score += 12;
     if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile)\b/i.test(innerText)) score += 10;
     if (/\b(shop|store|online\s*store|cart|basket|buy\s*online)\b/i.test(innerText)) score += 9;
@@ -2913,7 +2929,7 @@ function extractEmailsFromHtml(html, hostDomain = "") {
   }
 
   // 5. Extract emails from JSON-LD, script hydration, and social profile JSON before stripping scripts
-  const scriptJsonEmailMatches = [...html.matchAll(/"(?:email|emailAddress|e-mail|mail)"\s*:\s*["']([a-zA-Z0-9._%+-]+(?:@|\\u0040|%40)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
+  const scriptJsonEmailMatches = [...html.matchAll(/"(?:email|emailAddress|e-mail|mail|text)"\s*:\s*["']([a-zA-Z0-9._%+-]+(?:@|\\u0040|%40)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
   for (const sjm of scriptJsonEmailMatches) {
     const em = sjm[1].replace(/\\u0040/gi, "@").replace(/%40/gi, "@").toLowerCase().trim();
     if (isValidCorporateEmail(em) && !isUnwantedEmail(em)) {
@@ -4727,23 +4743,28 @@ COUNTRY NAME VALIDATION RULES:
 3. For the United States, you MUST return the full official name "United States Of America" (NEVER return just "United States" or "USA").
 4. For Turkey / Türkiye / Republic of Turkey / Republic of Turkiye, you MUST return "Turkiye" (spelled "Turkiye").
 
-EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE):
+EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE & SOCIAL CHANNELS):
 1. Comprehensive Full-Website Email Analysis:
-   - Thoroughly examine the entire website content provided (Homepage body, Contact Us page, About Us page, Company Profile, Branch locations, and Footer).
-   - Review all corporate emails discovered during crawling: ${crawlData.emails.join(", ") || "(None)"}
+   - Thoroughly examine the entire website content provided (Homepage body, Contact Us page, About Us page, Careers page, Company Profile, Branch locations, and Footer).
+   - Review all corporate emails discovered during crawling (from website and official Facebook page): ${crawlData.emails.join(", ") || "(None)"}
 2. Primary Email (emailId):
-   - Extract the primary corporate, general business, or headquarters contact email (e.g. info@..., contact@..., enquiries@..., office@..., or the main corporate email).
-3. Secondary Email (secondaryEmailId) - CRITICAL QC RULE:
-   - YOU MUST ANALYZE THE COMPLETE WEBSITE TO IDENTIFY ANY SECONDARY OR ALTERNATE CORPORATE EMAIL.
-   - Look for department emails (e.g. sales@..., support@..., service@..., export@..., accounts@..., marketing@..., admin@...), branch emails, or alternate personnel/contact emails found anywhere on the site.
-   - If two or more distinct valid corporate emails exist on the website, secondaryEmailId MUST be populated with the second distinct email.
+   - Extract the primary corporate, general business, or headquarters contact email (e.g. info@..., contact@..., enquiries@..., hr@..., sales@..., or main corporate domain email).
+3. Facebook & Official Social Email Rule (APPLICABLE TO BOTH PRIMARY & SECONDARY EMAIL):
+   - Check official website pages first.
+   - If NO email is found on the website pages, check the company's official Facebook page or social media evidence. If a valid corporate email is discovered on Facebook, populate it as emailId!
+   - If the website already has one email, check Facebook for a second distinct corporate email and populate it as secondaryEmailId!
+   - Never leave emailId blank if a valid corporate email is available in the crawled emails list or Facebook evidence!
+4. Secondary Email (secondaryEmailId) - CRITICAL QC RULE:
+   - YOU MUST ANALYZE THE COMPLETE WEBSITE AND SOCIAL EVIDENCE TO IDENTIFY ANY SECONDARY OR ALTERNATE CORPORATE EMAIL.
+   - Look for department emails (e.g. sales@..., support@..., service@..., export@..., accounts@..., marketing@..., hr@..., admin@...), branch emails, or alternate personnel/contact emails found anywhere on the site or Facebook.
+   - If two or more distinct valid corporate emails exist, secondaryEmailId MUST be populated with the second distinct email.
    - secondaryEmailId MUST be different and distinct from emailId (never output identical emails in both fields).
    - CRITICAL ANTI-HALLUCINATION RULE:
-     * ONLY extract emails that are explicitly written on the crawled website.
+     * ONLY extract emails that are explicitly written on the crawled website or official Facebook page.
      * NEVER invent, guess, hallucinate, or output personal email addresses (such as @gmail.com, @yahoo.com, @hotmail.com, @outlook.com, @icloud.com) that do not appear anywhere in the website content!
-     * If the website only has ONE email address (or All Corporate Emails Discovered list has only 1 email), return "" for secondaryEmailId. NEVER invent or populate a second email!
-   - Return "" ONLY if the entire website contains just one single email address.
-4. STRICT EMAIL ANTI-ARTIFACT QC RULE:
+     * If the website and Facebook only have ONE email address (or All Corporate Emails Discovered list has only 1 email), return "" for secondaryEmailId. NEVER invent or populate a second email!
+   - Return "" ONLY if the entire website and Facebook contain just one single email address.
+5. STRICT EMAIL ANTI-ARTIFACT QC RULE:
    - NEVER extract scraping, legal, or privacy policy artifacts like "collected@www...", "posted@...", "sent@...", "accessed@...", or any email containing "www." in the domain.
    - ONLY extract genuine corporate contact emails.
 
@@ -4806,7 +4827,7 @@ ${crawlData.bodyText.slice(0, 4000)}
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${apiKey}`;
     try {
       const abortCtrl = new AbortController();
-      const abortTimer = setTimeout(() => abortCtrl.abort(), 5000);
+      const abortTimer = setTimeout(() => abortCtrl.abort(), 15000);
       let response;
       try {
         response = await fetch(url, {
@@ -5857,27 +5878,32 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     country = "Spain";
   } else if (/italy|italia/i.test(trimmedCountry) || /^it$/i.test(trimmedCountry)) {
     country = "Italy";
-  } else if (/^(?:united\s*kingdom|great\s*britain|uk)$/i.test(trimmedCountry)) {
+  } else if (/^(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)$/i.test(trimmedCountry)) {
     country = "United Kingdom";
-  } else if (/england/i.test(trimmedCountry)) {
-    country = "England";
-  } else if (/scotland/i.test(trimmedCountry)) {
-    country = "Scotland";
-  } else if (/wales/i.test(trimmedCountry)) {
-    country = "Wales";
-  } else if (/northern\s*ireland/i.test(trimmedCountry)) {
-    country = "Northern Ireland";
   }
   result.countryName = toTitleCase(country.trim());
 
-  // Cross-Country Conflict Guard: Ensure Company Address does not point to an overseas branch in a different country!
+  // Helper for cross-country equivalence (UK constituent nations, USA variants)
+  const isSameOrConstituentCountry = (c1, c2) => {
+    if (!c1 || !c2) return false;
+    const s1 = c1.trim().toLowerCase();
+    const s2 = c2.trim().toLowerCase();
+    if (s1 === s2) return true;
+    const ukGroup = ["united kingdom", "great britain", "uk", "england", "scotland", "wales", "northern ireland"];
+    if (ukGroup.includes(s1) && ukGroup.includes(s2)) return true;
+    const usGroup = ["united states of america", "united states", "usa", "us", "u.s.a."];
+    if (usGroup.includes(s1) && usGroup.includes(s2)) return true;
+    return false;
+  };
+
+  // Cross-Country Conflict Guard: Ensure Company Address does not point to an overseas branch in a completely different country!
   if (country && country.length >= 2 && addr && addr !== "Not Available") {
     const addrCountry = detectCountryFromAddress(addr);
-    if (addrCountry && addrCountry.toLowerCase() !== country.toLowerCase()) {
+    if (addrCountry && !isSameOrConstituentCountry(addrCountry, country)) {
       const domesticCandidate = (crawlData.addressCandidates || []).find(c => {
         const cRaw = typeof c === "object" ? c.raw : c;
         const cCountry = detectCountryFromAddress(cRaw);
-        if (cCountry && cCountry.toLowerCase() === country.toLowerCase()) return true;
+        if (cCountry && isSameOrConstituentCountry(cCountry, country)) return true;
         if (country.toLowerCase() === "china" && /[\u4e00-\u9fa5]/.test(cRaw)) return true;
         if (country.toLowerCase() === "taiwan" && (cRaw.toLowerCase().includes("taiwan") || /[\u4e00-\u9fa5]/.test(cRaw))) return true;
         return false;
@@ -5887,6 +5913,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         if (/[\u4e00-\u9fa5]/.test(domRaw)) {
           domRaw = romanizeChineseAddress(domRaw);
         }
+        // Strip corporate registration disclaimers & legal office prefixes
+        domRaw = domRaw.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
+        domRaw = domRaw.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
         domRaw = expandAddressAndStateAbbreviations(domRaw, country);
         domRaw = removePostalCodesCarefully(domRaw);
         domRaw = toTitleCase(domRaw);
@@ -5943,8 +5972,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       email = "";
     }
   }
-  // Ensure primary email uses the highest-ranked verified corporate email from the website/contact page
-  if (!email || !isValidCorporateEmail(email) || isUnwantedEmail(email) || (crawlEmails.length > 0 && crawlEmails[0] && isValidCorporateEmail(crawlEmails[0]) && !isUnwantedEmail(crawlEmails[0]))) {
+  // Ensure primary email uses the highest-ranked verified corporate email from the website/contact page/Facebook
+  if (!email || !isValidCorporateEmail(email) || isUnwantedEmail(email)) {
     const validFromCrawl = crawlEmails.find(e => isValidCorporateEmail(e) && !isUnwantedEmail(e));
     email = validFromCrawl || "";
   }
