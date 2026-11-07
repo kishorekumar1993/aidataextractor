@@ -1681,6 +1681,136 @@
     return toTitleCase(n);
   }
 
+  /**
+   * Rule: Take the complete phone number, but remove the country code, special characters, and spaces.
+   * Do not take toll-free numbers. Do not take numbers starting with zero.
+   */
+  function cleanPhoneNumber(rawPhone, country) {
+    if (!rawPhone) return "";
+    let p = String(rawPhone).trim();
+
+    p = p.replace(/^(?:tel|call|phone|contact|mobile|fax|whatsapp)[\s.:]*/i, "").trim();
+
+    // Immediate rejection of explicit toll-free keywords
+    if (/\b(?:toll[-\s]*free|free[-\s]*phone|green[-\s]*line)\b/i.test(p)) {
+      return "";
+    }
+
+    const cLower = (country || "").toLowerCase();
+    const hasPlus = p.startsWith("+");
+    const has00 = p.startsWith("00");
+
+    let digits = p.replace(/\D/g, "");
+    if (!digits) return "";
+
+    // Reject immediate toll-free numbers before country code removal
+    if (/^(?:1800|1888|1877|1866|1855|1844|1833|1300|0800|0808|0500|800|888|877|866|855|844|833)/.test(digits)) {
+      return "";
+    }
+
+    if (has00 && digits.length >= 10) {
+      digits = digits.slice(2);
+    }
+
+    // Comprehensive map of country calling codes
+    const countryCodes = [
+      { match: ["malaysia"], code: "60", minLen: 10 },
+      { match: ["south africa"], code: "27", minLen: 11 },
+      { match: ["australia"], code: "61", minLen: 11 },
+      { match: ["united states", "canada", "usa", "america"], code: "1", minLen: 11 },
+      { match: ["united kingdom", "england", "scotland", "wales", "great britain", "uk"], code: "44", minLen: 12 },
+      { match: ["taiwan"], code: "886", minLen: 11 },
+      { match: ["india"], code: "91", minLen: 12 },
+      { match: ["singapore"], code: "65", minLen: 10 },
+      { match: ["china"], code: "86", minLen: 12 },
+      { match: ["hong kong"], code: "852", minLen: 11 },
+      { match: ["japan"], code: "81", minLen: 11 },
+      { match: ["south korea", "korea"], code: "82", minLen: 11 },
+      { match: ["germany", "deutschland"], code: "49", minLen: 11 },
+      { match: ["france"], code: "33", minLen: 11 },
+      { match: ["italy"], code: "39", minLen: 11 },
+      { match: ["spain"], code: "34", minLen: 11 },
+      { match: ["netherlands"], code: "31", minLen: 11 },
+      { match: ["switzerland"], code: "41", minLen: 11 },
+      { match: ["united arab emirates", "uae"], code: "971", minLen: 12 },
+      { match: ["saudi arabia"], code: "966", minLen: 12 },
+      { match: ["new zealand"], code: "64", minLen: 11 },
+      { match: ["indonesia"], code: "62", minLen: 11 },
+      { match: ["philippines"], code: "63", minLen: 11 },
+      { match: ["thailand"], code: "66", minLen: 11 },
+      { match: ["vietnam"], code: "84", minLen: 11 },
+      { match: ["czechia", "czech"], code: "420", minLen: 12 },
+      { match: ["turkiye", "turkey"], code: "90", minLen: 12 },
+      { match: ["ireland"], code: "353", minLen: 11 }
+    ];
+
+    let codeRemoved = false;
+    // Match by detected country
+    for (const cc of countryCodes) {
+      if (cc.match.some(m => cLower.includes(m))) {
+        if (digits.startsWith(cc.code) && digits.length >= (cc.minLen - 1)) {
+          digits = digits.slice(cc.code.length);
+          codeRemoved = true;
+          break;
+        }
+      }
+    }
+
+    // If phone had '+' or '00' or starts with country code without plus and wasn't removed yet
+    if (!codeRemoved) {
+      for (const cc of countryCodes) {
+        if (digits.startsWith(cc.code) && digits.length >= (hasPlus ? cc.minLen - 1 : cc.minLen)) {
+          digits = digits.slice(cc.code.length);
+          codeRemoved = true;
+          break;
+        }
+      }
+    }
+
+    // Rule: Take complete phone number, but remove leading zero
+    digits = digits.replace(/^0+/, "");
+
+    // Rule: Do NOT take numbers starting with zero
+    if (!digits || digits.startsWith("0")) {
+      return "";
+    }
+
+    // Rule: STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (US 800/888/877/866/855/844/833, AU 1800/1300, UK 0800/0808/0500)
+    if (/^(?:800|888|877|866|855|844|833|1800|1300|900|901|902|0800|0808|0500)/.test(digits)) {
+      return "";
+    }
+
+    // Country-specific length validation
+    const len = digits.length;
+    if (cLower.includes("south africa")) {
+      if (len !== 9) return "";
+    } else if (cLower.includes("united states") || cLower.includes("canada") || cLower.includes("usa")) {
+      if (len !== 10) return "";
+    } else if (cLower.includes("taiwan")) {
+      if (len < 8 || len > 9) return "";
+    } else if (cLower.includes("united kingdom") || cLower.includes("england")) {
+      if (len < 9 || len > 10) return "";
+    } else if (cLower.includes("india")) {
+      if (len !== 10) return "";
+    } else if (cLower.includes("australia")) {
+      if (len !== 9) return "";
+    } else if (cLower.includes("malaysia")) {
+      if (len < 8 || len > 10) return "";
+    } else if (cLower.includes("new zealand")) {
+      if (len < 8 || len > 10) return "";
+    } else if (cLower.includes("indonesia")) {
+      if (len < 8 || len > 11) return "";
+    } else if (cLower.includes("singapore")) {
+      if (len !== 8) return "";
+    } else if (cLower.includes("spain") || cLower.includes("espana")) {
+      if (len !== 9) return "";
+    } else {
+      if (len < 7 || len > 12) return "";
+    }
+
+    return digits;
+  }
+
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
     const elements = detectFormElements();
@@ -1917,18 +2047,11 @@
       }
     } catch (e) { console.warn("Error setting secondaryEmailId:", e); }
 
-    // 11. Phone Number: digits only, remove country code, no toll-free, never start with zero
+    // 11. Phone Number: Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero.
     try {
       if (elements.phoneNumber && data.phoneNumber) {
-        let cleanPhone = String(data.phoneNumber).trim().replace(/\D/g, "").replace(/^0+/, "");
-        // Strictly reject toll-free numbers (US: 800, 888, 877, 866, 855, 844, 833; AU/UK/IN: 1800, 1300, 0800, 0808, 0500)
-        // Must never drop real geographic area codes like 860 (Connecticut) or 808 (Hawaii)
-        if (!data._isFromAi) {
-          if (/^(?:800|888|877|866|855|844|833|1800|1300|0800|0808|0500)/.test(cleanPhone)) {
-            cleanPhone = "";
-          }
-        }
-        if (cleanPhone && !cleanPhone.startsWith("0")) {
+        let cleanPhone = cleanPhoneNumber(data.phoneNumber, data.countryName);
+        if (cleanPhone) {
           if (setInputValue(elements.phoneNumber, cleanPhone)) {
             highlightField(elements.phoneNumber);
             filledCount++;
@@ -3096,7 +3219,7 @@
       { key: "Primary Email Link", val: primaryEmailLink, isLink: true },
       { key: "Secondary Email", val: isRestr ? "-" : (data.secondaryEmailId || "(None)") },
       { key: "Sec Email Link", val: secEmailLink, isLink: true },
-      { key: "Phone", val: isRestr ? "-" : data.phoneNumber },
+      { key: "Phone", val: isRestr ? "-" : cleanPhoneNumber(data.phoneNumber, data.countryName) },
       { key: "No. Products", val: isRestr ? "-" : data.numberOfProducts },
       { key: "Product Images", val: isRestr ? "-" : data.productImages },
       { key: "Product Descs", val: isRestr ? "-" : data.numberOfProductDescriptions }

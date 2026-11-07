@@ -4082,7 +4082,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     phoneNumber: {
       type: "STRING",
-      description: "Contact phone number digits only (without country code, without leading 0, and strictly no toll-free numbers)"
+      description: "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero. Digits only."
     },
     numberOfProducts: {
       type: "STRING",
@@ -4257,6 +4257,8 @@ CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME
   * In "countryName": Capitalize every single word! E.g. "United States Of America" (with capital 'Of'), "United Kingdom", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye".
   * STRICT PROHIBITION: Do NOT leave small words, prepositions, or conjunctions in lowercase! Words like "Of", "And", "In", "At", "By", "For", "With", "On", "The", "De", "Du" MUST be capitalized with their first letter uppercase (e.g. "United States Of America", "City Of Industry", "Bank Of China").
   * Special characters MUST NOT start and MUST NOT end "companyName" or "companyAddress".
+- MANDATORY PHONE NUMBER QC RULE:
+  * "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
 - CRITICAL "NUMBER" EXPANSION RULE ("if No come only expand and do with out coming dont put blankly number"):
   * ONLY expand to "Number" if the original address explicitly contains "No.", "No", "NO.", "Nos.", "Nº", or "#" (e.g. "No. 56-106, Zhangma St." -> "Number 56-106, Zhangma Street", "NO. 12" -> "Number 12").
   * If the original address does NOT contain "No" or "No." (e.g. it is just "18 Kuang Fu North Road", "40 Sarah Street", "12 Stephen Road", "46 Market Hill"), DO NOT put "Number"! Output "18 Kuang Fu North Road" (NEVER put "Number" if "No" was not in the original text!).
@@ -4644,25 +4646,38 @@ EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE & SOCIAL CHANNELS):
    - ONLY extract genuine corporate contact emails.
 
 PHONE NUMBER RULES (CRITICAL QC REQUIREMENT):
-- Take the complete phone number, but remove the country code, special characters, and spaces.
-- Digits only (no spaces, hyphens, brackets, plus signs, dots, or extension text).
-- STRICTLY DO NOT ENTER COUNTRY CODE:
-  * Remove international calling codes globally across all countries:
-    - USA / Canada (+1 / 1): Remove 1 (e.g. +1 573-682-5521 -> 5736825521)
-    - UK (+44 / 44): Remove 44 (e.g. +44 20 7946 0991 or 020 7946 0991 -> 2079460991)
-    - Australia (+61 / 61): Remove 61 (e.g. +61 3 9357 6115 -> 393576115)
-    - South Africa (+27 / 27): Remove 27 (e.g. +27 11 397 2959 -> 113972959)
-    - Malaysia (+60 / 60): Remove 60 (e.g. +60 12-940 2782 -> 129402782)
-    - Taiwan (+886 / 886): Remove 886 (e.g. +886-3-464-1966 -> 34641966)
-    - Singapore (+65 / 65): Remove 65 (e.g. +65 6123 4567 -> 61234567)
-    - India (+91 / 91): Remove 91
+- MANDATORY QC RULE:
+  "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
+- REMOVE COUNTRY CODE:
+  * Extract the complete phone number, but STRIP the international country calling code:
+    - USA / Canada (+1 / 1): Remove country code 1 (e.g. +1 573-682-5521 -> 5736825521)
+    - Taiwan (+886 / 886): Remove country code 886 (e.g. +886-2-2668-9796 -> 226689796; +886-3-9233966 -> 39233966)
+    - UK (+44 / 44): Remove country code 44 (e.g. +44 20 7946 0991 -> 2079460991)
+    - Australia (+61 / 61): Remove country code 61 (e.g. +61 3 9357 6115 -> 393576115)
+    - South Africa (+27 / 27): Remove country code 27 (e.g. +27 11 397 2959 -> 113972959)
+    - Malaysia (+60 / 60): Remove country code 60 (e.g. +60 12-940 2782 -> 129402782)
+    - Singapore (+65 / 65): Remove country code 65 (e.g. +65 6123 4567 -> 61234567)
+    - India (+91 / 91): Remove country code 91
+    - China (+86 / 86): Remove country code 86
+    - Germany (+49 / 49): Remove country code 49
+    - France (+33 / 33): Remove country code 33
+    - Italy (+39 / 39): Remove country code 39
+    - Spain (+34 / 34): Remove country code 34
+    - Japan (+81 / 81): Remove country code 81
+    - South Korea (+82 / 82): Remove country code 82
+    - New Zealand (+64 / 64): Remove country code 64
+    - Indonesia (+62 / 62): Remove country code 62
+    - Czechia (+420 / 420): Remove country code 420
+    - Turkiye (+90 / 90): Remove country code 90
+- REMOVE SPECIAL CHARACTERS AND SPACES:
+  * Digits only (no spaces, hyphens, brackets, parentheses, plus signs, dots, or extension text).
 - STRICTLY DO NOT TAKE TOLL-FREE NUMBERS:
   * Toll-free numbers are NOT allowed!
-  * If only a toll-free number is available on the website, return "" for phoneNumber.
+  * If only a toll-free number is available on the website, return "" (leave empty string).
   * Never extract numbers starting with 800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800, 0808, 0500, or any toll-free prefix.
 - STRICTLY DO NOT TAKE NUMBERS STARTING WITH ZERO:
   * Strip all leading zeros. The final output MUST NEVER start with zero (0).
-  * Example: 012-940 2782 -> 129402782; 020 7946 0991 -> 2079460991.
+  * Example: 02-26689796 -> 226689796; 012-940 2782 -> 129402782; 020 7946 0991 -> 2079460991.
   * If a number cannot be formatted without starting with 0, return "" (do not take it).
 
 WEBSITE DATA FOR THIS CRAWL:
@@ -5295,7 +5310,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(result.secondaryEmailId)) {
       result.secondaryEmailId = "";
     }
-    result.phoneNumber = String(result.phoneNumber || "").trim().replace(/\D/g, "").replace(/^0+/, "");
+    // QC Rule: Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero.
+    result.phoneNumber = cleanPhoneNumber(result.phoneNumber, result.countryName);
+    if (!result.phoneNumber && crawlData && crawlData.phones && crawlData.phones.length > 0) {
+      for (const cand of crawlData.phones) {
+        const cleaned = cleanPhoneNumber(cand, result.countryName);
+        if (cleaned) {
+          result.phoneNumber = cleaned;
+          break;
+        }
+      }
+    }
     // Product metrics synchronization (Rules 12, 13, 14):
     // "all should be large 3 means 3 only check and crawl properly all should be same only"
     const parseCount = (v) => {
