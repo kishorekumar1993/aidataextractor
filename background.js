@@ -4087,17 +4087,17 @@ const GEMINI_RESPONSE_SCHEMA = {
     numberOfProducts: {
       type: "STRING",
       enum: ["0", "1", "2", "3"],
-      description: "Number of physical product items/catalog offerings identified (capped at 3)"
+      description: "Number of physical product items/catalog offerings identified (must be synchronized and equal to productImages and numberOfProductDescriptions)"
     },
     productImages: {
       type: "STRING",
       enum: ["0", "1", "2", "3"],
-      description: "Number of physical product images identified (capped at 3)"
+      description: "Number of physical product images identified (must be synchronized and equal to numberOfProducts and numberOfProductDescriptions)"
     },
     numberOfProductDescriptions: {
       type: "STRING",
       enum: ["0", "1", "2", "3"],
-      description: "Number of physical product descriptions identified (capped at 3)"
+      description: "Number of physical product descriptions identified (must be synchronized and equal to numberOfProducts and productImages)"
     }
   },
   required: [
@@ -4392,29 +4392,17 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
 
 PRODUCT, IMAGE & DESCRIPTION QC RULES (ACCURATELY BASED ON SITE):
 Count the distinct items, product images, and descriptions actually present on this specific website:
-CRITICAL SYNCHRONIZATION QC RULE:
+CRITICAL SYNCHRONIZATION QC RULE (Rules 12, 13, 14):
 - The counts for Number of Product, Image Product, and No. of Product Description MUST NOT CONFLICT with each other!
-- If product images or descriptions exist (e.g. 3 images), products obviously exist — NEVER return 0 products when images exist!
-- If which one is coming highest, take that HIGHEST count (3, 2, 1, or 0) across all three categories!
-
-1. numberOfProducts:
-   - Count distinct, individually identifiable products or core commercial services offered by the business (e.g. bubble making machine, bag making machine, pelletize machine, etc.).
-   - If 0 products found: "0"
-   - If 1 product found: "1" (or "One")
-   - If 2 products found: "2"
-   - If 3 or more products found: "3" (or "Three")
-2. productImages:
-   - Count images that directly depict products, machinery, or equipment shown on the site.
-   - If 0 images found: "0"
-   - If 1 image found: "1" (or "One")
-   - If 2 images found: "2"
-   - If 3 or more images found: "3" (or "Three")
-3. numberOfProductDescriptions:
-   - Count substantive descriptions detailing specifications, features, or applications of distinct products or services.
-   - If 0 descriptions found: "0"
-   - If 1 description found: "1" (or "One")
-   - If 2 descriptions found: "2"
-   - If 3 or more descriptions found: "3" (or "Three")
+- "numberOfProducts", "productImages", and "numberOfProductDescriptions" MUST ALL BE THE SAME VALUE!
+- If 3 or more products/items/services are shown on the website, ALL THREE FIELDS MUST BE "3":
+  * "numberOfProducts": "3"
+  * "productImages": "3"
+  * "numberOfProductDescriptions": "3"
+- If 2 products/items are shown, ALL THREE FIELDS MUST BE "2".
+- If 1 product/item is shown, ALL THREE FIELDS MUST BE "1".
+- If 0 products found, ALL THREE FIELDS MUST BE "0".
+- CRITICAL QC MANDATE: NEVER return "0" for numberOfProductDescriptions when numberOfProducts or productImages is "3" or "1"! The product title, model number, specifications, and features count as the product description. ALL THREE PRODUCT FIELDS MUST BE IDENTICAL!
 
 COMPANY PROFILE QC RULES (Rule 3):
 - This is a drop-down option ("Available" | "Not Available").
@@ -5275,9 +5263,31 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.secondaryEmailId = "";
     }
     result.phoneNumber = String(result.phoneNumber || "").trim().replace(/\D/g, "").replace(/^0+/, "");
-    result.numberOfProducts = String(result.numberOfProducts || "").trim();
-    result.productImages = String(result.productImages || "").trim();
-    result.numberOfProductDescriptions = String(result.numberOfProductDescriptions || "").trim();
+    // Product metrics synchronization (Rules 12, 13, 14):
+    // "all should be large 3 means 3 only check and crawl properly all should be same only"
+    const parseCount = (v) => {
+      if (!v) return 0;
+      const s = String(v).trim().toLowerCase();
+      if (s === "three" || s === "3") return 3;
+      if (s === "two" || s === "2") return 2;
+      if (s === "one" || s === "1") return 1;
+      const num = parseInt(s, 10);
+      return !isNaN(num) && num > 0 ? (num >= 3 ? 3 : num) : 0;
+    };
+
+    const maxCount = Math.max(
+      parseCount(result.numberOfProducts),
+      parseCount(result.productImages),
+      parseCount(result.numberOfProductDescriptions),
+      parseCount(crawlData && crawlData.detectedProductCount),
+      parseCount(crawlData && crawlData.detectedImageCount),
+      parseCount(crawlData && crawlData.detectedDescCount)
+    );
+
+    const syncVal = String(maxCount);
+    result.numberOfProducts = syncVal;
+    result.productImages = syncVal;
+    result.numberOfProductDescriptions = syncVal;
 
     return result;
   }

@@ -1562,10 +1562,28 @@
       }
     } catch (e) { console.warn("Error setting phoneNumber:", e); }
 
+    // 12, 13, 14. Product Metrics Synchronization (Rules 12, 13, 14):
+    // "all should be large 3 means 3 only check and crawl properly all should be same only"
+    const parseNum = (v) => {
+      const s = String(v || "").toLowerCase().trim();
+      if (s === "three" || s === "3") return 3;
+      if (s === "two" || s === "2") return 2;
+      if (s === "one" || s === "1") return 1;
+      const n = parseInt(s, 10);
+      return !isNaN(n) && n > 0 ? (n >= 3 ? 3 : n) : 0;
+    };
+
+    const maxP = Math.max(
+      parseNum(data.numberOfProducts),
+      parseNum(data.productImages),
+      parseNum(data.numberOfProductDescriptions)
+    );
+    const unifiedProductCount = String(maxP);
+
     // 12. Number of Products
     try {
-      if (elements.numberOfProducts && data.numberOfProducts !== undefined && data.numberOfProducts !== null) {
-        if (setSelectValue(elements.numberOfProducts, data.numberOfProducts)) {
+      if (elements.numberOfProducts) {
+        if (setSelectValue(elements.numberOfProducts, unifiedProductCount)) {
           highlightField(elements.numberOfProducts);
           filledCount++;
         }
@@ -1574,8 +1592,8 @@
 
     // 13. Product Images
     try {
-      if (elements.productImages && data.productImages !== undefined && data.productImages !== null) {
-        if (setSelectValue(elements.productImages, data.productImages)) {
+      if (elements.productImages) {
+        if (setSelectValue(elements.productImages, unifiedProductCount)) {
           highlightField(elements.productImages);
           filledCount++;
         }
@@ -1584,8 +1602,8 @@
 
     // 14. Number of Product Descriptions
     try {
-      if (elements.numberOfProductDescriptions && data.numberOfProductDescriptions !== undefined && data.numberOfProductDescriptions !== null) {
-        if (setSelectValue(elements.numberOfProductDescriptions, data.numberOfProductDescriptions)) {
+      if (elements.numberOfProductDescriptions) {
+        if (setSelectValue(elements.numberOfProductDescriptions, unifiedProductCount)) {
           highlightField(elements.numberOfProductDescriptions);
           filledCount++;
         }
