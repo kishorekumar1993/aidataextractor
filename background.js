@@ -993,12 +993,10 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   name = name.replace(/\s*[-–—|:•·]\s*(?:manufacturer|supplier|wholesaler|distributor|timber\s*merchants|specialists|services|official\s*website|home|online\s*store).*$/i, "");
 
   // 5. Clean boundary punctuation and special characters per Rule 4
-  // Remove special characters from beginning (must start with letter or digit)
+  // Rule: Special character should not start and should not end
   name = name.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
-  // Remove trailing special characters from end (must end cleanly without stray symbols, preserve . or ))
-  name = name.replace(/[^\p{L}\p{N}.)]+$/gu, "").trim();
-  name = name.replace(/(?<![\p{L}\p{N}])\.+$/gu, "").trim();
-  name = name.replace(/[,;:]+$/g, "").trim();
+  name = name.replace(/[^\p{L}\p{N}]+$/gu, "").trim();
+  name = name.replace(/\s+/g, " ").trim();
 
   return name;
 }
@@ -4453,20 +4451,27 @@ COMPANY NAME RULES (Rule 4):
    - Example: "Meramec USA Inc" -> "Meramec USA Incorporated"
    - Example: "Stoneland USA" -> "Stoneland USA"
    - Example: "Palram Americas" -> "Palram Americas"
-4. PRESERVE COMMAS AND PERIODS/DOTS (CRITICAL QC RULE):
-   - STRICTLY DO NOT strip or remove commas (,) and periods/dots (.) inside the company name or abbreviations!
-   - When expanding ", Inc" or ", Inc." to full form, YOU MUST KEEP THE COMMA:
+4. EXPANDING "CO., LTD" VS "CO. LTD" AND CORPORATE COMMAS (CRITICAL QC RULE):
+   - RESPECT THE PRESENCE OR ABSENCE OF COMMAS EXACTLY AS IN THE OFFICIAL SOURCE:
+     * If WITH comma: "Co., Ltd" or "Co.,Ltd" -> MUST expand to "Company, Limited" (keep the comma!).
+     * If WITHOUT comma: "Co. Ltd" or "Co Ltd" -> MUST expand to "Company Limited" (DO NOT add a comma!).
+     * Example: "KAULIN MFG. CO., LTD" -> "Kaulin Manufacturing Company, Limited" (comma kept).
+     * Example: "ABC Inter Co. Ltd" -> "ABC Inter Company Limited" (no comma).
+     * Example: "Pte., Ltd" -> "Private, Limited" vs "Pte. Ltd" -> "Private Limited".
+     * Example: "Pty., Ltd" -> "Proprietary, Limited" vs "Pty. Ltd" -> "Proprietary Limited".
+     * Example: "Pvt., Ltd" -> "Private, Limited" vs "Pvt. Ltd" -> "Private Limited".
+   - When expanding ", Inc" or ", Inc." to full form, KEEP THE COMMA if present in original:
      * "TP Orthodontics, Inc" -> "TP Orthodontics, Incorporated"
      * "Transformer Manufacturers, Inc" -> "Transformer Manufacturers, Incorporated"
-   - When expanding "CO., LTD" or "Co., Ltd." to full form, YOU MUST EXPAND MFG. TO "Manufacturing" AND KEEP THE COMMA IN "Company, Limited":
-     * "KAULIN MFG. CO., LTD" -> "Kaulin Manufacturing Company, Limited"
+     * "Meramec USA Inc" -> "Meramec USA Incorporated" (no comma in original -> no comma in output).
    - Example: "U.S. Tsubaki Industrial, LLC" -> MUST KEEP the dots in "U.S." and the comma before "LLC"!
-   - Example: "Acme, Inc." -> MUST KEEP the comma and dot!
-   - Example: "Data Plastics Co., Ltd." -> MUST KEEP dots and comma!
-5. REMOVE SPECIAL CHARACTERS FROM BEGINNING AND END:
-   - Remove any special characters, symbols, quotes, colons, slashes, dashes, hashes, copyright marks (©), bullets (•), asterisks (*), or stray punctuation from the BEGINNING or END of the company name.
-   - The company name must begin directly with an alphanumeric letter or number (e.g. "# Carrier Inc" -> "Carrier Incorporated", "© 2024 Acme Ltd." -> "Acme Limited").
-   - The company name must end cleanly without trailing dashes, colons, semicolons, vertical bars, slashes, or trailing commas.
+5. SPECIAL CHARACTERS MUST NOT START AND MUST NOT END (STRICT QC RULE):
+   - Special characters MUST NOT start and MUST NOT end the company name!
+   - The company name must strictly START with a letter or digit (never start with quotes, copyright ©, #, •, -, _, /, |, *, ~, (, [, @, &, punctuation, or symbols).
+   - The company name must strictly END with a letter or digit (never end with trailing commas, periods/dots, semicolons, colons, dashes, slashes, or quotes).
+   - Example: "# Carrier Inc." -> "Carrier Incorporated" (no leading #, no trailing dot).
+   - Example: "© 2024 Acme Co., Ltd." -> "Acme Company, Limited" (no leading ©, no trailing dot).
+   - Example: "- Furco Co. Ltd -" -> "Furco Company Limited" (no leading or trailing dashes).
 6. EXPAND LEGAL ABBREVIATIONS GLOBALLY TO FULL WORDS:
    - Indonesia:
      * PT, PT., P.T. -> Perseroan Terbatas (prefix before name: e.g. "PT Astra International Tbk" -> "Perseroan Terbatas Astra International Terbuka")
@@ -5211,8 +5216,15 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     // Preserve Gemini's exact extracted fields directly without local heuristic mutation
-    result.companyName = decodeHtmlEntities(String(result.companyName || "").trim());
-    result.companyAddress = decodeHtmlEntities(String(result.companyAddress || "").trim());
+    // Rule: Special character should not start and should not end
+    result.companyName = decodeHtmlEntities(String(result.companyName || "").trim())
+      .replace(/^[^\p{L}\p{N}]+/gu, "")
+      .replace(/[^\p{L}\p{N}]+$/gu, "")
+      .trim();
+    result.companyAddress = decodeHtmlEntities(String(result.companyAddress || "").trim())
+      .replace(/^[^\p{L}\p{N}]+/gu, "")
+      .replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "")
+      .trim();
     result.countryName = String(result.countryName || "").trim();
     result.businessType = String(result.businessType || "").trim();
     result.companyProfile = String(result.companyProfile || "").trim();
@@ -5519,17 +5531,13 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // Remove brackets while preserving inner text
   compName = compName.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
   compName = compName.replace(/[\(\)\[\]\{\}]/g, " ");
-  // Remove any special characters from the beginning
+  // Rule: Special character should not start and should not end
   compName = compName.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
-  // Remove trailing special characters (symbols, dashes, colons, semicolons, commas, slashes, quotes)
-  compName = compName.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
-  compName = compName.replace(/\.{2,}$/g, ".");
-  compName = compName.replace(/[^\p{L}\p{N}.)]+$/gu, "").trim();
-  compName = compName.replace(/(?<![\p{L}\p{N}])\.+$/gu, "").trim();
-  compName = compName.replace(/[,;]+$/g, "").trim();
+  compName = compName.replace(/[^\p{L}\p{N}]+$/gu, "").trim();
   compName = compName.replace(/\s+/g, " ").trim();
   compName = toTitleCase(compName);
   compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
+  compName = compName.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N}]+$/gu, "").trim();
   result.companyName = compName;
 
   // 6. Company Address: Use Gemini's extracted address directly as source of truth; fall back to website candidates only if empty
@@ -7608,14 +7616,17 @@ function expandCompanyAbbreviations(name, country = "") {
 
   // 18. Common Business, Technical, and Industry Word Abbreviations in Company Names
   // Manufacturing / Makers
-  n = n.replace(/\bmfg[\.\s]*co[\.\s]*,?[\.\s]*ltd(?:\.|\b)/gi, "Manufacturing Company, Limited");
+  n = n.replace(/\bmfg[\.\s]*co[\.\s]*(,)?[\.\s]*ltd(?:\.|\b)/gi, (match, comma) => {
+    return comma ? "Manufacturing Company, Limited" : "Manufacturing Company Limited";
+  });
   n = n.replace(/\bmfg(?:\.|\b)/gi, "Manufacturing");
   n = n.replace(/\bmfrs(?:\.|\b)/gi, "Manufacturers");
   n = n.replace(/\bmfr(?:\.|\b)/gi, "Manufacturer");
 
   // Industries / Industrial
-  n = n.replace(/\bind[\.\s]*co[\.\s]*,?[\.\s]*ltd(?:\.|\b)/gi, "Industries Company, Limited");
-  n = n.replace(/\bindust[\.\s]*co[\.\s]*,?[\.\s]*ltd(?:\.|\b)/gi, "Industries Company, Limited");
+  n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*(,)?[\.\s]*ltd(?:\.|\b)/gi, (match, comma) => {
+    return comma ? "Industries Company, Limited" : "Industries Company Limited";
+  });
   n = n.replace(/\binds(?:\.|\b)/gi, "Industries");
   n = n.replace(/\bindust(?:\.|\b)/gi, "Industries");
   n = n.replace(/\bind\b\.?\s*(?=(?:services?|solutions?|suppl(?:y|ies)|products?|equipment|park|estate|zone|area)\b)/gi, "Industrial ");
@@ -7688,10 +7699,19 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\blp(?:\.|\b)/gi, "Limited Partnership");
   n = n.replace(/\bl\.?p(?:\.|\b)/gi, "Limited Partnership");
 
-  // "Co., Ltd." variations (Taiwan, China, Japan, Korea, Global)
-  n = n.replace(/\bco[\.\s]*,[\.\s]*ltd\b\.?/gi, "Company, Limited");
-  n = n.replace(/\bco[\.\s]+ltd\b\.?/gi, "Company, Limited");
-  n = n.replace(/\bCompany\s+Limited\b/gi, "Company, Limited");
+  // "Co., Ltd." vs "Co. Ltd"
+  // If comma is present between Co and Ltd (e.g. "Co., Ltd." or "Co.,Ltd") -> "Company, Limited"
+  // If WITHOUT comma (e.g. "Co. Ltd" or "Co Ltd") -> "Company Limited"
+  n = n.replace(/\bco[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Company, Limited");
+  n = n.replace(/\bco[\.\s]+ltd(?:\.|\b)/gi, "Company Limited");
+
+  // Private, Proprietary Limited with/without comma
+  n = n.replace(/\bpte[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Private, Limited");
+  n = n.replace(/\bpte[\.\s]+ltd(?:\.|\b)/gi, "Private Limited");
+  n = n.replace(/\bpvt[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Private, Limited");
+  n = n.replace(/\bpvt[\.\s]+ltd(?:\.|\b)/gi, "Private Limited");
+  n = n.replace(/\bpty[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Proprietary, Limited");
+  n = n.replace(/\bpty[\.\s]+ltd(?:\.|\b)/gi, "Proprietary Limited");
 
   n = n.replace(/\bltd(?:\.|\b)/gi, "Limited");
   n = n.replace(/\bl\.?t\.?d(?:\.|\b)/gi, "Limited");
@@ -7707,8 +7727,9 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\s*,\s*/g, ", ");
   n = n.replace(/\s+/g, " ").trim();
 
-  // Strip trailing dot if attached directly to corporate suffix (e.g. "Limited." -> "Limited", "Incorporated." -> "Incorporated")
-  n = n.replace(/\b(Company,\s*Limited|Limited|Incorporated|Corporation|Company|Proprietary\s*Limited|Private\s*Limited|Sendirian\s*Berhad|Berhad|Aktiengesellschaft|Gesellschaft\s*mit\s*beschränkter\s*Haftung|Sociedad\s*Anónima|Sociedad\s*Limitada|Società\s*per\s*Azioni|Società\s*a\s*Responsabilità\s*Limitata|Société\s*Anonyme|Société\s*à\s*Responsabilité\s*Limitée|Limitada)\.+$/gi, "$1");
+  // Rule: Special character should not start and should not end
+  n = n.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
+  n = n.replace(/[^\p{L}\p{N}]+$/gu, "").trim();
 
   return n;
 }

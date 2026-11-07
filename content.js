@@ -1256,8 +1256,8 @@
    * Rule 4: Cleans and formats company name per QC requirements:
    * - Remove brackets while preserving inner text
    * - Keep country name as it is
-   * - Preserve commas and dots (e.g. U.S., Co., Ltd.)
-   * - Remove any special characters from beginning and end
+   * - Co., Ltd -> Company, Limited vs Co. Ltd -> Company Limited
+   * - Special character should not start and should not end
    * - Apply Title Case
    */
   function cleanCompanyName(name) {
@@ -1266,14 +1266,28 @@
     // Remove brackets while preserving inner text
     n = n.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
     n = n.replace(/[\(\)\[\]\{\}]/g, " ");
-    // Remove any special characters from beginning
+
+    // Co., Ltd vs Co. Ltd (preserve comma if present, omit if not)
+    n = n.replace(/\bmfg[\.\s]*co[\.\s]*(,)?[\.\s]*ltd(?:\.|\b)/gi, (m, c) => c ? "Manufacturing Company, Limited" : "Manufacturing Company Limited");
+    n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*(,)?[\.\s]*ltd(?:\.|\b)/gi, (m, c) => c ? "Industries Company, Limited" : "Industries Company Limited");
+    n = n.replace(/\bco[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Company, Limited");
+    n = n.replace(/\bco[\.\s]+ltd(?:\.|\b)/gi, "Company Limited");
+
+    // Private / Proprietary Limited
+    n = n.replace(/\bpte[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Private, Limited");
+    n = n.replace(/\bpte[\.\s]+ltd(?:\.|\b)/gi, "Private Limited");
+    n = n.replace(/\bpvt[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Private, Limited");
+    n = n.replace(/\bpvt[\.\s]+ltd(?:\.|\b)/gi, "Private Limited");
+    n = n.replace(/\bpty[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Proprietary, Limited");
+    n = n.replace(/\bpty[\.\s]+ltd(?:\.|\b)/gi, "Proprietary Limited");
+
+    n = n.replace(/\bltd(?:\.|\b)/gi, "Limited");
+    n = n.replace(/\binc(?:\.|\b)/gi, "Incorporated");
+    n = n.replace(/\bcorp(?:\.|\b)/gi, "Corporation");
+
+    // Rule: Special character should not start and should not end
     n = n.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
-    // Remove trailing special characters (symbols, dashes, colons, semicolons, commas, slashes, quotes)
-    n = n.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
-    n = n.replace(/\.{2,}$/g, ".");
-    n = n.replace(/[^a-zA-Z0-9.\u00C0-\u024F]+$/gu, "").trim();
-    n = n.replace(/(?<![\p{L}\p{N}])\.+$/gu, "").trim();
-    n = n.replace(/[,;]+$/g, "").trim();
+    n = n.replace(/[^\p{L}\p{N}]+$/gu, "").trim();
     n = n.replace(/\s+/g, " ").trim();
     return toTitleCase(n);
   }
@@ -1407,10 +1421,12 @@
       }
     } catch (e) { console.warn("Error setting companyProfile:", e); }
 
-    // 4. Company Name (Rule 4: When from Gemini API, prefill exact API response without alteration)
+    // 4. Company Name (Rule 4: Special character should not start and should not end)
     try {
       if (elements.companyName && data.companyName) {
-        const formattedName = data._isFromAi ? String(data.companyName).trim() : cleanCompanyName(data.companyName);
+        let formattedName = data._isFromAi ? String(data.companyName).trim() : cleanCompanyName(data.companyName);
+        // Rule: Special character should not start and should not end
+        formattedName = formattedName.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N}]+$/gu, "").trim();
         if (setInputValue(elements.companyName, formattedName)) {
           highlightField(elements.companyName);
           filledCount++;
@@ -1477,6 +1493,8 @@
           cleanAddress = cleanAddress.replace(/(\b(?:City|District|Township|County|Hsien|Village|Li|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
           cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
         }
+        // Rule: Special character should not start and should not end
+        cleanAddress = cleanAddress.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
         if (setInputValue(elements.companyAddress, cleanAddress)) {
           highlightField(elements.companyAddress);
           filledCount++;
