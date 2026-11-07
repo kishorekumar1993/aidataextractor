@@ -496,8 +496,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           errorCategory: "Unreachable / Timeout",
           errorKeyword: "Connection Timeout / Unresponsive",
           errorSourceUrl: request.url,
-          errorSnippet: "Website took longer than 20 seconds to respond or server is unresponsive (Rule 1).",
-          notWorkingReason: "Website took longer than 20 seconds to respond or server is unresponsive (Rule 1).",
+          errorSnippet: "Website took longer than 45 seconds to respond or server is unresponsive (Rule 1).",
+          notWorkingReason: "Website took longer than 45 seconds to respond or server is unresponsive (Rule 1).",
           _finalUrl: request.url,
           _originalUrl: request.url,
           _note: "Crawl timeout reached safety boundary - Marked as Not Working (Rule 1)"
@@ -506,7 +506,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (err) {
         try { sendResponse({ success: false, error: "Crawl timeout" }); } catch (e) { }
       }
-    }, 20000);
+    }, 45000);
 
     handleCrawlAndExtract(request.url)
       .then(result => {
@@ -561,8 +561,14 @@ if (chrome && chrome.runtime && chrome.runtime.onConnect) {
   chrome.runtime.onConnect.addListener((port) => {
     if (port.name === "ai-crawl-port") {
       let isDisconnected = false;
+      let portKeepAlive = null;
+
       port.onDisconnect.addListener(() => {
         isDisconnected = true;
+        if (portKeepAlive) {
+          clearInterval(portKeepAlive);
+          portKeepAlive = null;
+        }
       });
 
       port.onMessage.addListener(async (msg) => {
@@ -573,12 +579,25 @@ if (chrome && chrome.runtime && chrome.runtime.onConnect) {
           return;
         }
         if (msg.action === "CRAWL_AND_EXTRACT") {
+          // Actively keep service worker alive during the crawl + AI processing
+          portKeepAlive = setInterval(() => {
+            try { chrome.runtime.getPlatformInfo(() => { }); } catch (e) { }
+          }, 4000);
+
           try {
             const result = await handleCrawlAndExtract(msg.url);
+            if (portKeepAlive) {
+              clearInterval(portKeepAlive);
+              portKeepAlive = null;
+            }
             if (!isDisconnected) {
               try { port.postMessage({ success: true, data: result }); } catch (e) { }
             }
           } catch (err) {
+            if (portKeepAlive) {
+              clearInterval(portKeepAlive);
+              portKeepAlive = null;
+            }
             if (!isDisconnected) {
               try { port.postMessage({ success: false, error: err.message }); } catch (e) { }
             }
@@ -1824,6 +1843,9 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   let cleaned = decoded
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
+    .replace(/^(?:[A-Za-z0-9&,.'\-()\[\]\s]{2,100}?\s+)?(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "")
+    .replace(/^(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)/i, "")
+    .replace(/^(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "")
     .replace(/^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|add|addr|location|廠址|地址|view|learn\s*more|read\s*more|see\s*more|click\s*here|find\s*out\s*more|get\s*directions|directions)\s*[:：\-–,\s]+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|floor)\b)/i, "")
     .replace(/^(?:address|add|addr|location|headquarters|head\s*office|registered\s*office|corporate\s*office|廠址|地址|view|learn\s*more|read\s*more|see\s*more|click\s*here|find\s*out\s*more|get\s*directions|directions)\s*[:：\-–]?\s*/i, "")
     .replace(/^(?:we(?:'re|\s+are)\s+(?:at|located\s+at)|visit\s+us(?:\s+at)?|find\s+us(?:\s+at)?|our\s+location\s+is|come\s+(?:in\s+and\s+)?visit\s+us(?:\s+at)?)\s*[:,\s]*/i, "")
@@ -1858,16 +1880,24 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
 
   // STRUCTURAL COMPONENT VALIDATION:
   // A valid address must possess verifiable structural address components:
-  // 1. Premise indicator / street number (e.g. 12, Lot 45, Unit 2, Suite 200, Building 5, PO Box 123, No. 12)
+  // 1. Premise indicator / street number / named building, works, centre, hall, estate, park
   // 2. Thoroughfare suffix (Street, Road, Ave, Lane, Drive, Boulevard, Highway, Way, Close, Court, Terrace, Crescent, etc.)
-  // 3. Or locality/postal code (e.g. 4-6 digit postal code, state abbreviation with ZIP, or East Asian structural address)
+  // 3. Or locality/postal code (e.g. 4-6 digit postal code, UK alphanumeric postcodes, state abbreviation with ZIP, or East Asian structural address)
   const hasPremiseNum = /\b(?:number|no\.?|nos\.?|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?\b/i.test(cleaned) ||
-    /\b(?:lot|plot|unit|suite|ste|bldg|building|floor|level|rm|room|shed|warehouse|kav|kavling|apt|apartment|po\s*box)\s+[A-Za-z0-9\-\/]+/i.test(cleaned);
-  const hasThoroughfare = /\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|jln|jalan|taman|lorong|lebuh|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|apt\b|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned);
+    /\b(?:lot|plot|unit|suite|ste|bldg|building|floor|level|rm|room|shed|warehouse|kav|kavling|apt|apartment|po\s*box)\s+[A-Za-z0-9\-\/]+/i.test(cleaned) ||
+    /\b(?:centre|center|house|hall|mill|works|court|lodge|grange|tower|park|estate|chambers|wharf|barn|farm)\b/i.test(cleaned);
+
+  const hasThoroughfare = /\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|row|walk|mews|passage|grove|view|hill|rise|vale|gate|approach|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|jln|jalan|taman|lorong|lebuh|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|apt\b|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned);
+
   const hasLocalityOrPostcode = /\b\d{4,6}\b/.test(cleaned) ||
+    /\b[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}\b/i.test(cleaned) ||
+    /\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/i.test(cleaned) ||
     /\b(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\s+\d{5}(?:-\d{4})?\b/i.test(cleaned) ||
     /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|vic|nsw|qld|wa|sa|tas|act)\b/i.test(cleaned) ||
-    /\b(?:town|township|district|city|province|county|hsien|state|borough|municipality)\b/i.test(cleaned);
+    /\b(?:leicestershire|nottinghamshire|derbyshire|staffordshire|warwickshire|worcestershire|northamptonshire|lincolnshire|yorkshire|lancashire|cheshire|cumbria|durham|northumberland|gloucestershire|oxfordshire|cambridgeshire|bedfordshire|hertfordshire|buckinghamshire|berkshire|surrey|kent|sussex|essex|norfolk|suffolk|devon|cornwall|somerset|dorset|wiltshire|hampshire|shropshire|herefordshire|middlesex)\b/i.test(cleaned) ||
+    /\b(?:town|township|district|city|province|county|hsien|state|borough|municipality|shire)\b/i.test(cleaned) ||
+    evaluateCityQC(cleaned, "") === "Available" ||
+    hasStateInAddress(cleaned, "");
 
   const hasChineseAddressStructure = /(?:[0-9一二三四五六七八九十]+[号號]|大道|大厦|大廈|路|街|巷|弄|工业区|工業區|工业园|工業園|产业园|產業園|开发区|開發區|科技园|科技園|高新区|高新區|园区|園區|楼|樓|栋|棟|室|城|[省市区縣县鄉镇鎭])/.test(cleaned);
 
@@ -1890,10 +1920,16 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   const isEnglish = latinLetters >= 4 && latinLetters >= nonLatinLetters;
 
   // Location Context & Priority hierarchy:
-  // Headquarters (Tier 1) > Contact (Tier 2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Branch (Tier 8) > Distributor/Dealer (Tier 9)
-  const hasHqKeyword = /\b(?:headquarters|head\s*office|registered\s*office|corporate\s*office|main\s*office|principal\s*office|hq|main\s*factory|main\s*plant|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(rawText + " " + contextText) ||
+  // Operational Headquarters (Tier 1) / Contact Page Operational Address (Tier 1.2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Registered Office (Tier 8) > Branch (Tier 8.5) > Distributor/Dealer (Tier 9)
+  const isRegisteredOffice = /\b(?:registered\s*office|registered\s*in\b|company\s*registration\b|domicilio\s*social|registered\s*agent|legal\s*address|statutory\s*office)\b/i.test(rawText + " " + contextText);
+  const hasHqKeyword = !isRegisteredOffice && (
+    /\b(?:headquarters|head\s*office|corporate\s*office|main\s*office|principal\s*office|hq|main\s*factory|main\s*plant|main\s*facility|sede\s*central|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(rawText + " " + contextText) ||
     /(?:總公司|总公司|總部|总部|本公司|集團總部|集团总部|總廠|总厂|本廠|本厂|本部|本社|本店)/i.test(rawText + " " + contextText) ||
-    isHq || source === "headquarters";
+    isHq || source === "headquarters"
+  );
+
+  const isOperationalContact = (source === "contact" || /\b(?:contact|showroom|factory|plant|workshop|store|visiting|our\s+location|address)\b/i.test(pageUrl + " " + contextText));
+
   // Only demote explicit secondary/branch offices (NEVER treat manufacturing plants, factories, warehouses, or units as branches!)
   const hasBranchKeyword = /\b(?:branch(?:\s*office)?|regional\s*office|overseas\s*office|sales\s*office|subsidiary|sucursal|delegaci[oó]n|filiale|filial)\b/i.test(rawText + " " + contextText) ||
     /(?:海外子公司|全资子公司|控股子公司|子公司|海外办事处|办事处|辦事處|国内分公司|分公司|分處|分处|營業所|营业所|經銷商|经销商)/i.test(rawText + " " + contextText) ||
@@ -1904,12 +1940,13 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   let locType = locationType || "general";
 
   if (hasHqKeyword) {
-    basePriority = 1;
+    basePriority = 1.0;
     locType = "headquarters";
     isHq = true;
-  } else if (source === "contact") {
-    basePriority = 2;
-    locType = "contact";
+  } else if (source === "contact" || isOperationalContact) {
+    basePriority = 1.2;
+    locType = "operational_contact";
+    isHq = false;
   } else if (source === "profile") {
     basePriority = 3;
     locType = "profile";
@@ -1924,9 +1961,16 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     locType = "footer";
   }
 
+  // Legal Registered Office is strictly demoted so operational contact addresses and showrooms always take precedence
+  if (isRegisteredOffice && !hasHqKeyword) {
+    basePriority = 8;
+    locType = "registered_office";
+    isHq = false;
+  }
+
   // Deprioritize explicit branch offices if not marked as Headquarters
   if (hasBranchKeyword && !hasHqKeyword) {
-    basePriority = 8;
+    basePriority = 8.5;
     locType = "branch";
     isHq = false;
   }
@@ -1946,6 +1990,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     source: source || locType,
     locationType: locType,
     isHeadquarters: isHq,
+    isRegisteredOffice: isRegisteredOffice,
     isEnglish: isEnglish,
     pageUrl: pageUrl || "",
     contextText: contextText || "",
@@ -2225,7 +2270,10 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   // Helper to determine context from surrounding text / headers / inner text
   const getContext = (beforeText, fallbackSource, innerText = "") => {
     const textToCheck = (beforeText || "") + " " + (innerText || "");
-    if (/\b(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|principal\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(textToCheck) ||
+    if (/\b(?:registered\s*office|registered\s*in\b|domicilio\s*social|registered\s*agent|statutory\s*office)\b/i.test(textToCheck)) {
+      return { isHq: false, source: "registered_office", locType: "registered_office" };
+    }
+    if (/\b(?:headquarters|head\s*office|corporate\s*office|main\s*office|principal\s*office|hq|main\s*factory|main\s*plant|main\s*facility|sede\s*central|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(textToCheck) ||
       /(?:總公司|总公司|總部|总部|本公司|集團總部|集团总部|總廠|总厂|本廠|本厂|本部|本社|本店)/i.test(textToCheck)) {
       return { isHq: true, source: "headquarters", locType: "headquarters" };
     }
@@ -2237,12 +2285,22 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   };
 
   // 1. Explicit Headquarters / Head Office blocks (Priority 1)
-  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|registered\s*office|main\s*office|hq|sede\s*central|domicilio\s*social|oficinas?\s*central(?:es)?|sede\s*principal|總公司|总公司|總部|总部|本公司|集團總部|集团总部)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|th|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|th|dd)>/gi;
+  const hqRegex = /(?:headquarters|head\s*office|corporate\s*office|main\s*office|hq|sede\s*central|oficinas?\s*central(?:es)?|sede\s*principal|總公司|总公司|總部|总部|本公司|集團總部|集团总部)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|th|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|th|dd)>/gi;
   let hqm;
   while ((hqm = hqRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(hqm[1]);
     if (raw.length > 8) {
       addAddressCandidate(targetList, raw, "headquarters", true, "headquarters", pageUrl);
+    }
+  }
+
+  // 1b. Explicit Registered Office blocks (Demoted to Priority 8 - Secondary/Fallback)
+  const regOfficeRegex = /(?:registered\s*office|domicilio\s*social)\s*[:\-–]?\s*<(?:p|div|span|address|li|td|th|dd)[^>]*>([\s\S]*?)<\/(?:p|div|span|address|li|td|th|dd)>/gi;
+  let rom;
+  while ((rom = regOfficeRegex.exec(processedHtml)) !== null) {
+    const raw = stripHtml(rom[1]);
+    if (raw.length > 8) {
+      addAddressCandidate(targetList, raw, "registered_office", false, "registered_office", pageUrl);
     }
   }
 
@@ -2540,9 +2598,21 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
     const rawA = getRaw(a).toLowerCase();
     const rawB = getRaw(b).toLowerCase();
 
+    // Legal Registered Office (e.g. accounting/incorporation office) MUST NEVER beat operational contact / headquarters / showroom
+    const isRegA = a.locationType === "registered_office" || (typeof a === "object" && a.isRegisteredOffice);
+    const isRegB = b.locationType === "registered_office" || (typeof b === "object" && b.isRegisteredOffice);
+    if (isRegA && !isRegB) pA += 20.0;
+    else if (isRegB && !isRegA) pB += 20.0;
+
+    // Contact page address / showroom / factory / operational premise gets Priority 1 boost (-5.0)
+    const isOpA = a.locationType === "operational_contact" || a.source === "contact";
+    const isOpB = b.locationType === "operational_contact" || b.source === "contact";
+    if (isOpA && !isOpB && !isRegA) pA -= 5.0;
+    else if (isOpB && !isOpA && !isRegB) pB -= 5.0;
+
     // Full Address Boost: Candidate containing City AND (State or Postcode) beats street-only fragment
-    const hasFullA = (hasStateInAddress(rawA, "") || /\b\d{4,6}\b/.test(rawA)) && evaluateCityQC(rawA, "") === "Available";
-    const hasFullB = (hasStateInAddress(rawB, "") || /\b\d{4,6}\b/.test(rawB)) && evaluateCityQC(rawB, "") === "Available";
+    const hasFullA = (hasStateInAddress(rawA, "") || /\b\d{4,6}\b/.test(rawA) || /\b[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}\b/i.test(rawA)) && evaluateCityQC(rawA, "") === "Available";
+    const hasFullB = (hasStateInAddress(rawB, "") || /\b\d{4,6}\b/.test(rawB) || /\b[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}\b/i.test(rawB)) && evaluateCityQC(rawB, "") === "Available";
     if (hasFullA && !hasFullB) pA -= 4.0;
     else if (hasFullB && !hasFullA) pB -= 4.0;
 
@@ -4326,20 +4396,27 @@ CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALWAYS TARGET ENGLISH & T
   * ONLY expand to "Number" if the original address explicitly contains "No.", "No", "NO.", "Nos.", "Nº", or "#" (e.g. "No. 56-106, Zhangma St." -> "Number 56-106, Zhangma Street", "NO. 12" -> "Number 12").
   * If the original address does NOT contain "No" or "No." (e.g. it is just "18 Kuang Fu North Road", "40 Sarah Street", "12 Stephen Road", "46 Market Hill"), DO NOT put "Number"! Output "18 Kuang Fu North Road" (NEVER put "Number" if "No" was not in the original text!).
 - STRICT HEADQUARTERS & DOMESTIC DOMICILE MANDATE:
-  * You MUST ALWAYS select the company's HEADQUARTERS / HEAD OFFICE / MAIN OFFICE located in its domestic home country!
+  * You MUST ALWAYS select the company's OPERATIONAL HEADQUARTERS, MAIN SHOWROOM, FACTORY, or CONTACT PAGE PHYSICAL ADDRESS located in its domestic home country!
   * NEVER pick an overseas subsidiary, branch, or distributor address (e.g. choosing a USA / California sales office when the company is headquartered in China, Taiwan, UK, Australia, Canada, Malaysia, India, South Africa, etc.)!
   * If Candidate #1 is the Headquarters in local script (e.g. Chinese, Japanese, Taiwanese), translate or romanize THAT headquarters address into English—DO NOT pick an overseas branch address just because it is written in English!
-  * Candidate #1 is the highest-ranked location. If candidate #1 is marked HEADQUARTERS / HEAD OFFICE, you MUST select that headquarters address. DO NOT choose a secondary branch, distributor, or showroom address if a headquarters address exists.
+  * Candidate #1 is the highest-ranked location. If candidate #1 is marked HEADQUARTERS or OPERATIONAL / CONTACT PAGE ADDRESS, select that operating address.
 - ALWAYS target and extract English language text for Company Name and Company Address.
 - NEVER return Chinese, Japanese, Korean, Arabic, Thai, Cyrillic, or other non-Latin characters for "companyName" or "companyAddress" when English or Romanized/Latin text is available. Translate or transliterate local script addresses to English Title Case.
 - Always output the English physical address with street abbreviations expanded (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County" -> "Number 56-106, Zhangma Street, Xiushui Township, Changhua County", BUT "18 Kuang Fu North Road" -> "18 Kuang Fu North Road" WITHOUT adding "Number").
 - If the website title or logo contains both English and Chinese/local script (e.g. "FURCO Taiwan 宙辰"), take the English corporate name (e.g. "Furco Industrial Company Limited" or "Furco Taiwan Limited"). Do NOT include non-Latin characters in companyName.
 - If the website is a Single Page Application (isDynamicSpa: ${crawlData.isDynamicSpa ? "YES" : "No"}) and no address candidate was found in static HTML, inspect the site metadata, title, and body text. If no physical address exists anywhere on the site, return "Not Available" (NEVER invent or hallucinate addresses!).
 
-ADDRESS EXTRACTION PRIORITY (DYNAMICALLY FROM WEBSITE):
-1. First Priority: Extract the Head Office / Headquarters physical address from the Contact Page, Company Profile, Get In Touch page, or Google Map place embed.
-2. Second Priority: If not available on the Contact Page, extract the physical address from the Footer.
-3. Third Priority: If not in Contact or Footer, look in the general page text.
+ADDRESS EXTRACTION PRIORITY (CRITICAL QC REQUIREMENT):
+1. First Priority: Extract the operational Headquarters, main showroom, factory, workshop, or physical trading address from the Contact Us page, Showroom page, or Get In Touch page.
+2. Second Priority: Extract from the dedicated Company Profile / About Us page.
+3. Third Priority: If not on Contact/About page, extract from the general page body or Footer.
+4. STRICT PROHIBITION ON LEGAL REGISTERED OFFICES:
+   - STRICTLY DO NOT EXTRACT corporate legal registration addresses, accounting offices, registered agent offices, or addresses labelled "Registered Office", "Registered in England", "Company Registration No.", or "Domicilio Social" if a physical showroom, factory, workshop, or Contact page address exists!
+   - Legal registered offices (e.g. "Lonsdale House, High Street, Lutterworth" or an accounting firm address) are legal disclaimers, NOT the physical operating location where products are made or sold.
+   - ALWAYS choose the showroom / factory / contact page location (e.g. "The Springboard Centre, Mantle Lane, Coalville, Leicestershire").
+5. STRICTLY STRIP REGISTRATION CLAUSES FROM ADDRESS:
+   - NEVER output legal disclaimers like "Registered in England : 11743582., Registered Office :" in companyAddress.
+   - companyAddress MUST only contain clean physical address components: Premise/Building, Street, Locality/Town/City, and State.
 4. Address Formatting (Rule 6) - COMPLETE PHYSICAL ADDRESS PRESERVATION:
    - TAKE THE COMPLETE PHYSICAL ADDRESS: Retain street address, locality/suburb, town/city, AND State / Province / Territory!
    - STRICTLY DO NOT DROP OR STRIP STATE / PROVINCE / REGION! (e.g. For "40 Sarah St, Campbellfield VIC 3061.", you MUST KEEP the state "Victoria": "40 Sarah Street, Campbellfield, Victoria").
@@ -5583,6 +5660,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = addr.replace(/&quot;|&apos;|&#34;|&#39;/gi, " ");
       addr = addr.replace(/["“”«»`]+/g, " ");
 
+      // Strip corporate registration disclaimers & legal office prefixes (e.g. "Charnwood Fireplace Holdings LTD. Registered in England : 11743582., Registered Office :")
+      addr = addr.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
+      addr = addr.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
+
       // Strip conversational boilerplate from start of address e.g. "If you have any enquiries, require a quote or want to book a survey please feel free to call us or send us a message with your requirements Priory Windows And Conservatories 5 Burnt House Road, Whitley Bay"
       addr = addr.replace(/^(?:if\s+you\s+have\s+any\s+enquiries|require\s+a\s+quote|want\s+to\s+book\s+a\s+survey|please\s+feel\s+free\s+to\s+call\s+us|send\s+us\s+a\s+message|with\s+your\s+requirements|get\s+in\s+touch|contact\s+us\s+at)[\s\S]*?(?=\b\d+\s+[A-Za-z]|\b(?:po\s*box|unit|suite|building|floor|no\.?)\b)/i, "").trim();
 
@@ -5594,12 +5675,18 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       if (compName && addr.toLowerCase().startsWith(compName.toLowerCase())) {
         addr = addr.slice(compName.length).trim();
       }
+      // Also strip company name brand stem with or without legal suffix (e.g. "Charnwood Fireplaces Ltd, ")
+      const compBrand = compName ? compName.replace(/\b(?:ltd|limited|inc|incorporated|llc|corp|corporation|co|company|proprietary|pty)\b/gi, "").trim() : "";
+      if (compBrand && compBrand.length >= 4) {
+        const brandRegex = new RegExp(`^${compBrand.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*(?:(?:ltd|limited|inc|llc|corp|co|pty)\\.?)?\\s*[,\\-–]?\\s*`, "i");
+        addr = addr.replace(brandRegex, "").trim();
+      }
       // Strip company name or corporate brand prefix at start of address before street number or premise
       if (compName) {
         const compClean = compName.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+/g, " ").trim();
         const firstToken = compClean.split(/\s+/)[0];
         if (firstToken && firstToken.length >= 3 && !/^(?:the|and|for)$/i.test(firstToken)) {
-          const compPrefixRegex = new RegExp(`^${firstToken}\\b[\\s\\S]*?(?=\\b(?:\\d{1,5}|no\\.?\\s*\\d+|po\\s*box|unit|suite|building|floor)\\b)`, "i");
+          const compPrefixRegex = new RegExp(`^${firstToken}\\b[\\s\\S]*?(?=\\b(?:\\d{1,5}|no\\.?\\s*\\d+|po\\s*box|unit|suite|building|floor|the\\s+[a-z]+|centre|center|house|hall|mill|works|court|lodge|grange|tower|park|estate|chambers|wharf)\\b)`, "i");
           addr = addr.replace(compPrefixRegex, "").trim();
         }
       }

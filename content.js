@@ -69,7 +69,7 @@
             portResolved = true;
             cleanupPort();
             sendMessageDirect(message, retryCount).then(resolve);
-          }, 24000);
+          }, 45000);
 
           port.onMessage.addListener((res) => {
             if (res && res.action === "PONG") return; // Keepalive pong
@@ -1302,17 +1302,23 @@
 
     const isProhibitedOrRestricted = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowedType || data.isDisallowedBusinessType);
 
+    // Rule 1 QC Safeguard: A site with 0 products and no address or contact info CANNOT be Working!
+    const isZeroProdUnverifiable = (String(data.numberOfProducts || "").trim() === "0" || data.numberOfProducts === 0) &&
+      (!data.companyAddress || data.companyAddress === "Not Available" || !data.companyAddress.trim()) &&
+      (!data.emailId || !data.emailId.trim()) &&
+      (!data.phoneNumber || !data.phoneNumber.trim());
+
     // CRITICAL QC RULE:
     // When Website Status is NOT "Working" and NOT "Redirect Site" (Not Working, Non English, Flash, Domain Expired, or prohibited category detected),
     // select the respective status and clear/leave empty ALL other fields!
     // NOTE: "Redirect Site" is a WORKING website that redirected to a new domain (Rule 13).
     // All 14 fields MUST be filled with the company data from the final redirected URL!
-    const isNonWorkingStatus = data.websiteStatus &&
+    const isNonWorkingStatus = (data.websiteStatus &&
       data.websiteStatus !== "Working" &&
       data.websiteStatus !== "Redirect Site" &&
-      data.websiteStatus !== "Redirect";
+      data.websiteStatus !== "Redirect") || isZeroProdUnverifiable;
     if (isNonWorkingStatus || isProhibitedOrRestricted) {
-      const targetStatus = isProhibitedOrRestricted ? "Not Working" : (data.websiteStatus || "Not Working");
+      const targetStatus = (isProhibitedOrRestricted || isZeroProdUnverifiable) ? "Not Working" : (data.websiteStatus || "Not Working");
       if (elements.websiteStatus) {
         if (setSelectValue(elements.websiteStatus, targetStatus)) {
           highlightField(elements.websiteStatus);
