@@ -4124,7 +4124,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyName: {
       type: "STRING",
-      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, Wang Ruey Industrial Company Limited, Danzer UK Limited)."
+      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited). CRITICAL QC RULE: DO NOT expand symbols like '&' into 'And' (keep '&' as it is: e.g. 'H&R Manufacturing', 'Johnson & Johnson'). DO NOT invent or add 'Company' if not in the official name."
     },
     countryName: {
       type: "STRING",
@@ -4324,7 +4324,10 @@ BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
 CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME, COMPANY ADDRESS, COUNTRY MUST START WITH CAPITAL LETTER):
 - MANDATORY CAPITALIZATION QC RULE ("In Company Name, Company Address, Country All the words start with Capital letter"):
   EVERY SINGLE WORD in "companyName", "companyAddress", and "countryName" MUST start with a Capital letter (Title Case).
-  * In "companyName": Capitalize every single word! E.g. "Inter Outstanding Electronics Incorporated", "Wang Ruey Industrial Company Limited", "Web Rack Industrial Company Limited", "Danzer UK Limited".
+  * In "companyName": Capitalize every single word! E.g. "Inter Outstanding Electronics Incorporated", "H&R Manufacturing", "Web Rack Industrial Company Limited", "Danzer UK Limited".
+  * CRITICAL QC RULE - DO NOT EXPAND SYMBOLS:
+    - DO NOT expand symbols like "&" into "And"! Keep symbols as they are (e.g. "H&R Manufacturing", NOT "H And R Manufacturing"!).
+    - DO NOT add "Company" to the company name if "Company" or "Co." was not part of the original name (e.g. "H&R Manufacturing" must remain "H&R Manufacturing", NEVER add "Company"!).
   * In "companyAddress": Capitalize every single word! E.g. "Number 53-5, Pocheng Road, Yuanshan Township, Yilan County", "Number 20-2, Xinxing Street, Shulin District, New Taipei City", "46 Market Hill, Maldon, Essex", "123 Main Street, Suite 400", "City Of Industry, California".
   * In "countryName": Capitalize every single word! E.g. "United States Of America" (with capital 'Of'), "United Kingdom", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye".
   * STRICT PROHIBITION: Do NOT leave small words, prepositions, or conjunctions in lowercase! Words like "Of", "And", "In", "At", "By", "For", "With", "On", "The", "De", "Du" MUST be capitalized with their first letter uppercase (e.g. "United States Of America", "City Of Industry", "Bank Of China").
@@ -4539,7 +4542,18 @@ COMPANY NAME RULES (Rule 4):
    - Example: "Meramec USA Inc" -> "Meramec USA Incorporated"
    - Example: "Stoneland USA" -> "Stoneland USA"
    - Example: "Palram Americas" -> "Palram Americas"
-4. EXPANDING "CO., LTD" VS "CO. LTD" AND CORPORATE COMMAS (CRITICAL QC RULE):
+4. DO NOT EXPAND SYMBOLS (KEEP SYMBOLS AS THEY ARE - e.g. "&") & DO NOT INVENT "COMPANY":
+   - CRITICAL MANDATORY QC RULE ("dont expand the symbols it should be as it is H&R Manufacturing"):
+     * When a company name uses symbols such as "&" (ampersand), DO NOT expand "&" into "And"!
+     * Keep the symbol exactly as it appears on the website:
+       - "H&R Manufacturing" -> "H&R Manufacturing" (STRICTLY NEVER "H And R Manufacturing" or "H And R Manufacturing Company"!)
+       - "B&M Industrial" -> "B&M Industrial"
+       - "Johnson & Johnson" -> "Johnson & Johnson"
+       - "AT&T" -> "AT&T"
+       - "P&G" -> "P&G"
+       - "Black & Decker" -> "Black & Decker"
+     * DO NOT invent, hallucinate, or append "Company" to the company name if "Company" or "Co." does not appear in the official name (e.g. if the website says "H&R Manufacturing", return "H&R Manufacturing", NEVER "H&R Manufacturing Company"!).
+5. EXPANDING "CO., LTD" VS "CO. LTD" AND CORPORATE COMMAS (CRITICAL QC RULE):
    - RESPECT THE PRESENCE OR ABSENCE OF COMMAS EXACTLY AS IN THE OFFICIAL SOURCE:
      * If WITH comma: "Co., Ltd" or "Co.,Ltd" -> MUST expand to "Company, Limited" (keep the comma!).
      * If WITHOUT comma: "Co. Ltd" or "Co Ltd" -> MUST expand to "Company Limited" (DO NOT add a comma!).
@@ -5732,8 +5746,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const curNormComp = normalizeNameForComparison(compName);
   const compMatchesDomain = dStemNorm && (curNormComp.includes(dStemNorm) || dStemNorm.includes(curNormComp));
   const hasLegalCandidates = crawlData && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0;
+  const hasExpandedSymbol = /\bAnd\b/i.test(compName) && ((crawlData && (crawlData.logoText || crawlData.title || crawlData.copyrightText || (crawlData.mainHtml || "").slice(0, 10000))).includes("&"));
 
-  if (!compName || !hasSuffix || (!compMatchesDomain && hasLegalCandidates)) {
+  if (!compName || !hasSuffix || (!compMatchesDomain && hasLegalCandidates) || hasExpandedSymbol) {
     compName = preferOfficialCompanyName(compName, crawlData);
     compName = restoreLegalSuffixIfOmitted(compName, crawlData);
     compName = decodeHtmlEntities(compName);
@@ -5753,6 +5768,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = compName.replace(/\s+/g, " ").trim();
   compName = toTitleCase(compName);
   compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
+  compName = restoreOriginalSymbolsInCompanyName(compName, crawlData);
   compName = compName.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N}]+$/gu, "").trim();
   result.companyName = compName;
 
@@ -7426,6 +7442,7 @@ function companyNamesMatch(a, b) {
   const sB = (b || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!sA || !sB) return false;
   if (sA === sB) return true;
+  if (sA.replace(/and/g, "") === sB || sB.replace(/and/g, "") === sA) return true;
 
   // Strip legal suffixes from stems
   const stripLegal = (s) => s.replace(/(?:proprietarylimited|privatelimited|publiclimitedcompany|sendirianberhad|limitedliabilitycompany|limited|incorporated|corporation|berhad|gmbh|llc|llp|pllc|ptyltd|pteltd|pvtltd|sdnbhd|ltd|inc|plc|corp|co)$/g, "");
@@ -7498,7 +7515,9 @@ function preferOfficialCompanyName(name, crawlData) {
   let bestScore = -1;
 
   for (const official of allCandidates) {
-    if (!hasCompleteLegalSuffix(official) && !/\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc)\b/i.test(official)) {
+    const hasSuffix = hasCompleteLegalSuffix(official) || /\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc)\b/i.test(official);
+    const hasSymbolMatch = official.includes("&") && (current.toLowerCase().includes(" and ") || companyNamesMatch(current, official));
+    if (!hasSuffix && !hasSymbolMatch) {
       continue;
     }
     let score = 0;
@@ -7509,11 +7528,16 @@ function preferOfficialCompanyName(name, crawlData) {
       if (offNorm === curNorm) score += 100;
       else if (offNorm.startsWith(curNorm) || curNorm.startsWith(offNorm)) score += 80;
       else if (offNorm.includes(curNorm) || curNorm.includes(offNorm)) score += 60;
+      else if (curNorm.replace(/and/g, "").startsWith(offNorm) || offNorm.startsWith(curNorm.replace(/and/g, ""))) score += 90;
     }
     if (dStemNorm && offNorm) {
       if (offNorm === dStemNorm) score += 90;
       else if (offNorm.startsWith(dStemNorm) || dStemNorm.startsWith(offNorm)) score += 70;
       else if (offNorm.includes(dStemNorm) || dStemNorm.includes(offNorm)) score += 50;
+    }
+    // Candidate preserves original symbol "&" when AI expanded to "And"
+    if (hasSymbolMatch) {
+      score += 150;
     }
     // If AI extracted name fails to match domain stem, but this official candidate matches domain stem:
     if (!curMatchesDomain && dStemNorm && (offNorm.includes(dStemNorm) || dStemNorm.includes(offNorm))) {
@@ -7589,6 +7613,58 @@ function preferOfficialCompanyName(name, crawlData) {
   }
 
   return cleanCompanyPrefixesAndSuffixes(current);
+}
+
+/**
+ * Restores original symbols (such as "&") in company name when AI incorrectly expanded them to words ("And"),
+ * and strips extraneous "Company" when the official website brand is without "Company".
+ * Strictly satisfies QC rule: "dont expand the symbols it should be as it is H&R Manufacturing"
+ */
+function restoreOriginalSymbolsInCompanyName(name, crawlData) {
+  if (!name || typeof name !== "string") return name;
+  let n = name;
+
+  const evidenceSources = [
+    crawlData && crawlData.logoText,
+    crawlData && crawlData.title,
+    crawlData && crawlData.copyrightText,
+    ...(crawlData && crawlData.legalCompanyCandidates || []),
+    crawlData && crawlData.mainHtml
+  ].filter(Boolean);
+
+  const combinedEvidence = evidenceSources.join(" ");
+
+  // 1. Restore "&" when AI expanded it to "And"
+  // e.g. "H And R Manufacturing" -> "H&R Manufacturing" or "H & R Manufacturing"
+  if (/\b(?:and)\b/i.test(n) && combinedEvidence.includes("&")) {
+    n = n.replace(/\b([A-Za-z0-9]+)\s+And\s+([A-Za-z0-9]+)\b/g, (match, p1, p2) => {
+      const noSpaceRegex = new RegExp(`\\b${p1}&${p2}\\b`, "i");
+      const spaceRegex = new RegExp(`\\b${p1}\\s+&\\s+${p2}\\b`, "i");
+      if (noSpaceRegex.test(combinedEvidence)) {
+        return `${p1}&${p2}`;
+      } else if (spaceRegex.test(combinedEvidence)) {
+        return `${p1} & ${p2}`;
+      }
+      return match;
+    });
+  }
+
+  // 2. If name ends with "Company" but the official website brand / title / logo is without "Company"
+  // e.g. "H&R Manufacturing Company" -> "H&R Manufacturing"
+  if (/\bCompany\b$/i.test(n.trim())) {
+    const withoutCompany = n.replace(/\s+Company$/i, "").trim();
+    if (withoutCompany.length >= 3) {
+      const esc = withoutCompany.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const brandExactRegex = new RegExp(`(^|[^a-zA-Z0-9])${esc}([^a-zA-Z0-9]|$)`, "i");
+      const brandWithCoRegex = new RegExp(`(^|[^a-zA-Z0-9])${esc}\\s+Company([^a-zA-Z0-9]|$)`, "i");
+      const titleOrLogo = ((crawlData && crawlData.title) || "") + " " + ((crawlData && crawlData.logoText) || "");
+      if (brandExactRegex.test(titleOrLogo) && !brandWithCoRegex.test(combinedEvidence)) {
+        n = withoutCompany;
+      }
+    }
+  }
+
+  return n;
 }
 
 /**
