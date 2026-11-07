@@ -948,11 +948,12 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   name = name.replace(/\s*[-–—|:•·]\s*(?:manufacturer|supplier|wholesaler|distributor|timber\s*merchants|specialists|services|official\s*website|home|online\s*store).*$/i, "");
 
   // 5. Clean boundary punctuation and special characters per Rule 4
-  // Remove special characters from beginning
+  // Remove special characters from beginning (must start with letter or digit)
   name = name.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
-  // Remove trailing special characters (symbols, dashes, colons, semicolons, commas, slashes, quotes)
-  name = name.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
-  name = name.replace(/[^a-zA-Z0-9.)\u00C0-\u024F]+$/gu, "").trim();
+  // Remove trailing special characters from end (must end cleanly without stray symbols, preserve . or ))
+  name = name.replace(/[^\p{L}\p{N}.)]+$/gu, "").trim();
+  name = name.replace(/(?<![\p{L}\p{N}])\.+$/gu, "").trim();
+  name = name.replace(/[,;:]+$/g, "").trim();
 
   return name;
 }
@@ -1904,15 +1905,16 @@ function extractFooterText(html) {
 
 function extractMapAddresses(html, targetList, pageUrl = "") {
   if (!html) return;
-  const mapRegex = /(?:google\.com\/maps|maps\.google|baidu\.com|openstreetmap)[^"'>\s]*/gi;
+  const decodedHtml = decodeHtmlEntities(html);
+  const mapRegex = /(?:google\.[a-z.]+\/maps|maps\.google(?:\.[a-z.]+)?|baidu\.com|openstreetmap)[^"'>\s]*/gi;
   let match;
-  while ((match = mapRegex.exec(html)) !== null) {
+  while ((match = mapRegex.exec(decodedHtml)) !== null) {
     const rawUrl = match[0];
     try {
-      const decoded = decodeURIComponent(rawUrl);
+      const decoded = decodeURIComponent(rawUrl.replace(/&amp;/gi, "&"));
       let query = "";
 
-      // 1. Standard query parameters (?q=..., ?query=..., ?place=..., ?daddr=..., ?hnear=...)
+      // 1. Standard query parameters (?q=..., ?query=..., ?place=..., ?destination=..., ?daddr=..., ?saddr=..., ?hnear=...)
       const qMatch = decoded.match(/[?&](?:q|query|place|destination|daddr|saddr|hnear)=([^&"'>]+)/i);
       if (qMatch) {
         query = qMatch[1].replace(/\+/g, " ").trim();
@@ -1947,6 +1949,15 @@ function extractMapAddresses(html, targetList, pageUrl = "") {
 
       if (query.length > 8 && !/^[-\d.,\s]+$/.test(query) && !/^\d+$/.test(query)) {
         addAddressCandidate(targetList, query, "map", false, "map", pageUrl, "Google Maps");
+      }
+
+      // Also check hnear parameter if present
+      const hnearMatch = decoded.match(/[?&]hnear=([^&"'>]+)/i);
+      if (hnearMatch) {
+        const hnearQuery = hnearMatch[1].replace(/\+/g, " ").trim();
+        if (hnearQuery.length > 8 && hnearQuery !== query && !/^[-\d.,\s]+$/.test(hnearQuery)) {
+          addAddressCandidate(targetList, hnearQuery, "map", false, "map", pageUrl, "Google Maps");
+        }
       }
     } catch (e) { }
   }
@@ -5304,7 +5315,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = stripBlindlyAddedNumber(addr, allAddressEvidence);
 
       // Deduplicate repeated premise numbers e.g. "No. 1013 Number 1013" -> "Number 1013"
-      addr = addr.replace(/(^|[,\s])(?:no\.?|number|#)\s*(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?|number|#)\s*\2\b/gi, '$1Number $2');
+      addr = addr.replace(/(^|[,\s])(?:no\.?|number)\s*(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?|number)\s*\2\b/gi, '$1Number $2');
       addr = addr.replace(/(^|[,\s])(?:no\.?\s*)?(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)Number\s+\2\b/gi, '$1Number $2');
       addr = addr.replace(/(^|[,\s])Number\s+(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?\s*)?\2\b/gi, '$1Number $2');
 
@@ -5350,7 +5361,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Final pass: clean postal codes, stray quotes, and punctuation
       addr = removePostalCodesCarefully(addr);
       addr = addr.replace(/["“”«»`]+/g, " ");
-      addr = addr.replace(/^[,;.\s\-_/\\|"'“”«»`]+|[,;.\s\-_/\\|"'“”«»`]+$/g, "").trim();
+      // Strictly enforce: No special characters or invisible symbols at the beginning (FIRST) or end (LAST)
+      addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
+      addr = addr.replace(/[^\p{L}\p{N})]+$/gu, "").trim();
       addr = addr.replace(/\s+/g, " ");
     }
   } else {
@@ -5636,6 +5649,19 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.errorSourceUrl = result.errorSourceUrl || result.restrictedSourceUrl || result.disallowedSourceUrl || result.shopCartSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
     result.errorKeyword = result.errorKeyword || result.restrictedKeyword || result.disallowedKeyword || result.shopCartKeyword || result.restrictedReason || "";
     result.errorSnippet = result.errorSnippet || result.restrictedSnippet || result.disallowedSnippet || result.shopCartSnippet || result._note || "";
+  }
+
+  // Enforce boundary QC rule: special characters like &, #, etc. must NEVER be at the first or end of any field
+  // Internal special characters like & in "AT&T", # in "Suite #4" must be preserved!
+  for (const key of ["companyName", "companyAddress", "businessType", "countryName"]) {
+    if (result[key] && typeof result[key] === "string" && result[key] !== "Not Available") {
+      result[key] = result[key].replace(/^[^\p{L}\p{N}]+/gu, "").trim();
+      if (key === "companyName") {
+        result[key] = result[key].replace(/[^\p{L}\p{N}.)]+$/gu, "").trim();
+      } else {
+        result[key] = result[key].replace(/[^\p{L}\p{N})]+$/gu, "").trim();
+      }
+    }
   }
 
   return result;
@@ -7586,7 +7612,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = normalizeTaiwanDivisions(a);
 
   // Deduplicate repeated premise numbers early (e.g. "No. 1013 Number 1013" -> "Number 1013")
-  a = a.replace(/(^|[,\s])(?:no\.?|number|#)\s*(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?|number|#)\s*\2\b/gi, '$1Number $2');
+  a = a.replace(/(^|[,\s])(?:no\.?|number)\s*(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?|number)\s*\2\b/gi, '$1Number $2');
   a = a.replace(/(^|[,\s])(?:no\.?\s*)?(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)Number\s+\2\b/gi, '$1Number $2');
   a = a.replace(/(^|[,\s])Number\s+(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?\s*)?\2\b/gi, '$1Number $2');
   a = a.replace(/(^|[,\s])(?:no\.?\s*)?(\d+)\s+\2\b/gi, '$1$2');
@@ -7604,8 +7630,8 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
   a = a.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
 
-  // Replace ampersand with 'and' in address
-  a = a.replace(/\s*&\s*/g, " and ");
+  // Preserve ampersand inside address (normalize spacing, do not replace with 'and')
+  a = a.replace(/\s*&\s*/g, " & ");
 
   // 1. "St" as "Saint" in city or place names (e.g. St Louis, Port St Lucie, St Petersburg, St Paul, St Marys)
   a = a.replace(/\b(?:port\s+|mount\s+)?st\.?\s+(lucie|louis|paul|petersburg|cloud|albans|kilda|george|john|andrews|charles|joseph|moritz|leonards|marys|mary's|peters|helens|ives|clair)\b/gi, function (m, p) {
@@ -7638,12 +7664,10 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[\s,])S\.?W\.?\s+(?=[A-Za-z0-9])/gi, '$1Southwest ');
 
   // 3. Number, Section, Lane & Alley prefixes (Global full form expansion)
+  // Note: Special characters like # and & must be preserved inside address (e.g. Suite #4, Unit #12)
   a = a.replace(/(^|[,\s])No\.\s*(?=\d)/gi, '$1Number ');
   a = a.replace(/(^|[,\s])No\b\s*(?=\d)/gi, '$1Number ');
   a = a.replace(/(^|[,\s])Nos\.?\s*(?=\d)/gi, '$1Number ');
-  a = a.replace(/(^|[,\s])#\s*(?=\d)/gi, '$1Number ');
-  a = a.replace(/(^|[,\s])(\d+)\s*#\s*(?=[A-Za-z0-9])/gi, '$1Number $2, ');
-  a = a.replace(/(^|[,\s])(\d+)\s*#\b/gi, '$1Number $2');
   a = a.replace(/\blot\s+no\.?\s*(?=\d)/gi, 'Lot Number ');
   a = a.replace(/\bplot\s+no\.?\s*(?=\d)/gi, 'Plot Number ');
   a = a.replace(/(^|[,\s])Sec\.\s*(?=[A-Za-z0-9])/gi, '$1Section ');
