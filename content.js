@@ -14,14 +14,74 @@
     }
   }
 
-  // Resilient message sender preventing any unhandled Promise rejections with auto-retry
-  function sendRuntimeMessage(message, retryCount = 1) {
+  // Proactively wakes up service worker if idle
+  function ensureServiceWorkerAwake() {
     return new Promise((resolve) => {
+      if (!isExtensionAlive()) return resolve(false);
+      try {
+        chrome.runtime.sendMessage({ action: "PING" }, (res) => {
+          if (chrome.runtime.lastError) {
+            setTimeout(() => resolve(true), 250);
+          } else {
+            resolve(true);
+          }
+        });
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  }
+
+  // Resilient message sender with dual-channel (persistent port + sendMessage fallback) preventing port disconnects
+  function sendRuntimeMessage(message, retryCount = 2) {
+    return new Promise(async (resolve) => {
       if (!isExtensionAlive()) {
         showReloadBanner();
         return resolve({ success: false, error: "Extension context invalidated. Please refresh this page (F5).", isExtensionError: true });
       }
 
+      await ensureServiceWorkerAwake();
+
+      // Use persistent port connection for long-running CRAWL_AND_EXTRACT tasks (prevents MV3 message channel closure)
+      if (message.action === "CRAWL_AND_EXTRACT" && chrome.runtime.connect) {
+        try {
+          const port = chrome.runtime.connect({ name: "ai-crawl-port" });
+          let portResolved = false;
+
+          const portTimer = setTimeout(() => {
+            if (portResolved) return;
+            portResolved = true;
+            try { port.disconnect(); } catch (e) { }
+            sendMessageDirect(message, retryCount).then(resolve);
+          }, 16000);
+
+          port.onMessage.addListener((res) => {
+            if (portResolved) return;
+            portResolved = true;
+            clearTimeout(portTimer);
+            try { port.disconnect(); } catch (e) { }
+            resolve(res);
+          });
+
+          port.onDisconnect.addListener(() => {
+            if (portResolved) return;
+            clearTimeout(portTimer);
+            sendMessageDirect(message, retryCount).then(resolve);
+          });
+
+          port.postMessage(message);
+          return;
+        } catch (e) {
+          // Port connect failed, fallback to sendMessage
+        }
+      }
+
+      sendMessageDirect(message, retryCount).then(resolve);
+    });
+  }
+
+  function sendMessageDirect(message, retryCount) {
+    return new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage(message, (response) => {
           if (chrome.runtime.lastError) {
@@ -30,12 +90,11 @@
               showReloadBanner();
               return resolve({ success: false, error: err, isExtensionError: true });
             }
-            // Auto-retry once on service worker wakeup/port disconnect
             if (retryCount > 0 && (err.includes("message channel closed") || err.includes("Could not establish connection"))) {
-              console.warn(`[AI Assistant] Service worker message port closed (${err}). Waking worker and retrying...`);
+              console.warn(`[AI Assistant] Service worker reconnecting (${err}). Retrying in 500ms (${retryCount} retries left)...`);
               setTimeout(() => {
                 sendRuntimeMessage(message, retryCount - 1).then(resolve);
-              }, 400);
+              }, 500);
               return;
             }
             return resolve({ success: false, error: err, isExtensionError: true });

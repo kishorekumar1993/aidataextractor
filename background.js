@@ -11,7 +11,7 @@ const DEFAULT_API_KEY =
 const DEFAULT_MODEL =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
   (typeof self !== "undefined" && self.ENV && self.ENV.DEFAULT_MODEL) ||
-  "gemini-3.5-flash-lite";
+  "gemini-1.5-flash";
 
 // Primary prohibited core industries per Instruction Sheet Note 2
 // Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
@@ -450,19 +450,24 @@ const RECOGNIZED_TOWNS = [
 ];
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "PING") {
+    sendResponse({ success: true, pong: true });
+    return false;
+  }
+
   if (request.action === "CRAWL_AND_EXTRACT") {
     // Keep MV3 service worker alive while crawling
     let keepAlive = setInterval(() => {
       try { chrome.runtime.getPlatformInfo(() => {}); } catch (e) { }
-    }, 3500);
+    }, 2500);
 
-    // Bounded safety timeout so we never hit Chrome's 30-second message channel port timeout
+    // Bounded safety timeout: 15s guarantees sendResponse fires well before Chrome's 30s message channel deadline!
     let finished = false;
     const timeoutId = setTimeout(() => {
       if (finished) return;
       finished = true;
       clearInterval(keepAlive);
-      console.warn("[Background] Crawl reached safety boundary. Returning timeout Not Working result before port closes.");
+      console.warn("[Background] Crawl reached safety boundary (15s). Returning timeout Not Working result before port closes.");
       try {
         const timeoutNotWorking = {
           websiteStatus: "Not Working",
@@ -482,8 +487,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           errorCategory: "Unreachable / Timeout",
           errorKeyword: "Connection Timeout / Unresponsive",
           errorSourceUrl: request.url,
-          errorSnippet: "Website took longer than 24 seconds to respond or server is unresponsive (Rule 1).",
-          notWorkingReason: "Website took longer than 24 seconds to respond or server is unresponsive (Rule 1).",
+          errorSnippet: "Website took longer than 15 seconds to respond or server is unresponsive (Rule 1).",
+          notWorkingReason: "Website took longer than 15 seconds to respond or server is unresponsive (Rule 1).",
           _finalUrl: request.url,
           _originalUrl: request.url,
           _note: "Crawl timeout reached safety boundary - Marked as Not Working (Rule 1)"
@@ -492,7 +497,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (err) {
         sendResponse({ success: false, error: "Crawl timeout" });
       }
-    }, 24000);
+    }, 15000);
 
     handleCrawlAndExtract(request.url)
       .then(result => {
@@ -539,6 +544,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 });
+
+// Port-based long-lived channel support for Chrome MV3
+if (chrome && chrome.runtime && chrome.runtime.onConnect) {
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name === "ai-crawl-port") {
+      port.onMessage.addListener(async (msg) => {
+        if (msg.action === "PING") {
+          try { port.postMessage({ action: "PONG" }); } catch (e) { }
+          return;
+        }
+        if (msg.action === "CRAWL_AND_EXTRACT") {
+          try {
+            const result = await handleCrawlAndExtract(msg.url);
+            port.postMessage({ success: true, data: result });
+          } catch (err) {
+            port.postMessage({ success: false, error: err.message });
+          }
+        }
+      });
+    }
+  });
+}
 
 /**
  * Main coordinator: Deep crawls target site, handles framesets & charsets, runs AI, applies independent QC.
@@ -4441,18 +4468,10 @@ Return ONLY valid JSON matching this schema:
   // ].filter((m, i, arr) => m && arr.indexOf(m) === i);
   const candidateModels = [
     modelName,
-
-    // Latest Gemini models
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-
-    // Gemini 2.5 alternatives
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro"
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
+    "gemini-1.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-pro"
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i).slice(0, 2);
 
   let lastError = null;
   let parsed = null;
@@ -4461,7 +4480,7 @@ Return ONLY valid JSON matching this schema:
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${apiKey}`;
     try {
       const abortCtrl = new AbortController();
-      const abortTimer = setTimeout(() => abortCtrl.abort(), 6000);
+      const abortTimer = setTimeout(() => abortCtrl.abort(), 4500);
       let response;
       try {
         response = await fetch(url, {
@@ -9064,25 +9083,10 @@ function extractLikelyAddress(text) {
 async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
   const modelsToTry = [
     modelName,
-    // Latest Gemini models
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-
-    // Gemini 2.5 alternatives
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-pro"
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
-
-
-  //   const modelsToTry = [
-  //   modelName,
-  //   "gemini-2.5-flash-lite",
-  //   "gemini-3.5-flash-lite",
-  //   "gemini-flash-lite-latest"
-  // ].filter((m, i, arr) => m && arr.indexOf(m) === i);
+    "gemini-1.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-pro"
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i).slice(0, 2);
 
   let lastError = null;
 

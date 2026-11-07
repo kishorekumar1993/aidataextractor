@@ -7,7 +7,7 @@ const DEFAULT_API_KEY =
 const DEFAULT_MODEL =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
   (typeof window !== "undefined" && window.ENV && window.ENV.DEFAULT_MODEL) ||
-  "gemini-3.5-flash-lite";
+  "gemini-1.5-flash";
 
 document.addEventListener("DOMContentLoaded", () => {
   const apiKeyInput = document.getElementById("api-key-input");

@@ -3,7 +3,7 @@
 (function (root) {
   const ENV = {
     GEMINI_API_KEY: "your_gemini_api_key_here",
-    DEFAULT_MODEL: "gemini-3.5-flash-lite"
+    DEFAULT_MODEL: "gemini-1.5-flash"
   };
 
   if (typeof module !== "undefined" && module.exports) {
