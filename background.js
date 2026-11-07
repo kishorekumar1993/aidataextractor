@@ -1479,28 +1479,34 @@ async function crawlWebsite(targetUrl) {
         }
       }
       // Double check for secondary email: if fewer than 2 corporate emails discovered so far,
-      // concurrently fetch up to 2 additional contact/about/support subpages from contactLinks
+      // concurrently fetch all remaining contact, support, privacy, policy, terms, legal, and warranty subpages from contactLinks
       if (allDiscoveredEmails.size < 2 && contactLinks && contactLinks.length > 0) {
-        const extraLinks = [];
-        for (const link of contactLinks) {
-          if (!fetchedUrls.has(link)) {
-            fetchedUrls.add(link);
-            extraLinks.push(link);
-            if (extraLinks.length >= 2) break;
-          }
-        }
-        if (extraLinks.length > 0) {
+        const remainingCandidates = contactLinks
+          .filter(l => !fetchedUrls.has(l))
+          .sort((a, b) => {
+            const score = (u) => {
+              if (/(?:privacy|policy|legal|terms|support|warranty|service|inquir|quote)/i.test(u)) return 10;
+              return 1;
+            };
+            return score(b) - score(a);
+          })
+          .slice(0, 8);
+
+        if (remainingCandidates.length > 0) {
           const extraResults = await Promise.allSettled(
-            extraLinks.map(cUrl => fetchDecodedHtml(cUrl, {
-              timeoutMs: 2000,
-              headers: {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-              }
-            }))
+            remainingCandidates.map(cUrl => {
+              fetchedUrls.add(cUrl);
+              return fetchDecodedHtml(cUrl, {
+                timeoutMs: 2500,
+                headers: {
+                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                }
+              });
+            })
           );
-          for (let i = 0; i < extraLinks.length; i++) {
-            const cUrl = extraLinks[i];
+          for (let i = 0; i < remainingCandidates.length; i++) {
+            const cUrl = remainingCandidates[i];
             const settled = extraResults[i];
             if (settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
               const cText = settled.value.html;
