@@ -1317,6 +1317,12 @@ async function crawlWebsite(targetUrl) {
 
     if (mainHtml) {
       crawledPages.push({ url: finalUrl, html: mainHtml, text: stripHtml(mainHtml) });
+      for (const em of extractEmailsFromHtml(mainHtml, finalUrl)) {
+        allDiscoveredEmails.add(em);
+        updateEmailSource(emailSourceMap, em, finalUrl, finalUrl, targetUrl);
+      }
+      const homePhoneLinks = [...mainHtml.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
+      for (const p of homePhoneLinks) allDiscoveredPhones.add(p);
     }
 
     // Extract Footer text & Footer address candidates
@@ -4128,7 +4134,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     countryName: {
       type: "STRING",
-      description: "Standardized official country name in Title Case where EVERY single word starts with a Capital letter (e.g. Czechia, Turkiye, United States Of America, United Kingdom, Canada, Australia, Taiwan, India). For Czech Republic always return Czechia."
+      description: "You must write the country name in full form in Title Case where EVERY single word starts with a Capital letter (e.g. Czechia, Turkiye, United States Of America, England, Wales, Scotland, Northern Ireland, United Kingdom, Canada, Australia, Taiwan, India). If not available on site, check social media; if still not available, consider locality/city/state. For United Kingdom: if 'England' and 'United Kingdom' both are mentioned, you must take England as the country name (same for Wales, Scotland, Northern Ireland)."
     },
     companyAddress: {
       type: "STRING",
@@ -4696,14 +4702,32 @@ COMPANY NAME RULES (Rule 4):
    - Special characters MUST NOT start and MUST NOT end the company name.
 
 COUNTRY NAME VALIDATION RULES:
-1. Country Name MUST be taken DIRECTLY from the physical address on the website.
-2. STRICTLY DO NOT guess or infer from domain name or URL extension (e.g. do NOT guess from .com.tw, .tw, .co.za).
-3. MANDATORY CAPITALIZATION: EVERY SINGLE WORD in countryName MUST start with a Capital letter (e.g. "United States Of America" with capital 'Of', "United Kingdom", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye").
-4. STANDARDIZED OFFICIAL COUNTRY NAMES (GLOBAL MANDATE - APPLIES GLOBALLY TO ALL COUNTRIES):
+1. FULL FORM COUNTRY NAME (CRITICAL MANDATORY QC RULE):
+   - You MUST write the country name in full form (e.g. "United States Of America", "United Kingdom", "South Africa", "United Arab Emirates", "Saudi Arabia", "New Zealand").
+2. FALLBACK HIERARCHY FOR COUNTRY IDENTIFICATION (CRITICAL QC RULE):
+   - If the country name is not available on the site, check on company social media (LinkedIn, Facebook, Twitter/X, Instagram, YouTube).
+   - If still not available, search using the city and state name. WE CONSIDER THE LOCALITY FOR THE COUNTRY NAME.
+   - Extract directly from the physical address, city, state, or locality evidence.
+3. UNITED KINGDOM & CONSTITUENT COUNTRIES MANDATE (CRITICAL QC RULE):
+   - Example: United Kingdom (England, Wales, Scotland, Northern Ireland). If "England" and "United Kingdom" both are mentioned, you must take England as the country name.
+   - The constituent countries of the United Kingdom are:
+     * "England"
+     * "Wales"
+     * "Scotland"
+     * "Northern Ireland"
+   - STRICT QC MANDATE:
+     * If "England" and "United Kingdom" both are mentioned, YOU MUST TAKE England as the country name!
+     * If "Scotland" and "United Kingdom" both are mentioned, YOU MUST TAKE Scotland as the country name!
+     * If "Wales" and "United Kingdom" both are mentioned, YOU MUST TAKE Wales as the country name!
+     * If "Northern Ireland" and "United Kingdom" both are mentioned, YOU MUST TAKE Northern Ireland as the country name!
+     * When the locality, city, or county belongs to a constituent country (e.g. London, Birmingham, Manchester, Leeds, Essex, Yorkshire, Kent, Lancashire -> England; Cardiff, Swansea, Newport -> Wales; Edinburgh, Glasgow, Aberdeen, Dundee -> Scotland; Belfast, Derry -> Northern Ireland), you MUST return that constituent country ('England', 'Wales', 'Scotland', 'Northern Ireland') instead of generic 'United Kingdom'!
+     * Only return generic "United Kingdom" if NO specific constituent country (England, Wales, Scotland, Northern Ireland) or constituent locality is identifiable.
+4. MANDATORY CAPITALIZATION: EVERY SINGLE WORD in countryName MUST start with a Capital letter (e.g. "United States Of America" with capital 'Of', "United Kingdom", "England", "Scotland", "Wales", "Northern Ireland", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye").
+5. STANDARDIZED OFFICIAL COUNTRY NAMES (GLOBAL MANDATE - APPLIES GLOBALLY TO ALL COUNTRIES):
    - For Czech Republic / Czech / Česká republika / Česko, you MUST return "Czechia" (NEVER return "Czech Republic").
    - For Turkey / Türkiye / Republic of Turkey / Republic of Turkiye, you MUST return "Turkiye" (spelled "Turkiye").
    - For the United States / USA / US / U.S.A., you MUST return the full official name "United States Of America" (NEVER return just "United States" or "USA").
-   - For the United Kingdom / Great Britain / UK / Britain, you MUST return "United Kingdom".
+   - For the United Kingdom, remember: If England, Wales, Scotland, or Northern Ireland is mentioned or identifiable from locality, return "England", "Wales", "Scotland", or "Northern Ireland" (if "England" and "United Kingdom" both are mentioned, take "England"). If no constituent country is identified, return "United Kingdom".
    - For Taiwan / Taiwan, R.O.C. / Republic of China, you MUST return "Taiwan".
    - For South Korea / Korea / Republic of Korea / ROK, you MUST return "South Korea".
    - For Swaziland, you MUST return "Eswatini".
@@ -5970,6 +5994,26 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
   }
   country = toTitleCase(normalizeCountryName(country));
+  // UK Constituent Country refinement (Mandatory QC Rule):
+  // "United Kingdom (England, Wales, Scotland, Northern Ireland). If 'England' and 'United Kingdom' both are mentioned, you must take England as the country name."
+  if (country === "United Kingdom") {
+    const rawCandidatesText = (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
+    const fullCheckText = (addr + " " + rawCandidatesText + " " + (crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
+    if (/\bengland\b/i.test(fullCheckText)) {
+      country = "England";
+    } else if (/\bscotland\b/i.test(fullCheckText)) {
+      country = "Scotland";
+    } else if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText)) {
+      country = "Wales";
+    } else if (/\bnorthern\s*ireland\b/i.test(fullCheckText)) {
+      country = "Northern Ireland";
+    } else {
+      const constituentFromLocality = detectCountryFromAddress(addr || rawCandidatesText);
+      if (["England", "Scotland", "Wales", "Northern Ireland"].includes(constituentFromLocality)) {
+        country = constituentFromLocality;
+      }
+    }
+  }
   result.countryName = country;
 
   // Helper for cross-country equivalence (UK constituent nations, USA variants)
@@ -9564,13 +9608,14 @@ function normalizeCountryName(country) {
   }
 
   // 5. United Kingdom & Constituent Countries
-  if (/^(?:united\s*kingdom|great\s*britain|uk|u\.k\.|britain)$/i.test(unaccented)) {
+  // QC Rule: "United Kingdom (England, Wales, Scotland, Northern Ireland). If 'England' and 'United Kingdom' both are mentioned, you must take England as the country name."
+  if (/\bengland\b/i.test(unaccented)) return "England";
+  if (/\bscotland\b/i.test(unaccented)) return "Scotland";
+  if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(unaccented)) return "Wales";
+  if (/\bnorthern\s*ireland\b/i.test(unaccented)) return "Northern Ireland";
+  if (/^(?:united\s*kingdom|great\s*britain|uk|u\.k\.|britain)$/i.test(unaccented) || /\bunited\s*kingdom\b/i.test(unaccented)) {
     return "United Kingdom";
   }
-  if (/^england$/i.test(unaccented)) return "England";
-  if (/^scotland$/i.test(unaccented)) return "Scotland";
-  if (/^wales$/i.test(unaccented)) return "Wales";
-  if (/^northern\s*ireland$/i.test(unaccented)) return "Northern Ireland";
 
   // 6. South Korea
   if (/\b(?:south\s*korea|korea,\s*republic\s*of|republic\s*of\s*korea|korea\s*republic|rok)\b/i.test(unaccented) || /^korea$/i.test(unaccented)) {
@@ -9836,7 +9881,14 @@ function detectCountryFromAddress(address) {
   if (/\b(scotland)\b/i.test(lower)) return "Scotland";
   if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(lower)) return "Wales";
   if (/\b(northern\s*ireland)\b/i.test(lower)) return "Northern Ireland";
-  if (/\b(united\s*kingdom|great\s*britain|uk)\b/i.test(lower)) return "United Kingdom";
+  if (/\b(united\s*kingdom|great\s*britain|uk)\b/i.test(lower)) {
+    // QC Mandate: Prioritize constituent country if locality belongs to England, Wales, Scotland, or Northern Ireland
+    if (/\b(?:london|birmingham|manchester|leeds|liverpool|sheffield|bristol|newcastle|nottingham|leicester|coventry|essex|yorkshire|kent|lancashire|surrey|hampshire|sussex|norfolk|suffolk|somerset|devon|cornwall|cheshire|derbyshire|berkshire|oxfordshire|cambridgeshire|gloucestershire|northamptonshire|wiltshire|bedfordshire|staffordshire|cumbria|lincolnshire|hertfordshire|warwickshire|dorset|worcestershire|shropshire|buckinghamshire)\b/i.test(lower)) return "England";
+    if (/\b(?:edinburgh|glasgow|aberdeen|dundee|inverness|perth|stirling|fife|lanarkshire|highland|ayrshire|lothian)\b/i.test(lower)) return "Scotland";
+    if (/\b(?:cardiff|swansea|newport|wrexham|glamorgan|gwent|dyfed|powys|gwynedd|clwyd)\b/i.test(lower)) return "Wales";
+    if (/\b(?:belfast|derry|londonderry|armagh|antrim|down|fermanagh|tyrone)\b/i.test(lower)) return "Northern Ireland";
+    return "United Kingdom";
+  }
   if (/\b(united\s*states|usa|united\s*states\s*of\s*america)\b/i.test(lower)) return "United States Of America";
   if (/\b(australia)\b/i.test(lower)) return "Australia";
   if (/\b(canada)\b/i.test(lower)) return "Canada";

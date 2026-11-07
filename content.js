@@ -795,18 +795,18 @@
               }
             }
           }
-        } else if (targetClean === "england") {
-          // Pass 1: exact match for England
+        } else if (targetClean === "england" || targetClean === "scotland" || targetClean === "wales" || targetClean === "northern ireland") {
+          // Pass 1: exact match for specific constituent country (England, Scotland, Wales, Northern Ireland)
           for (let i = 0; i < element.options.length; i++) {
             const opt = element.options[i];
             const val = (opt.value || "").trim().toLowerCase();
             const txt = (opt.text || "").trim().toLowerCase();
-            if (val === "england" || txt === "england") {
+            if (val === targetClean || txt === targetClean) {
               matchedIndex = i;
               break;
             }
           }
-          // Pass 2: fall back to United Kingdom only if England is not in the dropdown
+          // Pass 2: fall back to United Kingdom only if specific constituent is not in the dropdown
           if (matchedIndex === -1) {
             for (let i = 0; i < element.options.length; i++) {
               const opt = element.options[i];
@@ -1385,13 +1385,14 @@
     }
 
     // 5. United Kingdom & Constituent Countries
-    if (/^(?:united\s*kingdom|great\s*britain|uk|u\.k\.|britain)$/i.test(unaccented)) {
+    // QC Rule: "United Kingdom (England, Wales, Scotland, Northern Ireland). If 'England' and 'United Kingdom' both are mentioned, you must take England as the country name."
+    if (/\bengland\b/i.test(unaccented)) return "England";
+    if (/\bscotland\b/i.test(unaccented)) return "Scotland";
+    if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(unaccented)) return "Wales";
+    if (/\bnorthern\s*ireland\b/i.test(unaccented)) return "Northern Ireland";
+    if (/^(?:united\s*kingdom|great\s*britain|uk|u\.k\.|britain)$/i.test(unaccented) || /\bunited\s*kingdom\b/i.test(unaccented)) {
       return "United Kingdom";
     }
-    if (/^england$/i.test(unaccented)) return "England";
-    if (/^scotland$/i.test(unaccented)) return "Scotland";
-    if (/^wales$/i.test(unaccented)) return "Wales";
-    if (/^northern\s*ireland$/i.test(unaccented)) return "Northern Ireland";
 
     // 6. South Korea
     if (/\b(?:south\s*korea|korea,\s*republic\s*of|republic\s*of\s*korea|korea\s*republic|rok)\b/i.test(unaccented) || /^korea$/i.test(unaccented)) {
