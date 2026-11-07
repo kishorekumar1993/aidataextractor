@@ -5504,10 +5504,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     const cTrim = country.trim();
     if (/taiwan/i.test(country) || /r\.?o\.?c\.?/i.test(country)) country = "Taiwan";
     else if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?)$/i.test(cTrim)) country = "United States Of America";
-    else if (/england/i.test(country)) country = "England";
-    else if (/scotland/i.test(country)) country = "Scotland";
-    else if (/wales/i.test(country)) country = "Wales";
-    else if (/northern\s*ireland/i.test(country)) country = "Northern Ireland";
+    else if (/^(?:united\s*kingdom|great\s*britain|uk)$/i.test(cTrim)) country = "United Kingdom";
+    else if (/england/i.test(cTrim)) country = "England";
+    else if (/scotland/i.test(cTrim)) country = "Scotland";
+    else if (/wales/i.test(cTrim)) country = "Wales";
+    else if (/northern\s*ireland/i.test(cTrim)) country = "Northern Ireland";
     else if (/italy|italia/i.test(country)) country = "Italy";
     else if (/spain|espa[nñ]a/i.test(country)) country = "Spain";
     else if (/\b(?:turkey|t[uü]rkiye|republic\s*of\s*t[uü]rkiye|republic\s*of\s*turkey)\b/i.test(country)) country = "Turkiye";
@@ -5526,17 +5527,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = compName.replace(/['’`]\s*s\b/gi, "'s");
   compName = cleanCompanyPrefixesAndSuffixes(compName);
 
-  // Prefer the fuller official name (copyright / JSON-LD) when it carries the legal suffix
-  compName = preferOfficialCompanyName(compName, crawlData);
-  compName = decodeHtmlEntities(compName);
-  compName = compName.replace(/['’`]\s*s\b/gi, "'s");
-  compName = cleanCompanyPrefixesAndSuffixes(compName);
-
-  // Restore legal suffixes (Ltd, Inc, Sdn Bhd, etc.) from footer/copyright evidence
-  compName = restoreLegalSuffixIfOmitted(compName, crawlData);
-  compName = decodeHtmlEntities(compName);
-  compName = compName.replace(/['’`]\s*s\b/gi, "'s");
-  compName = cleanCompanyPrefixesAndSuffixes(compName);
+  // Prefer the fuller official name (copyright / JSON-LD) ONLY when AI output was missing a legal suffix or empty
+  if (!compName || !hasCompleteLegalSuffix(compName)) {
+    compName = preferOfficialCompanyName(compName, crawlData);
+    compName = restoreLegalSuffixIfOmitted(compName, crawlData);
+    compName = decodeHtmlEntities(compName);
+    compName = compName.replace(/['’`]\s*s\b/gi, "'s");
+    compName = cleanCompanyPrefixesAndSuffixes(compName);
+  }
 
   // Expand abbreviations to full form and clean brackets per Rule 4
   compName = expandCompanyAbbreviations(compName, country);
@@ -5557,14 +5555,19 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
   result.companyName = compName;
 
-  // 6. Company Address: Compare Gemini's answer against website candidates, prioritizing Headquarters
-  const verifiedResult = verifyAndSelectAddress(result.companyAddress, crawlData.addressCandidates, crawlData);
-  let addr = (typeof verifiedResult === "object" && verifiedResult !== null && verifiedResult.address !== undefined)
-    ? verifiedResult.address
-    : verifiedResult;
-  const selectedCandidate = (typeof verifiedResult === "object" && verifiedResult !== null)
-    ? verifiedResult.selectedCandidate
-    : null;
+  // 6. Company Address: Use Gemini's extracted address directly as source of truth; fall back to website candidates only if empty
+  let addr = (result.companyAddress || "").trim();
+  let selectedCandidate = null;
+
+  if (!addr || addr.toLowerCase() === "not available" || addr.length < 6) {
+    const verifiedResult = verifyAndSelectAddress(result.companyAddress, crawlData.addressCandidates, crawlData);
+    addr = (typeof verifiedResult === "object" && verifiedResult !== null && verifiedResult.address !== undefined)
+      ? verifiedResult.address
+      : verifiedResult;
+    selectedCandidate = (typeof verifiedResult === "object" && verifiedResult !== null)
+      ? verifiedResult.selectedCandidate
+      : null;
+  }
 
   if (addr && addr !== "Not Available") {
     // Immediate rejection of Cloudflare email protection strings
@@ -5767,11 +5770,16 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     country = "Spain";
   } else if (/italy|italia/i.test(trimmedCountry) || /^it$/i.test(trimmedCountry)) {
     country = "Italy";
-  } else if (/united\s*kingdom|great\s*britain|england|scotland|wales/i.test(trimmedCountry) || /^uk$/i.test(trimmedCountry)) {
-    if (/scotland/i.test(trimmedCountry)) country = "Scotland";
-    else if (/wales/i.test(trimmedCountry)) country = "Wales";
-    else if (/northern\s*ireland/i.test(trimmedCountry)) country = "Northern Ireland";
-    else country = "England";
+  } else if (/^(?:united\s*kingdom|great\s*britain|uk)$/i.test(trimmedCountry)) {
+    country = "United Kingdom";
+  } else if (/england/i.test(trimmedCountry)) {
+    country = "England";
+  } else if (/scotland/i.test(trimmedCountry)) {
+    country = "Scotland";
+  } else if (/wales/i.test(trimmedCountry)) {
+    country = "Wales";
+  } else if (/northern\s*ireland/i.test(trimmedCountry)) {
+    country = "Northern Ireland";
   }
   result.countryName = toTitleCase(country.trim());
 
@@ -5805,14 +5813,22 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (!addr || addr.length < 8 || addr.toLowerCase() === "not available") {
     result.state = "Not Available";
   } else {
-    result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
+    if (result.state === "Available") {
+      result.state = "Available";
+    } else {
+      result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
+    }
   }
 
   // 8. City: Evaluated STRICTLY per City QC Rule (Only explicit Town, Township, District, Municipality)
   if (!addr || addr.length < 8 || addr.toLowerCase() === "not available" || addr === "Not Available") {
     result.city = "Not Available";
   } else {
-    result.city = evaluateCityQC(addr, country);
+    if (result.city === "Available") {
+      result.city = "Available";
+    } else {
+      result.city = evaluateCityQC(addr, country);
+    }
   }
 
   // 9. Email ID & 10. Secondary Email ID (Strict Grounding & Anti-Hallucination)
