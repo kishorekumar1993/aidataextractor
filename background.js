@@ -4236,7 +4236,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     phoneNumber: {
       type: "STRING",
-      description: "Contact phone number digits only (without country code or leading 0)"
+      description: "Contact phone number digits only (without country code, without leading 0, and strictly no toll-free numbers)"
     },
     numberOfProducts: {
       type: "STRING",
@@ -4768,19 +4768,27 @@ EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE & SOCIAL CHANNELS):
    - NEVER extract scraping, legal, or privacy policy artifacts like "collected@www...", "posted@...", "sent@...", "accessed@...", or any email containing "www." in the domain.
    - ONLY extract genuine corporate contact emails.
 
-PHONE NUMBER RULES (Rule 11):
-- phoneNumber: Complete phone number, digits only.
-- STRICTLY REMOVE COUNTRY CALLING CODES GLOBALLY ACROSS ALL COUNTRIES:
-  * Malaysia (+60 / 60): Remove 60 (e.g. 60129402782 or 012-940 2782 -> 129402782)
-  * South Africa (+27 / 27): Remove 27 (e.g. +27 11 397 2959 -> 113972959)
-  * Australia (+61 / 61): Remove 61 (e.g. +61 3 9357 6115 -> 393576115)
-  * USA / Canada (+1 / 1): Remove 1 (e.g. +1 573-682-5521 -> 5736825521)
-  * UK (+44 / 44): Remove 44 (e.g. +44 20 7946 0991 -> 2079460991)
-  * Taiwan (+886 / 886): Remove 886 (e.g. 886-3-464-1966 -> 34641966)
-  * Singapore (+65 / 65): Remove 65 (e.g. +65 6123 4567 -> 61234567)
-  * India (+91 / 91): Remove 91
-- STRICTLY STRIP LEADING ZERO (e.g. 012-940 2782 -> 129402782; 011 397 2959 -> 113972959).
-- Do not take toll-free numbers (1800, 1300, 800, etc.).
+PHONE NUMBER RULES (CRITICAL QC REQUIREMENT):
+- Take the complete phone number, but remove the country code, special characters, and spaces.
+- Digits only (no spaces, hyphens, brackets, plus signs, dots, or extension text).
+- STRICTLY DO NOT ENTER COUNTRY CODE:
+  * Remove international calling codes globally across all countries:
+    - USA / Canada (+1 / 1): Remove 1 (e.g. +1 573-682-5521 -> 5736825521)
+    - UK (+44 / 44): Remove 44 (e.g. +44 20 7946 0991 or 020 7946 0991 -> 2079460991)
+    - Australia (+61 / 61): Remove 61 (e.g. +61 3 9357 6115 -> 393576115)
+    - South Africa (+27 / 27): Remove 27 (e.g. +27 11 397 2959 -> 113972959)
+    - Malaysia (+60 / 60): Remove 60 (e.g. +60 12-940 2782 -> 129402782)
+    - Taiwan (+886 / 886): Remove 886 (e.g. +886-3-464-1966 -> 34641966)
+    - Singapore (+65 / 65): Remove 65 (e.g. +65 6123 4567 -> 61234567)
+    - India (+91 / 91): Remove 91
+- STRICTLY DO NOT TAKE TOLL-FREE NUMBERS:
+  * Toll-free numbers are NOT allowed!
+  * If only a toll-free number is available on the website, return "" for phoneNumber.
+  * Never extract numbers starting with 800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800, 0808, 0500, or any toll-free prefix.
+- STRICTLY DO NOT TAKE NUMBERS STARTING WITH ZERO:
+  * Strip all leading zeros. The final output MUST NEVER start with zero (0).
+  * Example: 012-940 2782 -> 129402782; 020 7946 0991 -> 2079460991.
+  * If a number cannot be formatted without starting with 0, return "" (do not take it).
 
 WEBSITE DATA FOR THIS CRAWL:
 Target URL: ${crawlData.originalUrl}
@@ -6025,23 +6033,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
   result.secondaryEmailId = secEmail;
 
-  // 11. Phone Number: Country-specific cleaning & validation
-  // First pass: try direct local landline phone (non-toll-free)
-  let phone = cleanPhoneNumber(result.phoneNumber, country, false);
+  // 11. Phone Number: Country-specific cleaning & validation (Strictly no toll-free, no country code, no leading zeros)
+  let phone = cleanPhoneNumber(result.phoneNumber, country);
   if (!phone && crawlData.phones && crawlData.phones.length > 0) {
     for (const cand of crawlData.phones) {
-      phone = cleanPhoneNumber(cand, country, false);
+      phone = cleanPhoneNumber(cand, country);
       if (phone) break;
-    }
-  }
-  // Fallback: If no direct landline exists, capture official toll-free contact number (e.g. 888-783-3584 on sturdell.com)
-  if (!phone) {
-    phone = cleanPhoneNumber(result.phoneNumber, country, true);
-    if (!phone && crawlData.phones && crawlData.phones.length > 0) {
-      for (const cand of crawlData.phones) {
-        phone = cleanPhoneNumber(cand, country, true);
-        if (phone) break;
-      }
     }
   }
   result.phoneNumber = phone;
@@ -9190,11 +9187,16 @@ function removePostalCodesCarefully(addr) {
  * Country-specific phone cleaner and validator strictly conforming to Rule 11.
  * Strips international calling codes globally and removes leading zeros.
  */
-function cleanPhoneNumber(rawPhone, country, allowTollFree = false) {
+function cleanPhoneNumber(rawPhone, country) {
   if (!rawPhone) return "";
   let p = String(rawPhone).trim();
 
   p = p.replace(/^(?:tel|call|phone|contact|mobile|fax|whatsapp)[\s.:]*/i, "").trim();
+
+  // Immediate rejection of explicit toll-free keywords
+  if (/\b(?:toll[-\s]*free|free[-\s]*phone|green[-\s]*line)\b/i.test(p)) {
+    return "";
+  }
 
   const cLower = (country || "").toLowerCase();
   const hasPlus = p.startsWith("+");
@@ -9202,6 +9204,11 @@ function cleanPhoneNumber(rawPhone, country, allowTollFree = false) {
 
   let digits = p.replace(/\D/g, "");
   if (!digits) return "";
+
+  // Reject immediate toll-free numbers before country code removal
+  if (/^(?:1800|1888|1877|1866|1855|1844|1833|1300|0800|0808|0500|800|888|877|866|855|844|833)/.test(digits)) {
+    return "";
+  }
 
   if (has00 && digits.length >= 10) {
     digits = digits.slice(2);
@@ -9249,8 +9256,8 @@ function cleanPhoneNumber(rawPhone, country, allowTollFree = false) {
     }
   }
 
-  // If phone had '+' or '00' and country code wasn't removed yet
-  if ((hasPlus || has00) && !codeRemoved) {
+  // If phone had '+' or '00' or starts with country code without plus and wasn't removed yet
+  if (!codeRemoved) {
     for (const cc of countryCodes) {
       if (digits.startsWith(cc.code) && digits.length >= cc.minLen) {
         digits = digits.slice(cc.code.length);
@@ -9260,11 +9267,16 @@ function cleanPhoneNumber(rawPhone, country, allowTollFree = false) {
     }
   }
 
-  // Rule 11: Strip leading zero
+  // Rule: Take complete phone number, but remove leading zero
   digits = digits.replace(/^0+/, "");
 
-  // Rule 11: Do not take toll-free numbers unless allowed or fallback
-  if (!allowTollFree && /^(800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902)/.test(digits)) {
+  // Rule: Do NOT take numbers starting with zero
+  if (!digits || digits.startsWith("0")) {
+    return "";
+  }
+
+  // Rule: STRICTLY DO NOT TAKE TOLL-FREE NUMBERS
+  if (/^(?:800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902|0800|0808|0500)/.test(digits)) {
     return "";
   }
 

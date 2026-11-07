@@ -1487,11 +1487,18 @@
       filledCount++;
     }
 
-    // 11. Phone Number
+    // 11. Phone Number: digits only, remove country code, no toll-free, never start with zero
     if (elements.phoneNumber && data.phoneNumber) {
-      if (setInputValue(elements.phoneNumber, data.phoneNumber)) {
-        highlightField(elements.phoneNumber);
-        filledCount++;
+      let cleanPhone = String(data.phoneNumber).trim().replace(/\D/g, "").replace(/^0+/, "");
+      // Strictly reject toll-free numbers
+      if (/^(?:800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902|0800|0808|0500)/.test(cleanPhone)) {
+        cleanPhone = "";
+      }
+      if (cleanPhone && !cleanPhone.startsWith("0")) {
+        if (setInputValue(elements.phoneNumber, cleanPhone)) {
+          highlightField(elements.phoneNumber);
+          filledCount++;
+        }
       }
     }
 
