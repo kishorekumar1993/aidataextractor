@@ -4433,8 +4433,13 @@ COMPANY PROFILE QC RULES (Rule 3):
 COMPANY NAME RULES (Rule 4):
 1. COMPLETE COMPANY NAME IN FULL FORM (CRITICAL QC RULE):
    - You must take the COMPLETE registered company name in FULL FORM, Title Case.
+   - OFFICIAL ENGLISH NAME VS PINYIN TRANSLITERATION (CRITICAL QC MANDATE):
+     * When the website provides an OFFICIAL ENGLISH NAME in its header, logo, page title, or matching the domain (e.g. "Web Rack Industrial Co., Ltd." on "web-rack.com.tw"), YOU MUST USE THAT EXACT OFFICIAL ENGLISH NAME: "Web Rack Industrial Company, Limited"!
+     * NEVER translate, phonetically romanize, or Pinyin Chinese characters into English (e.g. NEVER translate "網瑞" to "Wang Ruey" when the website brand/logo is "Web Rack"!).
+     * Look at the DOMAIN NAME (e.g. "web-rack.com.tw" -> stem is "Web Rack"): The official English company name MUST match the website domain!
+     * If multiple group entities or associated companies appear in the header/footer (e.g. "Web Rack Industrial Co., Ltd." / "Web Loop Technology Corp." / "Alpmetal Industrial Co., Ltd."), ALWAYS choose the PRIMARY entity that MATCHES THE WEBSITE DOMAIN (e.g. for "web-rack.com.tw", choose "Web Rack Industrial Company, Limited", NEVER an auxiliary or unmatching entity!).
    - NEVER drop, truncate, or omit corporate/legal entity designations (e.g. [Pty]Ltd, (Pty) Ltd, Pty Ltd, Sdn Bhd, Pte Ltd, Pvt Ltd, Ltd, Inc, LLC, LLP, Corp, Co).
-   - Look at the FOOTER, COPYRIGHT LINE (e.g. "© 2026 Company Name"), LEGAL NOTICES, and CONTACT BLOCK for the full official registered corporate name.
+   - Look at the HEADER, LOGO, FOOTER, COPYRIGHT LINE, and TITLE for the full official registered corporate name.
    - Restore legal entity designations (e.g. [Pty]Ltd -> Proprietary Limited, Sdn Bhd -> Sendirian Berhad, Inc -> Incorporated) ONLY when supported by official website text evidence (footer, copyright, Contact page, or Company Profile).
 2. REMOVE BRACKETS FROM THE COMPANY NAME:
    - Remove square brackets [ ] and parentheses ( ) from the company name while KEEPING their internal words:
@@ -5216,11 +5221,45 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     // Preserve Gemini's exact extracted fields directly without local heuristic mutation
+    let compName = decodeHtmlEntities(String(result.companyName || "").trim());
+
+    // Domain-matching safeguard: If AI returned an unmatching Pinyin or auxiliary name (e.g. "Wang Ruey" instead of "Web Rack"),
+    // verify against the website domain stem and official candidates
+    try {
+      const targetHost = (crawlData.finalUrl || crawlData.originalUrl || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].split(":")[0];
+      const domainParts = targetHost.split(".");
+      const domainStem = domainParts[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      if (domainStem && domainStem.length >= 4) {
+        const compNorm = compName.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (!compNorm.includes(domainStem)) {
+          const candidatesToSearch = [
+            crawlData.logoText,
+            crawlData.title,
+            ...(crawlData.legalCompanyCandidates || [])
+          ].filter(Boolean);
+
+          for (const cand of candidatesToSearch) {
+            const candNorm = cand.toLowerCase().replace(/[^a-z0-9]/g, "");
+            if (candNorm.includes(domainStem) && hasCompleteLegalSuffix(cand)) {
+              console.log(`[AI Safeguard] Corrected mismatched company name "${compName}" to domain-matching official candidate "${cand}"`);
+              compName = cand;
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) { }
+
+    // Ensure abbreviation expansions are applied (e.g. "Co., Ltd." -> "Company, Limited", "Co. Ltd" -> "Company Limited")
+    compName = expandCompanyAbbreviations(compName, result.countryName || "");
+
     // Rule: Special character should not start and should not end
-    result.companyName = decodeHtmlEntities(String(result.companyName || "").trim())
+    result.companyName = compName
       .replace(/^[^\p{L}\p{N}]+/gu, "")
       .replace(/[^\p{L}\p{N}]+$/gu, "")
       .trim();
+
     result.companyAddress = decodeHtmlEntities(String(result.companyAddress || "").trim())
       .replace(/^[^\p{L}\p{N}]+/gu, "")
       .replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "")
