@@ -1208,21 +1208,24 @@ async function crawlWebsite(targetUrl) {
         }
       } catch (e) { }
 
-      for (const altUrl of fallbackUrls.slice(0, 2)) {
-        try {
-          const altRes = await fetchDecodedHtml(altUrl, {
-            timeoutMs: 4000,
+      const targetFallbacks = fallbackUrls.slice(0, 2);
+      if (targetFallbacks.length > 0) {
+        const fallbackResults = await Promise.allSettled(
+          targetFallbacks.map(altUrl => fetchDecodedHtml(altUrl, {
+            timeoutMs: 3500,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             }
-          });
-          if (altRes.ok && altRes.html && altRes.html.trim().length > 0 && !isAntiBotChallenge(altRes.html, altRes.status)) {
-            mainRes = altRes;
+          }))
+        );
+        for (const res of fallbackResults) {
+          if (res.status === "fulfilled" && res.value && res.value.ok && res.value.html && res.value.html.trim().length > 0 && !isAntiBotChallenge(res.value.html, res.value.status)) {
+            mainRes = res.value;
             isMainFailed = false;
             break;
           }
-        } catch (e) { }
+        }
       }
     }
 
@@ -1270,7 +1273,7 @@ async function crawlWebsite(targetUrl) {
           if (isRedirectDomain(targetUrl, resolvedClientUrl) || isRedirectDomain(finalUrl, resolvedClientUrl)) {
             console.log(`[AI Assistant] Detected client-side HTML/JS redirect from ${finalUrl} to ${resolvedClientUrl}`);
             const clientRes = await fetchDecodedHtml(resolvedClientUrl, {
-              timeoutMs: 5000,
+              timeoutMs: 3500,
               headers: {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1296,10 +1299,15 @@ async function crawlWebsite(targetUrl) {
     const frameMatches = [...mainHtml.matchAll(/<(?:frame|iframe)[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
     for (const fSrc of frameMatches.slice(0, 2)) {
       try {
-        if (/^(javascript:|about:|mailto:|tel:|https?:\/\/(?:www\.)?(?:google|youtube|vimeo|facebook|twitter|doubleclick))/i.test(fSrc)) continue;
-        const frameUrl = new URL(fSrc, finalUrl).href;
-        const fRes = await fetchDecodedHtml(frameUrl, {
-          timeoutMs: 3000,
+        if (!fSrc || /^(javascript:|about:|mailto:|tel:|data:)/i.test(fSrc)) continue;
+        const frameUrl = new URL(fSrc, finalUrl);
+        // Strictly only crawl same-domain frames; skip all external third-party iframes (maps, tags, analytics, widgets)
+        const mainHost = new URL(finalUrl).hostname.replace(/^www\./i, "");
+        const fHost = frameUrl.hostname.replace(/^www\./i, "");
+        if (fHost !== mainHost && !fHost.endsWith("." + mainHost)) continue;
+
+        const fRes = await fetchDecodedHtml(frameUrl.href, {
+          timeoutMs: 2500,
           headers: { "User-Agent": "Mozilla/5.0" }
         });
         if (fRes.ok && fRes.html) {
@@ -2174,24 +2182,26 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     }
   }
 
-  // 3. <address> tag
-  const addrTagRegex = /([\s\S]{0,600})<address[^>]*>([\s\S]*?)<\/address>/gi;
+  // 3. <address> tag (Fast execution without leading wildcard)
+  const addrTagRegex = /<address[^>]*>([\s\S]*?)<\/address>/gi;
   let am;
   while ((am = addrTagRegex.exec(processedHtml)) !== null) {
-    const ctx = getContext(am[1], defaultSource);
-    const raw = stripHtml(am[2]);
+    const beforeText = processedHtml.slice(Math.max(0, am.index - 500), am.index);
+    const ctx = getContext(beforeText, defaultSource);
+    const raw = stripHtml(am[1]);
     if (raw.length > 10) {
       addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
   }
 
-  // 4. Class or id containing "address" or "addr" or "add" (including li, td, dd, article, section)
-  const classAddrRegex = /([\s\S]{0,600})<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|add\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
+  // 4. Class or id containing "address" or "addr" or "add" (Fast execution without leading wildcard)
+  const classAddrRegex = /<(?:div|p|span|section|li|td|dd|article)[^>]+(?:class|id)=["']([^"']*(?:address|addr\b|add\b|direcci[oó]n|domicilio|ubicaci[oó]n)[^"']*)["'][^>]*>([\s\S]*?)<\/(?:div|p|span|section|li|td|dd|article)>/gi;
   let cm;
   while ((cm = classAddrRegex.exec(processedHtml)) !== null) {
-    const contextStr = cm[1] + " " + cm[2];
+    const beforeText = processedHtml.slice(Math.max(0, cm.index - 500), cm.index);
+    const contextStr = beforeText + " " + cm[1];
     const ctx = getContext(contextStr, defaultSource);
-    const raw = stripHtml(cm[3]);
+    const raw = stripHtml(cm[2]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
       addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
@@ -2209,12 +2219,13 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     }
   }
 
-  // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / Dirección: / 地址:
-  const labelAddrRegex = /([\s\S]{0,600})(?:^|[^a-zA-Z0-9])(?:address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]\s*(?:\s*<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / Dirección: / 地址: (Fast execution)
+  const labelAddrRegex = /(?:^|[^a-zA-Z0-9])(?:address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]\s*(?:\s*<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let lm;
   while ((lm = labelAddrRegex.exec(processedHtml)) !== null) {
-    const ctx = getContext(lm[1], defaultSource);
-    const raw = stripHtml(lm[2]);
+    const beforeText = processedHtml.slice(Math.max(0, lm.index - 500), lm.index);
+    const ctx = getContext(beforeText, defaultSource);
+    const raw = stripHtml(lm[1]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
       addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
@@ -2231,12 +2242,13 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     }
   }
 
-  // 6. Map-marker icon followed by address text (e.g. <span class="fa fa-map-marker"></span> No. 492, ...)
-  const markerRegex = /([\s\S]{0,600})(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location|e-fas-map-marker-alt)[^>]*>[\s\S]{0,800}?(?:<\/(?:span|i|div|svg)>\s*){1,4}(?:<(?:span|p|div|li)[^>]*>)*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  // 6. Map-marker icon followed by address text (Fast execution)
+  const markerRegex = /(?:fa-map-marker|fa-map-marker-alt|map-marker|icon-location|dashicons-location|e-fas-map-marker-alt)[^>]*>[\s\S]{0,800}?(?:<\/(?:span|i|div|svg)>\s*){1,4}(?:<(?:span|p|div|li)[^>]*>)*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
   let mm;
   while ((mm = markerRegex.exec(processedHtml)) !== null) {
-    const ctx = getContext(mm[1], defaultSource);
-    const raw = stripHtml(mm[2]);
+    const beforeText = processedHtml.slice(Math.max(0, mm.index - 500), mm.index);
+    const ctx = getContext(beforeText, defaultSource);
+    const raw = stripHtml(mm[1]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
       addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
@@ -2247,11 +2259,11 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     }
   }
 
-  // 7. Paragraphs, list items, or table cells containing physical address patterns
-  const pAddrRegex = /([\s\S]{0,600})<(?:p|li|td|th)[^>]*>([\s\S]*?)<\/(?:p|li|td|th)>/gi;
+  // 7. Paragraphs, list items, or table cells containing physical address patterns (Fast execution)
+  const pAddrRegex = /<(?:p|li|td|th)[^>]*>([\s\S]*?)<\/(?:p|li|td|th)>/gi;
   let pm;
   while ((pm = pAddrRegex.exec(processedHtml)) !== null) {
-    const raw = stripHtml(pm[2]);
+    const raw = stripHtml(pm[1]);
     if (raw.length >= 15 && raw.length <= 400 &&
       (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|marg|nagar|estate|colony|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|strasse|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
         /(?:大道|路|街|巷|弄|号|號|工业区|工业园|产业园|高新区)/.test(raw) ||
@@ -2261,7 +2273,8 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
        /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(raw) ||
        /\b\d{6}\b/.test(raw) ||
        /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
-      const ctx = getContext(pm[1], defaultSource, pm[2]);
+      const beforeText = processedHtml.slice(Math.max(0, pm.index - 500), pm.index);
+      const ctx = getContext(beforeText, defaultSource, pm[1]);
       addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
       const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length >= 10);
       for (const line of lines) {
@@ -4636,31 +4649,28 @@ Product Items / Units Detected: ${crawlData.detectedProductCount}
 Product Images Detected: ${crawlData.detectedImageCount}
 Product Descriptions Detected: ${crawlData.detectedDescCount}
 
-${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD STRUCTURED BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd, null, 2)}\n\n` : ""}${crawlData.renderedText ? `TRUE RENDERED VISUAL TEXT (LIVE BROWSER DOM):\n${crawlData.renderedText.slice(0, 8000)}\n\n` : ""}DEDICATED COMPANY PROFILE / ABOUT US CONTENT:
-${crawlData.profilePageText || "(No dedicated company profile page text found)"}
+${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD STRUCTURED BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 3), null, 2)}\n\n` : ""}${crawlData.renderedText ? `TRUE RENDERED VISUAL TEXT (LIVE BROWSER DOM):\n${crawlData.renderedText.slice(0, 3500)}\n\n` : ""}DEDICATED COMPANY PROFILE / ABOUT US CONTENT:
+${(crawlData.profilePageText || "").slice(0, 2500) || "(No dedicated company profile page text found)"}
 
 PHYSICAL ADDRESS CANDIDATES FOUND ON WEBSITE (PRIMARY EVIDENCE IN PRIORITY ORDER):
 ${formattedAddressEvidence}
 
 CONTACT PAGE / PROFILE CONTENT:
-${crawlData.contactPageText || "(No separate contact page text found)"}
+${(crawlData.contactPageText || "").slice(0, 3000) || "(No separate contact page text found)"}
 
 FOOTER CONTENT:
-${crawlData.footerText || "(No separate footer text found)"}
+${(crawlData.footerText || "").slice(0, 1500) || "(No separate footer text found)"}
 
 PAGE BODY TEXT:
-${crawlData.bodyText.slice(0, 4000)}
+${(crawlData.bodyText || "").slice(0, 2500)}
 `;
 
   const candidateModels = [
     (modelName && !DEPRECATED_MODELS.has(modelName)) ? modelName : "gemini-3.5-flash-lite",
     "gemini-3.5-flash-lite",
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-    "gemini-3.1-flash-lite",
-    "gemini-flash-lite-latest",
-    "gemini-2.5-flash-lite"
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i && !DEPRECATED_MODELS.has(m));
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash"
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i && !DEPRECATED_MODELS.has(m)).slice(0, 2);
 
   let lastError = null;
   let parsed = null;
@@ -4669,7 +4679,8 @@ ${crawlData.bodyText.slice(0, 4000)}
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${apiKey}`;
     try {
       const abortCtrl = new AbortController();
-      const abortTimer = setTimeout(() => abortCtrl.abort(), 15000);
+      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 8000 : 5000;
+      const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
       let response;
       try {
         response = await fetch(url, {
