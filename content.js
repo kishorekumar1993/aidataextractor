@@ -353,7 +353,18 @@
     elements.city = document.getElementById("selectCity") || document.getElementById("city");
     elements.emailId = document.getElementById("inputEmail") || document.getElementById("email-id") || document.getElementById("email") || document.getElementById("primaryEmail");
     elements.secondaryEmailId = document.getElementById("inputSecondaryEmail") || document.getElementById("secondary-email-id") || document.getElementById("secondaryEmail") || document.getElementById("secondary_email") || document.getElementById("altEmail") || document.getElementById("alternateEmail");
-    elements.phoneNumber = document.getElementById("inputPhone") || document.getElementById("phone-number");
+    elements.phoneNumber = document.getElementById("inputPhone") ||
+      document.getElementById("phone-number") ||
+      document.getElementById("phone") ||
+      document.getElementById("phoneNumber") ||
+      document.getElementById("inputPhoneNumber") ||
+      document.getElementById("telephone") ||
+      document.getElementById("inputTelephone") ||
+      document.querySelector('input[type="tel"]') ||
+      document.querySelector('input[name="phoneNumber"]') ||
+      document.querySelector('input[name="phone"]') ||
+      document.querySelector('input[name="inputPhone"]') ||
+      document.querySelector('input[name="telephone"]');
     elements.numberOfProducts = document.getElementById("selectProductCount") || document.getElementById("number-of-product");
     elements.productImages = document.getElementById("selectProductImage") || document.getElementById("image-product");
     elements.numberOfProductDescriptions = document.getElementById("selectProductDescription") || document.getElementById("desc-of-product");
@@ -444,7 +455,8 @@
     if (!elements.phoneNumber) {
       elements.phoneNumber = allInputs.find(inp => {
         if (inp === elements.companyName || inp === elements.companyAddress || inp === elements.countryName || inp === elements.emailId || inp === elements.secondaryEmailId) return false;
-        return getElementContext(inp).includes("phone") || (inp.placeholder || "").toLowerCase().includes("phone");
+        const ctx = getElementContext(inp);
+        return ctx.includes("phone") || ctx.includes("mobile") || ctx.includes("tel") || (inp.placeholder || "").toLowerCase().includes("phone") || inp.type === "tel";
       });
     }
 
@@ -1516,9 +1528,12 @@
     try {
       if (elements.phoneNumber && data.phoneNumber) {
         let cleanPhone = String(data.phoneNumber).trim().replace(/\D/g, "").replace(/^0+/, "");
-        // Strictly reject toll-free numbers
-        if (/^(?:800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902|0800|0808|0500)/.test(cleanPhone)) {
-          cleanPhone = "";
+        // Strictly reject toll-free numbers (US: 800, 888, 877, 866, 855, 844, 833; AU/UK/IN: 1800, 1300, 0800, 0808, 0500)
+        // Must never drop real geographic area codes like 860 (Connecticut) or 808 (Hawaii)
+        if (!data._isFromAi) {
+          if (/^(?:800|888|877|866|855|844|833|1800|1300|0800|0808|0500)/.test(cleanPhone)) {
+            cleanPhone = "";
+          }
         }
         if (cleanPhone && !cleanPhone.startsWith("0")) {
           if (setInputValue(elements.phoneNumber, cleanPhone)) {

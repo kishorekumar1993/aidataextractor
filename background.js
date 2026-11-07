@@ -9145,8 +9145,8 @@ function cleanPhoneNumber(rawPhone, country) {
     return "";
   }
 
-  // Rule: STRICTLY DO NOT TAKE TOLL-FREE NUMBERS
-  if (/^(?:800|888|877|866|855|844|833|860|861|808|1800|1300|900|901|902|0800|0808|0500)/.test(digits)) {
+  // Rule: STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (US 800/888/877/866/855/844/833, AU 1800/1300, UK 0800/0808/0500)
+  if (/^(?:800|888|877|866|855|844|833|1800|1300|900|901|902|0800|0808|0500)/.test(digits)) {
     return "";
   }
 
