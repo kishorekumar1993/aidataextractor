@@ -470,13 +470,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (e) { }
     }, 2000);
 
-    // Bounded safety timeout: 24s (well before Chrome's 30s message channel deadline)
+    // Bounded safety timeout: 28s (well before Chrome's 30s message channel deadline)
     let finished = false;
     const timeoutId = setTimeout(() => {
       if (finished) return;
       finished = true;
       clearInterval(keepAlive);
-      console.warn("[Background] Crawl reached safety boundary (24s). Returning timeout Not Working result before channel closes.");
+      console.warn("[Background] Crawl reached safety boundary (28s). Returning timeout Not Working result before channel closes.");
       try {
         const timeoutNotWorking = {
           websiteStatus: "Not Working",
@@ -496,8 +496,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           errorCategory: "Unreachable / Timeout",
           errorKeyword: "Connection Timeout / Unresponsive",
           errorSourceUrl: request.url,
-          errorSnippet: "Website took longer than 24 seconds to respond or server is unresponsive (Rule 1).",
-          notWorkingReason: "Website took longer than 24 seconds to respond or server is unresponsive (Rule 1).",
+          errorSnippet: "Website took longer than 28 seconds to respond or server is unresponsive (Rule 1).",
+          notWorkingReason: "Website took longer than 28 seconds to respond or server is unresponsive (Rule 1).",
           _finalUrl: request.url,
           _originalUrl: request.url,
           _note: "Crawl timeout reached safety boundary - Marked as Not Working (Rule 1)"
@@ -506,7 +506,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (err) {
         try { sendResponse({ success: false, error: "Crawl timeout" }); } catch (e) { }
       }
-    }, 24000);
+    }, 28000);
 
     handleCrawlAndExtract(request.url)
       .then(result => {
@@ -1175,7 +1175,7 @@ async function crawlWebsite(targetUrl) {
   let mainRes = null;
   try {
     mainRes = await fetchDecodedHtml(targetUrl, {
-      timeoutMs: 5000,
+      timeoutMs: 8000,
       headers: {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1361,7 +1361,7 @@ async function crawlWebsite(targetUrl) {
         } catch (e) { }
       }
 
-      // (b) Add top contact/about/career links (max 3 for high speed & full coverage)
+      // (b) Add top contact/about/career links (max 2 for high speed & full coverage)
       let contactCount = 0;
       for (const link of contactLinks) {
         if (fetchedUrls.has(link)) continue;
@@ -1372,7 +1372,7 @@ async function crawlWebsite(targetUrl) {
           topLinks.push(link);
           fetchedUrls.add(link);
           contactCount++;
-          if (contactCount >= 3) break;
+          if (contactCount >= 2) break;
         } catch (e) { }
       }
 
@@ -1389,11 +1389,12 @@ async function crawlWebsite(targetUrl) {
         } catch (e) { }
       }
 
-      if (topLinks.length > 0) {
-        // High-speed concurrent parallel fetching of candidate subpages (3s timeout)
+      const candidateSubpages = topLinks.slice(0, 3);
+      if (candidateSubpages.length > 0) {
+        // High-speed concurrent parallel fetching of candidate subpages (2.5s timeout)
         const subpageResults = await Promise.allSettled(
-          topLinks.map(cUrl => fetchDecodedHtml(cUrl, {
-            timeoutMs: 3000,
+          candidateSubpages.map(cUrl => fetchDecodedHtml(cUrl, {
+            timeoutMs: 2500,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -1401,8 +1402,8 @@ async function crawlWebsite(targetUrl) {
           }))
         );
 
-        for (let i = 0; i < topLinks.length; i++) {
-          const cUrl = topLinks[i];
+        for (let i = 0; i < candidateSubpages.length; i++) {
+          const cUrl = candidateSubpages[i];
           const settled = subpageResults[i];
           if (settled.status !== "fulfilled") continue;
           const cRes = settled.value;
@@ -1480,15 +1481,15 @@ async function crawlWebsite(targetUrl) {
     const allCrawlText = mainHtml + "\n" + contactHtml;
     companySocials = extractOfficialSocialLinks(allCrawlText);
 
-    // High-speed smart social check: if primary email or secondary email is missing (< 2 emails discovered)
-    // Rule: Details & Addresses MUST be taken strictly from website only! Social (Facebook) is used for email if missing or for secondary email.
-    if (allDiscoveredEmails.size < 2) {
+    // High-speed smart social check: if email is missing on website (Rule: website check, if not available check Facebook)
+    // Rule: Details & Addresses MUST be taken strictly from website only! Social (Facebook) is used for email if missing on website.
+    if (allDiscoveredEmails.size === 0) {
       const socialUrl = companySocials.facebook || companySocials.linkedin;
       if (socialUrl && !fetchedUrls.has(socialUrl)) {
         fetchedUrls.add(socialUrl);
         try {
           const sRes = await fetchDecodedHtml(socialUrl, {
-            timeoutMs: 3500,
+            timeoutMs: 2500,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
