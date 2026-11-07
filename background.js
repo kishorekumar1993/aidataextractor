@@ -926,8 +926,9 @@ function extractCopyrightCompanyName(html) {
   const decoded = decodeHtmlEntities(html);
   const plainText = stripHtml(decoded.replace(/<(?:br|\/p|\/div|\/li)[^>]*>/gi, "\n"));
   const patterns = [
-    /(?:©|&copy;|copyright)\s*(?:©|&copy;)?\s*(?:20\d{2}(?:\s*[-–\/]\s*20\d{2})?)?\s*([^<\n\r|]{3,200}?)(?:\.?\s*all\s+rights?\s+reserved|\s*<\/|$)/i,
-    /all\s+rights?\s+reserved(?:\s+by)?\s+([^<\n\r|]{3,200}?)(?:\s*<\/|$)/i
+    /(?:©|&copy;|copyright|\(c\))\s*(?:©|&copy;|\(c\))?\s*(?:20\d{2}(?:\s*[-–\/]\s*20\d{2})?)?\s*([^<\n\r|]{3,200}?)(?:\.?\s*all\s+rights?\s+reserved|\s*<\/|$)/i,
+    /all\s+rights?\s+reserved(?:\s+by)?\s+([^<\n\r|]{3,200}?)(?:\s*<\/|$)/i,
+    /([A-Z\u4e00-\u9fa5][A-Za-z0-9\s&,.'\-\u4e00-\u9fa5]{3,80}?)\s*(?:\(c\)|©|&copy;)\s*20\d{2}/i
   ];
   for (const re of patterns) {
     const m = plainText.match(re) || decoded.match(re);
@@ -1089,17 +1090,20 @@ function extractSiteLogoText(html) {
 
   // Look for logo class/id image
   const logoImgMatch = searchArea.match(/<img[^>]+(?:class|id)=["'][^"']*logo[^"']*["'][^>]+(?:alt|title)=["']([^"']+)["']/i) ||
-    searchArea.match(/<img[^>]+(?:alt|title)=["']([^"']+)["'][^>]+(?:class|id)=["'][^"']*logo[^"']*["']/i);
+    searchArea.match(/<img[^>]+(?:alt|title)=["']([^"']+)["'][^>]+(?:class|id)=["'][^"']*logo[^"']*["']/i) ||
+    searchArea.match(/<img[^>]+src=["'][^"']*(?:logo|brand)[^"']*["'][^>]+(?:alt|title)=["']([^"']+)["']/i);
   if (logoImgMatch && logoImgMatch[1]) {
     const val = logoImgMatch[1].replace(/\blogo\b/gi, "").trim();
-    if (val.length >= 2 && !/^(?:home|image|banner|site)$/i.test(val)) return val;
+    if (val.length >= 2 && !/^(?:home|image|banner|site|first\s*slide|second\s*slide|third\s*slide|slide\s*\d+|carousel)$/i.test(val)) return val;
   }
 
-  // Look for any image in header with alt or title
-  const anyHeaderImg = searchArea.match(/<img[^>]+(?:alt|title)=["']([^"']{3,60})["']/i);
-  if (anyHeaderImg && anyHeaderImg[1]) {
-    const val = anyHeaderImg[1].replace(/\b(?:logo|website|homepage)\b/gi, "").trim();
-    if (val.length >= 2 && !/^(?:home|image|banner|site|skip\s*to\s*content|loading)$/i.test(val)) return val;
+  // Look for any image ONLY inside an explicit <header> with alt or title
+  if (headerMatch) {
+    const anyHeaderImg = searchArea.match(/<img[^>]+(?:alt|title)=["']([^"']{3,60})["']/i);
+    if (anyHeaderImg && anyHeaderImg[1]) {
+      const val = anyHeaderImg[1].replace(/\b(?:logo|website|homepage)\b/gi, "").trim();
+      if (val.length >= 2 && !/^(?:home|image|banner|site|skip\s*to\s*content|loading|first\s*slide|second\s*slide|third\s*slide|slide\s*\d+|carousel|next|prev|previous|photo|placeholder|slider)$/i.test(val)) return val;
+    }
   }
 
   // 3. Header brand link (e.g. <a class="logo" ... title="..."> or <a class="brand">Brand</a>)
@@ -1650,8 +1654,8 @@ async function crawlWebsite(targetUrl) {
     primaryAboutUrl: primaryAboutUrl || (contactLinks.find(u => /\b(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|profile)\b/i.test(u)) || ""),
     companySocials,
     crawledPages,
-    renderedText: (liveDom && liveDom.renderedText) || (mainHtml ? stripHtml(mainHtml).slice(0, 15000) : ""),
-    jsonLd: (liveDom && liveDom.jsonLd) || []
+    renderedText: mainHtml ? stripHtml(mainHtml).slice(0, 15000) : "",
+    jsonLd: extractJsonLdBlocks(mainHtml)
   };
 }
 
@@ -1826,6 +1830,29 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   } else {
     targetList.push(candObj);
   }
+}
+
+/**
+ * Extracts schema.org JSON-LD structured blocks from HTML.
+ */
+function extractJsonLdBlocks(html) {
+  if (!html) return [];
+  const scriptRegex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const blocks = [];
+  let match;
+  while ((match = scriptRegex.exec(html)) !== null) {
+    try {
+      const data = JSON.parse(match[1]);
+      if (Array.isArray(data)) {
+        blocks.push(...data);
+      } else if (data && data["@graph"] && Array.isArray(data["@graph"])) {
+        blocks.push(...data["@graph"]);
+      } else if (data && typeof data === "object") {
+        blocks.push(data);
+      }
+    } catch (e) { }
+  }
+  return blocks;
 }
 
 /**
