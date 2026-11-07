@@ -661,23 +661,49 @@
             }
           }
         } else if (targetClean === "united kingdom" || targetClean === "uk" || targetClean === "great britain") {
+          // Pass 1: exact match for United Kingdom, UK, or Great Britain
           for (let i = 0; i < element.options.length; i++) {
             const opt = element.options[i];
             const val = (opt.value || "").trim().toLowerCase();
             const txt = (opt.text || "").trim().toLowerCase();
-            if (val === "united kingdom" || txt === "united kingdom" || val === "uk" || txt === "uk" || val === "great britain" || txt === "great britain" || val === "england" || txt === "england") {
+            if (val === "united kingdom" || txt === "united kingdom" || val === "uk" || txt === "uk" || val === "great britain" || txt === "great britain") {
               matchedIndex = i;
               break;
             }
           }
+          // Pass 2: fall back to England only if United Kingdom is not in the dropdown
+          if (matchedIndex === -1) {
+            for (let i = 0; i < element.options.length; i++) {
+              const opt = element.options[i];
+              const val = (opt.value || "").trim().toLowerCase();
+              const txt = (opt.text || "").trim().toLowerCase();
+              if (val === "england" || txt === "england") {
+                matchedIndex = i;
+                break;
+              }
+            }
+          }
         } else if (targetClean === "england") {
+          // Pass 1: exact match for England
           for (let i = 0; i < element.options.length; i++) {
             const opt = element.options[i];
             const val = (opt.value || "").trim().toLowerCase();
             const txt = (opt.text || "").trim().toLowerCase();
-            if (val === "england" || txt === "england" || val === "united kingdom" || txt === "united kingdom" || val === "uk" || txt === "uk" || val === "great britain" || txt === "great britain") {
+            if (val === "england" || txt === "england") {
               matchedIndex = i;
               break;
+            }
+          }
+          // Pass 2: fall back to United Kingdom only if England is not in the dropdown
+          if (matchedIndex === -1) {
+            for (let i = 0; i < element.options.length; i++) {
+              const opt = element.options[i];
+              const val = (opt.value || "").trim().toLowerCase();
+              const txt = (opt.text || "").trim().toLowerCase();
+              if (val === "united kingdom" || txt === "united kingdom" || val === "uk" || txt === "uk" || val === "great britain" || txt === "great britain") {
+                matchedIndex = i;
+                break;
+              }
             }
           }
         } else if (targetClean === "distributer" || targetClean === "distributor") {
@@ -1430,8 +1456,9 @@
         const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)`, "g");
         cleanAddress = cleanAddress.replace(streetSepRegex, "$1, $2");
         cleanAddress = cleanAddress.replace(/\s+,/g, ",").replace(/,\s*,/g, ", ").replace(/,\s*/g, ", ");
-        // Remove comma between street/building number and street name (including hyphenated street names)
-        cleanAddress = cleanAddress.replace(/(\b(?:Number|No\.?|#)\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)\b)/gi, "$1 $2");
+        // Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
+        // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
+        cleanAddress = cleanAddress.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)\b)/gi, "$1$2 $3");
         // Repair accidental comma splitting two-syllable East Asian cities
         cleanAddress = cleanAddress.replace(/\bChia,\s*Yi\s*City\b/gi, "Chiayi City");
         cleanAddress = cleanAddress.replace(/\bChia[-\s,]*[Yy]i\s*City\b/gi, "Chiayi City");

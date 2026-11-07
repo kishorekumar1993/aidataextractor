@@ -5486,7 +5486,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = cleanCompanyPrefixesAndSuffixes(compName);
 
   // Prefer the fuller official name (copyright / JSON-LD) ONLY when AI output was missing a legal suffix or empty
-  if (!compName || !hasCompleteLegalSuffix(compName)) {
+  const hasSuffix = hasCompleteLegalSuffix(compName) || /\b(?:limited|ltd|incorporated|incorporation|inc|corporation|corp|llc|llp|pllc|plc|gmbh|ag|kg|sa|sl|srl|bv|nv|co|company|holdings|group)\b/i.test(compName);
+  if (!compName || !hasSuffix) {
     compName = preferOfficialCompanyName(compName, crawlData);
     compName = restoreLegalSuffixIfOmitted(compName, crawlData);
     compName = decodeHtmlEntities(compName);
@@ -5649,10 +5650,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       const eaRoadSyllables = "Chung|Zhong|Hsin|Xin|Kuang|Guang|Min|San|Da|Ta|Ren|Jen|Nan|Bei|Pei|Xi|Hsi|Dong|Tung";
       addr = addr.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
 
-      // Remove unwanted comma between street/building number and street name
-      // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
-      addr = addr.replace(/(\b(?:Number|No\.?|#)\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1 $2');
-      addr = addr.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
+      // Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
+      // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
+      addr = addr.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
 
       // Strip leading list/index numbers before company names in address only if followed by a separate street address number (e.g. "138 U.S. Tsubaki Industrial, LLC 250 Kirby Drive...")
       addr = addr.replace(/^\d{1,4}\s+([A-Z].*?\b(?:LLC|Inc\.?|Corp\.?|Ltd\.?|Limited)\b)(?=\s+\d+\s+[A-Z])/i, (m, g) => g);
@@ -6464,7 +6464,7 @@ const UK_CITIES_AND_TOWNS = [
   "blackpool", "huddersfield", "ipswich", "blackburn", "watford", "rotherham", "stockport", "oldham",
   "walsall", "telford", "rochdale", "solihull", "poole", "halifax", "burnley", "scunthorpe", "grimsby",
   "hartlepool", "darlington", "southport", "wigan", "st helens", "warrington", "crewe", "macclesfield",
-  "ellesmere port", "chesterfield", "mansfield", "worksop", "newark", "beeston", "loughborough",
+  "ellesmere port", "chesterfield", "mansfield", "worksop", "newark", "beeston", "loughborough", "lutterworth",
   "hinckley", "kettering", "corby", "wellingborough", "bedford", "dunstable", "stevenage",
   "hemel hempstead", "welwyn garden city", "harlow", "basildon", "southend-on-sea", "brentwood",
   "braintree", "clacton-on-sea", "bury st edmunds", "lowestoft", "great yarmouth", "kings lynn",
@@ -7198,7 +7198,7 @@ function hasCompleteLegalSuffix(name) {
   // Indonesian prefixes
   if (/^(?:PT|P\.T\.|CV|C\.V\.|UD|U\.D\.|Perseroan\s+Terbatas)\b/i.test(n)) return true;
   // Complete forms across countries
-  return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|berhad|perkongsian\s+liabiliti\s+terhad|limited\s+liability\s+(?:company|partnership)|gesellschaft\s+mit\s+beschr[äa]nkter\s+haftung|aktiengesellschaft|kommanditgesellschaft|offene\s+handelsgesellschaft|unternehmergesellschaft|eingetragener\s+kaufmann|sociedad\s+limitada|sociedad\s+an[oó]nima|societ[aà]\s+(?:a\s+responsabilit[aà]\s+limitata|per\s+azioni|in\s+accomandita\s+semplice|in\s+nome\s+collettivo)|soci[eé]t[eé]\s+(?:[aà]\s+responsabilit[eé]\s+limit[eé]e|par\s+actions\s+simplifi[eé]e)|besloten\s+vennootschap|naamloze\s+vennootschap|sp[oó][lł]ka\s+z\s+ograniczon[aą]\s+odpowiedzialno[sś]ci[aą]|aktiebolag|aksjeselskap|osakeyhti[oö]|terbuka|tbk|gmbh|ag|kg|llc|llp|pllc|ltd|inc|plc|corp|corporation|joint\s+stock\s+company|societas\s+europaea|limitada|společnost\s+s\s+ručením\s+omezeným|društvo\s+s\s+ograničenom\s+odgovornošću|korlátolt\s+felelősségű\s+társaság|jsc|pjsc|ojsc|cjsc|sro|doo|kft|ltda|aps)\b/i.test(n);
+  return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|berhad|perkongsian\s+liabiliti\s+terhad|limited\s+liability\s+(?:company|partnership)|gesellschaft\s+mit\s+beschr[äa]nkter\s+haftung|aktiengesellschaft|kommanditgesellschaft|offene\s+handelsgesellschaft|unternehmergesellschaft|eingetragener\s+kaufmann|sociedad\s+limitada|sociedad\s+an[oó]nima|societ[aà]\s+(?:a\s+responsabilit[aà]\s+limitata|per\s+azioni|in\s+accomandita\s+semplice|in\s+nome\s+collettivo)|soci[eé]t[eé]\s+(?:[aà]\s+responsabilit[eé]\s+limit[eé]e|par\s+actions\s+simplifi[eé]e)|besloten\s+vennootschap|naamloze\s+vennootschap|sp[oó][lł]ka\s+z\s+ograniczon[aą]\s+odpowiedzialno[sś]ci[aą]|aktiebolag|aksjeselskap|osakeyhti[oö]|terbuka|tbk|gmbh|ag|kg|llc|llp|pllc|ltd|limited|inc|incorporated|incorporation|plc|corp|corporation|joint\s+stock\s+company|societas\s+europaea|limitada|společnost\s+s\s+ručením\s+omezeným|društvo\s+s\s+ograničenom\s+odgovornošću|korlátolt\s+felelősségű\s+társaság|jsc|pjsc|ojsc|cjsc|sro|doo|kft|ltda|aps)\b/i.test(n);
 }
 
 function companyNamesMatch(a, b) {
@@ -8083,9 +8083,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   const eaRoadSyllables = "Chung|Zhong|Hsin|Xin|Kuang|Guang|Min|San|Da|Ta|Ren|Jen|Nan|Bei|Pei|Xi|Hsi|Dong|Tung";
   a = a.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
 
-  // Remove unwanted comma between street/building number and street name
-  // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
-  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
+  // Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
+  // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
+  a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
 
   // Preserve ampersand inside address (normalize spacing, do not replace with 'and')
   a = a.replace(/\s*&\s*/g, " & ");
@@ -8580,9 +8580,9 @@ function repairBlindlySeparatedCommas(addr) {
   // 4. Premise comma fix: "Unit 2, Argent, Trade Park" -> "Unit 2, Argent Trade Park"
   a = a.replace(/(\b(?:Unit|Suite|Lot|Plot|Building|Bldg|Level|Floor|Block|Flr|Ste|Apt)\s+[A-Za-z0-9\-\/]+),\s+([A-Za-z0-9]+),\s+([A-Za-z0-9]+\s+(?:Park|Estate|Zone|Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway)\b)/gi, "$1, $2 $3");
 
-  // 5. Remove unwanted comma between street/building number and street name: "604, Progress Drive" -> "604 Progress Drive"
-  // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
-  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
+  // 5. Remove unwanted comma between bare street number and street name: "604, Progress Drive" -> "604 Progress Drive"
+  // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
+  a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
 
   // Clean double commas and spaces
   a = a.replace(/\s+,/g, ",");
@@ -8626,9 +8626,9 @@ function ensureCommaBeforeState(addr) {
   const directionalSepRegex = new RegExp(`\\b(${streetSuffixes}\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext))\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)(?!\\s+(?:Street|Road|Avenue|Lane|Drive|Place|Close|Court|Terrace|Way|Blvd|Hwy)\\b)`, "g");
   a = a.replace(directionalSepRegex, "$1, $2");
 
-  // 2b. Remove unwanted comma between street/building number and street name
-  // Must NOT strip commas between floor/unit/number and Lane/Alley/Section (e.g. "Number 12, Lane 270, Section 3, Beishen Road")
-  a = a.replace(/(^|[,\s])(?<!\b(?:section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b((?:Number|No\.?|#)?\s*\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?),\s+(?!(?:lane|ln\.?|alley|aly\.?|section|sec\.?|unit|suite|ste\.?|floor|fl\.?|level|lot|plot|block|blk)\b)([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
+  // 2b. Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
+  // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
+  a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
 
   // 2c. Ensure clean comma separation across Taiwanese, East Asian, and multi-component premises:
   // Floor -> Premise Number
