@@ -4733,17 +4733,21 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
     throw lastError || new Error("All Gemini models failed to return structured data");
   }
 
-  // If Gemini provided primary email, keep it! Only fill from crawl if empty
-  if (!parsed.emailId || !parsed.emailId.trim()) {
+  // Ensure secondaryEmailId doesn't retain "Not Available" placeholder text
+  if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
+    parsed.secondaryEmailId = "";
+  }
+
+  // Safely fallback to crawled emails/phones only if missing from Gemini
+  const crawlEmails = (crawlData && Array.isArray(crawlData.emails) ? crawlData.emails : []).map(e => String(e).trim().toLowerCase());
+  if ((!parsed.emailId || !parsed.emailId.trim()) && crawlEmails.length > 0) {
     parsed.emailId = crawlEmails.find(e => isValidCorporateEmail(e)) || crawlEmails[0] || "";
   }
-  // If Gemini provided secondary email, keep it! Only fill from crawl if empty
-  if (!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) {
-    const second = crawlEmails.find(e => isValidCorporateEmail(e) && e !== parsed.emailId);
+  if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) && crawlEmails.length > 1) {
+    const second = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
     parsed.secondaryEmailId = second || "";
   }
-  // If Gemini provided phone, keep it! Only fill from crawl if empty
-  if (!parsed.phoneNumber && crawlData.phones && crawlData.phones.length > 0) {
+  if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
     parsed.phoneNumber = crawlData.phones[0];
   }
   parsed._isFromAi = true;
@@ -5184,7 +5188,50 @@ function determineCompanyNameSource(compName, crawlData) {
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const result = { ...data };
 
-  // 1. Prohibited Category / Word Check (Highest Priority Rule Note 2)
+  // 1. Authoritative API Ground Truth: When Gemini API provided the extraction, use the API response directly!
+  if (data._isFromAi) {
+    result._isFromAi = true;
+    result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    result._originalUrl = crawlData.originalUrl || "";
+    if (result.websiteStatus === "Not Working") {
+      result.businessType = "";
+      result.companyProfile = "";
+      result.companyName = "";
+      result.countryName = "";
+      result.companyAddress = "";
+      result.state = "";
+      result.city = "";
+      result.emailId = "";
+      result.secondaryEmailId = "";
+      result.phoneNumber = "";
+      result.numberOfProducts = "";
+      result.productImages = "";
+      result.numberOfProductDescriptions = "";
+      return result;
+    }
+
+    // Preserve Gemini's exact extracted fields directly without local heuristic mutation
+    result.companyName = decodeHtmlEntities(String(result.companyName || "").trim());
+    result.companyAddress = decodeHtmlEntities(String(result.companyAddress || "").trim());
+    result.countryName = String(result.countryName || "").trim();
+    result.businessType = String(result.businessType || "").trim();
+    result.companyProfile = String(result.companyProfile || "").trim();
+    result.state = String(result.state || "").trim();
+    result.city = String(result.city || "").trim();
+    result.emailId = String(result.emailId || "").trim();
+    result.secondaryEmailId = String(result.secondaryEmailId || "").trim();
+    if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(result.secondaryEmailId)) {
+      result.secondaryEmailId = "";
+    }
+    result.phoneNumber = String(result.phoneNumber || "").trim().replace(/\D/g, "").replace(/^0+/, "");
+    result.numberOfProducts = String(result.numberOfProducts || "").trim();
+    result.productImages = String(result.productImages || "").trim();
+    result.numberOfProductDescriptions = String(result.numberOfProductDescriptions || "").trim();
+
+    return result;
+  }
+
+  // 2. Prohibited Category / Word Check (Highest Priority Rule Note 2)
   // "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
   const isProhibited = (restrictedCheck && restrictedCheck.isRestricted) ||
     String(result.businessType || "").toLowerCase() === "restricted site" ||
@@ -5217,45 +5264,6 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.errorSnippet = result.restrictedSnippet;
     result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
     result._originalUrl = crawlData.originalUrl || "";
-    return result;
-  }
-
-  // 2. Authoritative API Ground Truth: When Gemini API provided the extraction, use the API response directly!
-  if (data._isFromAi) {
-    result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-    result._originalUrl = crawlData.originalUrl || "";
-    if (result.websiteStatus === "Not Working") {
-      result.businessType = "";
-      result.companyProfile = "";
-      result.companyName = "";
-      result.countryName = "";
-      result.companyAddress = "";
-      result.state = "";
-      result.city = "";
-      result.emailId = "";
-      result.secondaryEmailId = "";
-      result.phoneNumber = "";
-      result.numberOfProducts = "";
-      result.productImages = "";
-      result.numberOfProductDescriptions = "";
-      return result;
-    }
-
-    // Preserve Gemini's exact extracted fields directly without local heuristic mutation
-    result.companyName = decodeHtmlEntities(String(result.companyName || "").trim());
-    result.companyAddress = decodeHtmlEntities(String(result.companyAddress || "").trim());
-    result.countryName = String(result.countryName || "").trim();
-    result.businessType = String(result.businessType || "").trim();
-    result.companyProfile = String(result.companyProfile || "").trim();
-    result.state = String(result.state || "").trim();
-    result.city = String(result.city || "").trim();
-    result.emailId = String(result.emailId || "").trim();
-    result.secondaryEmailId = String(result.secondaryEmailId || "").trim();
-    result.phoneNumber = String(result.phoneNumber || "").trim().replace(/\D/g, "").replace(/^0+/, "");
-    result.numberOfProducts = String(result.numberOfProducts || "").trim();
-    result.productImages = String(result.productImages || "").trim();
-    result.numberOfProductDescriptions = String(result.numberOfProductDescriptions || "").trim();
-
     return result;
   }
 

@@ -1121,14 +1121,6 @@
       }
     }
 
-    // Auto-approve native confirm dialogs in MAIN world so they don't block
-    try {
-      const s = document.createElement("script");
-      s.textContent = "window.confirm = function() { return true; }; window.alert = function() { return true; };";
-      (document.head || document.documentElement).appendChild(s);
-      s.remove();
-    } catch (e) { }
-
     let hasClickedSubmit = false;
     let hasConfirmedModal = false;
 
@@ -1301,10 +1293,10 @@
     const btVal = String(data.businessType || "").trim().toLowerCase();
     const isDisallowedType = !!(btVal && !allowedWorkingTypes.has(btVal));
 
-    const isProhibitedOrRestricted = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowedType || data.isDisallowedBusinessType);
+    const isProhibitedOrRestricted = !data._isFromAi && !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowedType || data.isDisallowedBusinessType);
 
     // Rule 1 QC Safeguard: A site with 0 products and no address or contact info CANNOT be Working!
-    const isZeroProdUnverifiable = (String(data.numberOfProducts || "").trim() === "0" || data.numberOfProducts === 0) &&
+    const isZeroProdUnverifiable = !data._isFromAi && (String(data.numberOfProducts || "").trim() === "0" || data.numberOfProducts === 0) &&
       (!data.companyAddress || data.companyAddress === "Not Available" || !data.companyAddress.trim()) &&
       (!data.emailId || !data.emailId.trim()) &&
       (!data.phoneNumber || !data.phoneNumber.trim());
@@ -2726,35 +2718,34 @@
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message && message.action === "TRIGGER_CRAWL") {
         resetCrawlButtons();
-        triggerCrawlAndFill()
-          .then(() => sendResponse({ success: true }))
-          .catch((err) => sendResponse({ success: false, error: err?.message || String(err) }));
-        return true; // Keep message channel open for async response
+        try { sendResponse({ success: true, started: true }); } catch (e) { }
+        triggerCrawlAndFill();
+        return false;
       }
       if (message && message.action === "START_BATCH_10_NOTWORKING") {
         startBatchNotWorking(10);
-        sendResponse({ success: true });
-        return true;
+        try { sendResponse({ success: true }); } catch (e) { }
+        return false;
       }
       if (message && message.action === "SUBMIT_1_NOTWORKING") {
         markAndSubmitCurrentAsNotWorking("Popup 1-click Not Working");
-        sendResponse({ success: true });
-        return true;
+        try { sendResponse({ success: true }); } catch (e) { }
+        return false;
       }
       if (message && message.action === "START_BATCH_ALL_NOTWORKING") {
         startBatchNotWorking(-1);
-        sendResponse({ success: true });
-        return true;
+        try { sendResponse({ success: true }); } catch (e) { }
+        return false;
       }
       if (message && message.action === "STOP_BATCH_NOTWORKING") {
         stopBatchNotWorking("Stopped from popup");
-        sendResponse({ success: true });
-        return true;
+        try { sendResponse({ success: true }); } catch (e) { }
+        return false;
       }
       if (message && message.action === "RESET_CRAWL_BUTTONS") {
         resetCrawlButtons();
-        sendResponse({ success: true });
-        return true;
+        try { sendResponse({ success: true }); } catch (e) { }
+        return false;
       }
       if (message && message.action === "GET_STATUS") {
         sendResponse({
