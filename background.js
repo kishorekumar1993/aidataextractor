@@ -179,7 +179,13 @@ const NON_CITY_SUBURBS = [
   "islington", "middleton", "shirley", "mairehau", "st albans", "edgeware", "spreydon", "cashmere",
   "petone", "miramar", "thorndon", "te aro", "kilbirnie", "newtown", "johnsonville", "tawa",
   "ngaio", "khandallah", "karori", "island bay", "lyall bay", "rongotai", "kelburn", "wadestown",
-  "frankton", "te rapa", "hamilton east", "claudelands", "chartwell", "rototuna", "dinsdale"
+  "frankton", "te rapa", "hamilton east", "claudelands", "chartwell", "rototuna", "dinsdale",
+  // Taiwan Suburbs & Localities (MUST NOT be classified as City)
+  "keishan", "guishan", "xizhi", "shulin", "linkou", "tamsui", "danshui",
+  "sanchong", "xinzhuang", "zhonghe", "yonghe", "tucheng", "luzhou", "yingge",
+  "sanxia", "wugu", "bali", "shenkeng", "shiding", "pinglin", "luzhu", "dayuan",
+  "daxi", "yangmei", "pingzhen", "bade", "longtan", "guanyin", "xinwu", "fuxing",
+  "nantun", "xitun", "beitun", "qianzhen", "fengshan", "gangshan", "qishan"
 ];
 
 // International Recognized Towns, Districts, Municipalities
@@ -337,8 +343,6 @@ const RECOGNIZED_TOWNS = [
   "heyuan", "meizhou", "yunfu", "yangjiang", "shunde", "nanhai", "sanshui",
   "panyu", "huadu", "zengcheng", "conghua", "baoan", "longgang", "nanshan",
   "futian", "luohu", "yantian", "pingshan", "guangming", "longhua",
-  "taoyuan", "hsinchu", "chiayi", "changhua", "pingtung", "taitung", "miaoli",
-  "nantou", "yunlin", "penghu", "kinmen", "keelung", "hualien", "yilan",
   // Additional India
   "coimbatore", "kochi", "kozhikode", "thiruvananthapuram", "madurai", "tiruchirappalli",
   "salem in", "tiruppur", "erode", "vellore", "mangalore", "mysore", "mysuru",
@@ -4184,7 +4188,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyName: {
       type: "STRING",
-      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited, PEM Fountain Company). CRITICAL QC RULE: DO NOT expand symbols like '&' into 'And' (keep '&' as it is: e.g. 'H&R Manufacturing', 'Johnson & Johnson'). DO NOT invent or add 'Company' if not in the official name. Brand acronyms/trademarks must be in UPPERCASE (e.g. PEM, BMW, AKS, HR, CRP). Expand all corporate abbreviations to full form (Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated)."
+      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited, PEM Fountain Company, Hsin Hsin Metals, Limited). CRITICAL QC RULE: DO NOT expand symbols like '&' into 'And' (keep '&' as it is: e.g. 'H&R Manufacturing', 'Johnson & Johnson'). If a comma precedes the corporate legal suffix on the website (e.g. 'HSINHSIN METALS, LTD.'), you MUST retain the comma (e.g. 'Hsin Hsin Metals, Limited'). DO NOT invent or add 'Company' if not in the official name. Brand acronyms/trademarks must be in UPPERCASE (e.g. PEM, BMW, AKS, HR, CRP). Expand all corporate abbreviations to full form (Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated)."
     },
     countryName: {
       type: "STRING",
@@ -4202,7 +4206,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     city: {
       type: "STRING",
       enum: ["Available", "Not Available"],
-      description: "Available if an official City, Town, Township, District, or Municipality is identifiable in the address; else Not Available. CRITICAL QC RULE: A SUBURB IS NOT A CITY! If the address only contains a suburb or locality (e.g. Campbellfield, Rowville, Welshpool, Mascot, Rydalmere, Sandton, Penrose) with no recognized city/town, MUST mark Not Available!"
+      description: "Available if an official City, Town, Township, District, or Municipality is identifiable in the address; else Not Available. CRITICAL QC RULE: A SUBURB IS NOT A CITY! If the address only contains a suburb or locality (e.g. Keishan, Campbellfield, Rowville, Welshpool, Mascot, Rydalmere, Sandton, Penrose) with no explicit recognized city/town, MUST mark Not Available! For Taiwan: if address only contains a suburb (e.g. Keishan) or municipality without the explicit word 'City', MUST mark Not Available!"
     },
     emailId: {
       type: "STRING",
@@ -5561,11 +5565,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       return result;
     }
 
-    // Preserve Gemini's exact extracted fields directly without local heuristic mutation
+    // 1. Company Name: Align, expand, Title Case, restore symbols, restore comma before legal suffix
     let compName = decodeHtmlEntities(String(result.companyName || "").trim());
 
-    // Domain-matching safeguard: If AI returned an unmatching Pinyin or auxiliary name (e.g. "Wang Ruey" instead of "Web Rack"),
-    // verify against the website domain stem and official candidates
+    // Domain-matching safeguard: If AI returned an unmatching Pinyin or auxiliary name, verify against domain stem
     try {
       const targetHost = (crawlData.finalUrl || crawlData.originalUrl || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].split(":")[0];
       const domainParts = targetHost.split(".");
@@ -5592,28 +5595,99 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
     } catch (e) { }
 
-    // Ensure abbreviation expansions are applied (e.g. "Co., Ltd." -> "Company, Limited", "Co. Ltd" -> "Company Limited")
+    compName = restoreLegalSuffixIfOmitted(compName, crawlData);
     compName = expandCompanyAbbreviations(compName, result.countryName || "");
-
-    // Rule: All words in companyName, companyAddress, and countryName MUST start with a Capital letter
-    // Rule: Special character should not start and should not end
-    result.companyName = toTitleCase(compName)
+    compName = toTitleCase(compName);
+    compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
+    compName = restoreOriginalSymbolsInCompanyName(compName, crawlData);
+    result.companyName = compName
       .replace(/^[^\p{L}\p{N}]+/gu, "")
       .replace(/[^\p{L}\p{N}]+$/gu, "")
       .trim();
 
-    result.companyAddress = toTitleCase(decodeHtmlEntities(String(result.companyAddress || "").trim()))
-      .replace(/^[^\p{L}\p{N}]+/gu, "")
-      .replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "")
-      .trim();
-    result.countryName = toTitleCase(normalizeCountryName(result.countryName));
-    if (!result.countryName && result.companyAddress) {
-      result.countryName = toTitleCase(detectCountryFromAddress(result.companyAddress));
+    // 2. Country Name: Full form Title Case, and UK constituent refinement (Mandatory QC Rule)
+    // "United Kingdom (England, Wales, Scotland, Northern Ireland). If 'England' and 'United Kingdom' both are mentioned, you must take England as the country name."
+    let country = toTitleCase(normalizeCountryName(result.countryName));
+    if (!country && result.companyAddress) {
+      country = toTitleCase(detectCountryFromAddress(result.companyAddress));
     }
+    if (country === "United Kingdom") {
+      const rawCandidatesText = (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
+      const fullCheckText = ((result.companyAddress || "") + " " + rawCandidatesText + " " + (crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
+      if (/\bengland\b/i.test(fullCheckText)) {
+        country = "England";
+      } else if (/\bscotland\b/i.test(fullCheckText)) {
+        country = "Scotland";
+      } else if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText)) {
+        country = "Wales";
+      } else if (/\bnorthern\s*ireland\b/i.test(fullCheckText)) {
+        country = "Northern Ireland";
+      } else {
+        const constituentFromLocality = detectCountryFromAddress(result.companyAddress || rawCandidatesText);
+        if (["England", "Scotland", "Wales", "Northern Ireland"].includes(constituentFromLocality)) {
+          country = constituentFromLocality;
+        }
+      }
+    }
+    result.countryName = country;
+
+    // 3. Company Address: Strict QC sanitization - No Extra Words, expand abbreviations, remove postal codes & country
+    let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
+    let bestRaw = "";
+    if (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates.length > 0) {
+      const hqCand = crawlData.addressCandidates.find(c => c && (c.isHeadquarters || c.source === "contact" || c.source === "headquarters"));
+      bestRaw = hqCand ? (typeof hqCand === "object" ? hqCand.raw : hqCand) : (typeof crawlData.addressCandidates[0] === "object" ? crawlData.addressCandidates[0].raw : crawlData.addressCandidates[0]);
+    }
+    if (addr && addr.toLowerCase() !== "not available") {
+      addr = expandAddressAndStateAbbreviations(addr, country);
+      if (bestRaw) {
+        addr = restoreStateIfOmitted(addr, bestRaw, country);
+        addr = restoreStreetNumberIfOmitted(addr, bestRaw);
+        addr = stripBlindlyAddedNumber(addr, bestRaw, bestRaw);
+        addr = stripExtraWordsFromAddress(addr, bestRaw);
+      }
+      addr = removePostalCodesCarefully(addr);
+      addr = ensureCommaBeforeState(addr);
+      if (bestRaw) {
+        addr = stripBlindlyAddedNumber(addr, bestRaw, bestRaw);
+        addr = stripExtraWordsFromAddress(addr, bestRaw);
+      }
+      // Unconditionally strip country names from address so country never appears inside the street address field
+      addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.)\b/gi, " ");
+      addr = addr.replace(/\b(?:Great\s*Britain|United\s*Kingdom|UK|U\.K\.)\b/gi, " ");
+      addr = addr.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
+      addr = addr.replace(/\b(?:Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Turkiye|T[uü]rkiye|Turkey|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|China|India|South\s*Africa)\b/gi, " ");
+      addr = addr.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
+      if (country && country.length > 2) {
+        const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
+        addr = addr.replace(countryRegex, " ");
+      }
+      addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+      addr = addr.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
+      addr = addr.replace(/\s+/g, " ");
+      addr = toTitleCase(addr);
+      addr = repairBlindlySeparatedCommas(addr);
+      addr = normalizeTaiwanDivisions(addr);
+      if (bestRaw) {
+        addr = stripExtraWordsFromAddress(addr, bestRaw);
+      }
+      addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
+    } else {
+      addr = "Not Available";
+    }
+    result.companyAddress = addr;
+
+    // 4. State & City QC (CRITICAL QC RULE: A SUBURB IS NOT A CITY!)
+    if (!addr || addr.length < 5 || addr.toLowerCase() === "not available") {
+      result.state = "Not Available";
+      result.city = "Not Available";
+    } else {
+      result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
+      result.city = evaluateCityQC(addr, country);
+    }
+
     result.businessType = String(result.businessType || "").trim();
     result.companyProfile = String(result.companyProfile || "").trim();
-    result.state = String(result.state || "").trim();
-    result.city = String(result.city || "").trim();
     result.emailId = String(result.emailId || "").trim();
     result.secondaryEmailId = String(result.secondaryEmailId || "").trim();
     if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(result.secondaryEmailId)) {
@@ -7029,6 +7103,16 @@ function isUnitedStatesLocation(address, country) {
   return false;
 }
 
+function isTaiwanLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:taiwan|r\.?o\.?c\.?|republic\s*of\s*china)\b/i.test(c)) return true;
+  const a = (address || "").toLowerCase();
+  if (/\b(?:taiwan|r\.?o\.?c\.?|republic\s*of\s*china)\b/i.test(a)) return true;
+  if (/[\u4e00-\u9fa5]/.test(a) && /[\u81fa\u53f0\u7063\u65b0\u5317\u53f0\u5317\u6843\u5712\u53f0\u4e2d\u53f0\u5357\u9ad8\u96c4\u57fa\u9686\u65b0\u7af9\u5609\u7fa9]/.test(a)) return true;
+  if (/\b(?:taipei|new\s*taipei|taoyuan|taichung|tainan|kaohsiung|keelung|hsinchu|chiayi|changhua|miaoli|nantou|yunlin|pingtung|yilan|hualien|taitung|penghu|kinmen|keishan|guishan)\b/i.test(a)) return true;
+  return false;
+}
+
 function isUkLocation(address, country) {
   const c = (country || "").toLowerCase();
   if (/\b(?:united\s*kingdom|uk|u\.k\.|great\s*britain|england|scotland|wales|northern\s*ireland)\b/i.test(c)) {
@@ -7496,6 +7580,32 @@ function evaluateCityQC(address, country) {
   // Capital City Rule: (If a country's capital is mentioned in the address, then both City and State are considered available.)
   if (hasCapitalInAddress(cleanAddr, country)) {
     return "Available";
+  }
+
+  // Taiwan City Evaluation (Strict QC Rule):
+  // Note: (Town, Township, District, City) should be considered as City, BUT:
+  // "Subhurb is consider as city if subhurb was coming means its should mark not available its not city"
+  // If an address contains only a suburb (e.g. Keishan, Guishan) or county/municipality name without the word "City" or "市",
+  // City MUST be marked "Not Available"!
+  if (isTaiwanLocation(cleanAddr, country)) {
+    // 1. Capital Rule: Taipei / Taipei City in address -> City: Available
+    if (/\b(?:taipei|taipei\s*city|臺北市|台北市)\b/i.test(cleanAddr) && !isNewTaipeiCity(cleanAddr)) {
+      return "Available";
+    }
+    // 2. Official Cities with explicit "City" or "市":
+    // e.g. "New Taipei City", "Taichung City", "Kaohsiung City", "Tainan City", "Taoyuan City", "Keelung City", "Hsinchu City", "Chiayi City"
+    if (hasExplicitCityWord(cleanAddr) || /[\u5e02]/.test(cleanAddr)) {
+      return "Available";
+    }
+    // 3. Explicit Town, Township, District:
+    const strippedTW = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+(?:park|zone|district)\b/gi, " ");
+    if (/\b(?:township|town|district|municipality)\b/i.test(strippedTW) || /[\u93ae\u9547\u9109\u4e61\u5340\u533a]/.test(strippedTW)) {
+      if (!addressLooksLikeSuburbOnly(cleanAddr)) {
+        return "Available";
+      }
+    }
+    // Suburb only or bare municipality/county name (e.g. "Keishan, Taoyuan", "Taoyuan") -> Not Available!
+    return "Not Available";
   }
 
   // New Zealand City Evaluation (Strict QC Rule):
@@ -8349,11 +8459,11 @@ function expandCompanyAbbreviations(name, country = "") {
  */
 function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
   if (!compName || typeof compName !== "string") return compName;
-  // If already has a comma before Incorporated / Company, Limited / Limited Liability Company, keep it intact
+  // If already has a comma before Incorporated / Company, Limited / Limited Liability Company / Limited, keep it intact
   if (/,\s*(?:Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Limited)\b/i.test(compName)) {
     return compName;
   }
-  const m = compName.match(/^(.*?)\s+(Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company)\b(.*)$/i);
+  const m = compName.match(/^(.*?)\s+(Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Limited)\b(.*)$/i);
   if (m) {
     const base = m[1].trim();
     const suffix = m[2].trim();
@@ -8369,8 +8479,9 @@ function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
       crawlData && crawlData.combinedText
     ].filter(Boolean).join(" ");
 
-    const escBase = base.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-    if (new RegExp(`${escBase}\\s*,\\s*(?:Inc|Incorporated|LLC|Ltd)`, "i").test(corpus)) {
+    const baseTokens = base.split(/\s+/).filter(Boolean);
+    const flexibleBasePattern = baseTokens.map(t => t.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")).join("\\s*");
+    if (new RegExp(`${flexibleBasePattern}\\s*,\\s*(?:Inc|Incorporated|LLC|Ltd|Limited)`, "i").test(corpus)) {
       return `${base}, ${suffix}${rest}`;
     }
   }
@@ -9624,6 +9735,13 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
     if (mLead && mLead[1]) {
       const prefix = mLead[1].trim().replace(/,$/, '');
       if (/\b(?:unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|lot|plot|office\s*park|industrial|tower|kav)\b|\b\d+\s*(?:\/|\s*)?F\b/i.test(prefix)) {
+        const floorDigitMatch = prefix.match(/\b(\d+)\s*(?:\/|\s*)?F\b/i);
+        if (floorDigitMatch && new RegExp(`\\b${floorDigitMatch[1]}(?:st|nd|rd|th)?\\s+Floor\\b`, 'i').test(c)) {
+          return c;
+        }
+        if (new RegExp(`^${prefix.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i').test(c)) {
+          return c;
+        }
         return `${prefix}, ${c}`;
       }
     }
@@ -9686,7 +9804,7 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
       leadingNum = leadingNum.replace(/[,;]+$/, "").trim();
       if (leadingNum) {
         const numDigits = (leadingNum.match(/\d+/) || [])[0];
-        if (numDigits && new RegExp('\\b' + numDigits + '\\b').test(c.slice(0, 40))) {
+        if (numDigits && new RegExp('\\b' + numDigits + '(?:st|nd|rd|th)?\\b', 'i').test(c.slice(0, 40))) {
           return cleanAddr;
         }
         if (new RegExp('^(?:' + premiseWords + ')\\b', 'i').test(leadingNum) && !leadingNum.includes(",")) {
@@ -9706,7 +9824,7 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
   if (mStart && mStart[1]) {
     const lead = mStart[1].trim().replace(/[,;]+$/, "");
     const leadDigits = (lead.match(/\d+/) || [])[0];
-    if (leadDigits && new RegExp('\\b' + leadDigits + '\\b').test(c.slice(0, 40))) {
+    if (leadDigits && new RegExp('\\b' + leadDigits + '(?:st|nd|rd|th)?\\b', 'i').test(c.slice(0, 40))) {
       return cleanAddr;
     }
     if (!new RegExp('\\b' + lead.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\b', 'i').test(c)) {
@@ -9857,10 +9975,10 @@ function cleanPhoneNumber(rawPhone, country) {
   ];
 
   let codeRemoved = false;
-  // Match by detected country
+  // Match by detected country - unconditionally strip country code if digits start with it
   for (const cc of countryCodes) {
     if (cc.match.some(m => cLower.includes(m))) {
-      if (digits.startsWith(cc.code) && digits.length >= (cc.minLen - 1)) {
+      if (digits.startsWith(cc.code)) {
         digits = digits.slice(cc.code.length);
         codeRemoved = true;
         break;
@@ -9871,7 +9989,7 @@ function cleanPhoneNumber(rawPhone, country) {
   // If phone had '+' or '00' or starts with country code without plus and wasn't removed yet
   if (!codeRemoved) {
     for (const cc of countryCodes) {
-      if (digits.startsWith(cc.code) && digits.length >= cc.minLen) {
+      if (digits.startsWith(cc.code) && digits.length >= (cc.minLen - 2)) {
         digits = digits.slice(cc.code.length);
         codeRemoved = true;
         break;
