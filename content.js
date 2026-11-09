@@ -2168,8 +2168,11 @@
 
     // 6. Company Address (Rule: All words start with Capital letter, Special character should not start and should not end)
     try {
-      if (elements.companyAddress && data.companyAddress) {
-        let cleanAddress = String(data.companyAddress).trim();
+      const addrVal = (data.companyAddress && data.companyAddress !== "Not Available")
+        ? data.companyAddress
+        : (data.selectedAddressCandidateRaw || "");
+      if (elements.companyAddress && addrVal) {
+        let cleanAddress = String(addrVal).trim();
         cleanAddress = expandAddressAndStateAbbreviations(cleanAddress, data.countryName);
         if (!data._isFromAi) {
           // Strip corporate registration disclaimers & statutory registered office disclaimers

@@ -1150,6 +1150,33 @@ function extractOfficialSocialLinks(html) {
 }
 
 /**
+ * Validates if an address candidate is complete (premise/street + locality/suburb/town/city + state/postcode).
+ */
+function isFullAddressCandidate(raw) {
+  if (!raw || typeof raw !== "string" || raw.length < 15) return false;
+  const hasStreetOrPremise = /\b(?:street|road|avenue|lane|drive|way|place|court|terrace|boulevard|highway|parkway|crescent|close|walk|row|parade|circuit|square|esplanade|mews|alley|st\b|rd\b|ave\b|ln\b|dr\b|blvd\b|hwy\b|suite|unit|bldg|building|floor|fl|flr|level|lot|plot|block|factory|shed|office\s*park|no\.?\s*\d+|\d+\s*[号號]|strasse|straße|rue|via|viale|calle|avenida|jalan|jl)\b/i.test(raw) ||
+    /(?:大道|路|街|巷|弄|号|號|工业区|工业园|产业园|高新区)/.test(raw);
+  const hasLocalityOrAdmin = hasStateInAddress(raw, "") ||
+    hasCityDesignation(raw) ||
+    hasExplicitCityWord(raw) ||
+    hasRecognizedPlaceName(raw, AUSTRALIAN_CITIES) ||
+    hasRecognizedPlaceName(raw, RECOGNIZED_TOWNS) ||
+    hasRecognizedPlaceName(raw, UK_CITIES_AND_TOWNS) ||
+    hasRecognizedPlaceName(raw, NEW_ZEALAND_CITIES_AND_TOWNS) ||
+    addressLooksLikeSuburbOnly(raw) ||
+    /(?:區|区|市|縣|县|鄉|乡|鎮|镇)/.test(raw) ||
+    NON_CITY_SUBURBS.some(s => new RegExp(`\\b${s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, "i").test(raw));
+  const hasRegionOrPostcode = hasStateInAddress(raw, "") ||
+    /\b\d{4,6}\b/.test(raw) ||
+    /\b[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}\b/i.test(raw) ||
+    /\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/i.test(raw) ||
+    /\b\d{3}\s*\d{2}\b/.test(raw) ||
+    /\b\d{2}-\d{3}\b/.test(raw);
+
+  return hasStreetOrPremise && (hasLocalityOrAdmin || hasRegionOrPostcode);
+}
+
+/**
  * Deep crawls homepage, handles HTML <frameset>/<frame>, contact pages, footer, JSON-LD, products.
  */
 async function crawlWebsite(targetUrl) {
@@ -1650,9 +1677,9 @@ async function crawlWebsite(targetUrl) {
     const rawA = typeof a === "object" ? (a.raw || "") : String(a || "");
     const rawB = typeof b === "object" ? (b.raw || "") : String(b || "");
 
-    // Full Address Boost: Candidate containing City AND (State or Postcode) beats street-only fragment
-    const hasFullA = (hasStateInAddress(rawA, "") || /\b\d{4,6}\b/.test(rawA)) && evaluateCityQC(rawA, "") === "Available";
-    const hasFullB = (hasStateInAddress(rawB, "") || /\b\d{4,6}\b/.test(rawB)) && evaluateCityQC(rawB, "") === "Available";
+    // Full Address Boost: Candidate containing Premise/Street AND Locality/State/Postcode beats fragment
+    const hasFullA = isFullAddressCandidate(rawA);
+    const hasFullB = isFullAddressCandidate(rawB);
     if (hasFullA && !hasFullB) pA -= 4.0;
     else if (hasFullB && !hasFullA) pB -= 4.0;
 
@@ -1664,7 +1691,7 @@ async function crawlWebsite(targetUrl) {
     const scoreCandidate = (raw) => {
       let score = 0;
       if (hasStateInAddress(raw, "")) score += 50;
-      if (evaluateCityQC(raw, "") === "Available") score += 40;
+      if (isFullAddressCandidate(raw)) score += 40;
       if (/\b\d{4,6}\b/.test(raw)) score += 20;
       score += Math.min(raw.length, 60);
       if (/\b(?:will\s+be\s+held|trade\s*show|exhibition|expo|conference|convention|booth|cookies?|privacy\s*policy)\b/i.test(raw)) score -= 200;
@@ -2214,21 +2241,22 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     }
   }
 
-  // 2. <h1-6> with "address" or "contact" followed by <p>, <div>, <span>, <li>, <td>, <th>
-  const headingRegex = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>\s*<(?:p|div|span|li|td|th)[^>]*>([\s\S]*?)<\/(?:p|div|span|li|td|th)>/gi;
+  // 2. <h1-6> with "address" or "contact" followed by content / sibling blocks (capture complete multi-line address blocks)
+  const headingRegex = /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>([\s\S]{1,600}?)(?=<h[1-6]\b|<form\b|<footer\b|<\/section\b|<\/main\b|$)/gi;
   let hm;
   while ((hm = headingRegex.exec(processedHtml)) !== null) {
     const hText = stripHtml(hm[1]);
-    if (!/address|location|head\s*office|headquarters|contact\s*us|contact|direcci[oó]n|domicilio|sede|ubicaci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|encu[eé]ntranos|辦事處|办事处|地址|總部|总部/i.test(hText)) continue;
-    if (/email|e-mail|newsletter|subscribe/i.test(hText)) continue;
+    if (!/address|location|head\s*office|headquarters|contact\s*us|contact|postal\s*address|direcci[oó]n|domicilio|sede|ubicaci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|encu[eé]ntranos|辦事處|办事处|地址|總部|总部/i.test(hText)) continue;
+    if (/email|e-mail|newsletter|subscribe|phone|tel|telephone|opening\s*hours|working\s*hours/i.test(hText)) continue;
 
     const ctx = getContext(hText, defaultSource);
-    const raw = stripHtml(hm[2]);
-    const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    let blockText = stripHtml(hm[2]);
+    blockText = blockText.replace(/(?:\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|hours|mon\s*[-–]|monday)\b[\s\S]*)/i, "").trim();
+    const combinedBlock = blockText.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
       addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
-    const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
+    const lines = blockText.split(/\n+/).map(l => l.trim()).filter(l => l.length > 8);
     for (const line of lines) {
       addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
@@ -2272,13 +2300,14 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / Dirección: / 地址: (Fast execution)
-  const labelAddrRegex = /(?:^|[^a-zA-Z0-9])(?:address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]\s*(?:\s*<[^>]+>)*\s*([^<\r\n]+(?:\s*<br\s*\/?>\s*[^<\r\n]+)*)/gi;
+  const labelAddrRegex = /(?:^|[^a-zA-Z0-9])(?:postal\s*address|address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]?\s*(?:\s*<[^>]+>)*\s*([\s\S]{10,400}?)(?=<h[1-6]\b|<form\b|<footer\b|\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|fax)\b\s*[:：]|$)/gi;
   let lm;
   while ((lm = labelAddrRegex.exec(processedHtml)) !== null) {
     const beforeText = processedHtml.slice(Math.max(0, lm.index - 500), lm.index);
     const ctx = getContext(beforeText, defaultSource);
-    const raw = stripHtml(lm[1]);
-    const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    let block = stripHtml(lm[1]);
+    block = block.replace(/(?:\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|fax)\b[\s\S]*)/i, "").trim();
+    const combinedBlock = block.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
       addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
@@ -2527,9 +2556,9 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
     if (isOpA && !isOpB && !isRegA) pA -= 5.0;
     else if (isOpB && !isOpA && !isRegB) pB -= 5.0;
 
-    // Full Address Boost: Candidate containing City AND (State or Postcode) beats street-only fragment
-    const hasFullA = (hasStateInAddress(rawA, "") || /\b\d{4,6}\b/.test(rawA) || /\b[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}\b/i.test(rawA)) && evaluateCityQC(rawA, "") === "Available";
-    const hasFullB = (hasStateInAddress(rawB, "") || /\b\d{4,6}\b/.test(rawB) || /\b[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}\b/i.test(rawB)) && evaluateCityQC(rawB, "") === "Available";
+    // Full Address Boost: Candidate containing Premise/Street AND Locality/State/Postcode beats fragment
+    const hasFullA = isFullAddressCandidate(rawA);
+    const hasFullB = isFullAddressCandidate(rawB);
     if (hasFullA && !hasFullB) pA -= 4.0;
     else if (hasFullB && !hasFullA) pB -= 4.0;
 
@@ -2564,16 +2593,17 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
   let bestCandidate = sorted[0];
   let bestRaw = getRaw(bestCandidate);
 
-  // If bestCandidate is missing City or State, check if a fuller candidate exists in the list
-  if (!hasStateInAddress(bestRaw, "") || evaluateCityQC(bestRaw, "") !== "Available") {
-    const fuller = candidates.find(c => {
-      const cRaw = getRaw(c);
-      return cRaw.toLowerCase().includes(bestRaw.toLowerCase()) && (hasStateInAddress(cRaw, "") || evaluateCityQC(cRaw, "") === "Available");
-    });
-    if (fuller) {
-      bestCandidate = fuller;
-      bestRaw = getRaw(fuller);
-    }
+  // If bestCandidate is missing structural address components, check if a fuller candidate exists in the list
+  const fuller = candidates.find(c => {
+    const cRaw = getRaw(c);
+    if (cRaw === bestRaw) return false;
+    if (cRaw.toLowerCase().includes(bestRaw.toLowerCase()) && cRaw.length > bestRaw.length) return true;
+    if (isFullAddressCandidate(cRaw) && !isFullAddressCandidate(bestRaw)) return true;
+    return false;
+  });
+  if (fuller) {
+    bestCandidate = fuller;
+    bestRaw = getRaw(fuller);
   }
 
   // 3. SOURCE OF TRUTH MANDATE (Correction for Problem 1):
@@ -4156,7 +4186,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyAddress: {
       type: "STRING",
-      description: "Clean physical headquarters/main address in Title Case where EVERY single word starts with a Capital letter (e.g. 18, Lane 247, Fusing 3rd Road, Keishan, Taoyuan or 15 Telford Way, Kettering, Northamptonshire or Number 53-5, Pocheng Road, Yuanshan Township, Yilan County). CRITICAL QC RULE - NO EXTRA WORDS: The items what available that only should come, no extra word! If 'Number' or 'No.' is not written in the contact address (e.g. '18, Lane 247...'), DO NOT add 'Number'! If 'City' is not written in the address (e.g. 'Taoyuan', 'München', 'Hayes'), DO NOT add 'City'! If 'District' or 'Township' is not written (e.g. 'Keishan'), DO NOT add 'District' or replace with 'Guishan District'! MANDATORY FULL FORM EXPANSION: You MUST expand all abbreviations to full form globally (e.g. 5/F. or 5/F or 5F -> 5th Floor, 1/F -> 1st Floor, 2/F -> 2nd Floor, 3/F -> 3rd Floor, G/F -> Ground Floor, B/F -> Basement Floor, Lvl -> Level, No. -> Number, St. -> Street, Rd. -> Road, Ave. -> Avenue, Dr. -> Drive, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Flr. -> Floor, Rm. -> Room, Dept. -> Department, Apt. -> Apartment, POB -> Post Office Box). Strip country name and postal codes."
+      description: "CRITICAL MANDATE - FULL PHYSICAL ADDRESS: You MUST take the COMPLETE FULL physical address with ALL available structural components from the website: Premise / Building Name / Office Park / Suite / Unit / Floor / Level / Block / Lot / Plot / Factory / Workshop / Survey Number, Industrial Estate / Business Park / Zone, Street Number and Street Name, Suburb / Locality / Neighborhood / Village, Town / Township / Sub-district / District, City, and State / Province / Territory / County / Region. NEVER return an incomplete or partial address (NEVER return only a street name or omit premise/suite/suburb/city/state). Format in Title Case where EVERY single word starts with a Capital letter (e.g. 'Suite 260, 2021 Guadalupe Street, Austin, Texas' or '15 Telford Way, Kettering, Northamptonshire' or '5th Floor, Office Park, Number 535, Qingshuiqiao Road, Hi-Tech Zone, Ningbo' or '40 Sarah Street, Campbellfield, Victoria'). CRITICAL QC RULE - NO EXTRA WORDS: Retain all authentic address words that appear on the website; do not invent or add words not present (e.g. if 'Number' or 'No.' is not written, DO NOT add 'Number'; if 'City' is not written, DO NOT add 'City'; if 'District' is not written, DO NOT add 'District'). MANDATORY FULL FORM EXPANSION: You MUST expand all abbreviations to full form globally (5/F. or 5/F or 5F -> 5th Floor, 1/F -> 1st Floor, 2/F -> 2nd Floor, 3/F -> 3rd Floor, G/F -> Ground Floor, B/F -> Basement Floor, Lvl -> Level, No. -> Number, St. -> Street, Rd. -> Road, Ave. -> Avenue, Dr. -> Drive, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Flr. -> Floor, Rm. -> Room, Dept. -> Department, Apt. -> Apartment, POB -> Post Office Box). Strip country name and postal codes."
     },
     state: {
       type: "STRING",
@@ -4399,15 +4429,25 @@ ADDRESS EXTRACTION PRIORITY (CRITICAL QC REQUIREMENT):
    - NEVER output legal disclaimers like "Registered in England : 11743582., Registered Office :" in companyAddress.
    - companyAddress MUST only contain clean physical address components: Premise/Building, Street, Locality/Town/City, and State.
 4. Address Formatting (Rule 6) - COMPLETE PHYSICAL ADDRESS PRESERVATION (GLOBAL MANDATE FOR ALL COUNTRIES WORLDWIDE):
-   - MANDATORY GLOBAL COMPLETE ADDRESS RULE ("some country address coming incomplete - address should support and take all country addresses completely"):
-     * You MUST extract the COMPLETE physical address for ALL countries worldwide. NEVER return an incomplete, partial, or truncated address!
+   - MANDATORY GLOBAL COMPLETE FULL ADDRESS QC RULE ("Address full address must be taken"):
+     * You MUST extract the COMPLETE, FULL physical headquarters/main address for ALL countries worldwide. NEVER return an incomplete, partial, or truncated address!
+     * If the website displays the address across multiple lines, paragraphs, or sibling blocks (e.g. Suite/Floor on line 1, Street on line 2, City/Suburbs/State on line 3), YOU MUST COMBINE THEM INTO ONE SINGLE COMPLETE ADDRESS!
      * NEVER cut off or omit any part of the address. Retain every single structural address component:
-       1. Premise / Building Name / Suite / Unit / Floor / Level / Block / Lot / Plot / Factory / Workshop / Survey Number / Gate Number / Shed / Bay.
-       2. Industrial Estate / Business Park / Trading Estate / Science Park / Free Zone / Special Economic Zone / Technology Park / Polígono Industrial / Zona Industriale / Gewerbegebiet / Kawasan Industri / Taman Perindustrian.
+       1. Premise / Building Name / Suite / Unit / Floor / Level / Block / Lot / Plot / Factory / Workshop / Survey Number / Gate Number / Shed / Bay / Office Park.
+       2. Industrial Estate / Business Park / Trading Estate / Science Park / Free Zone / Special Economic Zone / Technology Park / Hi-Tech Zone / Polígono Industrial / Zona Industriale / Gewerbegebiet / Kawasan Industri / Taman Perindustrian.
        3. Street number and Street / Road / Avenue / Boulevard / Way / Drive / Lane / Highway / Route / Strasse / Rue / Via / Calle / Jalan / Chome.
        4. Suburb / Locality / Ward / Neighborhood / Village / Town / Township / Sub-district / District / Municipality / Borough / Taluk / Tehsil / Mukim / Amphoe / Barangay / Sector.
        5. City / Metropolitan Area.
        6. State / Province / Territory / County / Shire / Canton / Prefecture / Bundesland / Region / Division / Department / Voivodeship / Oblast / Emirate / Governorate.
+     * EXAMPLES OF COMPLETE FULL ADDRESSES:
+       - "Suite 260, 2021 Guadalupe Street, Austin, Texas" (MUST retain Suite 260, 2021 Guadalupe Street, Austin, and Texas!)
+       - "15 Telford Way, Kettering, Northamptonshire" (MUST retain 15 Telford Way, Kettering, and Northamptonshire!)
+       - "5th Floor, Office Park, Number 535, Qingshuiqiao Road, Hi-Tech Zone, Ningbo" (MUST retain 5th Floor, Office Park, Number 535, Qingshuiqiao Road, Hi-Tech Zone, and Ningbo!)
+       - "40 Sarah Street, Campbellfield, Victoria" (MUST retain 40 Sarah Street, Campbellfield, and Victoria!)
+       - "Unit 5, 12 Baxter Road, Mascot, New South Wales" (MUST retain Unit 5, 12 Baxter Road, Mascot, and New South Wales!)
+       - "15 Sandton Drive, Sandton, Gauteng" (MUST retain 15 Sandton Drive, Sandton, and Gauteng!)
+     * NEVER return only a bare street name when premise, locality, suburb, city, or state is available on the website!
+     * NEVER omit the Suite/Unit/Floor/Building/Office Park at the beginning, and NEVER omit the Suburb/Town/City/State at the end!
    - CRITICAL CONTINENTAL EUROPE & INTERNATIONAL POSTAL CODE RULE:
      * In Continental Europe (Germany, Austria, Switzerland, France, Italy, Spain, Netherlands, Belgium, Poland, Czechia, Sweden, Norway, Denmark, etc.), postal codes are placed BEFORE the city name (e.g. "80333 München", "75008 Paris", "28013 Madrid", "602 00 Brno", "00-838 Warszawa").
      * When stripping postal codes, REMOVE ONLY the postal code digits/code!
@@ -5914,6 +5954,22 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   if (selectedCandidate) {
     rawSource = typeof selectedCandidate === "object" ? selectedCandidate.raw : selectedCandidate;
+  }
+
+  // MANDATORY COMPLETE FULL ADDRESS QC CHECK:
+  // If Gemini returned an incomplete or partial address (e.g. only street name, or missing premise/suite/floor,
+  // or missing suburb/locality/city/state), but a complete candidate exists on the website, adopt the complete address!
+  if (rawSource && typeof rawSource === "string") {
+    if (rawSource.length > addr.length && rawSource.toLowerCase().includes(addr.toLowerCase())) {
+      addr = rawSource;
+    } else if (isFullAddressCandidate(rawSource) && !isFullAddressCandidate(addr)) {
+      addr = rawSource;
+    } else if (rawSource.length > addr.length + 5) {
+      const streetChunk = addr.match(/(?:no\.?|nos\.?|number|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+)?[,\s]+[A-Za-z0-9\u00C0-\u024F\s\-]+?\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b/i);
+      if (streetChunk && rawSource.toLowerCase().includes(streetChunk[0].toLowerCase())) {
+        addr = rawSource;
+      }
+    }
   }
 
   if (addr && addr !== "Not Available") {
@@ -9455,8 +9511,24 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
   if (!cleanAddr || !rawAddr) return cleanAddr;
   let c = cleanAddr.trim();
 
-  // If cleanAddr already starts with a number, premise indicator, or PO Box, check if rawAddr had a leading Unit/Floor/Level
+  // If cleanAddr already starts with a number, premise indicator, or PO Box, check if rawAddr had a leading Unit/Floor/Level/Office Park
   if (/^(?:\d+|no\.?|nos\.?|nº|#|number\b|unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk|kav|kavling|p\.?o\.?\s*box)\b/i.test(c)) {
+    // Check if rawAddr has leading premise/floor/unit/suite/building/office park before cleanAddr
+    const cleanEscaped = c.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&').replace(/\s+/g, '\\s+');
+    let mLead = rawAddr.match(new RegExp(`^\\s*([\\s\\S]{3,80}?)[,\\s]+(?=${cleanEscaped})`, 'i'));
+    if (!mLead) {
+      const firstThoroughfareMatch = c.match(/^(?:no\.?|nos\.?|number|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+)?[,\s]+[A-Za-z0-9\u00C0-\u024F\s\-]+?\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b/i);
+      if (firstThoroughfareMatch) {
+        const segEscaped = firstThoroughfareMatch[0].replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&').replace(/\s+/g, '\\s+');
+        mLead = rawAddr.match(new RegExp(`^\\s*([\\s\\S]{3,80}?)[,\\s]+(?=${segEscaped})`, 'i'));
+      }
+    }
+    if (mLead && mLead[1]) {
+      const prefix = mLead[1].trim().replace(/,$/, '');
+      if (/\b(?:unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|lot|plot|office\s*park|industrial|tower|kav)\b|\b\d+\s*(?:\/|\s*)?F\b/i.test(prefix)) {
+        return `${prefix}, ${c}`;
+      }
+    }
     const leadingUnitMatch = rawAddr.match(/^\s*(\b(?:\d{1,3}(?:st|nd|rd|th)?\s+floor|\d{1,3}\s*(?:\/|\s*)?F\.?|(?:unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|block|blk)\s+[A-Za-z0-9\-\/]+)[,\s]+)(?:no\.?|nos\.?|number|#)?\s*(\d+[A-Za-z]?(?:[-\/]\d+)?)/i);
     if (leadingUnitMatch) {
       const unitText = leadingUnitMatch[1].trim().replace(/,$/, '');
