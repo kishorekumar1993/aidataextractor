@@ -7,14 +7,14 @@ const DEFAULT_API_KEY =
 const DEFAULT_MODEL =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
   (typeof window !== "undefined" && window.ENV && window.ENV.DEFAULT_MODEL) ||
-  "gemini-3.8-flash";
+  "gemini-3.5-flash-lite";
 
 const GEMINI_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
   "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite"
+  "gemini-3.1-flash-lite",
+  "gemini-3.6-flash",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite"
 ];
 
 document.addEventListener("DOMContentLoaded", () => {
