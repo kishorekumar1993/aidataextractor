@@ -1338,7 +1338,8 @@
     if (!str || typeof str !== "string") return "";
     const upperAcronyms = new Set([
       "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
-      "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA"
+      "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA",
+      "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC"
     ]);
     let s = str.replace(/['’`]\s*s\b/gi, "'s");
     return s.replace(/[\p{L}\p{N}]+/gu, function (word, offset, fullStr) {
@@ -1348,6 +1349,10 @@
       const upper = word.toUpperCase();
       if (upperAcronyms.has(upper)) return upper;
       if (/^GmbH$/i.test(word)) return "GmbH";
+      // Preserve 2-4 letter all-caps acronyms when the surrounding string has mixed lowercase characters
+      if (word.length >= 2 && word.length <= 4 && word === upper && /[a-z]/.test(fullStr) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO|UPON|OVER|UNDER|AFTER|ABOUT)$/i.test(word)) {
+        return upper;
+      }
       return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
     });
   }

@@ -467,7 +467,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     let keepAlive = setInterval(() => {
       try {
         if (chrome && chrome.storage && chrome.storage.local) {
-          chrome.storage.local.set({ _sw_beat: Date.now() }, () => {});
+          chrome.storage.local.set({ _sw_beat: Date.now() }, () => { });
         }
       } catch (e) { }
     }, 2000);
@@ -1786,7 +1786,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
 
   // Reject opening hours / business hours strings (e.g. "Monday to Saturday - 9.00 AM to 5.30 PM CT")
   if (/\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s+(?:to|-|through)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i.test(cleaned) ||
-      /\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i.test(cleaned)) {
+    /\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i.test(cleaned)) {
     return;
   }
 
@@ -2350,12 +2350,12 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
         /(?:大道|路|街|巷|弄|号|號|工业区|工业园|产业园|高新区)/.test(raw) ||
         /\b(?:victoria|new\s*south\s*wales|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|vic|nsw|qld|wa|sa|tas|act|madrid|barcelona|valencia|sevilla|andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|murcia|navarra|rioja|maharashtra|mumbai|delhi|bangalore|karnataka|tamil\s*nadu|chennai|gujarat|ahmedabad|kolkata|hyderabad|pune|selangor|johor|penang|perak|kedah|pahang|jihomoravsk[yý]|st[rř]edo[cč]esk[yý]|praha|brno|ostrava|plze[nň]|mazowieckie|ma[lł]opolskie|[sś]l[aą]skie|wielkopolskie|dolno[sś]l[aą]skie|bavaria|bayern|hessen|nordrhein-westfalen|baden-w[uü]rttemberg|sachsen)\b/i.test(raw)) &&
       (/\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|plot\s*\d+|factory\s*\d+|level\s*\d+|floor\s*\d+|ist\s*floor|1st\s*floor|2nd\s*floor|3rd\s*floor|gpo\s*box)\b/i.test(raw) ||
-       /\d+\s*[号號]/.test(raw) ||
-       /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(raw) ||
-       /\b\d{3}\s*\d{2}\b/.test(raw) ||
-       /\b\d{2}-\d{3}\b/.test(raw) ||
-       /\b\d{4,6}\b/.test(raw) ||
-       /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
+        /\d+\s*[号號]/.test(raw) ||
+        /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(raw) ||
+        /\b\d{3}\s*\d{2}\b/.test(raw) ||
+        /\b\d{2}-\d{3}\b/.test(raw) ||
+        /\b\d{4,6}\b/.test(raw) ||
+        /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
       const beforeText = processedHtml.slice(Math.max(0, pm.index - 500), pm.index);
       const ctx = getContext(beforeText, defaultSource, pm[1]);
       addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
@@ -4178,7 +4178,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyName: {
       type: "STRING",
-      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited). CRITICAL QC RULE: DO NOT expand symbols like '&' into 'And' (keep '&' as it is: e.g. 'H&R Manufacturing', 'Johnson & Johnson'). DO NOT invent or add 'Company' if not in the official name."
+      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited, PEM Fountain Company). CRITICAL QC RULE: DO NOT expand symbols like '&' into 'And' (keep '&' as it is: e.g. 'H&R Manufacturing', 'Johnson & Johnson'). DO NOT invent or add 'Company' if not in the official name. Brand acronyms/trademarks must be in UPPERCASE (e.g. PEM, BMW, AKS, HR, CRP). Expand all corporate abbreviations to full form (Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated)."
     },
     countryName: {
       type: "STRING",
@@ -4378,10 +4378,13 @@ BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
 CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME, COMPANY ADDRESS, COUNTRY MUST START WITH CAPITAL LETTER):
 - MANDATORY CAPITALIZATION QC RULE ("In Company Name, Company Address, Country All the words start with Capital letter"):
   EVERY SINGLE WORD in "companyName", "companyAddress", and "countryName" MUST start with a Capital letter (Title Case).
-  * In "companyName": Capitalize every single word! E.g. "Inter Outstanding Electronics Incorporated", "H&R Manufacturing", "Web Rack Industrial Company Limited", "Danzer UK Limited".
+  * In "companyName": Capitalize every single word! E.g. "Inter Outstanding Electronics Incorporated", "H&R Manufacturing", "Web Rack Industrial Company Limited", "PEM Fountain Company", "Danzer UK Limited".
+  * CRITICAL QC RULE - ACRONYMS IN COMPANY NAME:
+    - Acronyms and all-caps brand names (e.g. PEM, BMW, AKS, HR, CRP, SMC) MUST remain in full UPPERCASE (e.g. "PEM Fountain Company", NOT "Pem Fountain Company" or "Pem Fountain"!).
   * CRITICAL QC RULE - DO NOT EXPAND SYMBOLS:
     - DO NOT expand symbols like "&" into "And"! Keep symbols as they are (e.g. "H&R Manufacturing", NOT "H And R Manufacturing"!).
-    - DO NOT add "Company" to the company name if "Company" or "Co." was not part of the original name (e.g. "H&R Manufacturing" must remain "H&R Manufacturing", NEVER add "Company"!).
+    - DO NOT add "Company" to the company name if "Company" or "Co." was not part of the official name (e.g. "H&R Manufacturing" must remain "H&R Manufacturing", NEVER add "Company"!).
+    - Expand "Co." / "Co" to "Company" when present in official name, trade listing, or social media handle (e.g. "PEM Fountain Co." / "pemfountainco" -> "PEM Fountain Company").
   * In "companyAddress": Capitalize every single word! E.g. "18, Lane 247, Fusing 3rd Road, Keishan, Taoyuan", "15 Telford Way, Kettering, Northamptonshire", "Number 53-5, Pocheng Road, Yuanshan Township, Yilan County", "46 Market Hill, Maldon, Essex", "123 Main Street, Suite 400", "City Of Industry, California".
   * In "countryName": Capitalize every single word! E.g. "United States Of America" (with capital 'Of'), "United Kingdom", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye".
   * STRICT PROHIBITION: Do NOT leave small words, prepositions, or conjunctions in lowercase! Words like "Of", "And", "In", "At", "By", "For", "With", "On", "The", "De", "Du" MUST be capitalized with their first letter uppercase (e.g. "United States Of America", "City Of Industry", "Bank Of China").
@@ -4665,6 +4668,11 @@ COMPANY NAME RULES (Rule 4):
        - "P&G" -> "P&G"
        - "Black & Decker" -> "Black & Decker"
      * DO NOT invent, hallucinate, or append "Company" to the company name if "Company" or "Co." does not appear in the official name (e.g. if the website says "H&R Manufacturing", return "H&R Manufacturing", NEVER "H&R Manufacturing Company"!).
+     * BUT when "Co." or "Co" appears in the corporate name, trade listing, or social media handles (e.g. "PEM Fountain Co." or "@pemfountainco"), expand "Co." to full form "Company": "PEM Fountain Company"!
+   - CRITICAL MANDATORY QC RULE - BRAND ACRONYMS:
+     * Retain acronyms and abbreviated brand trademarks in UPPERCASE (e.g. "PEM", "BMW", "AKS", "HR", "CRP", "FP"):
+       - "PEM Fountain Company" (STRICTLY "PEM", NEVER "Pem Fountain" or "Pem Fountain Company"!)
+       - "AKS Lining Systems Proprietary Limited" (STRICTLY "AKS", NEVER "Aks"!)
 5. EXPANDING "CO., LTD" VS "CO. LTD" AND CORPORATE COMMAS (CRITICAL QC RULE):
    - RESPECT THE PRESENCE OR ABSENCE OF COMMAS EXACTLY AS IN THE OFFICIAL SOURCE:
      * If WITH comma: "Co., Ltd" or "Co.,Ltd" -> MUST expand to "Company, Limited" (keep the comma!).
@@ -4956,7 +4964,6 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
   const candidateModels = [
     (modelName && !DEPRECATED_MODELS.has(modelName)) ? modelName : "gemini-3.5-flash-lite",
     "gemini-3.5-flash-lite",
-    "gemini-2.5-flash-lite",
     "gemini-2.5-flash"
   ].filter((m, i, arr) => m && arr.indexOf(m) === i && !DEPRECATED_MODELS.has(m)).slice(0, 2);
 
@@ -5073,9 +5080,10 @@ function extractRootDomain(urlOrHost) {
 function extractDomainStem(urlOrHost) {
   if (!urlOrHost || typeof urlOrHost !== "string") return "";
   let host = urlOrHost.trim().toLowerCase();
+  host = host.replace(/^https?:\/\//i, "");
   try {
     if (host.includes("://")) {
-      host = new URL(host).hostname;
+      host = new URL("http://" + host).hostname;
     } else if (host.includes("/")) {
       host = host.split("/")[0];
     }
@@ -6751,7 +6759,7 @@ function hasStateInAddress(addr, country) {
   //   Nantou, Penghu, Pingtung, Taitung, Yilan, Yunlin -> State: Available
   // - Special Municipalities (Taichung City, New Taipei City, Tainan City, Kaohsiung City, Taoyuan City, Keelung City)
   //   and Districts (Nantun District, Banqiao District, etc.) without County -> State: Not Available!
-  const isTaiwan = (country && /taiwan/i.test(country)) || 
+  const isTaiwan = (country && /taiwan/i.test(country)) ||
     /\b(taiwan|r\.?o\.?c\.?)\b/i.test(lower) ||
     /\b(changhua|chiayi|hsinchu|hualien|kinmen|lienchiang|matsu|miaoli|nantou|penghu|pingtung|taitung|yilan|yunlin)\s*(?:county|hsien|country)?\b/i.test(lower) ||
     /[\u5f70\u5316\u5609\u7fa9\u65b0\u7af9\u82b1\u84ee\u91d1\u9580\u9023\u6c5f\u99ac\u7956\u82d7\u6817\u5357\u6295\u6f8e\u6e56\u5c4f\u6771\u53f0\u6771\u81fa\u6771\u5b9c\u862d\u96f2\u6797]/.test(addr);
@@ -7742,7 +7750,7 @@ function preferOfficialCompanyName(name, crawlData) {
   let bestScore = -1;
 
   for (const official of allCandidates) {
-    const hasSuffix = hasCompleteLegalSuffix(official) || /\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc)\b/i.test(official);
+    const hasSuffix = hasCompleteLegalSuffix(official) || /\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|company|co)\b/i.test(official);
     const hasSymbolMatch = official.includes("&") && (current.toLowerCase().includes(" and ") || companyNamesMatch(current, official));
     if (!hasSuffix && !hasSymbolMatch) {
       continue;
@@ -7856,6 +7864,7 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
     crawlData && crawlData.title,
     crawlData && crawlData.copyrightText,
     ...(crawlData && crawlData.legalCompanyCandidates || []),
+    ...(crawlData && crawlData.companySocials ? Object.values(crawlData.companySocials) : []),
     crawlData && crawlData.mainHtml
   ].filter(Boolean);
 
@@ -7878,18 +7887,38 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
 
   // 2. If name ends with "Company" but the official website brand / title / logo is without "Company"
   // e.g. "H&R Manufacturing Company" -> "H&R Manufacturing"
+  // BUT do NOT strip "Company" if the company has "Co." or "Company" in legal candidates, text, or social media handles (e.g. "PEM Fountain Co." / "pemfountainco")
   if (/\bCompany\b$/i.test(n.trim())) {
     const withoutCompany = n.replace(/\s+Company$/i, "").trim();
     if (withoutCompany.length >= 3) {
       const esc = withoutCompany.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const domainUrl = (crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "";
+      const stem = cleanDomainStem(domainUrl);
       const brandExactRegex = new RegExp(`(^|[^a-zA-Z0-9])${esc}([^a-zA-Z0-9]|$)`, "i");
-      const brandWithCoRegex = new RegExp(`(^|[^a-zA-Z0-9])${esc}\\s+Company([^a-zA-Z0-9]|$)`, "i");
+      const brandWithCoRegex = new RegExp(`(^|[^a-zA-Z0-9])(?:${esc}\\s*(?:Company|Co\\.?|Corp\\.?)|${stem}\\s*(?:Company|Co\\.?)|${stem}co)([^a-zA-Z0-9]|$)`, "i");
       const titleOrLogo = ((crawlData && crawlData.title) || "") + " " + ((crawlData && crawlData.logoText) || "");
       if (brandExactRegex.test(titleOrLogo) && !brandWithCoRegex.test(combinedEvidence)) {
         n = withoutCompany;
       }
     }
   }
+
+  // 3. Restore all-caps brand acronyms (e.g. "Pem Fountain" -> "PEM Fountain", "Aks Lining" -> "AKS Lining")
+  const upperAcronyms = new Set([
+    "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
+    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA",
+    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC"
+  ]);
+  const titleAndLogo = ((crawlData && crawlData.title) || "") + " " + ((crawlData && crawlData.logoText) || "");
+  n = n.replace(/\b[A-Za-z0-9]{2,4}\b/g, (word) => {
+    const up = word.toUpperCase();
+    if (upperAcronyms.has(up)) return up;
+    const exactUpperRegex = new RegExp(`(^|[^A-Za-z0-9])${up}([^A-Za-z0-9]|$)`);
+    if (exactUpperRegex.test(titleAndLogo) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO)$/i.test(up)) {
+      return up;
+    }
+    return word;
+  });
 
   return n;
 }
@@ -7983,6 +8012,27 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
   const copyIndoMatch = copyright.match(new RegExp(`((?:PT|P\\.T\\.|CV|C\\.V\\.|UD|U\\.D\\.|Perseroan\\s+Terbatas)\\s+[A-Z0-9][A-Za-z0-9&.'\\- ]{2,60}(?:\\s+Tbk\\.?)?)`, "i"));
   if (copyIndoMatch && copyIndoMatch[1] && (namesOverlap(cleanName, copyIndoMatch[1]) || companyNamesMatch(cleanName, copyIndoMatch[1]))) {
     return copyIndoMatch[1].trim();
+  }
+
+  // 3c. Check social media handles or text evidence for [Brand] Co. / [Brand] Company (e.g. pemfountainco -> PEM Fountain Company)
+  const domainUrl = (crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "";
+  const stem = cleanDomainStem(domainUrl);
+  const socialValues = (crawlData && crawlData.companySocials) ? Object.values(crawlData.companySocials).join(" ").toLowerCase() : "";
+  const combinedText = [
+    crawlData && crawlData.logoText,
+    crawlData && crawlData.title,
+    crawlData && crawlData.copyrightText,
+    ...(crawlData && crawlData.legalCompanyCandidates || []),
+    crawlData && crawlData.mainHtml,
+    socialValues
+  ].filter(Boolean).join(" ");
+
+  if (stem && stem.length >= 3) {
+    const handleHasCo = new RegExp(`(?:/|@)${stem}co(?:/|\\b|$)`, "i").test(socialValues);
+    const textHasCo = new RegExp(`\\b${escapedName}\\s+(?:Co\\.?|Company)\\b`, "i").test(combinedText);
+    if ((handleHasCo || textHasCo) && !/\b(?:Company|Corporation|Limited|Incorporated)\b/i.test(cleanName)) {
+      return `${cleanName} Company`;
+    }
   }
 
   return cleanName;
@@ -9829,7 +9879,8 @@ function toTitleCase(str) {
   if (!str) return "";
   const upperAcronyms = new Set([
     "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
-    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA"
+    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA",
+    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC"
   ]);
   let s = str.replace(/['’`]\s*s\b/gi, "'s");
   // Every word starts with a Capital letter per QC instruction: "All words start with Capital letter"
@@ -9840,6 +9891,10 @@ function toTitleCase(str) {
     const upper = word.toUpperCase();
     if (upperAcronyms.has(upper)) return upper;
     if (/^GmbH$/i.test(word)) return "GmbH";
+    // Preserve 2-4 letter all-caps acronyms when the surrounding string has mixed lowercase characters
+    if (word.length >= 2 && word.length <= 4 && word === upper && /[a-z]/.test(fullStr) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO|UPON|OVER|UNDER|AFTER|ABOUT)$/i.test(word)) {
+      return upper;
+    }
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });
 }
@@ -10302,7 +10357,6 @@ async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
     "gemini-3.6-flash",
     "gemini-3.1-flash-lite",
     "gemini-flash-lite-latest",
-    "gemini-2.5-flash-lite"
   ].filter((m, i, arr) => m && arr.indexOf(m) === i && !DEPRECATED_MODELS.has(m));
 
   let lastError = null;
