@@ -2639,7 +2639,7 @@
               const escapedKw = info.keyword.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
               try {
                 rawSnippet = rawSnippet.replace(new RegExp(`(\\b${escapedKw}\\b|${escapedKw})`, "gi"), '<mark style="background: #fef08a; color: #854d0e; padding: 1px 4px; border-radius: 3px; font-weight: 700;">$1</mark>');
-              } catch (e) {}
+              } catch (e) { }
             }
             snippetRow.innerHTML = `"...${rawSnippet}..."`;
           } else {
@@ -3071,6 +3071,8 @@
         updateStatus("🛑 Auto-Submit STOPPED! You can now review and study the Not Working site.", "warning");
       });
     }
+    //
+
 
     const autoSubmitNotWorkingToggle = document.getElementById("ai-auto-submit-notworking-toggle");
     if (autoSubmitNotWorkingToggle) {
