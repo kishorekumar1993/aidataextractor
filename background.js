@@ -835,8 +835,8 @@ async function handleCrawlAndExtract(rawUrl) {
   if (!apiKey || !apiKey.trim()) {
     extractedData = heuristicExtraction(crawlResult, restrictedCheck);
     extractedData._note = "Analyzed via Local Rule Engine";
-  } else if (elapsedBeforeAi > 11000) {
-    // If crawling took more than 11 seconds, fast-path using local rule engine so response returns immediately without timing out!
+  } else if (elapsedBeforeAi > 13500) {
+    // If crawling took more than 13.5 seconds, fast-path using local rule engine so response returns immediately without timing out!
     console.warn(`[AI Assistant] Crawl took ${elapsedBeforeAi}ms. Fast-pathing with local rule engine to prevent timeout.`);
     extractedData = heuristicExtraction(crawlResult, restrictedCheck);
     extractedData._note = "Analyzed via Local Rule Engine (Fast-path to prevent timeout)";
@@ -1029,8 +1029,8 @@ function extractLegalCandidatesFromHtml(html) {
 
   function addCleanCandidate(rawCand) {
     if (!rawCand) return;
-    // Strip leading words like "and", "the", "or", "from", "with", "between", "fault arises and"
-    let candidateToClean = rawCand.replace(/^.*?\b(?:and|or|by|for|with|from|including|between|the|to|at|arises)\s+/i, "").trim();
+    // Strip leading words at the very beginning like "and", "the", "or", "from", "with", "between", "fault arises and"
+    let candidateToClean = rawCand.replace(/^(?:and|or|by|for|with|from|including|between|the|to|at|arises)\s+/i, "").trim();
     const cleaned = cleanCompanyPrefixesAndSuffixes(candidateToClean || rawCand);
     if (!cleaned) return;
     // Reject third-party job portals, HR platforms, web hosts, CMS, analytics, payment gateways
@@ -1062,7 +1062,7 @@ function extractLegalCandidatesFromHtml(html) {
   }
 
   // Pattern 3: Explicit legal suffix preceded by capitalized words (horizontal spaces only to avoid cross-line/inline link merging, supporting optional comma)
-  const generalLegalRegex = /\b((?:[A-Z0-9][a-zA-Z0-9&.'\-]*(?:[^\S\r\n]+[A-Z0-9][a-zA-Z0-9&.'\-]*){0,5})(?:,[^\S\r\n]*|[^\S\r\n]+)(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka)(?:\.|\b))/gi;
+  const generalLegalRegex = /\b((?:[A-Z0-9][a-zA-Z0-9&.'\-]*(?:[^\S\r\n]+(?:&|[A-Z0-9][a-zA-Z0-9&.'\-]*)){0,5})(?:,[^\S\r\n]*|[^\S\r\n]+)(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka)(?:\.|\b))/gi;
   while ((m = generalLegalRegex.exec(text)) !== null) {
     const cand = m[1].trim();
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
@@ -5030,8 +5030,8 @@ ${(crawlData.bodyText || "").slice(0, 1500)}
   let parsed = null;
 
   for (const modelToTry of candidateModels) {
-    // If overall elapsed time since crawl start is already high (>13.5s), break immediately to avoid safety timeout
-    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 13500) {
+    // If overall elapsed time since crawl start is already high (>16.5s), break immediately to avoid safety timeout
+    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 16500) {
       console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting AI calls to return promptly.`);
       break;
     }
@@ -5039,7 +5039,7 @@ ${(crawlData.bodyText || "").slice(0, 1500)}
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${encodeURIComponent(apiKey)}`;
     try {
       const abortCtrl = new AbortController();
-      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 6000 : 4000;
+      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 9000 : 5000;
       const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
       let response;
       try {
@@ -5393,15 +5393,16 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   let address = topCandidate
     ? (typeof topCandidate === "object" ? topCandidate.raw : topCandidate)
     : extractLikelyAddress(crawlData.contactPageText || crawlData.footerText || text);
-  if (address) {
-    address = address.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
-    address = address.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
-    address = expandAddressAndStateAbbreviations(address, country);
-  }
 
   let country = detectCountryFromAddress(address);
   if (/^(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)$/i.test((country || "").trim())) {
     country = "United Kingdom";
+  }
+
+  if (address) {
+    address = address.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
+    address = address.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
+    address = expandAddressAndStateAbbreviations(address, country);
   }
   const emailId = crawlData.emails.length > 0 ? stripTrailingContactWordsFromEmail(crawlData.emails[0]) : "";
   let targetDomain = "";
@@ -6902,7 +6903,7 @@ function hasNamedStateOrProvince(lower) {
   for (const text of targetTexts) {
     for (const name of STATE_AND_PROVINCE_NAMES) {
       if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(text, name)) continue;
-      const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&").replace(/\s/g, "\\s+");
+      const escaped = name.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&").replace(/\s+/g, "\\s+");
       if (new RegExp(`\\b${escaped}\\b`, "i").test(text)) return true;
     }
   }
@@ -7000,7 +7001,7 @@ function hasStateInAddress(addr, country) {
     ];
     for (const reg of NZ_REGIONS) {
       if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, reg)) continue;
-      const escaped = reg.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&").replace(/\\s/g, "\\s+");
+      const escaped = reg.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&").replace(/\s+/g, "\\s+");
       if (new RegExp(`\\b${escaped}\\b`, "i").test(lower)) {
         return true;
       }
