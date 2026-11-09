@@ -5668,17 +5668,21 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     const rawCandidatesText = (crawlData && crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
-    const fullCheckText = ((result.companyAddress || "") + " " + rawCandidatesText + " " + (crawlData && crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData && crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
+    const addressBlockText = ((result.companyAddress || "") + " " + rawCandidatesText).toLowerCase();
+    const fullCheckText = (addressBlockText + " " + (crawlData && crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData && crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
+    const addressHasExplicitUk = /\b(united\s*kingdom|great\s*britain|uk)\b/i.test(addressBlockText);
     const hasExplicitUk = /\b(united\s*kingdom|great\s*britain|uk)\b/i.test(fullCheckText);
     const hasExplicitEngland = /\bengland\b/i.test(fullCheckText);
     const hasExplicitScotland = /\bscotland\b/i.test(fullCheckText);
     const hasExplicitWales = /(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText);
     const hasExplicitNI = /\bnorthern\s*ireland\b/i.test(fullCheckText);
 
-    // If website explicitly wrote "United Kingdom" or "UK" and did NOT mention England/Scotland/Wales/NI, MUST retain "United Kingdom"!
-    if (hasExplicitUk && !hasExplicitEngland && !hasExplicitScotland && !hasExplicitWales && !hasExplicitNI) {
+    // CRITICAL QC RULE: "If website country available means it should written UK (United Kingdom) else we can search google and put country"
+    // If the address block or website explicitly wrote "United Kingdom" or "UK", it MUST be "United Kingdom"!
+    // NEVER override "United Kingdom" to "England" just because "Registered in England" appears in corporate footer!
+    if (addressHasExplicitUk || (country === "United Kingdom" && hasExplicitUk)) {
       country = "United Kingdom";
-    } else if (country === "United Kingdom") {
+    } else if (country === "United Kingdom" || !country) {
       if (hasExplicitEngland) {
         country = "England";
       } else if (hasExplicitScotland) {
@@ -5687,6 +5691,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         country = "Wales";
       } else if (hasExplicitNI) {
         country = "Northern Ireland";
+      } else {
+        country = "United Kingdom";
       }
     }
     result.countryName = country;
