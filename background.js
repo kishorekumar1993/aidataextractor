@@ -4150,7 +4150,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     countryName: {
       type: "STRING",
-      description: "You must write the country name in full form in Title Case where EVERY single word starts with a Capital letter (e.g. Czechia, Turkiye, United States Of America, England, Wales, Scotland, Northern Ireland, United Kingdom, Canada, Australia, Taiwan, India). If not available on site, check social media; if still not available, consider locality/city/state. For United Kingdom: if 'England' and 'United Kingdom' both are mentioned, you must take England as the country name (same for Wales, Scotland, Northern Ireland)."
+      description: "You must write the country name in full form in Title Case where EVERY single word starts with a Capital letter (e.g. Czechia, Turkiye, United States Of America, England, Wales, Scotland, Northern Ireland, United Kingdom, Canada, Australia, Taiwan, India). If the country name is not available on the site, check on social media. If still not available, search on Google using the city and state name. We consider the locality for the country name. Example: United Kingdom (England, Wales, Scotland, Northern Ireland). If 'England' and 'United Kingdom' both are mentioned, you must take England as the country name (same for Wales, Scotland, Northern Ireland)."
     },
     companyAddress: {
       type: "STRING",
@@ -4354,6 +4354,10 @@ CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME
   * In "countryName": Capitalize every single word! E.g. "United States Of America" (with capital 'Of'), "United Kingdom", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye".
   * STRICT PROHIBITION: Do NOT leave small words, prepositions, or conjunctions in lowercase! Words like "Of", "And", "In", "At", "By", "For", "With", "On", "The", "De", "Du" MUST be capitalized with their first letter uppercase (e.g. "United States Of America", "City Of Industry", "Bank Of China").
   * Special characters MUST NOT start and MUST NOT end "companyName" or "companyAddress".
+- MANDATORY COUNTRY NAME QC RULE (CRITICAL QUALITY CONTROL REQUIREMENT):
+  * "You must write the country name in full form. If the country name is not available on the site, check on social media. If still not available, search on Google using the city and state name. We consider the locality for the country name.
+  Example: United Kingdom (England, Wales, Scotland, Northern Ireland). If “England” and “United Kingdom” both are mentioned, you must take England as the country name."
+  * Every single word in countryName MUST start with a Capital letter (Title Case).
 - MANDATORY PHONE NUMBER QC RULE:
   * "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
 - MANDATORY EMAIL QC RULE:
@@ -4738,14 +4742,17 @@ COMPANY NAME RULES (Rule 4):
    - EVERY SINGLE WORD in companyName MUST start with a Capital letter (Title Case). E.g. "Inter Outstanding Electronics Incorporated", "Wang Ruey Industrial Company Limited".
    - Special characters MUST NOT start and MUST NOT end the company name.
 
-COUNTRY NAME VALIDATION RULES:
-1. FULL FORM COUNTRY NAME (CRITICAL MANDATORY QC RULE):
+COUNTRY NAME VALIDATION RULES (CRITICAL QC REQUIREMENT):
+1. MANDATORY COUNTRY NAME QC RULE:
+   - "You must write the country name in full form. If the country name is not available on the site, check on social media. If still not available, search on Google using the city and state name. We consider the locality for the country name.
+   Example: United Kingdom (England, Wales, Scotland, Northern Ireland). If “England” and “United Kingdom” both are mentioned, you must take England as the country name."
+2. FULL FORM COUNTRY NAME (CRITICAL MANDATORY QC RULE):
    - You MUST write the country name in full form (e.g. "United States Of America", "United Kingdom", "South Africa", "United Arab Emirates", "Saudi Arabia", "New Zealand").
-2. FALLBACK HIERARCHY FOR COUNTRY IDENTIFICATION (CRITICAL QC RULE):
+3. FALLBACK HIERARCHY FOR COUNTRY IDENTIFICATION (CRITICAL QC RULE):
    - If the country name is not available on the site, check on company social media (LinkedIn, Facebook, Twitter/X, Instagram, YouTube).
-   - If still not available, search using the city and state name. WE CONSIDER THE LOCALITY FOR THE COUNTRY NAME.
+   - If still not available, search on Google using the city and state name. WE CONSIDER THE LOCALITY FOR THE COUNTRY NAME.
    - Extract directly from the physical address, city, state, or locality evidence.
-3. UNITED KINGDOM & CONSTITUENT COUNTRIES MANDATE (CRITICAL QC RULE):
+4. UNITED KINGDOM & CONSTITUENT COUNTRIES MANDATE (CRITICAL QC RULE):
    - Example: United Kingdom (England, Wales, Scotland, Northern Ireland). If "England" and "United Kingdom" both are mentioned, you must take England as the country name.
    - The constituent countries of the United Kingdom are:
      * "England"
@@ -4757,7 +4764,7 @@ COUNTRY NAME VALIDATION RULES:
      * If "Scotland" and "United Kingdom" both are mentioned, YOU MUST TAKE Scotland as the country name!
      * If "Wales" and "United Kingdom" both are mentioned, YOU MUST TAKE Wales as the country name!
      * If "Northern Ireland" and "United Kingdom" both are mentioned, YOU MUST TAKE Northern Ireland as the country name!
-     * When the locality, city, or county belongs to a constituent country (e.g. London, Birmingham, Manchester, Leeds, Essex, Yorkshire, Kent, Lancashire -> England; Cardiff, Swansea, Newport -> Wales; Edinburgh, Glasgow, Aberdeen, Dundee -> Scotland; Belfast, Derry -> Northern Ireland), you MUST return that constituent country ('England', 'Wales', 'Scotland', 'Northern Ireland') instead of generic 'United Kingdom'!
+     * When the locality, city, or county belongs to a constituent country (e.g. London, Birmingham, Manchester, Leeds, Kettering, Northamptonshire, Essex, Yorkshire, Kent, Lancashire -> England; Cardiff, Swansea, Newport -> Wales; Edinburgh, Glasgow, Aberdeen, Dundee -> Scotland; Belfast, Derry -> Northern Ireland), you MUST return that constituent country ('England', 'Wales', 'Scotland', 'Northern Ireland') instead of generic 'United Kingdom'!
      * Only return generic "United Kingdom" if NO specific constituent country (England, Wales, Scotland, Northern Ireland) or constituent locality is identifiable.
 4. MANDATORY CAPITALIZATION: EVERY SINGLE WORD in countryName MUST start with a Capital letter (e.g. "United States Of America" with capital 'Of', "United Kingdom", "England", "Scotland", "Wales", "Northern Ireland", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye").
 5. STANDARDIZED OFFICIAL COUNTRY NAMES (GLOBAL MANDATE - APPLIES GLOBALLY TO ALL COUNTRIES):
