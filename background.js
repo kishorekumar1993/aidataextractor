@@ -2738,13 +2738,28 @@ function isUnwantedEmail(email) {
 }
 
 /**
+ * Strips contact label glued to the end of an email from HTML text concatenation.
+ * E.g. "key@keyar.comaddress" -> "key@keyar.com"
+ * E.g. "info@domain.co.ukphone:+44" -> "info@domain.co.uk"
+ */
+function stripTrailingContactWordsFromEmail(email) {
+  if (!email || typeof email !== "string") return "";
+  let em = email.trim();
+  const contactSuffixes = "address|addr|tel|telephone|phone|fax|email|mail|contact|mobile|cell|whatsapp|postcode|postal|zip|website|web|url|loc|location";
+  em = em.replace(new RegExp(`(\\.(?:com|org|net|edu|gov|io|co|cn|tw|uk|de|jp|fr|it|es|au|ca|in|biz|info|me|cc|tv|xyz|eu|nl|se|no|ch|at|ru|pl|br|mx|za|nz|asia|mobi|name|pro|tech|store|shop|online|site|vip|club|top))(?:${contactSuffixes})[\\s:：\\-–].*$`, "i"), "$1");
+  em = em.replace(new RegExp(`(\\.(?:com|org|net|edu|gov|io|co|cn|tw|uk|de|jp|fr|it|es|au|ca|in|biz|info|me|cc|tv|xyz|eu|nl|se|no|ch|at|ru|pl|br|mx|za|nz|asia|mobi|name|pro|tech|store|shop|online|site|vip|club|top))(?:${contactSuffixes})$`, "i"), "$1");
+  return em;
+}
+
+/**
  * Strict corporate email validator.
  * Rejects web URLs, images/assets, placeholders, prose artifacts (e.g. "collected at www.domain.com"),
  * and domains starting with www.
  */
 function isValidCorporateEmail(email) {
   if (!email || typeof email !== "string") return false;
-  const em = email.trim().toLowerCase();
+  let em = email.trim().toLowerCase();
+  em = stripTrailingContactWordsFromEmail(em);
 
   // Filter unwanted emails, script artifacts, and third-party vendors
   if (isUnwantedEmail(em)) return false;
@@ -2867,7 +2882,7 @@ function extractEmailsFromHtml(html, hostDomain = "") {
   const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
   const rawEmails = emailSearchText.match(emailRegex) || [];
   for (let em of rawEmails) {
-    em = em.toLowerCase().trim();
+    em = stripTrailingContactWordsFromEmail(em.toLowerCase().trim());
     if (isUnwantedEmail(em)) continue;
     // If an email ends in ROT13 TLD (.pbz -> .com, .bet -> .org, .arg -> .net, .rqh -> .edu, .tbi -> .gov), decode it!
     if (/\.(?:pbz|bet|arg|rqh|tbi)$/i.test(em)) {
@@ -2884,14 +2899,15 @@ function extractEmailsFromHtml(html, hostDomain = "") {
   const strippedText = stripHtml(emailSearchText);
   const textEmails = strippedText.match(emailRegex) || [];
   for (let em of textEmails) {
-    em = em.toLowerCase().trim();
+    em = stripTrailingContactWordsFromEmail(em.toLowerCase().trim());
     if (isValidCorporateEmail(em) && !isUnwantedEmail(em)) {
       candidateEmails.add(em);
     }
   }
 
   const uniqueEmails = [];
-  for (const em of candidateEmails) {
+  for (let em of candidateEmails) {
+    em = stripTrailingContactWordsFromEmail(em.toLowerCase().trim());
     if (isValidCorporateEmail(em) && !isUnwantedEmail(em) && !uniqueEmails.includes(em)) {
       uniqueEmails.push(em);
     }
@@ -4138,7 +4154,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyAddress: {
       type: "STRING",
-      description: "Clean physical headquarters/main address in Title Case where EVERY single word starts with a Capital letter (e.g. Number 53-5, Pocheng Road, Yuanshan Township, Yilan County, Number 20-2, Xinxing Street, Shulin District, New Taipei City)."
+      description: "Clean physical headquarters/main address in Title Case where EVERY single word starts with a Capital letter (e.g. Number 53-5, Pocheng Road, Yuanshan Township, Yilan County, Number 20-2, Xinxing Street, Shulin District, New Taipei City). MANDATORY FULL FORM EXPANSION: You MUST expand all abbreviations to full form globally (e.g. 5/F. or 5/F or 5F -> 5th Floor, 1/F -> 1st Floor, 2/F -> 2nd Floor, 3/F -> 3rd Floor, G/F -> Ground Floor, B/F -> Basement Floor, Lvl -> Level, No. -> Number, St. -> Street, Rd. -> Road, Ave. -> Avenue, Dr. -> Drive, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Flr. -> Floor, Rm. -> Room, Dept. -> Department, Apt. -> Apartment, POB -> Post Office Box). Strip country name and postal codes."
     },
     state: {
       type: "STRING",
@@ -4405,7 +4421,28 @@ ADDRESS EXTRACTION PRIORITY (CRITICAL QC REQUIREMENT):
      * Postal codes / ZIP codes (e.g. "OH 45241" -> strip 45241, "VIC 3061" -> strip 3061, "602 00 Brno" -> strip 602 00). DO NOT strip the initial street number!
      * Country name (e.g. Australia, South Africa, United States, Taiwan, R.O.C., Turkiye, Czechia).
      * Company name.
-   - EXPAND ALL ABBREVIATIONS TO FULL WORDS GLOBALLY:
+   - MANDATORY FULL FORM EXPANSION RULES (EXPAND ALL ABBREVIATIONS TO FULL WORDS GLOBALLY):
+     * Floors & Levels:
+       - Expand all floor abbreviations into full ordinal names! E.g. "5/F." or "5/F" or "5F." or "5F" or "Fl. 5" or "Flr 5" or "Floor 5" or "5th Fl" -> "5th Floor".
+       - "1/F" or "1F" -> "1st Floor", "2/F" or "2F" -> "2nd Floor", "3/F" or "3F" -> "3rd Floor", "4/F" or "4F" -> "4th Floor", "6/F" -> "6th Floor", "10/F" -> "10th Floor", etc.
+       - "G/F" or "GF" -> "Ground Floor".
+       - "B/F" or "BF" -> "Basement Floor", "B1" -> "Basement 1", "B2" -> "Basement 2".
+       - "Lvl." or "Lvl" -> "Level".
+       - Standalone "Flr." or "Flr" or "Fl." or "Fl" -> "Floor".
+     * Premises & Numbers:
+       - "No." or "No" or "NO." or "Nos." or "Nº" or "N." or "Núm." -> "Number" (e.g. "No. 535" -> "Number 535", "No. 20-2" -> "Number 20-2", "No. 53-5" -> "Number 53-5").
+       - "Sec." or "Sec" -> "Section" (e.g. "Sec. 2" -> "Section 2").
+       - "Ln." or "Ln" -> "Lane" (e.g. "Ln. 270" -> "Lane 270").
+       - "Aly." or "Aly" -> "Alley" (e.g. "Aly. 15" -> "Alley 15").
+       - "Lot No." -> "Lot Number", "Plot No." -> "Plot Number".
+     * Units / Buildings / Departments:
+       - "Ste." or "Ste" -> "Suite" (e.g. "Ste. 200" -> "Suite 200", "Ste 260" -> "Suite 260").
+       - "Bldg." or "Bldg" -> "Building" (e.g. "Bldg. 4" -> "Building 4").
+       - "Rm." or "Rm" -> "Room" (e.g. "Rm. 302" -> "Room 302").
+       - "Apt." or "Apt" -> "Apartment" (e.g. "Apt. 5B" -> "Apartment 5B").
+       - "Dept." or "Dept" -> "Department".
+       - "Blk." or "Blk" -> "Block" (e.g. "Blk 12" -> "Block 12").
+       - "POB" or "P.O. Box" or "PO Box" -> "Post Office Box".
      * Compass / Directional prefixes & suffixes: E. / E -> East (e.g. "301 E. Marquardt Drive" -> "301 East Marquardt Drive"), W. / W -> West, N. / N -> North, S. / S -> South, NE / N.E. -> Northeast, NW / N.W. -> Northwest, SE / S.E. -> Southeast, SW / S.W. -> Southwest.
      * Street types: St -> Street, Rd -> Road, Ave -> Avenue, Cnr -> Corner, Dr -> Drive, Blvd -> Boulevard, Ln -> Lane, Ct -> Court, Pl -> Place, Hwy -> Highway, Cres -> Crescent, Pde -> Parade, Tce/Ter -> Terrace, Cl -> Close, Sq -> Square, Pkwy -> Parkway, Cir -> Circle, Gr/Gv -> Grove, Mews -> Mews, Way -> Way, Wlk -> Walk, Gdns -> Gardens, Esp -> Esplanade, Crst -> Crest, Prom -> Promenade, Rte -> Route, Tpke -> Turnpike, Ctr -> Centre, Aly -> Alley, Arc -> Arcade, Bnd -> Bend, Brg -> Bridge, Byp -> Bypass, Cswy -> Causeway, Cmn -> Common, Xing -> Crossing, Ext -> Extension, Fwy -> Freeway, Grn -> Green, Holw -> Hollow, Jct -> Junction, Knl -> Knoll, Lndg -> Landing, Mdw/Mdws -> Meadow/Meadows, Ml/Mls -> Mill/Mills, Mt -> Mount, Oval -> Oval, Pass -> Pass, Path -> Path, Pike -> Pike, Plz -> Plaza, Pt -> Point, Rdg -> Ridge, Rnch -> Ranch, Row -> Row, Run -> Run, Shr -> Shore, Spg/Spgs -> Spring/Springs, Sta -> Station, Strm -> Stream, Sumit/Smt -> Summit, Trce -> Trace, Trl -> Trail, Tunl -> Tunnel, Via -> Via, Vis -> Vista, Whf -> Wharf, No. -> Number, Nr -> Near.
      * Units / Buildings / Floors: Ste -> Suite, Apt -> Apartment, Bldg -> Building, Flr -> Floor, Dept -> Department, Rm -> Room, POB / PO Box -> Post Office Box.
@@ -5173,19 +5210,20 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   if (address) {
     address = address.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
     address = address.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
+    address = expandAddressAndStateAbbreviations(address, country);
   }
 
   let country = detectCountryFromAddress(address);
   if (/^(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)$/i.test((country || "").trim())) {
     country = "United Kingdom";
   }
-  const emailId = crawlData.emails.length > 0 ? crawlData.emails[0] : "";
+  const emailId = crawlData.emails.length > 0 ? stripTrailingContactWordsFromEmail(crawlData.emails[0]) : "";
   let targetDomain = "";
   try {
     targetDomain = new URL(crawlData.originalUrl || crawlData.url).hostname.replace(/^www\./i, "").toLowerCase();
   } catch (e) { }
   const primHost = emailId ? (emailId.split("@")[1] || "").toLowerCase() : "";
-  const secCandidate = crawlData.emails.find(e => {
+  const secCandidate = crawlData.emails.map(e => stripTrailingContactWordsFromEmail(e)).find(e => {
     if (!e || e === emailId || !isValidCorporateEmail(e) || isUnwantedEmail(e)) return false;
     const h = (e.split("@")[1] || "").toLowerCase();
     if (!h) return false;
@@ -5193,7 +5231,7 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     if (targetDomain && (h === targetDomain || h.endsWith("." + targetDomain))) return true;
     return false;
   });
-  const secondaryEmailId = secCandidate || "";
+  const secondaryEmailId = (secCandidate && secCandidate !== emailId) ? secCandidate : "";
   const phoneNumber = crawlData.phones.length > 0 ? crawlData.phones[0] : "";
 
   // Dynamic product counts preserving 0
@@ -5975,6 +6013,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
       addr = addr.replace(/[^\p{L}\p{N})]+$/gu, "").trim();
       addr = addr.replace(/\s+/g, " ");
+      // Final pass: ensure all floor, unit, street, and state abbreviations are fully expanded
+      addr = expandAddressAndStateAbbreviations(addr, country);
+      addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
+      addr = addr.replace(/[^\p{L}\p{N})]+$/gu, "").trim();
+      addr = addr.replace(/\s+/g, " ");
     }
   } else {
     addr = "Not Available";
@@ -6051,9 +6094,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         domRaw = domRaw.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
         domRaw = expandAddressAndStateAbbreviations(domRaw, country);
         domRaw = removePostalCodesCarefully(domRaw);
+        domRaw = expandAddressAndStateAbbreviations(domRaw, country);
         domRaw = toTitleCase(domRaw);
         addr = domRaw.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
-        result.companyAddress = addr;
+        result.companyAddress = toTitleCase(addr);
       }
     }
   }
@@ -6081,7 +6125,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
 
   // 9. Email ID & 10. Secondary Email ID (Strict Grounding & Anti-Hallucination)
-  const crawlEmails = (crawlData.emails || []).map(e => String(e).trim().toLowerCase());
+  const crawlEmails = (crawlData.emails || []).map(e => stripTrailingContactWordsFromEmail(String(e).trim().toLowerCase())).filter(Boolean);
   const isGenericWebmail = (e) => /@(gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|aol|mail|zoho|proton|protonmail)\.com$/i.test(e);
   let targetHostDomain = "";
   try {
@@ -6090,7 +6134,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   } catch (e) { }
 
   // 9. Primary Email ID
-  let email = (result.emailId || "").trim().toLowerCase();
+  let email = stripTrailingContactWordsFromEmail((result.emailId || "").trim().toLowerCase());
   if (email && (isUnwantedEmail(email) || !isValidCorporateEmail(email))) {
     email = "";
   }
@@ -6110,10 +6154,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     const validFromCrawl = crawlEmails.find(e => isValidCorporateEmail(e) && !isUnwantedEmail(e));
     email = validFromCrawl || "";
   }
+  email = stripTrailingContactWordsFromEmail(email);
   result.emailId = email;
 
   // 10. Secondary Email ID (Double Check: if secondary email is available, ALWAYS take it!)
-  let secEmail = (result.secondaryEmailId || "").trim().toLowerCase();
+  let secEmail = stripTrailingContactWordsFromEmail((result.secondaryEmailId || "").trim().toLowerCase());
   const primHost = email ? (email.split("@")[1] || "").toLowerCase() : "";
 
   const isCompanyDomainEmail = (candEmail) => {
@@ -6143,22 +6188,23 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (!secEmail && email) {
     // Priority 1: distinct corporate email from same company domain
     let cand = crawlEmails.find(e => {
-      const emLower = (e || "").trim().toLowerCase();
+      const emLower = stripTrailingContactWordsFromEmail((e || "").trim().toLowerCase());
       return emLower && emLower !== email && isValidCorporateEmail(emLower) && !isUnwantedEmail(emLower) && isCompanyDomainEmail(emLower);
     });
     // Priority 2: any distinct corporate email discovered on website/socials during crawl (e.g. branch, sister brand, ISP, or social channel email)
     if (!cand) {
       cand = crawlEmails.find(e => {
-        const emLower = (e || "").trim().toLowerCase();
+        const emLower = stripTrailingContactWordsFromEmail((e || "").trim().toLowerCase());
         return emLower && emLower !== email && isValidCorporateEmail(emLower) && !isUnwantedEmail(emLower);
       });
     }
     if (cand) {
-      secEmail = cand;
+      secEmail = stripTrailingContactWordsFromEmail(cand);
     }
   }
 
   // Final QC: secondary email must be valid and strictly distinct from primary email
+  secEmail = stripTrailingContactWordsFromEmail(secEmail);
   if (secEmail === email || !isValidCorporateEmail(secEmail) || isUnwantedEmail(secEmail)) {
     secEmail = "";
   }
@@ -8500,14 +8546,23 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])Aly\.\s*(?=\d)/gi, '$1Alley ');
   a = a.replace(/(^|[,\s])Aly\b\s*(?=\d)/gi, '$1Alley ');
 
-  // Floor abbreviations (e.g. "7F.", "7F", "7/F" -> "7th Floor")
-  a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?(?=[,\s]|$)/gi, (m, p1, num) => {
+  const toOrdinalFloor = (num) => {
     const n = parseInt(num, 10);
+    if (isNaN(n)) return `${num} Floor`;
     const s = ["th", "st", "nd", "rd"];
     const v = n % 100;
     const ord = s[(v - 20) % 10] || s[v] || s[0];
-    return `${p1}${n}${ord} Floor`;
-  });
+    return `${n}${ord} Floor`;
+  };
+
+  // Floor & Level abbreviations (e.g. "5/F.", "5/F", "5F.", "5F", "Fl. 5", "Flr 5", "Floor 5", "5th Fl" -> "5th Floor")
+  a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
+  a = a.replace(/(^|[,\s])(?:Flr?|Floor)\.?\s*(\d{1,3})\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
+  a = a.replace(/(^|[,\s])(\d{1,3})(?:st|nd|rd|th)?\s*(?:Flr?|Floor)\.?\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
+  a = a.replace(/(^|[,\s])(?:G\s*\/\s*F\.?|GF\b|Gnd\s*Flr?\.?)/gi, "$1Ground Floor");
+  a = a.replace(/(^|[,\s])(?:B\s*\/\s*F\.?|BF\b|Bsmt\b\.?)/gi, "$1Basement Floor");
+  a = a.replace(/(^|[,\s])B(\d{1,2})\b/gi, "$1Basement $2");
+  a = a.replace(/(^|[,\s])Lvl\.?\s*(\d{1,3}|[A-Za-z])/gi, "$1Level $2");
 
   // 4. Administrative abbreviations
   a = a.replace(/\bTwp\b\.?/gi, "Township");
@@ -8586,6 +8641,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bapt\b\.?/gi, "Apartment");
   a = a.replace(/\bdept\b\.?/gi, "Department");
   a = a.replace(/\brm\b\.?/gi, "Room");
+  a = a.replace(/\bblk\b\.?/gi, "Block");
   a = a.replace(/\bpob\b\.?/gi, "Post Office Box");
   a = a.replace(/\bpo\s*box\b\.?/gi, "Post Office Box");
 

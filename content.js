@@ -1812,6 +1812,138 @@
     return digits;
   }
 
+  /**
+   * Strips contact label glued to the end of an email from HTML text concatenation.
+   * E.g. "key@keyar.comaddress" -> "key@keyar.com"
+   * E.g. "info@domain.co.ukphone:+44" -> "info@domain.co.uk"
+   */
+  function stripTrailingContactWordsFromEmail(email) {
+    if (!email || typeof email !== "string") return "";
+    let em = email.trim();
+    const contactSuffixes = "address|addr|tel|telephone|phone|fax|email|mail|contact|mobile|cell|whatsapp|postcode|postal|zip|website|web|url|loc|location";
+    em = em.replace(new RegExp(`(\\.(?:com|org|net|edu|gov|io|co|cn|tw|uk|de|jp|fr|it|es|au|ca|in|biz|info|me|cc|tv|xyz|eu|nl|se|no|ch|at|ru|pl|br|mx|za|nz|asia|mobi|name|pro|tech|store|shop|online|site|vip|club|top))(?:${contactSuffixes})[\\s:：\\-–].*$`, "i"), "$1");
+    em = em.replace(new RegExp(`(\\.(?:com|org|net|edu|gov|io|co|cn|tw|uk|de|jp|fr|it|es|au|ca|in|biz|info|me|cc|tv|xyz|eu|nl|se|no|ch|at|ru|pl|br|mx|za|nz|asia|mobi|name|pro|tech|store|shop|online|site|vip|club|top))(?:${contactSuffixes})$`, "i"), "$1");
+    return em;
+  }
+
+  /**
+   * Expands street, unit, floor, and state abbreviations to full words in content.js.
+   */
+  function expandAddressAndStateAbbreviations(addr, country = "") {
+    if (!addr || typeof addr !== "string") return "";
+    let a = addr;
+
+    const toOrdinalFloor = (num) => {
+      const n = parseInt(num, 10);
+      if (isNaN(n)) return `${num} Floor`;
+      const s = ["th", "st", "nd", "rd"];
+      const v = n % 100;
+      const ord = s[(v - 20) % 10] || s[v] || s[0];
+      return `${n}${ord} Floor`;
+    };
+
+    // Deduplicate repeated premise numbers
+    a = a.replace(/(^|[,\s])(?:no\.?|number)\s*(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?|number)\s*\2\b/gi, '$1Number $2');
+    a = a.replace(/(^|[,\s])(?:no\.?\s*)?(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)Number\s+\2\b/gi, '$1Number $2');
+    a = a.replace(/(^|[,\s])Number\s+(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?\s*)?\2\b/gi, '$1Number $2');
+    a = a.replace(/(^|[,\s])(?:no\.?\s*)?(\d+)\s+\2\b/gi, '$1$2');
+
+    // Preserve ampersand inside address
+    a = a.replace(/\s*&\s*/g, " & ");
+
+    // Directional prefixes
+    a = a.replace(/(^|[\s,])E\.\s+(?=[A-Za-z0-9])/gi, '$1East ');
+    a = a.replace(/(^|[\s,])W\.\s+(?=[A-Za-z0-9])/gi, '$1West ');
+    a = a.replace(/(^|[\s,])N\.\s+(?=[A-Za-z0-9])/gi, '$1North ');
+    a = a.replace(/(^|[\s,])S\.\s+(?=[A-Za-z0-9])/gi, '$1South ');
+    a = a.replace(/(^|[\s,])N\.?E\.?\s+(?=[A-Za-z0-9])/gi, '$1Northeast ');
+    a = a.replace(/(^|[\s,])N\.?W\.?\s+(?=[A-Za-z0-9])/gi, '$1Northwest ');
+    a = a.replace(/(^|[\s,])S\.?E\.?\s+(?=[A-Za-z0-9])/gi, '$1Southeast ');
+    a = a.replace(/(^|[\s,])S\.?W\.?\s+(?=[A-Za-z0-9])/gi, '$1Southwest ');
+
+    // Number, Section, Lane & Alley prefixes
+    a = a.replace(/(^|[,\s])No\.\s*(?=\d)/gi, '$1Number ');
+    a = a.replace(/(^|[,\s])No\b\s*(?=\d)/gi, '$1Number ');
+    a = a.replace(/(^|[,\s])Nos\.?\s*(?=\d)/gi, '$1Number ');
+    a = a.replace(/\blot\s+no\.?\s*(?=\d)/gi, 'Lot Number ');
+    a = a.replace(/\bplot\s+no\.?\s*(?=\d)/gi, 'Plot Number ');
+    a = a.replace(/(^|[,\s])Sec\.\s*(?=[A-Za-z0-9])/gi, '$1Section ');
+    a = a.replace(/(^|[,\s])Sec\b\s*(?=[A-Za-z0-9])/gi, '$1Section ');
+    a = a.replace(/(^|[,\s])Ln\.\s*(?=\d)/gi, '$1Lane ');
+    a = a.replace(/(^|[,\s])Ln\b\s*(?=\d)/gi, '$1Lane ');
+    a = a.replace(/(^|[,\s])Aly\.\s*(?=\d)/gi, '$1Alley ');
+    a = a.replace(/(^|[,\s])Aly\b\s*(?=\d)/gi, '$1Alley ');
+
+    // Floors & Levels
+    a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
+    a = a.replace(/(^|[,\s])(?:Flr?|Floor)\.?\s*(\d{1,3})\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
+    a = a.replace(/(^|[,\s])(\d{1,3})(?:st|nd|rd|th)?\s*(?:Flr?|Floor)\.?\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
+    a = a.replace(/(^|[,\s])(?:G\s*\/\s*F\.?|GF\b|Gnd\s*Flr?\.?)/gi, "$1Ground Floor");
+    a = a.replace(/(^|[,\s])(?:B\s*\/\s*F\.?|BF\b|Bsmt\b\.?)/gi, "$1Basement Floor");
+    a = a.replace(/(^|[,\s])B(\d{1,2})\b/gi, "$1Basement $2");
+    a = a.replace(/(^|[,\s])Lvl\.?\s*(\d{1,3}|[A-Za-z])/gi, "$1Level $2");
+
+    // Administrative
+    a = a.replace(/\bTwp\b\.?/gi, "Township");
+    a = a.replace(/\bDist\b\.?/gi, "District");
+    a = a.replace(/\bCty\b\.?/gi, "County");
+    a = a.replace(/\bProv\b\.?/gi, "Province");
+    a = a.replace(/\bMun\b\.?/gi, "Municipality");
+
+    // Street types
+    a = a.replace(/\bpkwy\b\.?/gi, "Parkway");
+    a = a.replace(/\bpky\b\.?/gi, "Parkway");
+    a = a.replace(/\bblvd\b\.?/gi, "Boulevard");
+    a = a.replace(/\bbvd\b\.?/gi, "Boulevard");
+    a = a.replace(/\bboul\b\.?/gi, "Boulevard");
+    a = a.replace(/\bcres\b\.?/gi, "Crescent");
+    a = a.replace(/\btpke\b\.?/gi, "Turnpike");
+    a = a.replace(/\bcswy\b\.?/gi, "Causeway");
+    a = a.replace(/\bgdns\b\.?/gi, "Gardens");
+    a = a.replace(/\bfwy\b\.?/gi, "Freeway");
+    a = a.replace(/\bhwy\b\.?/gi, "Highway");
+    a = a.replace(/\bexp(?:ress)?wy\b\.?/gi, "Expressway");
+    a = a.replace(/\bcir\b\.?/gi, "Circle");
+    a = a.replace(/\bave\b\.?/gi, "Avenue");
+    a = a.replace(/\bav\b\.?/gi, "Avenue");
+    a = a.replace(/\bcnr\b\.?/gi, "Corner");
+    a = a.replace(/\btce\b\.?/gi, "Terrace");
+    a = a.replace(/\bter\b\.?/gi, "Terrace");
+    a = a.replace(/\bpde\b\.?/gi, "Parade");
+    a = a.replace(/\besp\b\.?/gi, "Esplanade");
+    a = a.replace(/\brte\b\.?/gi, "Route");
+    a = a.replace(/\bctr\b\.?/gi, "Centre");
+    a = a.replace(/\bcl\b\.?/gi, "Close");
+    a = a.replace(/(?<!,\s*)\bct\b\.?(?!\s*\d{5})/gi, "Court");
+    a = a.replace(/\bpl\b\.?/gi, "Place");
+    a = a.replace(/\bsq\b\.?/gi, "Square");
+    a = a.replace(/\bst\b\.?/gi, "Street");
+    a = a.replace(/\brd\b\.?/gi, "Road");
+    a = a.replace(/\bdr\b\.?/gi, "Drive");
+    a = a.replace(/\bln\b\.?/gi, "Lane");
+    a = a.replace(/\bjln\b\.?/gi, "Jalan");
+    a = a.replace(/\blrg\b\.?/gi, "Lorong");
+    a = a.replace(/\bbt\b\.?/gi, "Bukit");
+    a = a.replace(/\bkg\b\.?/gi, "Kampung");
+
+    // Buildings & Units
+    a = a.replace(/\bbldg\b\.?/gi, "Building");
+    a = a.replace(/\bflr\b\.?/gi, "Floor");
+    a = a.replace(/\bfl\.\s*(?=\d{1,2}(?:\b|[,\s]))/gi, "Floor ");
+    a = a.replace(/(\d+(?:st|nd|rd|th)?)\s*\bfl\b\.?/gi, "$1 Floor");
+    a = a.replace(/(\b\d+)\s*F\b(?=[,\s]|$)/gi, "$1 Floor");
+    a = a.replace(/(^|[,\s])Flr?\.?\s*(?=\d{1,2}(?:\b|[,\s]))/gi, "$1Floor ");
+    a = a.replace(/\bste\b\.?/gi, "Suite");
+    a = a.replace(/\bapt\b\.?/gi, "Apartment");
+    a = a.replace(/\bdept\b\.?/gi, "Department");
+    a = a.replace(/\brm\b\.?/gi, "Room");
+    a = a.replace(/\bblk\b\.?/gi, "Block");
+    a = a.replace(/\bpob\b\.?/gi, "Post Office Box");
+    a = a.replace(/\bpo\s*box\b\.?/gi, "Post Office Box");
+
+    return a;
+  }
+
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
     const elements = detectFormElements();
@@ -1971,6 +2103,7 @@
     try {
       if (elements.companyAddress && data.companyAddress) {
         let cleanAddress = String(data.companyAddress).trim();
+        cleanAddress = expandAddressAndStateAbbreviations(cleanAddress, data.countryName);
         if (!data._isFromAi) {
           // Strip corporate registration disclaimers & statutory registered office disclaimers
           cleanAddress = cleanAddress.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
@@ -1997,6 +2130,8 @@
           cleanAddress = cleanAddress.replace(/(\b(?:City|District|Township|County|Hsien|Village|Li|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
           cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
         }
+        // Expand abbreviations to full form globally
+        cleanAddress = expandAddressAndStateAbbreviations(cleanAddress, data.countryName);
         // Rule: All words in companyAddress MUST start with a Capital letter (Title Case)
         cleanAddress = toTitleCase(cleanAddress);
         // Rule: Special character should not start and should not end
@@ -2031,7 +2166,8 @@
     // 9. Email ID
     try {
       if (elements.emailId && data.emailId) {
-        if (setInputValue(elements.emailId, data.emailId)) {
+        let cleanEmail = stripTrailingContactWordsFromEmail(String(data.emailId).trim());
+        if (setInputValue(elements.emailId, cleanEmail)) {
           highlightField(elements.emailId);
           filledCount++;
         }
@@ -2042,8 +2178,8 @@
     try {
       if (elements.secondaryEmailId) {
         try { elements.secondaryEmailId.setAttribute("autocomplete", "off"); } catch (e) { }
-        let secEmail = String(data.secondaryEmailId || "").trim();
-        const primEmail = String(data.emailId || "").trim().toLowerCase();
+        let secEmail = stripTrailingContactWordsFromEmail(String(data.secondaryEmailId || "").trim());
+        const primEmail = stripTrailingContactWordsFromEmail(String(data.emailId || "").trim()).toLowerCase();
         if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(secEmail) || secEmail.toLowerCase() === primEmail) {
           secEmail = "";
         }
@@ -3217,14 +3353,14 @@
       { key: "Company Name", val: isRestr ? "-" : toTitleCase(cleanCompanyName(data.companyName) || data.companyName) },
       { key: "Name Source Link", val: nameLink, isLink: true },
       { key: "Country", val: isRestr ? "-" : toTitleCase(normalizeCountryName(data.countryName)) },
-      { key: "Address", val: isRestr ? "-" : toTitleCase(data.companyAddress) },
+      { key: "Address", val: isRestr ? "-" : toTitleCase(expandAddressAndStateAbbreviations(data.companyAddress, data.countryName)) },
       { key: "Address Source Link", val: addrLink, isLink: true },
       { key: "State", val: isRestr ? "-" : data.state },
       { key: "City", val: isRestr ? "-" : data.city },
-      { key: "Email", val: isRestr ? "-" : data.emailId },
+      { key: "Email", val: isRestr ? "-" : stripTrailingContactWordsFromEmail(data.emailId) },
       { key: "Primary Email Link", val: primaryEmailLink, isLink: true },
-      { key: "Secondary Email", val: isRestr ? "-" : ((data.secondaryEmailId && data.secondaryEmailId.trim().toLowerCase() !== String(data.emailId || "").trim().toLowerCase()) ? data.secondaryEmailId : "(None)") },
-      { key: "Sec Email Link", val: (data.secondaryEmailId && data.secondaryEmailId.trim().toLowerCase() !== String(data.emailId || "").trim().toLowerCase()) ? secEmailLink : "", isLink: true },
+      { key: "Secondary Email", val: isRestr ? "-" : ((data.secondaryEmailId && stripTrailingContactWordsFromEmail(data.secondaryEmailId).trim().toLowerCase() !== stripTrailingContactWordsFromEmail(data.emailId || "").trim().toLowerCase()) ? stripTrailingContactWordsFromEmail(data.secondaryEmailId) : "(None)") },
+      { key: "Sec Email Link", val: (data.secondaryEmailId && stripTrailingContactWordsFromEmail(data.secondaryEmailId).trim().toLowerCase() !== stripTrailingContactWordsFromEmail(data.emailId || "").trim().toLowerCase()) ? secEmailLink : "", isLink: true },
       { key: "Phone", val: isRestr ? "-" : cleanPhoneNumber(data.phoneNumber, data.countryName) },
       { key: "No. Products", val: isRestr ? "-" : data.numberOfProducts },
       { key: "Product Images", val: isRestr ? "-" : data.productImages },
