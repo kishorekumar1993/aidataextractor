@@ -569,6 +569,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * Main coordinator: Deep crawls target site, handles framesets & charsets, runs AI, applies independent QC.
  */
 async function handleCrawlAndExtract(rawUrl) {
+  const crawlStartTime = Date.now();
   if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim() || rawUrl.trim() === "http://" || rawUrl.trim() === "https://") {
     return {
       websiteStatus: "Not Working",
@@ -830,12 +831,18 @@ async function handleCrawlAndExtract(rawUrl) {
   crawlResult.shopCartCheck = shopCartCheck;
 
   let extractedData;
+  const elapsedBeforeAi = Date.now() - crawlStartTime;
   if (!apiKey || !apiKey.trim()) {
     extractedData = heuristicExtraction(crawlResult, restrictedCheck);
     extractedData._note = "Analyzed via Local Rule Engine";
+  } else if (elapsedBeforeAi > 11000) {
+    // If crawling took more than 11 seconds, fast-path using local rule engine so response returns immediately without timing out!
+    console.warn(`[AI Assistant] Crawl took ${elapsedBeforeAi}ms. Fast-pathing with local rule engine to prevent timeout.`);
+    extractedData = heuristicExtraction(crawlResult, restrictedCheck);
+    extractedData._note = "Analyzed via Local Rule Engine (Fast-path to prevent timeout)";
   } else {
     try {
-      extractedData = await analyzeWithGemini(crawlResult, apiKey, model, restrictedCheck);
+      extractedData = await analyzeWithGemini(crawlResult, apiKey, model, restrictedCheck, crawlStartTime);
       extractedData._note = `AI Powered by Gemini (${model})`;
       extractedData._isFromAi = true;
     } catch (aiErr) {
@@ -870,7 +877,7 @@ function isAntiBotChallenge(html, status) {
  */
 async function fetchDecodedHtml(url, options = {}) {
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 5000;
+  const timeoutMs = options.timeoutMs || 4500;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
@@ -1208,14 +1215,51 @@ async function crawlWebsite(targetUrl) {
   const crawledPages = [];
 
   let mainRes = null;
+  // Fast-path: Check if the user already has the site open in a Chrome tab. Grabbing DOM directly is <100ms!
   try {
-    mainRes = await fetchDecodedHtml(targetUrl, {
-      timeoutMs: 8000,
-      headers: {
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    if (chrome && chrome.tabs && chrome.tabs.query && chrome.scripting && chrome.scripting.executeScript) {
+      const targetHost = new URL(targetUrl).hostname.replace(/^www\./i, "").toLowerCase();
+      const allTabs = await chrome.tabs.query({});
+      const matchedTab = allTabs.find(t => {
+        try {
+          if (!t.url) return false;
+          const h = new URL(t.url).hostname.replace(/^www\./i, "").toLowerCase();
+          return h === targetHost;
+        } catch (e) { return false; }
+      });
+      if (matchedTab && matchedTab.id) {
+        const injected = await chrome.scripting.executeScript({
+          target: { tabId: matchedTab.id },
+          func: () => ({
+            html: document.documentElement ? document.documentElement.outerHTML : "",
+            url: window.location.href,
+            title: document.title || ""
+          })
+        });
+        if (injected && injected[0] && injected[0].result && injected[0].result.html && injected[0].result.html.length > 500) {
+          const tabData = injected[0].result;
+          mainRes = {
+            ok: true,
+            status: 200,
+            url: tabData.url || targetUrl,
+            html: tabData.html
+          };
+          console.log(`[AI Assistant] Instantly loaded DOM from active tab ${matchedTab.id} (${tabData.url}) in <100ms!`);
+        }
       }
-    });
+    }
+  } catch (e) { }
+
+  try {
+    if (!mainRes) {
+      mainRes = await fetchDecodedHtml(targetUrl, {
+        timeoutMs: 4500,
+        headers: {
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+    }
 
     // If HTTP failed, returned 403, 400, 0, empty HTML, or anti-bot challenge:
     // Automatically try protocol swap (http <-> https), www toggle, and root homepage fallback
@@ -1243,7 +1287,7 @@ async function crawlWebsite(targetUrl) {
       if (targetFallbacks.length > 0) {
         const fallbackResults = await Promise.allSettled(
           targetFallbacks.map(altUrl => fetchDecodedHtml(altUrl, {
-            timeoutMs: 5000,
+            timeoutMs: 3000,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -1304,7 +1348,7 @@ async function crawlWebsite(targetUrl) {
           if (isRedirectDomain(targetUrl, resolvedClientUrl) || isRedirectDomain(finalUrl, resolvedClientUrl)) {
             console.log(`[AI Assistant] Detected client-side HTML/JS redirect from ${finalUrl} to ${resolvedClientUrl}`);
             const clientRes = await fetchDecodedHtml(resolvedClientUrl, {
-              timeoutMs: 5000,
+              timeoutMs: 3500,
               headers: {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -1338,7 +1382,7 @@ async function crawlWebsite(targetUrl) {
         if (fHost !== mainHost && !fHost.endsWith("." + mainHost)) continue;
 
         const fRes = await fetchDecodedHtml(frameUrl.href, {
-          timeoutMs: 4000,
+          timeoutMs: 2500,
           headers: {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -1441,12 +1485,12 @@ async function crawlWebsite(targetUrl) {
         } catch (e) { }
       }
 
-      const candidateSubpages = topLinks.slice(0, 4);
+      const candidateSubpages = topLinks.slice(0, 2);
       if (candidateSubpages.length > 0) {
-        // High-speed concurrent parallel fetching of candidate subpages (6.5s timeout for reliable international subpage delivery)
+        // High-speed concurrent parallel fetching of candidate subpages (3.5s timeout for fast, non-blocking delivery)
         const subpageResults = await Promise.allSettled(
           candidateSubpages.map(cUrl => fetchDecodedHtml(cUrl, {
-            timeoutMs: 6500,
+            timeoutMs: 3500,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
               "Accept-Language": "en-US,en;q=0.9",
@@ -4257,7 +4301,7 @@ const GEMINI_RESPONSE_SCHEMA = {
 /**
  * Prompts Google Gemini with complete, uncorrupted website content and strict QC instructions.
  */
-async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck) {
+async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, crawlStartTime = 0) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   const formattedAddressEvidence = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
@@ -4957,20 +5001,20 @@ Product Items / Units Detected: ${crawlData.detectedProductCount}
 Product Images Detected: ${crawlData.detectedImageCount}
 Product Descriptions Detected: ${crawlData.detectedDescCount}
 
-${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD STRUCTURED BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 3), null, 2)}\n\n` : ""}${crawlData.renderedText ? `TRUE RENDERED VISUAL TEXT (LIVE BROWSER DOM):\n${crawlData.renderedText.slice(0, 3500)}\n\n` : ""}DEDICATED COMPANY PROFILE / ABOUT US CONTENT:
-${(crawlData.profilePageText || "").slice(0, 2500) || "(No dedicated company profile page text found)"}
+${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD STRUCTURED BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2), null, 2)}\n\n` : ""}${crawlData.renderedText ? `TRUE RENDERED VISUAL TEXT (LIVE BROWSER DOM):\n${crawlData.renderedText.slice(0, 2000)}\n\n` : ""}DEDICATED COMPANY PROFILE / ABOUT US CONTENT:
+${(crawlData.profilePageText || "").slice(0, 1500) || "(No dedicated company profile page text found)"}
 
 PHYSICAL ADDRESS CANDIDATES FOUND ON WEBSITE (PRIMARY EVIDENCE IN PRIORITY ORDER):
 ${formattedAddressEvidence}
 
 CONTACT PAGE / PROFILE CONTENT:
-${(crawlData.contactPageText || "").slice(0, 3000) || "(No separate contact page text found)"}
+${(crawlData.contactPageText || "").slice(0, 2000) || "(No separate contact page text found)"}
 
 FOOTER CONTENT:
-${(crawlData.footerText || "").slice(0, 1500) || "(No separate footer text found)"}
+${(crawlData.footerText || "").slice(0, 1000) || "(No separate footer text found)"}
 
 PAGE BODY TEXT:
-${(crawlData.bodyText || "").slice(0, 2500)}
+${(crawlData.bodyText || "").slice(0, 1500)}
 `;
 
   const selectedModel = modelName || DEFAULT_MODEL;
@@ -4978,16 +5022,23 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
     selectedModel,
     ...GEMINI_MODELS
   ];
-  const candidateModels = Array.from(new Set(accuracyFallbackChain)).filter(Boolean);
+  // Limit to at most 2 candidate models: primary selected model + 1 best fallback
+  const candidateModels = Array.from(new Set(accuracyFallbackChain)).filter(Boolean).slice(0, 2);
 
   let lastError = null;
   let parsed = null;
 
   for (const modelToTry of candidateModels) {
+    // If overall elapsed time since crawl start is already high (>13.5s), break immediately to avoid safety timeout
+    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 13500) {
+      console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting AI calls to return promptly.`);
+      break;
+    }
+
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${encodeURIComponent(apiKey)}`;
     try {
       const abortCtrl = new AbortController();
-      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 10000 : 6000;
+      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 6000 : 4000;
       const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
       let response;
       try {
@@ -10538,7 +10589,7 @@ async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
   const modelsToTry = Array.from(new Set([
     selected,
     ...GEMINI_MODELS
-  ])).filter(Boolean);
+  ])).filter(Boolean).slice(0, 2);
 
   let lastError = null;
 
@@ -10549,13 +10600,21 @@ async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
         "Content-Type": "application/json",
         "x-goog-api-key": apiKey
       };
-      const res = await fetch(url, {
-        method: "POST",
-        headers: reqHeaders,
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: "Hello! Reply with 'OK'" }] }]
-        })
-      });
+      const abortCtrl = new AbortController();
+      const abortTimer = setTimeout(() => abortCtrl.abort(), 4000);
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: reqHeaders,
+          signal: abortCtrl.signal,
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: "Hello! Reply with 'OK'" }] }]
+          })
+        });
+      } finally {
+        clearTimeout(abortTimer);
+      }
       if (res.ok) {
         return { success: true, message: `Connected successfully with Gemini (${model})!`, activeModel: model };
       }
