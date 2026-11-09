@@ -7,7 +7,15 @@ const DEFAULT_API_KEY =
 const DEFAULT_MODEL =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
   (typeof window !== "undefined" && window.ENV && window.ENV.DEFAULT_MODEL) ||
-  "gemini-2.5-flash";
+  "gemini-3.8-flash";
+
+const GEMINI_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite"
+];
 
 document.addEventListener("DOMContentLoaded", () => {
   const apiKeyInput = document.getElementById("api-key-input");
@@ -22,19 +30,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const toggleInlineBtn = document.getElementById("toggle-inline-btn");
   const btnOpenTestPortal = document.getElementById("btn-open-test-portal");
 
-  const INVALID_MODELS = new Set([
-    "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite",
-    "gemini-flash-lite-latest", "gemini-2.0-flash-exp"
-  ]);
-
   // Load existing settings or pre-configure defaults
   chrome.storage.sync.get(["apiKey", "model", "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"], (res) => {
     apiKeyInput.value = res.apiKey || DEFAULT_API_KEY;
-    let savedModel = res.model || DEFAULT_MODEL;
-    if (INVALID_MODELS.has(savedModel)) {
-      savedModel = "gemini-2.5-flash";
-      try { chrome.storage.sync.set({ model: "gemini-2.5-flash" }); } catch (e) { }
-    }
+    const savedModel = res.model || DEFAULT_MODEL;
     modelSelect.value = savedModel;
     toggleStrictFilter.checked = res.strictFilter !== undefined ? res.strictFilter : true;
     if (toggleAutoQueue) {

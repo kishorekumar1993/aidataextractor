@@ -8,15 +8,18 @@ const DEFAULT_API_KEY =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.GEMINI_API_KEY) ||
   (typeof self !== "undefined" && self.ENV && self.ENV.GEMINI_API_KEY) ||
   "";
+const GEMINI_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite"
+];
+
 const DEFAULT_MODEL =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
   (typeof self !== "undefined" && self.ENV && self.ENV.DEFAULT_MODEL) ||
-  "gemini-2.5-flash";
-
-const INVALID_MODELS = new Set([
-  "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite",
-  "gemini-flash-lite-latest", "gemini-2.0-flash-exp"
-]);
+  "gemini-3.8-flash";
 
 // Primary prohibited core industries per Instruction Sheet Note 2
 // Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
@@ -626,10 +629,6 @@ async function handleCrawlAndExtract(rawUrl) {
   const settings = await chrome.storage.sync.get(["apiKey", "model"]);
   const apiKey = (settings.apiKey && settings.apiKey.trim()) ? settings.apiKey.trim() : DEFAULT_API_KEY;
   let model = (settings.model && settings.model.trim()) ? settings.model.trim() : DEFAULT_MODEL;
-  if (INVALID_MODELS.has(model)) {
-    model = "gemini-2.5-flash";
-    try { chrome.storage.sync.set({ model: "gemini-2.5-flash" }); } catch (e) { }
-  }
 
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
   const crawlResult = await crawlWebsite(targetUrl);
@@ -4968,32 +4967,40 @@ PAGE BODY TEXT:
 ${(crawlData.bodyText || "").slice(0, 2500)}
 `;
 
-  const selectedModel = (modelName && !INVALID_MODELS.has(modelName)) ? modelName : "gemini-2.5-flash";
+  const selectedModel = modelName || DEFAULT_MODEL;
   const accuracyFallbackChain = [
     selectedModel,
-    "gemini-2.5-pro",
+    ...GEMINI_MODELS,
     "gemini-2.5-flash",
+    "gemini-2.5-pro",
     "gemini-2.0-flash",
-    "gemini-1.5-pro",
-    "gemini-1.5-flash",
-    "gemini-2.0-flash-lite"
+    "gemini-1.5-flash"
   ];
-  const candidateModels = Array.from(new Set(accuracyFallbackChain)).filter(m => m && !INVALID_MODELS.has(m));
+  const candidateModels = Array.from(new Set(accuracyFallbackChain)).filter(Boolean);
 
   let lastError = null;
   let parsed = null;
 
   for (const modelToTry of candidateModels) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${apiKey}`;
+    const isBearer = apiKey && (apiKey.startsWith("AQ.") || apiKey.startsWith("ya29."));
+    const url = isBearer
+      ? `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent`
+      : `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${encodeURIComponent(apiKey)}`;
     try {
       const abortCtrl = new AbortController();
-      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 10000 : 7000;
+      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 12000 : 8000;
       const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
       let response;
       try {
+        const reqHeaders = { "Content-Type": "application/json" };
+        if (isBearer) {
+          reqHeaders["Authorization"] = `Bearer ${apiKey}`;
+        } else {
+          reqHeaders["x-goog-api-key"] = apiKey;
+        }
         response = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: reqHeaders,
           signal: abortCtrl.signal,
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
@@ -5010,18 +5017,24 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
 
       if (!response.ok) {
         const errText = await response.text();
-        if (response.status === 401) {
+        if (response.status === 401 && !isBearer) {
           console.warn(`[AI Assistant] Gemini API key invalid / unauthenticated (401).`);
           lastError = new Error(`Gemini authorization error 401: ${errText}`);
-          break; // Stop immediately! Invalid key will fail on all models!
+          break; // Stop immediately for standard API keys
         }
 
         // If 400 Bad Request, model might not support responseSchema; retry once without responseSchema
         if (response.status === 400) {
           try {
+            const reqHeaders = { "Content-Type": "application/json" };
+            if (isBearer) {
+              reqHeaders["Authorization"] = `Bearer ${apiKey}`;
+            } else {
+              reqHeaders["x-goog-api-key"] = apiKey;
+            }
             const fallbackRes = await fetch(url, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: reqHeaders,
               body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt + "\nReturn strictly a valid JSON object matching the requested schema." }] }],
                 generationConfig: {
@@ -10396,25 +10409,33 @@ function extractLikelyAddress(text) {
 }
 
 async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
-  const selected = (modelName && !INVALID_MODELS.has(modelName)) ? modelName : "gemini-2.5-flash";
+  const selected = modelName || DEFAULT_MODEL;
   const modelsToTry = Array.from(new Set([
     selected,
+    ...GEMINI_MODELS,
     "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.0-flash",
-    "gemini-1.5-pro",
-    "gemini-1.5-flash",
-    "gemini-2.0-flash-lite"
-  ])).filter(m => m && !INVALID_MODELS.has(m));
+    "gemini-1.5-flash"
+  ])).filter(Boolean);
 
   let lastError = null;
+  const isBearer = apiKey && (apiKey.startsWith("AQ.") || apiKey.startsWith("ya29."));
 
   for (const model of modelsToTry) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const url = isBearer
+        ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+        : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const reqHeaders = { "Content-Type": "application/json" };
+      if (isBearer) {
+        reqHeaders["Authorization"] = `Bearer ${apiKey}`;
+      } else {
+        reqHeaders["x-goog-api-key"] = apiKey;
+      }
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: reqHeaders,
         body: JSON.stringify({
           contents: [{ parts: [{ text: "Hello! Reply with 'OK'" }] }]
         })
@@ -10424,7 +10445,7 @@ async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
       }
       const err = await res.text();
       lastError = `API HTTP ${res.status}: ${err}`;
-      if (res.status === 401) {
+      if (res.status === 401 && !isBearer) {
         break; // Key invalid, no other model will succeed
       }
     } catch (e) {
