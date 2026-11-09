@@ -1944,6 +1944,73 @@
     return a;
   }
 
+  /**
+   * CRITICAL QC RULE: "the items what available that only should come no extra word"
+   * Strips words (like "Number", "City", "District", "Township", "County") that were NOT
+   * in the source address candidate, and aligns spelling back to the source candidate.
+   */
+  function stripExtraWordsFromAddress(addr, rawSource = "") {
+    if (!addr || typeof addr !== "string") return addr;
+    if (!rawSource || typeof rawSource !== "string") return addr;
+
+    let a = addr;
+
+    // 1. "Number": If addr has "Number <digits>" but rawSource has bare digits without "no", "number", "#"
+    a = a.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
+      const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+      if (rawHasNo.test(rawSource)) {
+        return match;
+      }
+      const rawHasBare = new RegExp('(?:^|[^a-zA-Z0-9#])' + digits.replace('-', '[-/]') + '(?:[^a-zA-Z0-9号號]|$)', 'i');
+      if (rawHasBare.test(rawSource)) {
+        return digits; // strip "Number "
+      }
+      return match;
+    });
+
+    // 2. "City": If addr has "<CityName> City" but rawSource has "<CityName>" without "City"
+    a = a.replace(/\b((?:(?:New|North|South|East|West|Old|San|Santa|Los|Las|Fort|Port|Saint|St\.)\s+)?[A-Z][a-z0-9\u00C0-\u024F\-]+)\s+City\b/g, (match, cityName) => {
+      const escapedName = cityName.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const rawHasCity = new RegExp('\\b' + escapedName + '\\s+(?:city|cty\\.?)\\b', 'i');
+      if (rawHasCity.test(rawSource)) {
+        return match;
+      }
+      const rawHasNameOnly = new RegExp('\\b' + escapedName + '\\b', 'i');
+      if (rawHasNameOnly.test(rawSource)) {
+        return cityName; // strip " City"
+      }
+      return match;
+    });
+
+    // 3. "District", "Township", "County":
+    const divPatterns = {
+      District: '(?:district|dist\\.?)',
+      Township: '(?:township|twp\\.?)',
+      County: '(?:county|co\\.?|hsien)',
+      Hsien: '(?:hsien|county|co\\.?)'
+    };
+    a = a.replace(/\b([A-Z][a-z0-9\u00C0-\u024F\-]+)\s+(District|Township|County|Hsien)\b/g, (match, name, div) => {
+      const pat = divPatterns[div] || div;
+      const rawHasDiv = new RegExp('\\b' + name + '\\s+' + pat + '\\b', 'i');
+      if (rawHasDiv.test(rawSource)) {
+        return match;
+      }
+      const rawHasNameOnly = new RegExp('\\b' + name + '\\b', 'i');
+      if (rawHasNameOnly.test(rawSource)) {
+        return name;
+      }
+      return match;
+    });
+
+    // 4. Locality spelling alignment:
+    // e.g. rawSource has "Keishan" and does NOT have "Guishan", but addr has "Guishan"
+    if (/\bKeishan\b/i.test(rawSource) && !/\bGuishan\b/i.test(rawSource)) {
+      a = a.replace(/\bGuishan\s*(?:District|Township)?\b/gi, "Keishan");
+    }
+
+    return a;
+  }
+
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
     const elements = detectFormElements();
@@ -2132,6 +2199,9 @@
         }
         // Expand abbreviations to full form globally
         cleanAddress = expandAddressAndStateAbbreviations(cleanAddress, data.countryName);
+        if (data.selectedAddressCandidateRaw) {
+          cleanAddress = stripExtraWordsFromAddress(cleanAddress, data.selectedAddressCandidateRaw);
+        }
         // Rule: All words in companyAddress MUST start with a Capital letter (Title Case)
         cleanAddress = toTitleCase(cleanAddress);
         // Rule: Special character should not start and should not end
@@ -3353,7 +3423,7 @@
       { key: "Company Name", val: isRestr ? "-" : toTitleCase(cleanCompanyName(data.companyName) || data.companyName) },
       { key: "Name Source Link", val: nameLink, isLink: true },
       { key: "Country", val: isRestr ? "-" : toTitleCase(normalizeCountryName(data.countryName)) },
-      { key: "Address", val: isRestr ? "-" : toTitleCase(expandAddressAndStateAbbreviations(data.companyAddress, data.countryName)) },
+      { key: "Address", val: isRestr ? "-" : toTitleCase(stripExtraWordsFromAddress(expandAddressAndStateAbbreviations(data.companyAddress, data.countryName), data.selectedAddressCandidateRaw)) },
       { key: "Address Source Link", val: addrLink, isLink: true },
       { key: "State", val: isRestr ? "-" : data.state },
       { key: "City", val: isRestr ? "-" : data.city },

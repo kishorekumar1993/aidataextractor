@@ -4154,7 +4154,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyAddress: {
       type: "STRING",
-      description: "Clean physical headquarters/main address in Title Case where EVERY single word starts with a Capital letter (e.g. Number 53-5, Pocheng Road, Yuanshan Township, Yilan County, Number 20-2, Xinxing Street, Shulin District, New Taipei City). MANDATORY FULL FORM EXPANSION: You MUST expand all abbreviations to full form globally (e.g. 5/F. or 5/F or 5F -> 5th Floor, 1/F -> 1st Floor, 2/F -> 2nd Floor, 3/F -> 3rd Floor, G/F -> Ground Floor, B/F -> Basement Floor, Lvl -> Level, No. -> Number, St. -> Street, Rd. -> Road, Ave. -> Avenue, Dr. -> Drive, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Flr. -> Floor, Rm. -> Room, Dept. -> Department, Apt. -> Apartment, POB -> Post Office Box). Strip country name and postal codes."
+      description: "Clean physical headquarters/main address in Title Case where EVERY single word starts with a Capital letter (e.g. 18, Lane 247, Fusing 3rd Road, Keishan, Taoyuan or 15 Telford Way, Kettering, Northamptonshire or Number 53-5, Pocheng Road, Yuanshan Township, Yilan County). CRITICAL QC RULE - NO EXTRA WORDS: The items what available that only should come, no extra word! If 'Number' or 'No.' is not written in the contact address (e.g. '18, Lane 247...'), DO NOT add 'Number'! If 'City' is not written in the address (e.g. 'Taoyuan', 'München', 'Hayes'), DO NOT add 'City'! If 'District' or 'Township' is not written (e.g. 'Keishan'), DO NOT add 'District' or replace with 'Guishan District'! MANDATORY FULL FORM EXPANSION: You MUST expand all abbreviations to full form globally (e.g. 5/F. or 5/F or 5F -> 5th Floor, 1/F -> 1st Floor, 2/F -> 2nd Floor, 3/F -> 3rd Floor, G/F -> Ground Floor, B/F -> Basement Floor, Lvl -> Level, No. -> Number, St. -> Street, Rd. -> Road, Ave. -> Avenue, Dr. -> Drive, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Flr. -> Floor, Rm. -> Room, Dept. -> Department, Apt. -> Apartment, POB -> Post Office Box). Strip country name and postal codes."
     },
     state: {
       type: "STRING",
@@ -4350,7 +4350,7 @@ CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME
   * CRITICAL QC RULE - DO NOT EXPAND SYMBOLS:
     - DO NOT expand symbols like "&" into "And"! Keep symbols as they are (e.g. "H&R Manufacturing", NOT "H And R Manufacturing"!).
     - DO NOT add "Company" to the company name if "Company" or "Co." was not part of the original name (e.g. "H&R Manufacturing" must remain "H&R Manufacturing", NEVER add "Company"!).
-  * In "companyAddress": Capitalize every single word! E.g. "Number 53-5, Pocheng Road, Yuanshan Township, Yilan County", "Number 20-2, Xinxing Street, Shulin District, New Taipei City", "46 Market Hill, Maldon, Essex", "123 Main Street, Suite 400", "City Of Industry, California".
+  * In "companyAddress": Capitalize every single word! E.g. "18, Lane 247, Fusing 3rd Road, Keishan, Taoyuan", "15 Telford Way, Kettering, Northamptonshire", "Number 53-5, Pocheng Road, Yuanshan Township, Yilan County", "46 Market Hill, Maldon, Essex", "123 Main Street, Suite 400", "City Of Industry, California".
   * In "countryName": Capitalize every single word! E.g. "United States Of America" (with capital 'Of'), "United Kingdom", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye".
   * STRICT PROHIBITION: Do NOT leave small words, prepositions, or conjunctions in lowercase! Words like "Of", "And", "In", "At", "By", "For", "With", "On", "The", "De", "Du" MUST be capitalized with their first letter uppercase (e.g. "United States Of America", "City Of Industry", "Bank Of China").
   * Special characters MUST NOT start and MUST NOT end "companyName" or "companyAddress".
@@ -4362,9 +4362,18 @@ CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME
   * "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
 - MANDATORY EMAIL QC RULE:
   * "Primary email and secondary emails should NOT be the same. Emails can be found in any place on the website or company social media like LinkedIn and Facebook. If a secondary email is available, double-check and ALWAYS take it. If only one email exists across the entire website and social channels, secondaryEmailId MUST be empty string \"\"."
-- CRITICAL "NUMBER" EXPANSION RULE ("if No come only expand and do with out coming dont put blankly number"):
-  * ONLY expand to "Number" if the original address explicitly contains "No.", "No", "NO.", "Nos.", "Nº", or "#" (e.g. "No. 56-106, Zhangma St." -> "Number 56-106, Zhangma Street", "NO. 12" -> "Number 12").
-  * If the original address does NOT contain "No" or "No." (e.g. it is just "18 Kuang Fu North Road", "40 Sarah Street", "12 Stephen Road", "46 Market Hill"), DO NOT put "Number"! Output "18 Kuang Fu North Road" (NEVER put "Number" if "No" was not in the original text!).
+- CRITICAL QC RULE - NO EXTRA WORDS ("the items what available that only should come no extra word"):
+  * NEVER invent, inject, or hallucinate words, administrative divisions, or labels that do NOT exist in the website's original contact address!
+  * 1. DO NOT ADD "Number" IF ABSENT:
+    - ONLY expand to "Number" if the original address explicitly contains "No.", "No", "NO.", "Nos.", "Nº", or "#" (e.g. "No. 56-106, Zhangma St." -> "Number 56-106, Zhangma Street", "NO. 12" -> "Number 12").
+    - If the original address does NOT contain "No" or "No." (e.g. it is just "18, Lane 247...", "18 Kuang Fu North Road", "40 Sarah Street", "12 Stephen Road", "46 Market Hill", "15 Telford Way"), DO NOT put "Number"! Output "18, Lane 247...", "18 Kuang Fu North Road", "40 Sarah Street", "15 Telford Way" (NEVER put "Number" if "No" was not in the original text!).
+  * 2. DO NOT ADD "City" IF ABSENT:
+    - If the word "City" is NOT written in the contact address (e.g. "Keishan, Taoyuan", "München", "Hayes, Middlesex", "Kettering, Northamptonshire"), DO NOT ADD "City"! Output "Keishan, Taoyuan", "München", "Hayes, Middlesex", "Kettering, Northamptonshire". NEVER append "City" when not present in source (e.g. NEVER make it "Taoyuan City" when the source only says "Taoyuan")!
+  * 3. DO NOT ADD "District", "Township", OR "County" IF ABSENT:
+    - If "District", "Township", or "County" is NOT written in the contact address, DO NOT ADD THEM!
+    - If the contact page says "Keishan", output "Keishan" - DO NOT replace or substitute it with "Guishan District"!
+  * 4. ONLY EXPAND ABBREVIATIONS THAT ARE ACTUALLY WRITTEN:
+    - Only expand abbreviations present on the page (e.g. Rd -> Road, St -> Street, Ln -> Lane, Ste -> Suite, Fl -> Floor, 5/F. -> 5th Floor).
 - STRICT HEADQUARTERS & DOMESTIC DOMICILE MANDATE:
   * You MUST ALWAYS select the company's OPERATIONAL HEADQUARTERS, MAIN SHOWROOM, FACTORY, or CONTACT PAGE PHYSICAL ADDRESS located in its domestic home country!
   * NEVER pick an overseas subsidiary, branch, or distributor address (e.g. choosing a USA / California sales office when the company is headquartered in China, Taiwan, UK, Australia, Canada, Malaysia, India, South Africa, etc.)!
@@ -5844,6 +5853,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // 6. Company Address: Use Gemini's extracted address directly as source of truth; fall back to website candidates only if empty
   let addr = (result.companyAddress || "").trim();
   let selectedCandidate = null;
+  let rawSource = "";
 
   if (!addr || addr.toLowerCase() === "not available" || addr.length < 6) {
     const verifiedResult = verifyAndSelectAddress(result.companyAddress, crawlData.addressCandidates, crawlData);
@@ -5853,6 +5863,41 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     selectedCandidate = (typeof verifiedResult === "object" && verifiedResult !== null)
       ? verifiedResult.selectedCandidate
       : null;
+  }
+
+  // If selectedCandidate is not set yet, match the best candidate from website candidates
+  if (!selectedCandidate && crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates.length > 0) {
+    const addrNorm = addr.toLowerCase().replace(/[^a-z0-9]/g, " ");
+    const addrTokens = addrNorm.split(/\s+/).filter(t => t.length >= 3 && !/^(?:number|road|street|avenue|lane|drive|suite|floor|city|district|township|county)$/i.test(t));
+
+    let bestMatch = null;
+    let maxMatchCount = 0;
+
+    for (const cand of crawlData.addressCandidates) {
+      const cRaw = (typeof cand === "object" ? cand.raw : cand) || "";
+      const cNorm = cRaw.toLowerCase().replace(/[^a-z0-9]/g, " ");
+      let matchCount = 0;
+      for (const t of addrTokens) {
+        if (cNorm.includes(t)) matchCount++;
+      }
+      if (matchCount > maxMatchCount) {
+        maxMatchCount = matchCount;
+        bestMatch = cand;
+      }
+    }
+
+    if (bestMatch && maxMatchCount >= 2) {
+      selectedCandidate = bestMatch;
+    } else {
+      const hqCand = crawlData.addressCandidates.find(c => c && (c.isHeadquarters || c.source === "contact" || c.locationType === "operational_contact"));
+      if (hqCand) {
+        selectedCandidate = hqCand;
+      }
+    }
+  }
+
+  if (selectedCandidate) {
+    rawSource = typeof selectedCandidate === "object" ? selectedCandidate.raw : selectedCandidate;
   }
 
   if (addr && addr !== "Not Available") {
@@ -5927,7 +5972,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
       // If raw website address had a state that got dropped by AI, restore it!
       // CRITICAL FIX: Restore missing state ONLY from the selected candidate's raw text (NEVER mix multiple addresses)
-      const rawSource = selectedCandidate ? (typeof selectedCandidate === "object" ? selectedCandidate.raw : selectedCandidate) : "";
+      if (selectedCandidate && !rawSource) {
+        rawSource = typeof selectedCandidate === "object" ? selectedCandidate.raw : selectedCandidate;
+      }
       if (rawSource) {
         addr = restoreStateIfOmitted(addr, rawSource, country);
       }
@@ -5961,7 +6008,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Ensure "Number" is ONLY present if "No." / "No" / "#" / "Nº" was in the original raw address evidence
       // Rule: "if No come only expand and do with out coming dont put blankly number"
       const allAddressEvidence = (rawSource || "") + " " + (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ") + " " + (crawlData.bodyText || "");
-      addr = stripBlindlyAddedNumber(addr, allAddressEvidence);
+      addr = stripBlindlyAddedNumber(addr, allAddressEvidence, rawSource);
+      if (rawSource) {
+        addr = stripExtraWordsFromAddress(addr, rawSource);
+      }
 
       // Deduplicate repeated premise numbers e.g. "No. 1013 Number 1013" -> "Number 1013"
       addr = addr.replace(/(^|[,\s])(?:no\.?|number)\s*(\d+[A-Za-z]?(?:[-/]\d+)?)(?:,\s*|\s+)(?:no\.?|number)\s*\2\b/gi, '$1Number $2');
@@ -6022,6 +6072,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = addr.replace(/\s+/g, " ");
       // Final pass: ensure all floor, unit, street, and state abbreviations are fully expanded
       addr = expandAddressAndStateAbbreviations(addr, country);
+      if (rawSource) {
+        addr = stripExtraWordsFromAddress(addr, rawSource);
+      }
       addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
       addr = addr.replace(/[^\p{L}\p{N})]+$/gu, "").trim();
       addr = addr.replace(/\s+/g, " ");
@@ -6303,6 +6356,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.companyAddressSource = (selectedCandidate && selectedCandidate.pageUrl)
     ? selectedCandidate.pageUrl
     : (crawlData.primaryContactUrl || crawlData.finalUrl || "");
+  result.selectedAddressCandidateRaw = rawSource || "";
 
   // Carry over Restricted Site, Shop Cart, and Disallowed Evidence
   if (restrictedCheck && restrictedCheck.isRestricted) {
@@ -8406,15 +8460,93 @@ function romanizeChineseAddress(addr) {
  * Ensures "Number" is ONLY present if "No.", "No", "NO.", "Nos.", "Nº", or "#" was in the original raw address evidence.
  * Rule: "if No come only expand and do with out coming dont put blankly number"
  */
-function stripBlindlyAddedNumber(addr, rawEvidence = "") {
+function stripBlindlyAddedNumber(addr, rawEvidence = "", rawSource = "") {
   if (!addr || !/\bNumber\s+\d+/i.test(addr)) return addr;
   return addr.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    const rawRegex = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+    // If rawSource is available (the actual selected candidate), prioritize it
+    if (rawSource && typeof rawSource === "string") {
+      const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+      if (rawHasNo.test(rawSource)) {
+        return match;
+      }
+      const rawHasBare = new RegExp('(?:^|[^a-zA-Z0-9#])' + digits.replace('-', '[-/]') + '(?:[^a-zA-Z0-9号號]|$)', 'i');
+      if (rawHasBare.test(rawSource)) {
+        return digits; // strip "Number "
+      }
+    }
+    const rawRegex = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
     if (rawEvidence && rawRegex.test(rawEvidence)) {
       return match;
     }
     return digits;
   });
+}
+
+/**
+ * CRITICAL QC RULE: "the items what available that only should come no extra word"
+ * Strips words (like "Number", "City", "District", "Township", "County") that were NOT
+ * in the source address candidate, and aligns spelling back to the source candidate.
+ */
+function stripExtraWordsFromAddress(addr, rawSource = "") {
+  if (!addr || typeof addr !== "string") return addr;
+  if (!rawSource || typeof rawSource !== "string") return addr;
+
+  let a = addr;
+
+  // 1. "Number": If addr has "Number <digits>" but rawSource has bare digits without "no", "number", "#"
+  a = a.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
+    const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+    if (rawHasNo.test(rawSource)) {
+      return match;
+    }
+    const rawHasBare = new RegExp('(?:^|[^a-zA-Z0-9#])' + digits.replace('-', '[-/]') + '(?:[^a-zA-Z0-9号號]|$)', 'i');
+    if (rawHasBare.test(rawSource)) {
+      return digits; // strip "Number "
+    }
+    return match;
+  });
+
+  // 2. "City": If addr has "<CityName> City" but rawSource has "<CityName>" without "City"
+  a = a.replace(/\b((?:(?:New|North|South|East|West|Old|San|Santa|Los|Las|Fort|Port|Saint|St\.)\s+)?[A-Z][a-z0-9\u00C0-\u024F\-]+)\s+City\b/g, (match, cityName) => {
+    const escapedName = cityName.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const rawHasCity = new RegExp('\\b' + escapedName + '\\s+(?:city|cty\\.?)\\b', 'i');
+    if (rawHasCity.test(rawSource)) {
+      return match;
+    }
+    const rawHasNameOnly = new RegExp('\\b' + escapedName + '\\b', 'i');
+    if (rawHasNameOnly.test(rawSource)) {
+      return cityName; // strip " City"
+    }
+    return match;
+  });
+
+  // 3. "District", "Township", "County":
+  const divPatterns = {
+    District: '(?:district|dist\\.?)',
+    Township: '(?:township|twp\\.?)',
+    County: '(?:county|co\\.?|hsien)',
+    Hsien: '(?:hsien|county|co\\.?)'
+  };
+  a = a.replace(/\b([A-Z][a-z0-9\u00C0-\u024F\-]+)\s+(District|Township|County|Hsien)\b/g, (match, name, div) => {
+    const pat = divPatterns[div] || div;
+    const rawHasDiv = new RegExp('\\b' + name + '\\s+' + pat + '\\b', 'i');
+    if (rawHasDiv.test(rawSource)) {
+      return match;
+    }
+    const rawHasNameOnly = new RegExp('\\b' + name + '\\b', 'i');
+    if (rawHasNameOnly.test(rawSource)) {
+      return name;
+    }
+    return match;
+  });
+
+  // 4. Locality spelling alignment:
+  // e.g. rawSource has "Keishan" and does NOT have "Guishan", but addr has "Guishan"
+  if (/\bKeishan\b/i.test(rawSource) && !/\bGuishan\b/i.test(rawSource)) {
+    a = a.replace(/\bGuishan\s*(?:District|Township)?\b/gi, "Keishan");
+  }
+
+  return a;
 }
 
 /**
