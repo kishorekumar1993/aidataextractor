@@ -117,6 +117,8 @@ const NON_CITY_SUBURBS = [
   "umhlanga", "bedfordview", "edenvale", "alberton", "rivonia", "woodmead", "morningside",
   "kempton park", "jet park", "boksburg industrial", "isando", "germiston", "roodepoort",
   "constantia", "camps bay", "sea point", "claremont", "bellville", "durbanville", "somerset west",
+  // Canada Suburbs & Boroughs (MUST NOT be considered as City)
+  "scarborough", "etobicoke", "north york", "east york", "york",
   // United States
   "brooklyn", "queens", "manhattan", "bronx", "staten island", "hollywood", "beverly hills",
   // Australia Suburbs & Localities (MUST NOT be considered as City)
@@ -224,8 +226,8 @@ const RECOGNIZED_TOWNS = [
   "mississauga", "brampton", "surrey", "laval", "markham", "vaughan", "gatineau", "longueuil", "burnaby",
   "richmond", "oakville", "burlington", "richmond hill", "sudbury", "sherbrooke", "saguenay", "kelowna",
   "abbotsford", "coquitlam", "cambridge", "kingston", "guelph", "whitby", "dartmouth", "moncton",
-  "regina", "saskatoon", "victoria", "waterloo", "barrie", "st. catharines", "saint catharines", "scarborough",
-  "etobicoke", "north york", "delta", "nanaimo", "kamloops", "prince george", "chilliwack", "red deer",
+  "regina", "saskatoon", "waterloo", "barrie", "st. catharines", "saint catharines",
+  "delta", "nanaimo", "kamloops", "prince george", "chilliwack", "red deer",
   "lethbridge", "st. albert", "medicine hat", "wood buffalo", "milton", "brantford", "thunder bay", "niagara falls",
   // Taiwan districts & cities
   "yangmei", "yangmei town", "banqiao", "banqiao district", "xinzhuang", "xinzhuang district", "zhonghe", "zhonghe district",
@@ -4164,7 +4166,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     city: {
       type: "STRING",
       enum: ["Available", "Not Available"],
-      description: "Available if city/town is identifiable in address; else Not Available"
+      description: "Available if an official City, Town, Township, District, or Municipality is identifiable in the address; else Not Available. CRITICAL QC RULE: A SUBURB IS NOT A CITY! If the address only contains a suburb or locality (e.g. Campbellfield, Rowville, Welshpool, Mascot, Rydalmere, Sandton, Penrose) with no recognized city/town, MUST mark Not Available!"
     },
     emailId: {
       type: "STRING",
@@ -4522,6 +4524,19 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    - Do not guess or infer. Only evaluate what is explicitly written in the address.
 
 2. CITY VALIDATION RULES – STRICT QC RULE:
+   - CRITICAL SUBURB QC RULE ("Subhurb is consider as city if subhurb was coming means its should mark not available its not city"):
+     * A SUBURB IS NOT A CITY!
+     * If an address contains ONLY a suburb or suburban locality (such as suburban localities in Australia, South Africa, New Zealand, UK, Canada, etc.) and does NOT contain an official recognized City, Town, Township, District, or Municipality:
+       -> YOU MUST MARK "city": "Not Available"!
+     * Suburbs are suburban residential or industrial areas within a metropolitan region—they are NOT cities!
+     * Examples:
+       - Australia: "40 Sarah Street, Campbellfield, Victoria" -> Campbellfield is a SUBURB, NOT a city. Mark "city": "Not Available"!
+       - Australia: "83 Henderson Road, Rowville, Victoria" -> Rowville is a SUBURB, NOT a city. Mark "city": "Not Available"!
+       - Australia: "12 Kewdale Road, Welshpool, Western Australia" -> Welshpool is a SUBURB, NOT a city. Mark "city": "Not Available"!
+       - Australia: "Unit 5, 12 Baxter Road, Mascot, New South Wales" -> Mascot is a SUBURB, NOT a city. Mark "city": "Not Available"!
+       - South Africa: "15 Sandton Drive, Sandton, Gauteng" -> Sandton is a SUBURB of Johannesburg. Mark "city": "Not Available"!
+       - New Zealand: "120 Penrose Road, Penrose 1061" -> Penrose is a SUBURB of Auckland. Mark "city": "Not Available"!
+     * ONLY mark "city": "Available" if an actual official recognized City (e.g. Sydney, Melbourne, Brisbane, Perth, Adelaide, Auckland, London, Chicago, etc.) or an explicit Town, Township, District, or Municipality is named in the address!
    The city field MUST be marked "Available" if ANY of the following is true:
    a) The official website's address explicitly identifies a qualifying City (e.g. "Cixi City", "Kansas City", "City of London"), Town (e.g. "Longshan Town"), Township (e.g. "Xiushui Township"), District (e.g. "Banqiao District"), Municipality / Metropolitan Municipality (e.g. "Ekurhuleni Municipality"), Borough, Shire, or Village.
    b) The address contains local administrative city designations across priority countries:
@@ -4538,8 +4553,9 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
    e) NEW ZEALAND: Recognized NZ cities & towns (e.g. Auckland, Wellington, Christchurch, Hamilton, Tauranga, Dunedin, Lower Hutt, Upper Hutt, Palmerston North, Napier, Porirua, New Plymouth, Rotorua, Whangarei, Invercargill, Nelson, Whanganui, Hastings, Gisborne, Blenheim, Timaru, Taupo, Pukekohe, Cambridge, Queenstown) evaluate as "Available".
    f) UNITED STATES: Standard US addresses follow the format "[Street Address], [City], [State] [ZIP]". The locality preceding the State and ZIP is the official City/Town/Municipality (e.g. Mundelein, Austin, Houston, Kutztown, Merced, North Hollywood, Oshkosh, Somerville, Allenton, Westford, Washington, Chicago, Hamden, Blomkest, Palmetto, Saegertown, Wheeling, Watertown, etc.) and MUST evaluate as "Available".
    STRICTLY MARK "Not Available" FOR:
-   - Suburb / locality / neighborhood only (e.g. Sandton, Rosebank) with no city/town/district.
+   - Suburb / locality / neighborhood only (e.g. Campbellfield, Rowville, Welshpool, Mascot, Sandton, Rosebank, Penrose, Albany) with no city/town/district.
    - New Zealand: Suburbs alone (e.g. Penrose, Albany, Rosedale, East Tamaki, Mount Wellington, Riccarton, Hornby) without a recognized city/town.
+   - Australia: Suburbs alone (e.g. Campbellfield, Rowville, Welshpool, Mascot, Rydalmere, Braeside, Dandenong) without a recognized city/town.
    - Industrial Area / Business Park only, with no city/town/district.
    - Street names containing the word "City" (e.g. "City Road", "City Street", "City Avenue") do NOT qualify as a city.
    - New Taipei City: Must remain "Not Available" unless a qualifying administrative area (e.g. Banqiao District) is separately identified in the address.
@@ -6173,14 +6189,16 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
   }
 
-  // 8. City: Evaluated STRICTLY per City QC Rule (Only explicit Town, Township, District, Municipality)
+  // 8. City: Evaluated STRICTLY per City QC Rule (Only explicit City, Town, Township, District, Municipality)
+  // CRITICAL QC RULE: "Subhurb is consider as city if subhurb was coming means its should mark not available its not city"
   if (!addr || addr.length < 8 || addr.toLowerCase() === "not available" || addr === "Not Available") {
     result.city = "Not Available";
   } else {
-    if (result.city === "Available") {
-      result.city = "Available";
+    const qcCity = evaluateCityQC(addr, country);
+    if (qcCity === "Not Available") {
+      result.city = "Not Available";
     } else {
-      result.city = evaluateCityQC(addr, country);
+      result.city = "Available";
     }
   }
 
@@ -7165,7 +7183,11 @@ function hasRecognizedPlaceName(cleanAddr, names) {
     for (const name of names) {
       if (!name || name.length < 3) continue;
       if (isPlaceUsedAsStreetName(text, name)) continue;
-      const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+      // If it is part of a directional suburb name (e.g. "North Sydney", "South Melbourne", "Port Melbourne", "West Perth", "East Perth")
+      if (new RegExp(`\\b(?:north|south|east|west|port)\\s+${name}\\b`, "i").test(text)) {
+        continue;
+      }
+      const escaped = name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
       if (new RegExp(`\\b${escaped}\\b`, "i").test(text)) {
         return true;
       }
@@ -7221,9 +7243,10 @@ function hasCityDesignation(addr) {
 
 function addressLooksLikeSuburbOnly(cleanAddr) {
   if (!cleanAddr) return false;
-  const withoutDesignation = cleanAddr.replace(/\b(township|town|district|municipality|metropolitan\s*municipality|borough|city)\b/gi, " ");
+  let withoutDesignation = cleanAddr.replace(/\b(township|town|district|municipality|metropolitan\s*municipality|borough|city)\b/gi, " ");
+  withoutDesignation = withoutDesignation.replace(/\b(victoria|western\s*australia|south\s*australia|new\s*south\s*wales|queensland|tasmania)\b/gi, " ");
   for (const suburb of NON_CITY_SUBURBS) {
-    const escaped = suburb.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+    const escaped = suburb.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
     if (new RegExp(`\\b${escaped}\\b`, "i").test(withoutDesignation)) {
       const rest = withoutDesignation.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ");
       if (!hasRecognizedPlaceName(rest, RECOGNIZED_TOWNS) && !hasRecognizedPlaceName(rest, AUSTRALIAN_CITIES) && !hasRecognizedPlaceName(rest, UK_CITIES_AND_TOWNS) && !hasRecognizedPlaceName(rest, NEW_ZEALAND_CITIES_AND_TOWNS) && !hasCityDesignation(rest)) {
@@ -7487,27 +7510,18 @@ function evaluateCityQC(address, country) {
     return "Not Available";
   }
 
-  // 4. Australian City evaluation: Official cities or recognized town / suburb / locality per Rule 8
+  // 4. Australian City evaluation (Strict QC Rule: SUBURB IS NOT A CITY):
   if (isAustralianLocation(cleanAddr, country)) {
-    if (hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES) || hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+    // 1. Official Australian Cities ONLY (Melbourne, Sydney, Brisbane, Perth, Adelaide, Hobart, Darwin, Canberra, Geelong, Gold Coast, Newcastle, Wollongong, etc.)
+    if (hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES)) {
       return "Available";
     }
-    const structCity = detectCityFromStructure(cleanAddr, country);
-    if (structCity && !isNotCitySegment(structCity)) {
+    // 2. Explicit City, Town, Township, Shire, District, Municipality designation
+    const strippedAU = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+district\b/gi, " ");
+    if (hasExplicitCityWord(strippedAU) || /\b(?:town|township|shire|district|municipality|borough)\b/i.test(strippedAU)) {
       return "Available";
     }
-    // Check if the locality preceding the state is an Australian suburb/town (Rule 8: Town, District, Municipality = City)
-    const parts = cleanAddr.split(",").map(p => p.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      for (let i = parts.length - 1; i >= 1; i--) {
-        if (hasStateInAddress(parts[i], "Australia")) {
-          const cand = parts[i - 1].replace(/\b\d{4}\b/g, "").trim();
-          if (cand && !/\b(?:street|road|avenue|lane|drive|way|close|court|place|terrace|crescent|boulevard|highway|parade|walk|row|unit|suite|building|floor)\b/i.test(cand)) {
-            return "Available";
-          }
-        }
-      }
-    }
+    // Suburbs are NOT cities -> MUST return Not Available!
     return "Not Available";
   }
 
@@ -7518,23 +7532,29 @@ function evaluateCityQC(address, country) {
     }
   }
 
-  // 5. South Africa: Suburbs preceding state/province MUST NOT be classified as cities!
+  // 6. South Africa: Suburbs preceding state/province MUST NOT be classified as cities!
   if (isSouthAfricanLocation(cleanAddr, country)) {
     if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+      return "Available";
+    }
+    const strippedZA = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+district\b/gi, " ");
+    if (hasExplicitCityWord(strippedZA) || /\b(?:town|township|district|municipality|metropolitan\s*municipality|borough)\b/i.test(strippedZA)) {
       return "Available";
     }
     return "Not Available";
   }
 
-  // 6. Recognized International Towns/Cities
+  // 7. Recognized International Towns/Cities
   if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
     return "Available";
   }
 
-  // 7. Structural address detection (for countries where city always precedes state/province without suburbs, e.g. USA, Canada)
-  const structCity = detectCityFromStructure(cleanAddr, country);
-  if (structCity && !isNotCitySegment(structCity)) {
-    return "Available";
+  // 8. Structural address detection (for USA, Canada where city always precedes state/province without suburbs)
+  if (isUnitedStatesLocation(cleanAddr, country) || /\b(?:canada)\b/i.test(country || cleanAddr)) {
+    const structCity = detectCityFromStructure(cleanAddr, country);
+    if (structCity && !isNotCitySegment(structCity)) {
+      return "Available";
+    }
   }
 
   return "Not Available";
