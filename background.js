@@ -4205,12 +4205,13 @@ const GEMINI_RESPONSE_SCHEMA = {
   properties: {
     websiteStatus: {
       type: "STRING",
-      enum: ["Working", "Not Working", "Redirect Site"],
-      description: "Working if operational physical goods company; Not Working if dead, 404, 0 products, or prohibited; Redirect Site if redirected to different domain"
+      enum: ["Working", "Not Working", "Domain Expired", "Non English", "Under Construction", "Flash", "Redirect Site"],
+      description: "Working if operational physical goods company; Not Working if dead, 404, 0 products, or prohibited; Domain Expired if parked/404; Non English if non-English without translation; Under Construction if under construction; Flash if flash format; Redirect Site if redirected to different domain"
     },
     businessType: {
       type: "STRING",
       enum: [
+        "",
         "Manufacturer",
         "Industrial Services",
         "Exporter",
@@ -4223,61 +4224,61 @@ const GEMINI_RESPONSE_SCHEMA = {
         "Restricted Site",
         "Other"
       ],
-      description: "Business scope classification. Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler are allowed working types."
+      description: "Business scope classification. Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler are allowed working types. Must be empty string \"\" if websiteStatus is Not Working, Domain Expired, Non English, Flash, or Under Construction."
     },
     companyProfile: {
       type: "STRING",
-      enum: ["Available", "Not Available"],
-      description: "Available if dedicated company overview/profile/history text exists; else Not Available"
+      enum: ["", "Available", "Not Available"],
+      description: "Available if dedicated company overview/profile/history text exists; else Not Available. Must be empty string \"\" if websiteStatus is not Working."
     },
     companyName: {
       type: "STRING",
-      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited, PEM Fountain Company, Hsin Hsin Metals, Limited). CRITICAL QC RULE: DO NOT expand symbols like '&' into 'And' (keep '&' as it is: e.g. 'H&R Manufacturing', 'Johnson & Johnson'). If a comma precedes the corporate legal suffix on the website (e.g. 'HSINHSIN METALS, LTD.'), you MUST retain the comma (e.g. 'Hsin Hsin Metals, Limited'). DO NOT invent or add 'Company' if not in the official name. Brand acronyms/trademarks must be in UPPERCASE (e.g. PEM, BMW, AKS, HR, CRP). Expand all corporate abbreviations to full form (Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated)."
+      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited, PEM Fountain Company, Hsin Hsin Metals, Limited). CRITICAL QC RULE: DO NOT expand symbols like '&' into 'And' (keep '&' as it is: e.g. 'H&R Manufacturing', 'Johnson & Johnson'). If a comma precedes the corporate legal suffix on the website (e.g. 'HSINHSIN METALS, LTD.'), you MUST retain the comma (e.g. 'Hsin Hsin Metals, Limited'). DO NOT invent or add 'Company' if not in the official name. Brand acronyms/trademarks must be in UPPERCASE (e.g. PEM, BMW, AKS, HR, CRP). Expand all corporate abbreviations to full form (Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated). Empty string \"\" if websiteStatus is not Working."
     },
     countryName: {
       type: "STRING",
-      description: "Official country name in full form Title Case (e.g. United Kingdom, United States Of America, Canada, Taiwan, Germany, Australia, India). CRITICAL MANDATORY QC RULE: If the website or contact address explicitly writes 'United Kingdom' or 'UK', you MUST return 'United Kingdom'. NEVER return 'England', 'Scotland', or 'Wales' if the website writes 'United Kingdom' or 'UK'! Only return 'England' if 'England' is explicitly written on the website, or if 'England' and 'United Kingdom' are both written on the site. If the country name is not available on the website, search Google using city/state and return the country based on locality."
+      description: "Official country name in full form Title Case (e.g. United Kingdom, United States Of America, Canada, Taiwan, Germany, Australia, India). CRITICAL MANDATORY QC RULE: If the website or contact address explicitly writes 'United Kingdom' or 'UK', you MUST return 'United Kingdom'. NEVER return 'England', 'Scotland', or 'Wales' if the website writes 'United Kingdom' or 'UK'! Only return 'England' if 'England' is explicitly written on the website, or if 'England' and 'United Kingdom' are both written on the site. If the country name is not available on the website, search Google using city/state and return the country based on locality. Empty string \"\" if websiteStatus is not Working."
     },
     companyAddress: {
       type: "STRING",
-      description: "CRITICAL MANDATE - FULL PHYSICAL ADDRESS: You MUST take the COMPLETE FULL physical address with ALL available structural components from the website: Premise / Building Name / Office Park / Suite / Unit / Floor / Level / Block / Lot / Plot / Factory / Workshop / Survey Number, Industrial Estate / Business Park / Zone, Street Number and Street Name, Suburb / Locality / Neighborhood / Village, Town / Township / Sub-district / District, City, and State / Province / Territory / County / Region. NEVER return an incomplete or partial address (NEVER return only a street name or omit premise/suite/suburb/city/state). Format in Title Case where EVERY single word starts with a Capital letter (e.g. 'Suite 260, 2021 Guadalupe Street, Austin, Texas' or '15 Telford Way, Kettering, Northamptonshire' or '5th Floor, Office Park, Number 535, Qingshuiqiao Road, Hi-Tech Zone, Ningbo' or '40 Sarah Street, Campbellfield, Victoria'). CRITICAL QC RULE - NO EXTRA WORDS: Retain all authentic address words that appear on the website; do not invent or add words not present (e.g. if 'Number' or 'No.' is not written, DO NOT add 'Number'; if 'City' is not written, DO NOT add 'City'; if 'District' is not written, DO NOT add 'District'). MANDATORY FULL FORM EXPANSION: You MUST expand all abbreviations to full form globally (5/F. or 5/F or 5F -> 5th Floor, 1/F -> 1st Floor, 2/F -> 2nd Floor, 3/F -> 3rd Floor, G/F -> Ground Floor, B/F -> Basement Floor, Lvl -> Level, No. -> Number, St. -> Street, Rd. -> Road, Ave. -> Avenue, Dr. -> Drive, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Flr. -> Floor, Rm. -> Room, Dept. -> Department, Apt. -> Apartment, POB -> Post Office Box). Strip country name and postal codes."
+      description: "CRITICAL MANDATE - FULL PHYSICAL ADDRESS: You MUST take the COMPLETE FULL physical address with ALL available structural components from the website: Premise / Building Name / Office Park / Suite / Unit / Floor / Level / Block / Lot / Plot / Factory / Workshop / Survey Number, Industrial Estate / Business Park / Zone, Street Number and Street Name, Suburb / Locality / Neighborhood / Village, Town / Township / Sub-district / District, City, and State / Province / Territory / County / Region. NEVER return an incomplete or partial address (NEVER return only a street name or omit premise/suite/suburb/city/state). Format in Title Case where EVERY single word starts with a Capital letter (e.g. 'Suite 260, 2021 Guadalupe Street, Austin, Texas' or '15 Telford Way, Kettering, Northamptonshire' or '5th Floor, Office Park, Number 535, Qingshuiqiao Road, Hi-Tech Zone, Ningbo' or '40 Sarah Street, Campbellfield, Victoria'). CRITICAL QC RULE - NO EXTRA WORDS: Retain all authentic address words that appear on the website; do not invent or add words not present (e.g. if 'Number' or 'No.' is not written, DO NOT add 'Number'; if 'City' is not written, DO NOT add 'City'; if 'District' is not written, DO NOT add 'District'). MANDATORY FULL FORM EXPANSION: You MUST expand all abbreviations to full form globally (5/F. or 5/F or 5F -> 5th Floor, 1/F -> 1st Floor, 2/F -> 2nd Floor, 3/F -> 3rd Floor, G/F -> Ground Floor, B/F -> Basement Floor, Lvl -> Level, No. -> Number, St. -> Street, Rd. -> Road, Ave. -> Avenue, Dr. -> Drive, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Flr. -> Floor, Rm. -> Room, Dept. -> Department, Apt. -> Apartment, POB -> Post Office Box). Strip country name and postal codes. Empty string \"\" if websiteStatus is not Working."
     },
     state: {
       type: "STRING",
-      enum: ["Available", "Not Available"],
-      description: "Available if state/province is identifiable in address; else Not Available"
+      enum: ["", "Available", "Not Available"],
+      description: "Available if state, province, county (e.g. Derbyshire, Leicestershire), territory, prefecture, or national capital is identifiable in address; else Not Available. Empty string \"\" if websiteStatus is not Working."
     },
     city: {
       type: "STRING",
-      enum: ["Available", "Not Available"],
-      description: "Available if an official City, Town, Township, District, or Municipality is identifiable in the address; else Not Available. CRITICAL QC RULE: A SUBURB IS NOT A CITY! If the address only contains a suburb or locality (e.g. Keishan, Campbellfield, Rowville, Welshpool, Mascot, Rydalmere, Sandton, Penrose) with no explicit recognized city/town, MUST mark Not Available! For Taiwan: if address only contains a suburb (e.g. Keishan) or municipality without the explicit word 'City', MUST mark Not Available!"
+      enum: ["", "Available", "Not Available"],
+      description: "Available if an official City, Town, Township, District, Municipality, or recognized town locality (e.g. Heanor Gate -> town of Heanor) is identifiable in the address; else Not Available. Note: Suburbs alone without a recognized city/town (e.g. Campbellfield, Rowville, Mascot, Sandton) are Not Available. Empty string \"\" if websiteStatus is not Working."
     },
     emailId: {
       type: "STRING",
-      description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook)"
+      description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook). Empty string \"\" if websiteStatus is not Working."
     },
     secondaryEmailId: {
       type: "STRING",
-      description: "Secondary distinct corporate email from anywhere on website or company social media (LinkedIn, Facebook). STRICTLY MUST NOT be the same as emailId. If only one email exists, return empty string \"\"."
+      description: "Secondary distinct corporate email from anywhere on website or company social media (LinkedIn, Facebook). STRICTLY MUST NOT be the same as emailId. If only one email exists or websiteStatus is not Working, return empty string \"\"."
     },
     phoneNumber: {
       type: "STRING",
-      description: "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero. Digits only."
+      description: "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero. Digits only. Empty string \"\" if websiteStatus is not Working."
     },
     numberOfProducts: {
       type: "STRING",
-      enum: ["0", "1", "2", "3"],
-      description: "Number of physical product items/catalog offerings identified (must be synchronized and equal to productImages and numberOfProductDescriptions)"
+      enum: ["", "0", "1", "2", "3"],
+      description: "Number of physical product items/catalog offerings identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website product evidence. Empty string \"\" if websiteStatus is not Working."
     },
     productImages: {
       type: "STRING",
-      enum: ["0", "1", "2", "3"],
-      description: "Number of physical product images identified (must be synchronized and equal to numberOfProducts and numberOfProductDescriptions)"
+      enum: ["", "0", "1", "2", "3"],
+      description: "Number of physical product images/photos identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website photo evidence. Empty string \"\" if websiteStatus is not Working."
     },
     numberOfProductDescriptions: {
       type: "STRING",
-      enum: ["0", "1", "2", "3"],
-      description: "Number of physical product descriptions identified (must be synchronized and equal to numberOfProducts and productImages)"
+      enum: ["", "0", "1", "2", "3"],
+      description: "Number of physical product descriptions/specifications identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website description evidence. Empty string \"\" if websiteStatus is not Working."
     }
   },
   required: [
@@ -4648,7 +4649,12 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
       - India: Taluk, Taluka, Tehsil, Tahsil, Mandal, Nagar Palika, Nagar Nigam
       - Turkey: İlçe, İlcesi, Belediye, Belediyesi, Şehir, Sehir, Mahalle, Mahallesi
    c) The address contains a recognized city / town / municipal name (e.g. Chicago, Melbourne, Boston, San Francisco, Cape Town, Manchester, Johor Bahru, Shenzhen).
-   d) UNITED KINGDOM: recognized UK cities, towns, and London boroughs evaluate as "Available".
+   d) UNITED KINGDOM: Recognized UK cities, towns, and London boroughs evaluate as "Available".
+      - GEOGRAPHIC NORMALIZATION AUTHORIZATION (CRITICAL QC RULE):
+        * You are EXPLICITLY AUTHORIZED to perform standard geographic normalization on the extracted address.
+        * When an address specifies a recognized town locality or industrial zone (e.g. "Heanor Gate" -> recognized town of Heanor, Derbyshire, UK), recognize the underlying town/municipality and mark "city": "Available".
+        * In the UK: Any recognized town, city, royal borough, or industrial zone of a town (e.g. Heanor Gate, Heanor, Kettering, Coalville, Maldon, Hayes, Slough) qualifies as City: "Available".
+        * In the UK: Any ceremonial or traditional county (e.g. Derbyshire, Leicestershire, Essex, Northamptonshire, Middlesex, Yorkshire, Lancashire) in the address qualifies as State: "Available".
    e) NEW ZEALAND: Recognized NZ cities & towns (e.g. Auckland, Wellington, Christchurch, Hamilton, Tauranga, Dunedin, Lower Hutt, Upper Hutt, Palmerston North, Napier, Porirua, New Plymouth, Rotorua, Whangarei, Invercargill, Nelson, Whanganui, Hastings, Gisborne, Blenheim, Timaru, Taupo, Pukekohe, Cambridge, Queenstown) evaluate as "Available".
    f) UNITED STATES: Standard US addresses follow the format "[Street Address], [City], [State] [ZIP]". The locality preceding the State and ZIP is the official City/Town/Municipality (e.g. Mundelein, Austin, Houston, Kutztown, Merced, North Hollywood, Oshkosh, Somerville, Allenton, Westford, Washington, Chicago, Hamden, Blomkest, Palmetto, Saegertown, Wheeling, Watertown, etc.) and MUST evaluate as "Available".
    STRICTLY MARK "Not Available" FOR:
@@ -4661,17 +4667,12 @@ Important: State and City MUST be evaluated STRICTLY based on the extracted addr
 
 PRODUCT, IMAGE & DESCRIPTION QC RULES (ACCURATELY BASED ON SITE):
 Count the distinct items, product images, and descriptions actually present on this specific website:
-CRITICAL SYNCHRONIZATION QC RULE (Rules 12, 13, 14):
-- The counts for Number of Product, Image Product, and No. of Product Description MUST NOT CONFLICT with each other!
-- "numberOfProducts", "productImages", and "numberOfProductDescriptions" MUST ALL BE THE SAME VALUE!
-- If 3 or more products/items/services are shown on the website, ALL THREE FIELDS MUST BE "3":
-  * "numberOfProducts": "3"
-  * "productImages": "3"
-  * "numberOfProductDescriptions": "3"
-- If 2 products/items are shown, ALL THREE FIELDS MUST BE "2".
-- If 1 product/item is shown, ALL THREE FIELDS MUST BE "1".
-- If 0 products found, ALL THREE FIELDS MUST BE "0".
-- CRITICAL QC MANDATE: NEVER return "0" for numberOfProductDescriptions when numberOfProducts or productImages is "3" or "1"! The product title, model number, specifications, and features count as the product description. ALL THREE PRODUCT FIELDS MUST BE IDENTICAL!
+- "numberOfProducts", "productImages", and "numberOfProductDescriptions" are THREE INDEPENDENT MEASUREMENTS:
+  * "numberOfProducts": Number of distinct physical product items / catalog offerings found on the website ('0', '1', '2', or '3' for 3 or more).
+  * "productImages": Number of physical product images/photos displayed on the website ('0', '1', '2', or '3' for 3 or more).
+  * "numberOfProductDescriptions": Number of distinct product descriptions, technical specifications, or feature summaries found on the website ('0', '1', '2', or '3' for 3 or more).
+- Evaluate each field INDEPENDENTLY based on actual evidence found on the website. DO NOT force them to be identical if the measurements differ (e.g. a site may have 0 products, 3 images, and 0 descriptions, or 3 products, 2 images, and 1 description).
+- If websiteStatus is Not Working (or Domain Expired, Non English, Flash, Under Construction), all three fields must be empty string "".
 
 COMPANY PROFILE QC RULES (Rule 3):
 - This is a drop-down option ("Available" | "Not Available").
@@ -5795,19 +5796,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       return !isNaN(num) && num > 0 ? (num >= 3 ? 3 : num) : 0;
     };
 
-    const maxCount = Math.max(
-      parseCount(result.numberOfProducts),
-      parseCount(result.productImages),
-      parseCount(result.numberOfProductDescriptions),
-      parseCount(crawlData && crawlData.detectedProductCount),
-      parseCount(crawlData && crawlData.detectedImageCount),
-      parseCount(crawlData && crawlData.detectedDescCount)
-    );
-
-    const syncVal = String(maxCount);
-    result.numberOfProducts = syncVal;
-    result.productImages = syncVal;
-    result.numberOfProductDescriptions = syncVal;
+    // Independent product measurements (Rules 12, 13, 14 - evaluated independently):
+    result.numberOfProducts = String(Math.min(3, Math.max(parseCount(result.numberOfProducts), parseCount(crawlData && crawlData.detectedProductCount))));
+    result.productImages = String(Math.min(3, Math.max(parseCount(result.productImages), parseCount(crawlData && crawlData.detectedImageCount))));
+    result.numberOfProductDescriptions = String(Math.min(3, Math.max(parseCount(result.numberOfProductDescriptions), parseCount(crawlData && crawlData.detectedDescCount))));
 
     return result;
   }
@@ -6567,21 +6559,18 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     return 0;
   };
 
-  const pCount = Math.max(parseCount(result.numberOfProducts), parseCount(crawlData.detectedProductCount));
-  const iCount = Math.max(parseCount(result.productImages), parseCount(crawlData.detectedImageCount));
-  const dCount = Math.max(parseCount(result.numberOfProductDescriptions), parseCount(crawlData.detectedDescCount));
+  // Independent product measurements (Rules 12, 13, 14 - evaluated independently):
+  const pCount = Math.min(3, Math.max(parseCount(result.numberOfProducts), parseCount(crawlData.detectedProductCount)));
+  const iCount = Math.min(3, Math.max(parseCount(result.productImages), parseCount(crawlData.detectedImageCount)));
+  const dCount = Math.min(3, Math.max(parseCount(result.numberOfProductDescriptions), parseCount(crawlData.detectedDescCount)));
 
-  // Highest count across all three categories to eliminate synchronization mismatch
-  const highestCount = Math.max(pCount, iCount, dCount);
-  const highestVal = String(highestCount);
+  result.numberOfProducts = String(pCount);
+  result.productImages = String(iCount);
+  result.numberOfProductDescriptions = String(dCount);
 
-  result.numberOfProducts = highestVal;
-  result.productImages = highestVal;
-  result.numberOfProductDescriptions = highestVal;
-
-  // Final safeguard: If highestCount is 0 and company has no physical address, it CANNOT be a working site
+  // Final safeguard: If website has 0 products and company has no physical address, it CANNOT be a working site
   const finalHasAddr = result.companyAddress && result.companyAddress !== "Not Available" && result.companyAddress.trim().length > 5;
-  if ((result.websiteStatus === "Working" || !result.websiteStatus) && highestCount === 0 && !finalHasAddr) {
+  if ((result.websiteStatus === "Working" || !result.websiteStatus) && pCount === 0 && !finalHasAddr) {
     result.websiteStatus = "Not Working";
     result.errorCategory = "No Business Products / 0 Products";
     result.errorKeyword = "0 Products / No Catalog";
