@@ -115,7 +115,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (res && res.success) {
         showStatus(`Connected! Gemini API is active & ready.`, "success");
       } else {
-        showStatus(`Test failed: ${res?.error || "Unknown error"}`, "error");
+        const err = res?.error || "Unknown error";
+        if (/401|unauthorized|unauthenticated/i.test(err)) {
+          showStatus(`Key Unauthorized (401). Valid Google Gemini API keys start with 'AIzaSy...'. Get one from aistudio.google.com/app/apikey`, "error");
+        } else {
+          showStatus(`Test failed: ${err}`, "error");
+        }
       }
     });
   });

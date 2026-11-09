@@ -5623,9 +5623,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       } else if (/\bnorthern\s*ireland\b/i.test(fullCheckText)) {
         country = "Northern Ireland";
       } else {
-        const constituentFromLocality = detectCountryFromAddress(result.companyAddress || rawCandidatesText);
+        const constituentFromLocality = detectCountryFromAddress((result.companyAddress || "") + " " + rawCandidatesText + " " + fullCheckText);
         if (["England", "Scotland", "Wales", "Northern Ireland"].includes(constituentFromLocality)) {
           country = constituentFromLocality;
+        } else if (/\b(?:derbyshire|nottinghamshire|leicestershire|northamptonshire|warwickshire|staffordshire|worcestershire|cheshire|lancashire|yorkshire|cumbria|durham|northumberland|cornwall|devon|somerset|dorset|wiltshire|hampshire|sussex|surrey|kent|essex|suffolk|norfolk|cambridgeshire|bedfordshire|hertfordshire|buckinghamshire|oxfordshire|berkshire|gloucestershire|herefordshire|rutland|lincolnshire|middlesex|london|birmingham|manchester|leeds|liverpool|sheffield|bristol|newcastle|nottingham|heanor|long\s*eaton)\b/i.test(fullCheckText) || /\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(fullCheckText)) {
+          country = "England";
         }
       }
     }
@@ -5637,6 +5639,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     if (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates.length > 0) {
       const hqCand = crawlData.addressCandidates.find(c => c && (c.isHeadquarters || c.source === "contact" || c.source === "headquarters"));
       bestRaw = hqCand ? (typeof hqCand === "object" ? hqCand.raw : hqCand) : (typeof crawlData.addressCandidates[0] === "object" ? crawlData.addressCandidates[0].raw : crawlData.addressCandidates[0]);
+    }
+    if (!bestRaw && crawlData) {
+      bestRaw = (crawlData.contactPageText || crawlData.bodyText || crawlData.combinedText || crawlData.mainHtml || "").slice(0, 5000);
     }
     if (addr && addr.toLowerCase() !== "not available") {
       addr = expandAddressAndStateAbbreviations(addr, country);
@@ -6085,6 +6090,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (selectedCandidate) {
     rawSource = typeof selectedCandidate === "object" ? selectedCandidate.raw : selectedCandidate;
   }
+  if (!rawSource && crawlData) {
+    rawSource = (crawlData.contactPageText || crawlData.bodyText || crawlData.combinedText || crawlData.mainHtml || "").slice(0, 5000);
+  }
 
   // MANDATORY COMPLETE FULL ADDRESS QC CHECK:
   // If Gemini returned an incomplete or partial address (e.g. only street name, or missing premise/suite/floor,
@@ -6313,9 +6321,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     } else if (/\bnorthern\s*ireland\b/i.test(fullCheckText)) {
       country = "Northern Ireland";
     } else {
-      const constituentFromLocality = detectCountryFromAddress(addr || rawCandidatesText);
+      const constituentFromLocality = detectCountryFromAddress((addr || "") + " " + rawCandidatesText + " " + fullCheckText);
       if (["England", "Scotland", "Wales", "Northern Ireland"].includes(constituentFromLocality)) {
         country = constituentFromLocality;
+      } else if (/\b(?:derbyshire|nottinghamshire|leicestershire|northamptonshire|warwickshire|staffordshire|worcestershire|cheshire|lancashire|yorkshire|cumbria|durham|northumberland|cornwall|devon|somerset|dorset|wiltshire|hampshire|sussex|surrey|kent|essex|suffolk|norfolk|cambridgeshire|bedfordshire|hertfordshire|buckinghamshire|oxfordshire|berkshire|gloucestershire|herefordshire|rutland|lincolnshire|middlesex|london|birmingham|manchester|leeds|liverpool|sheffield|bristol|newcastle|nottingham|heanor|long\s*eaton)\b/i.test(fullCheckText) || /\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(fullCheckText)) {
+        country = "England";
       }
     }
   }
@@ -7050,6 +7060,7 @@ const UK_CITIES_AND_TOWNS = [
   "lisburn", "newry", "derry", "londonderry", "bangor ni", "newtownabbey", "craigavon",
 
   // Major UK Towns & Municipal Centres
+  "heanor", "long eaton", "ilkeston", "alfreton", "belper", "ripley", "matlock", "swadlincote", "ashbourne", "buxton", "dronfield", "wirksworth", "stretton", "clay cross", "bakewell", "bolsover",
   "reading", "slough", "luton", "bolton", "bournemouth", "swindon", "northampton", "middlesbrough",
   "blackpool", "huddersfield", "ipswich", "blackburn", "watford", "rotherham", "stockport", "oldham",
   "walsall", "telford", "rochdale", "solihull", "poole", "halifax", "burnley", "scunthorpe", "grimsby",
@@ -8065,7 +8076,7 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
   const upperAcronyms = new Set([
     "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
     "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA",
-    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC"
+    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC", "ECU"
   ]);
   const titleAndLogo = ((crawlData && crawlData.title) || "") + " " + ((crawlData && crawlData.logoText) || "");
   n = n.replace(/\b[A-Za-z0-9]{2,4}\b/g, (word) => {
@@ -10046,7 +10057,7 @@ function toTitleCase(str) {
   const upperAcronyms = new Set([
     "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
     "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA",
-    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC"
+    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC", "ECU"
   ]);
   let s = str.replace(/['’`]\s*s\b/gi, "'s");
   // Every word starts with a Capital letter per QC instruction: "All words start with Capital letter"
@@ -10391,10 +10402,17 @@ function detectCountryFromAddress(address) {
   if (/\b(northern\s*ireland)\b/i.test(lower)) return "Northern Ireland";
   if (/\b(united\s*kingdom|great\s*britain|uk)\b/i.test(lower)) {
     // QC Mandate: Prioritize constituent country if locality belongs to England, Wales, Scotland, or Northern Ireland
-    if (/\b(?:london|birmingham|manchester|leeds|liverpool|sheffield|bristol|newcastle|nottingham|leicester|coventry|essex|yorkshire|kent|lancashire|surrey|hampshire|sussex|norfolk|suffolk|somerset|devon|cornwall|cheshire|derbyshire|berkshire|oxfordshire|cambridgeshire|gloucestershire|northamptonshire|wiltshire|bedfordshire|staffordshire|cumbria|lincolnshire|hertfordshire|warwickshire|dorset|worcestershire|shropshire|buckinghamshire)\b/i.test(lower)) return "England";
     if (/\b(?:edinburgh|glasgow|aberdeen|dundee|inverness|perth|stirling|fife|lanarkshire|highland|ayrshire|lothian)\b/i.test(lower)) return "Scotland";
     if (/\b(?:cardiff|swansea|newport|wrexham|glamorgan|gwent|dyfed|powys|gwynedd|clwyd)\b/i.test(lower)) return "Wales";
     if (/\b(?:belfast|derry|londonderry|armagh|antrim|down|fermanagh|tyrone)\b/i.test(lower)) return "Northern Ireland";
+    if (/\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) {
+      if (/\b(?:eh|g|ab|dd|dg|fk|hs|iv|ka|kw|ky|ml|pa|ph|td|ze)\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) return "Scotland";
+      if (/\b(?:cf|ld|ll|np|sa)\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) return "Wales";
+      if (/\bbt\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) return "Northern Ireland";
+      return "England";
+    }
+    if (/\b(?:london|birmingham|manchester|leeds|liverpool|sheffield|bristol|newcastle|nottingham|leicester|coventry|essex|yorkshire|kent|lancashire|surrey|hampshire|sussex|norfolk|suffolk|somerset|devon|cornwall|cheshire|derbyshire|berkshire|oxfordshire|cambridgeshire|gloucestershire|northamptonshire|wiltshire|bedfordshire|staffordshire|cumbria|lincolnshire|hertfordshire|warwickshire|dorset|worcestershire|shropshire|buckinghamshire|middlesex|rutland|herefordshire|durham|northumberland|isle\s*of\s*wight|tyne\s*and\s*wear|merseyside|west\s*midlands|greater\s*manchester|greater\s*london|heanor|long\s*eaton|ilkeston|alfreton|belper|ripley|matlock|swadlincote|kettering|corby|peterborough|luton|milton\s*keynes|slough|reading|swindon|gloucester|cheltenham|bath|exeter|plymouth|torquay|bournemouth|poole|southampton|portsmouth|brighton|worthing|hastings|eastbourne|crawley|guildford|woking|epsom|croydon|basingstoke|maidenhead|aylesbury|high\s*wycombe|stevenage|watford|st\s*albans|harlow|chelmsford|colchester|ipswich|bury\s*st\s*edmunds|norwich|great\s*yarmouth|kings\s*lynn|lincoln|grantham|boston|scunthorpe|grimsby|hull|doncaster|rotherham|barnsley|wakefield|bradford|halifax|huddersfield|york|harrogate|scarborough|darlington|hartlepool|stockton|middlesbrough|sunderland|gateshead|south\s*shields|carlisle|barrow|blackpool|preston|blackburn|burnley|bolton|bury|rochdale|oldham|wigan|st\s*helens|warrington|stockport|sale|chester|crewe|macclesfield|stoke|stafford|tamworth|cannock|walsall|wolverhampton|dudley|stourbridge|halesowen|solihull|redditch|bromsgrove|kidderminster|worcester|hereford|telford|shrewsbury|rugby|leamington|nuneaton|stratford|burton|mansfield|newark|worksop|chesterfield|buxton)\b/i.test(lower)) return "England";
+    if (typeof hasUkCityOrTown === "function" && hasUkCityOrTown(lower)) return "England";
     return "United Kingdom";
   }
   if (/\b(united\s*states|usa|united\s*states\s*of\s*america)\b/i.test(lower)) return "United States Of America";
