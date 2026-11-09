@@ -28,15 +28,18 @@
         </button>
 
         <div style="display: flex; gap: 6px; margin-top: 8px;">
-          <button type="button" id="btn-popup-batch-10" class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 7px 4px; border-color: #fca5a5; color: #b91c1c; font-weight: 600;">
+          <button type="button" id="btn-popup-batch-10" class="btn btn-secondary"
+            style="flex: 1; font-size: 11px; padding: 7px 4px; border-color: #fca5a5; color: #b91c1c; font-weight: 600;">
             ⚡ Auto 10 Not Working
           </button>
-          <button type="button" id="btn-popup-submit-notworking" class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 7px 4px; border-color: #fca5a5; color: #991b1b; font-weight: 600;">
+          <button type="button" id="btn-popup-submit-notworking" class="btn btn-secondary"
+            style="flex: 1; font-size: 11px; padding: 7px 4px; border-color: #fca5a5; color: #991b1b; font-weight: 600;">
             🚫 Submit 1 Not Working
           </button>
         </div>
 
-        <button type="button" id="btn-popup-batch-all" class="btn btn-secondary" style="width: 100%; margin-top: 6px; font-size: 11px; padding: 7px 4px; border-color: #f87171; color: #7f1d1d; font-weight: 600;">
+        <button type="button" id="btn-popup-batch-all" class="btn btn-secondary"
+          style="width: 100%; margin-top: 6px; font-size: 11px; padding: 7px 4px; border-color: #f87171; color: #7f1d1d; font-weight: 600;">
           ⚡ Auto Submit ALL Queue as Not Working
         </button>
         <div id="popup-crawl-status" class="status-msg"></div>
@@ -60,7 +63,6 @@
         <!-- <div class="form-group">
           <label for="model-select">AI Model</label>
           <select id="model-select">
-            <option value="gemini-2.5-flash-lite" selected>Gemini 2.5 Flash Lite (Recommended & Active)</option>
             <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
             <option value="gemini-flash-lite-latest">Gemini Flash Lite Latest</option>
             <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
@@ -84,9 +86,6 @@
             <option value="gemini-flash-lite-latest">
               Gemini Flash Lite Latest
             </option>
-            <option value="gemini-2.5-flash-lite">
-              Gemini 2.5 Flash Lite
-            </option>
             <option value="gemini-2.5-flash">
               Gemini 2.5 Flash
             </option>
@@ -105,7 +104,8 @@
       <!-- Display & Automation Options -->
       <div class="section-card">
         <div class="card-title">⚡ Assistant Display & Rules</div>
-        <label class="switch-row" title="Automatically crawls and auto-submits Not Working / unreachable records, and stops at the Submit button when a Working site is found.">
+        <label class="switch-row"
+          title="Automatically crawls and auto-submits Not Working / unreachable records, and stops at the Submit button when a Working site is found.">
           <span class="switch-label">Auto-crawl queue (Stop on Working site)</span>
           <input type="checkbox" id="toggle-auto-queue" checked>
         </label>
@@ -135,7 +135,8 @@
         <summary>📋 14 Strict Rules Reference</summary>
         <div class="rules-list">
           <ol>
-            <li><strong>Website Status:</strong> Working / Not Working (Do not work on redirect/subdomain; purchase / shopping cart sites mark as Not Working; Not Working means all other fields empty).</li>
+            <li><strong>Website Status:</strong> Working / Not Working (Do not work on redirect/subdomain; purchase /
+              shopping cart sites mark as Not Working; Not Working means all other fields empty).</li>
             <li><strong>Business Type:</strong> Manufacturer to Wholesaler. (Shopping with manufacturing =
               Manufacturer).</li>
             <li><strong>Company Profile:</strong> Available / Not Available.</li>

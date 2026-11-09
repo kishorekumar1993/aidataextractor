@@ -1240,10 +1240,10 @@ async function crawlWebsite(targetUrl) {
       if (targetFallbacks.length > 0) {
         const fallbackResults = await Promise.allSettled(
           targetFallbacks.map(altUrl => fetchDecodedHtml(altUrl, {
-            timeoutMs: 3500,
+            timeoutMs: 5000,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
             }
           }))
         );
@@ -1301,10 +1301,10 @@ async function crawlWebsite(targetUrl) {
           if (isRedirectDomain(targetUrl, resolvedClientUrl) || isRedirectDomain(finalUrl, resolvedClientUrl)) {
             console.log(`[AI Assistant] Detected client-side HTML/JS redirect from ${finalUrl} to ${resolvedClientUrl}`);
             const clientRes = await fetchDecodedHtml(resolvedClientUrl, {
-              timeoutMs: 3500,
+              timeoutMs: 5000,
               headers: {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
               }
             });
             if (clientRes.ok && clientRes.html && clientRes.html.trim().length > 0) {
@@ -1335,8 +1335,11 @@ async function crawlWebsite(targetUrl) {
         if (fHost !== mainHost && !fHost.endsWith("." + mainHost)) continue;
 
         const fRes = await fetchDecodedHtml(frameUrl.href, {
-          timeoutMs: 2500,
-          headers: { "User-Agent": "Mozilla/5.0" }
+          timeoutMs: 4000,
+          headers: {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+          }
         });
         if (fRes.ok && fRes.html) {
           mainHtml += "\n" + fRes.html;
@@ -1435,15 +1438,17 @@ async function crawlWebsite(targetUrl) {
         } catch (e) { }
       }
 
-      const candidateSubpages = topLinks.slice(0, 3);
+      const candidateSubpages = topLinks.slice(0, 4);
       if (candidateSubpages.length > 0) {
-        // High-speed concurrent parallel fetching of candidate subpages (2.5s timeout)
+        // High-speed concurrent parallel fetching of candidate subpages (6.5s timeout for reliable international subpage delivery)
         const subpageResults = await Promise.allSettled(
           candidateSubpages.map(cUrl => fetchDecodedHtml(cUrl, {
-            timeoutMs: 2500,
+            timeoutMs: 6500,
             headers: {
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.9",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+              "Referer": finalUrl
             }
           }))
         );
@@ -1532,10 +1537,12 @@ async function crawlWebsite(targetUrl) {
             remainingCandidates.map(cUrl => {
               fetchedUrls.add(cUrl);
               return fetchDecodedHtml(cUrl, {
-                timeoutMs: 2500,
+                timeoutMs: 5000,
                 headers: {
                   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                  "Accept-Language": "en-US,en;q=0.9",
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                  "Referer": finalUrl
                 }
               });
             })
@@ -1579,10 +1586,10 @@ async function crawlWebsite(targetUrl) {
         fetchedUrls.add(socialUrl);
         try {
           const sRes = await fetchDecodedHtml(socialUrl, {
-            timeoutMs: 2500,
+            timeoutMs: 3500,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
               "Sec-Fetch-Dest": "document",
               "Sec-Fetch-Mode": "navigate",
               "Sec-Fetch-Site": "none",
