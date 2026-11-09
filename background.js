@@ -835,8 +835,8 @@ async function handleCrawlAndExtract(rawUrl) {
   if (!apiKey || !apiKey.trim()) {
     extractedData = heuristicExtraction(crawlResult, restrictedCheck);
     extractedData._note = "Analyzed via Local Rule Engine";
-  } else if (elapsedBeforeAi > 13500) {
-    // If crawling took more than 13.5 seconds, fast-path using local rule engine so response returns immediately without timing out!
+  } else if (elapsedBeforeAi > 18000) {
+    // If crawling took more than 18 seconds, fast-path using local rule engine so response returns immediately without timing out!
     console.warn(`[AI Assistant] Crawl took ${elapsedBeforeAi}ms. Fast-pathing with local rule engine to prevent timeout.`);
     extractedData = heuristicExtraction(crawlResult, restrictedCheck);
     extractedData._note = "Analyzed via Local Rule Engine (Fast-path to prevent timeout)";
@@ -5030,8 +5030,8 @@ ${(crawlData.bodyText || "").slice(0, 1500)}
   let parsed = null;
 
   for (const modelToTry of candidateModels) {
-    // If overall elapsed time since crawl start is already high (>16.5s), break immediately to avoid safety timeout
-    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 16500) {
+    // If overall elapsed time since crawl start is already high (>22s), break immediately to avoid safety timeout
+    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) {
       console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting AI calls to return promptly.`);
       break;
     }
@@ -9980,6 +9980,9 @@ function removePostalCodesCarefully(addr) {
   // 15. Postal code at the very end of the address string (e.g. "... Campbellfield 3061", "... Mumbai - 400001", or "... Cincinnati, Ohio 45241")
   a = a.replace(/[\s,\-]+(?:\bpin(?:\s*code)?\b[\s:#\-]*)?\b(?:\d{4,6}|\d{3}\s*\d{2}|\d{2}-\d{3})\b(?:\s*[.,]?\s*)$/gi, "");
   a = a.replace(/\s*-\s*\b\d{4,6}\b(?=[\s,]|$)/g, "");
+
+  // 16. Strip trailing telephone / fax numbers from address string (e.g. "... Park Hills, Missouri 800.633.6775")
+  a = a.replace(/(?:,\s*|\s+)(?:tel|phone|call|toll[-\s]*free)?\s*(?:\+?\d{1,3}[-.\s]*)?\(?\d{3}\)?[-.\s]+\d{3}[-.\s]+\d{4}\s*$/gi, "");
 
   // Clean double commas and spaces
   a = a.replace(/,\s*,+/g, ",");
