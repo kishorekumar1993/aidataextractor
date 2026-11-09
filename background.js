@@ -4192,7 +4192,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     countryName: {
       type: "STRING",
-      description: "You must write the country name in full form in Title Case where EVERY single word starts with a Capital letter (e.g. Czechia, Turkiye, United States Of America, England, Wales, Scotland, Northern Ireland, United Kingdom, Canada, Australia, Taiwan, India). If the country name is not available on the site, check on social media. If still not available, search on Google using the city and state name. We consider the locality for the country name. Example: United Kingdom (England, Wales, Scotland, Northern Ireland). If 'England' and 'United Kingdom' both are mentioned, you must take England as the country name (same for Wales, Scotland, Northern Ireland)."
+      description: "You must write the country name in full form in Title Case where EVERY single word starts with a Capital letter (e.g. Czechia, Turkiye, United States Of America, United Kingdom, Canada, Australia, Taiwan, India). If the country name is available on the website (e.g. website address says 'United Kingdom'), write that country name in full form (e.g. 'United Kingdom'). DO NOT change 'United Kingdom' to 'England' if the website writes 'United Kingdom' and does NOT mention 'England'! If both 'England' and 'United Kingdom' are mentioned on the website, take England as the country name. If the country name is NOT available on the site, check social media or search Google using the city and state name to determine the country based on locality (e.g. England, Wales, Scotland, Northern Ireland)."
     },
     companyAddress: {
       type: "STRING",
@@ -4400,8 +4400,10 @@ CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME
   * STRICT PROHIBITION: Do NOT leave small words, prepositions, or conjunctions in lowercase! Words like "Of", "And", "In", "At", "By", "For", "With", "On", "The", "De", "Du" MUST be capitalized with their first letter uppercase (e.g. "United States Of America", "City Of Industry", "Bank Of China").
   * Special characters MUST NOT start and MUST NOT end "companyName" or "companyAddress".
 - MANDATORY COUNTRY NAME QC RULE (CRITICAL QUALITY CONTROL REQUIREMENT):
-  * "You must write the country name in full form. If the country name is not available on the site, check on social media. If still not available, search on Google using the city and state name. We consider the locality for the country name.
-  Example: United Kingdom (England, Wales, Scotland, Northern Ireland). If “England” and “United Kingdom” both are mentioned, you must take England as the country name."
+  * "You must write the country name in full form Title Case (e.g. 'United Kingdom', 'United States Of America', 'Canada', 'Taiwan', 'Germany', 'Australia').
+    1. If the country name IS AVAILABLE on the website or in the contact address (e.g. website address says 'United Kingdom'), you MUST write that country name in full form (e.g. 'United Kingdom')! DO NOT change 'United Kingdom' to 'England' if the website writes 'United Kingdom' and does NOT mention 'England'!
+    2. If BOTH 'England' and 'United Kingdom' are mentioned on the website, only then take England as the country name (same for Wales, Scotland, Northern Ireland).
+    3. If the country name is NOT AVAILABLE on the site or in the address, check social media or search Google using the city and state name, and determine the country based on locality (e.g. England, Wales, Scotland, Northern Ireland)."
   * Every single word in countryName MUST start with a Capital letter (Title Case).
 - MANDATORY PHONE NUMBER QC RULE:
   * "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
@@ -5622,14 +5624,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         country = "Wales";
       } else if (/\bnorthern\s*ireland\b/i.test(fullCheckText)) {
         country = "Northern Ireland";
-      } else {
-        const constituentFromLocality = detectCountryFromAddress((result.companyAddress || "") + " " + rawCandidatesText + " " + fullCheckText);
-        if (["England", "Scotland", "Wales", "Northern Ireland"].includes(constituentFromLocality)) {
-          country = constituentFromLocality;
-        } else if (/\b(?:derbyshire|nottinghamshire|leicestershire|northamptonshire|warwickshire|staffordshire|worcestershire|cheshire|lancashire|yorkshire|cumbria|durham|northumberland|cornwall|devon|somerset|dorset|wiltshire|hampshire|sussex|surrey|kent|essex|suffolk|norfolk|cambridgeshire|bedfordshire|hertfordshire|buckinghamshire|oxfordshire|berkshire|gloucestershire|herefordshire|rutland|lincolnshire|middlesex|london|birmingham|manchester|leeds|liverpool|sheffield|bristol|newcastle|nottingham|heanor|long\s*eaton)\b/i.test(fullCheckText) || /\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(fullCheckText)) {
-          country = "England";
-        }
       }
+      // Rule: If website explicitly wrote "United Kingdom" or "UK" and did NOT mention England/Scotland/Wales/NI, keep "United Kingdom"!
     }
     result.countryName = country;
 
@@ -6320,14 +6316,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       country = "Wales";
     } else if (/\bnorthern\s*ireland\b/i.test(fullCheckText)) {
       country = "Northern Ireland";
-    } else {
-      const constituentFromLocality = detectCountryFromAddress((addr || "") + " " + rawCandidatesText + " " + fullCheckText);
-      if (["England", "Scotland", "Wales", "Northern Ireland"].includes(constituentFromLocality)) {
-        country = constituentFromLocality;
-      } else if (/\b(?:derbyshire|nottinghamshire|leicestershire|northamptonshire|warwickshire|staffordshire|worcestershire|cheshire|lancashire|yorkshire|cumbria|durham|northumberland|cornwall|devon|somerset|dorset|wiltshire|hampshire|sussex|surrey|kent|essex|suffolk|norfolk|cambridgeshire|bedfordshire|hertfordshire|buckinghamshire|oxfordshire|berkshire|gloucestershire|herefordshire|rutland|lincolnshire|middlesex|london|birmingham|manchester|leeds|liverpool|sheffield|bristol|newcastle|nottingham|heanor|long\s*eaton)\b/i.test(fullCheckText) || /\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(fullCheckText)) {
-        country = "England";
-      }
     }
+    // Rule: If website explicitly wrote "United Kingdom" or "UK" and did NOT mention England/Scotland/Wales/NI, keep "United Kingdom"!
   }
   result.countryName = country;
 
@@ -7060,7 +7050,7 @@ const UK_CITIES_AND_TOWNS = [
   "lisburn", "newry", "derry", "londonderry", "bangor ni", "newtownabbey", "craigavon",
 
   // Major UK Towns & Municipal Centres
-  "heanor", "long eaton", "ilkeston", "alfreton", "belper", "ripley", "matlock", "swadlincote", "ashbourne", "buxton", "dronfield", "wirksworth", "stretton", "clay cross", "bakewell", "bolsover",
+  "heanor", "heanor gate", "long eaton", "ilkeston", "alfreton", "belper", "ripley", "matlock", "swadlincote", "ashbourne", "buxton", "dronfield", "wirksworth", "stretton", "clay cross", "bakewell", "bolsover",
   "reading", "slough", "luton", "bolton", "bournemouth", "swindon", "northampton", "middlesbrough",
   "blackpool", "huddersfield", "ipswich", "blackburn", "watford", "rotherham", "stockport", "oldham",
   "walsall", "telford", "rochdale", "solihull", "poole", "halifax", "burnley", "scunthorpe", "grimsby",
@@ -7277,8 +7267,8 @@ function hasUkCityOrTown(cleanAddr) {
   const segments = extractAddressLocalitySegments(cleanAddr);
   const targetTexts = (segments && segments.length > 0) ? segments : [cleanAddr];
 
-  const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
-  const streetPrefixPattern = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|gate|mews|row|wharf|park)\\s+";
+  const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
+  const streetPrefixPattern = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|mews|row|wharf|park)\\s+";
 
   for (const text of targetTexts) {
     for (const name of UK_CITIES_AND_TOWNS) {
@@ -10401,18 +10391,12 @@ function detectCountryFromAddress(address) {
   if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(lower)) return "Wales";
   if (/\b(northern\s*ireland)\b/i.test(lower)) return "Northern Ireland";
   if (/\b(united\s*kingdom|great\s*britain|uk)\b/i.test(lower)) {
-    // QC Mandate: Prioritize constituent country if locality belongs to England, Wales, Scotland, or Northern Ireland
-    if (/\b(?:edinburgh|glasgow|aberdeen|dundee|inverness|perth|stirling|fife|lanarkshire|highland|ayrshire|lothian)\b/i.test(lower)) return "Scotland";
-    if (/\b(?:cardiff|swansea|newport|wrexham|glamorgan|gwent|dyfed|powys|gwynedd|clwyd)\b/i.test(lower)) return "Wales";
-    if (/\b(?:belfast|derry|londonderry|armagh|antrim|down|fermanagh|tyrone)\b/i.test(lower)) return "Northern Ireland";
-    if (/\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) {
-      if (/\b(?:eh|g|ab|dd|dg|fk|hs|iv|ka|kw|ky|ml|pa|ph|td|ze)\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) return "Scotland";
-      if (/\b(?:cf|ld|ll|np|sa)\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) return "Wales";
-      if (/\bbt\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(lower)) return "Northern Ireland";
-      return "England";
-    }
-    if (/\b(?:london|birmingham|manchester|leeds|liverpool|sheffield|bristol|newcastle|nottingham|leicester|coventry|essex|yorkshire|kent|lancashire|surrey|hampshire|sussex|norfolk|suffolk|somerset|devon|cornwall|cheshire|derbyshire|berkshire|oxfordshire|cambridgeshire|gloucestershire|northamptonshire|wiltshire|bedfordshire|staffordshire|cumbria|lincolnshire|hertfordshire|warwickshire|dorset|worcestershire|shropshire|buckinghamshire|middlesex|rutland|herefordshire|durham|northumberland|isle\s*of\s*wight|tyne\s*and\s*wear|merseyside|west\s*midlands|greater\s*manchester|greater\s*london|heanor|long\s*eaton|ilkeston|alfreton|belper|ripley|matlock|swadlincote|kettering|corby|peterborough|luton|milton\s*keynes|slough|reading|swindon|gloucester|cheltenham|bath|exeter|plymouth|torquay|bournemouth|poole|southampton|portsmouth|brighton|worthing|hastings|eastbourne|crawley|guildford|woking|epsom|croydon|basingstoke|maidenhead|aylesbury|high\s*wycombe|stevenage|watford|st\s*albans|harlow|chelmsford|colchester|ipswich|bury\s*st\s*edmunds|norwich|great\s*yarmouth|kings\s*lynn|lincoln|grantham|boston|scunthorpe|grimsby|hull|doncaster|rotherham|barnsley|wakefield|bradford|halifax|huddersfield|york|harrogate|scarborough|darlington|hartlepool|stockton|middlesbrough|sunderland|gateshead|south\s*shields|carlisle|barrow|blackpool|preston|blackburn|burnley|bolton|bury|rochdale|oldham|wigan|st\s*helens|warrington|stockport|sale|chester|crewe|macclesfield|stoke|stafford|tamworth|cannock|walsall|wolverhampton|dudley|stourbridge|halesowen|solihull|redditch|bromsgrove|kidderminster|worcester|hereford|telford|shrewsbury|rugby|leamington|nuneaton|stratford|burton|mansfield|newark|worksop|chesterfield|buxton)\b/i.test(lower)) return "England";
-    if (typeof hasUkCityOrTown === "function" && hasUkCityOrTown(lower)) return "England";
+    // QC Mandate: If constituent country is also mentioned, take that (e.g. "England and United Kingdom"):
+    if (/\b(?:england)\b/i.test(lower)) return "England";
+    if (/\b(?:scotland)\b/i.test(lower)) return "Scotland";
+    if (/(?<!\bnew\s+south\s+)\b(?:wales)\b/i.test(lower)) return "Wales";
+    if (/\b(?:northern\s*ireland)\b/i.test(lower)) return "Northern Ireland";
+    // Otherwise, if website address literally says United Kingdom / UK, return "United Kingdom"!
     return "United Kingdom";
   }
   if (/\b(united\s*states|usa|united\s*states\s*of\s*america)\b/i.test(lower)) return "United States Of America";
