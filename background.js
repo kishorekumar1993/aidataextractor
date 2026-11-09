@@ -2793,7 +2793,7 @@ function isUnwantedEmail(email) {
   if (/@\d+x\./i.test(em)) return true; // e.g. logo@2x.png
 
   // Administrative / automated / bounce / non-contact prefixes (preserves department emails like sales, support, careers, jobs, press, media, hr, feedback, office)
-  if (/^(?:noreply|no-reply|donotreply|do-not-reply|postmaster|hostmaster|abuse|mailer-daemon|bounce|unsubscribe|notification|notifications|alert|alerts|sentry|git|npm|dpo)@/i.test(em)) return true;
+  if (/^(?:noreply|no-reply|donotreply|do-not-reply|postmaster|hostmaster|abuse|mailer-daemon|bounce|unsubscribe|notification|notifications|alert|alerts|sentry|git|npm|dpo|privacy|compliance|legal|security|webmaster|cookie|accessibility|terms)@/i.test(em)) return true;
 
   // Placeholder / dummy emails
   if (/^(?:user|email|name|test|sample|placeholder|yourname|youremail|username|example|domain|contact|admin|info)@(?:example|domain|test|sample|email|placeholder|yoursite|mysite|mycompany|yourcompany|company|website|sitename)\./i.test(em)) return true;
@@ -3131,7 +3131,14 @@ function parseHtmlDetails(html, baseUrl) {
   const imgMatches = cleanHtml.match(/<img\b[^>]+>/gi) || [];
   const validProductImgs = imgMatches.filter(img => {
     if (/src=['"]data:image\/(?:svg|gif)/i.test(img) && !/data-(?:src|lazy-src|original)=/i.test(img)) return false;
-    return !/logo|icon|banner|social|arrow|pixel|loader|nav|header|footer|button|spinner|backbar|avatar/i.test(img);
+    // Exclude UI chrome, icons, logos, banners, social icons, flags, payment badges, certs, and avatars
+    if (/logo|icon|banner|social|arrow|pixel|loader|nav|header|footer|button|spinner|backbar|avatar|flag|badge|payment|visa|mastercard|paypal|amex|stripe|ssl|norton|mcafee|trust|award|cert|iso9001|iso|star|rating|cart|basket|search|close|menu|quote|testimonial|team|client|partner|sponsor|brand/i.test(img)) return false;
+    // Exclude tiny UI images (<100px width/height)
+    const wMatch = img.match(/\bwidth=["']?(\d+)["']?/i);
+    const hMatch = img.match(/\bheight=["']?(\d+)["']?/i);
+    if (wMatch && parseInt(wMatch[1], 10) < 100) return false;
+    if (hMatch && parseInt(hMatch[1], 10) < 100) return false;
+    return true;
   });
 
   const descMatches = cleanHtml.match(/class=["'][^"']*(?:product-desc|product-description|item-description|catalog-desc)[^"']*["']/gi) || [];
@@ -3191,13 +3198,13 @@ function rankEmails(emails, targetDomain, emailSourceMap = {}) {
       score += 20; // Official company social media
     }
 
-    if (/^(sales|contact)/i.test(user)) {
-      score += 35;
-    } else if (/^(info|enquir|office|admin|mail|service|head|hq|ppi)/i.test(user)) {
-      score += 25;
+    if (/^(sales|contact|enquir|info|mail|hello|office)/i.test(user)) {
+      score += 50;
+    } else if (/^(service|support|orders|jobs|careers|admin|head|hq|ppi)/i.test(user)) {
+      score += 20;
     }
-    if (/^(webmaster|abuse|privacy|no-?reply|support@wordpress|support@wix)/i.test(user)) {
-      score -= 80;
+    if (/^(webmaster|abuse|privacy|compliance|legal|security|no-?reply|support@wordpress|support@wix)/i.test(user)) {
+      score -= 100;
     }
 
     return { email: lower, score };
@@ -3767,7 +3774,18 @@ function detectNonEnglishWithoutTranslation(html = "", text = "") {
 function isManufacturerSite(crawlData, text = "") {
   if (!crawlData) return false;
   const combined = ((crawlData.bodyText || "") + " " + (crawlData.profilePageText || "") + " " + (crawlData.footerText || "") + " " + (text || "")).toLowerCase();
-  return /\b(?:manufacturer|manufacturers|manufacturing|manufacture|we\s+manufacture|our\s+factory|production\s+plant|production\s+facility|fabrication\s+plant|fabrication\s+facility|oem|odm|custom\s+fabricat(?:ion|or|ed|ing))\b/i.test(combined);
+
+  // 1. Explicit first-person manufacturing ownership proof (highest confidence)
+  const hasFirstPersonManufacturing = /\b(?:we\s+(?:manufacture|produce|fabricate|build|engineer|design\s+and\s+manufacture)|our\s+(?:factory|manufacturing\s+(?:facility|plant)|production\s+(?:plant|facility)|fabrication\s+(?:plant|facility)|foundry|workshop)|custom\s+(?:fabrication|manufacturing|molding|casting|machining)|oem(?:\/|\s+)odm|contract\s+manufactur(?:er|ing)|in-house\s+manufacturing)\b/i.test(combined);
+  if (hasFirstPersonManufacturing) return true;
+
+  // 2. Pure distributor / reseller exclusion:
+  // e.g. "distributor of leading manufacturers", "authorized dealer for manufacturers", "we supply products from manufacturers"
+  const isDistributorOrReseller = /\b(?:distributor\s+(?:of|for)|authorized\s+(?:distributor|dealer|reseller)|dealer\s+(?:of|for)|wholesaler\s+(?:of|for)|reseller\s+(?:of|for)|retailer\s+(?:of|for)|stockist\s+(?:of|for)|supplier\s+of\s+leading\s+manufacturers|products\s+from\s+(?:leading|top|various|world)\s+manufacturers)\b/i.test(combined);
+  if (isDistributorOrReseller) return false;
+
+  // 3. General manufacturer keyword fallback only if not disqualified as distributor
+  return /\b(?:manufacturer|manufacturers|manufacturing|manufacture|oem|odm|custom\s+fabricat(?:ion|or|ed|ing))\b/i.test(combined);
 }
 
 /**
@@ -5603,7 +5621,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result._isFromAi = true;
     result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
     result._originalUrl = crawlData.originalUrl || "";
-    if (result.websiteStatus === "Not Working") {
+    // QC Rule: If websiteStatus is NOT Working and NOT Redirect Site, ALL other 13 fields MUST be empty strings ""
+    if (result.websiteStatus !== "Working" && result.websiteStatus !== "Redirect Site") {
       result.businessType = "";
       result.companyProfile = "";
       result.companyName = "";
@@ -5804,9 +5823,16 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     };
 
     // Independent product measurements (Rules 12, 13, 14 - evaluated independently):
-    result.numberOfProducts = String(Math.min(3, Math.max(parseCount(result.numberOfProducts), parseCount(crawlData && crawlData.detectedProductCount))));
-    result.productImages = String(Math.min(3, Math.max(parseCount(result.productImages), parseCount(crawlData && crawlData.detectedImageCount))));
-    result.numberOfProductDescriptions = String(Math.min(3, Math.max(parseCount(result.numberOfProductDescriptions), parseCount(crawlData && crawlData.detectedDescCount))));
+    // In AI mode, trust Gemini's visual product counts directly without forcing crawler noise
+    if (result._isFromAi) {
+      result.numberOfProducts = String(Math.min(3, Math.max(0, parseCount(result.numberOfProducts))));
+      result.productImages = String(Math.min(3, Math.max(0, parseCount(result.productImages))));
+      result.numberOfProductDescriptions = String(Math.min(3, Math.max(0, parseCount(result.numberOfProductDescriptions))));
+    } else {
+      result.numberOfProducts = String(Math.min(3, Math.max(parseCount(result.numberOfProducts), parseCount(crawlData && crawlData.detectedProductCount))));
+      result.productImages = String(Math.min(3, Math.max(parseCount(result.productImages), parseCount(crawlData && crawlData.detectedImageCount))));
+      result.numberOfProductDescriptions = String(Math.min(3, Math.max(parseCount(result.numberOfProductDescriptions), parseCount(crawlData && crawlData.detectedDescCount))));
+    }
 
     return result;
   }
@@ -10120,7 +10146,7 @@ function cleanPhoneNumber(rawPhone, country) {
   } else if (cLower.includes("spain") || cLower.includes("espana")) {
     if (len !== 9) return "";
   } else {
-    if (len < 7 || len > 12) return "";
+    if (len < 8 || len > 12) return "";
   }
 
   return digits;
