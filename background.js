@@ -9449,6 +9449,11 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
  * 4. Multi-word cities, states, counties (e.g. "West, Sussex" -> "West Sussex", "Kuala, Lumpur" -> "Kuala Lumpur")
  * 5. Accidental comma between building number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
  */
+function isStandaloneStateOrCounty(word) {
+  if (!word || typeof word !== "string") return false;
+  return /^(?:Victoria|Queensland|Tasmania|Australian\s*Capital\s*Territory|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|Ohio|Oklahoma|Oregon|Pennsylvania|Tennessee|Texas|Utah|Vermont|Virginia|Washington|Wisconsin|Wyoming|District\s*of\s*Columbia|Ontario|Quebec|Alberta|Manitoba|Saskatchewan|Nova\s*Scotia|New\s*Brunswick|Newfoundland|Prince\s*Edward\s*Island|Canterbury|Waikato|Bay\s*of\s*Plenty|Otago|Taranaki|Southland|Northland|Marlborough|Tasman|Manawatu|Essex|Kent|Surrey|Lancashire|Yorkshire|Cheshire|Hampshire|Berkshire|Hertfordshire|Middlesex|Gloucestershire|Warwickshire|Devon|Dorset|Somerset|Oxfordshire|Cambridgeshire|Buckinghamshire|Staffordshire|Derbyshire|Nottinghamshire|Lincolnshire|Northamptonshire|Norfolk|Suffolk|Wiltshire|Worcestershire|Cornwall|Cumbria|Northumberland|Maharashtra|Karnataka|Tamil\s*Nadu|Gujarat|Uttar\s*Pradesh|Telangana|Andhra\s*Pradesh|Punjab|Haryana|Rajasthan|Madhya\s*Pradesh|Bihar|Kerala|Odisha|Jharkhand|Assam|Delhi|Selangor|Johor|Penang|Perak|Kedah|Pahang|Negeri\s*Sembilan|Melaka|Terengganu|Kelantan|Sarawak|Sabah|Perlis|Gauteng|Limpopo|Mpumalanga|Free\s*State|Dublin|Cork|Galway|Kildare|Meath|Limerick|Kerry|Wicklow|Clare|Tipperary|Wexford|Donegal|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Malaga|Málaga|Murcia|Bilbao|Alicante|Cordoba|Córdoba|Valladolid|Bavaria|Bayern|Hessen|Lombardia|Lazio|Veneto|Piemonte|Toscana|Campania|Sicilia|Puglia|Liguria)$/i.test(word.trim());
+}
+
 function repairBlindlySeparatedCommas(addr) {
   if (!addr) return "";
   let a = addr;
@@ -9478,7 +9483,13 @@ function repairBlindlySeparatedCommas(addr) {
   // 3. Multi-word cities, states, counties: "West, Sussex" -> "West Sussex", "Kuala, Lumpur" -> "Kuala Lumpur"
   // Do NOT merge if the directional word is preceded by a park/estate/facility suffix (e.g. "Industrial Estate South, Durham" must NOT become "Estate South Durham")
   const twMultiWordPrefixes = "West|East|North|South|New|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La|Kuala|Hong|Batu|Johor|Petaling|Subang|Shah|George|Cape|Port|Fort|Mount|St\.?|Saint|Yung|Chung|Hsin|Xin|Da|Ta|Nan|Xi|Hsi|Bei|Pei|An|Ren|Jen|Gui|Kuei|Lu|Loo|Ping|Ba|Pa|Yang|Long|Lung|Shan|Guan|Kuan|Ma|Jia|Chia|Qi|Chi|Jiang|Chiang|Zhong|Qian|Chien|Feng|Fong|Ling|Gu|Ku|Zuo|Tso|Hou|Dong|Tung|Xia|Hsia|Liu|Yu|Kao|Gao|Tao|Kee|Miao|Yun|Chang|Hua|Peng|Kin|Lien";
-  a = a.replace(new RegExp(`(?<!\\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard|Estate|Park|Zone|Area|District|Sector|Ward|Block|Building|Phase)\\s+)\\b(${twMultiWordPrefixes}),\\s+([A-Za-z0-9]+)`, "gi"), "$1 $2");
+  a = a.replace(new RegExp(`(?<!\\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard|Estate|Park|Zone|Area|District|Sector|Ward|Block|Building|Phase)\\s+)\\b(${twMultiWordPrefixes}),\\s+([A-Za-z0-9]+)`, "gi"), (match, p1, p2) => {
+    const compound = `${p1} ${p2}`.toLowerCase();
+    const isKnownCompound = /^(?:new\s+york|new\s+jersey|new\s+mexico|new\s+hampshire|new\s+south\s+wales|new\s+zealand|north\s+carolina|south\s+carolina|north\s+dakota|south\s+dakota|west\s+virginia|rhode\s+island|western\s+australia|south\s+australia|northern\s+territory|west\s+sussex|east\s+sussex|north\s+yorkshire|south\s+yorkshire|west\s+yorkshire|western\s+cape|eastern\s+cape|northern\s+cape|north\s+west|west\s+bengal|west\s+midlands|san\s+francisco|san\s+jose|san\s+diego|san\s+antonio|san\s+juan|san\s+mateo|san\s+marcos|san\s+rafael|santa\s+clara|santa\s+barbara|santa\s+monica|santa\s+ana|santa\s+cruz|santa\s+fe|santa\s+rosa|los\s+angeles|las\s+vegas|kuala\s+lumpur|hong\s+kong|batu\s+pahat|johor\s+bahru|petaling\s+jaya|subang\s+jaya|shah\s+alam|george\s+town|port\s+elizabeth|cape\s+town|fort\s+worth|fort\s+wayne|fort\s+lauderdale|salt\s+lake\s+city)$/i.test(compound);
+    if (isKnownCompound) return `${p1} ${p2}`;
+    if (isStandaloneStateOrCounty(p2)) return match;
+    return `${p1} ${p2}`;
+  });
 
   // 4. Premise comma fix: "Unit 2, Argent, Trade Park" -> "Unit 2, Argent Trade Park"
   a = a.replace(/(\b(?:Unit|Suite|Lot|Plot|Building|Bldg|Level|Floor|Block|Flr|Ste|Apt)\s+[A-Za-z0-9\-\/]+),\s+([A-Za-z0-9]+),\s+([A-Za-z0-9]+\s+(?:Park|Estate|Zone|Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway)\b)/gi, "$1, $2 $3");
@@ -9591,7 +9602,14 @@ function ensureCommaBeforeState(addr) {
   // Repair accidental commas splitting multi-word prefixes: "New, York" -> "New York", "New, Zealand" -> "New Zealand"
   // Do NOT merge if the directional word is a street suffix (e.g. "Main Street East, City", "County Road West, City")
   // or a facility / industrial estate suffix (e.g. "Industrial Estate South, Durham")
-  a = a.replace(/(?<!\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard|Estate|Park|Zone|Area|District|Sector|Ward|Block|Building|Phase)\s+)\b(New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La)[,\s]+([A-Z][a-z]+)/g, "$1 $2");
+  // NEVER strip comma before a standalone state or province (e.g. "Oakleigh South, Victoria" MUST retain comma!)
+  a = a.replace(/(?<!\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway|Close|Terrace|Boulevard|Estate|Park|Zone|Area|District|Sector|Ward|Block|Building|Phase)\s+)\b(New|North|South|East|West|Old|Central|Upper|Lower|Greater|Inner|Outer|San|Santa|Los|Las|El|La)[,\s]+([A-Z][a-z]+)/gi, (match, p1, p2) => {
+    const compound = `${p1} ${p2}`.toLowerCase();
+    const isKnownCompound = /^(?:new\s+york|new\s+jersey|new\s+mexico|new\s+hampshire|new\s+south\s+wales|new\s+zealand|north\s+carolina|south\s+carolina|north\s+dakota|south\s+dakota|west\s+virginia|rhode\s+island|western\s+australia|south\s+australia|northern\s+territory|west\s+sussex|east\s+sussex|north\s+yorkshire|south\s+yorkshire|west\s+yorkshire|western\s+cape|eastern\s+cape|northern\s+cape|north\s+west|west\s+bengal|west\s+midlands|san\s+francisco|san\s+jose|san\s+diego|san\s+antonio|san\s+juan|san\s+mateo|san\s+marcos|san\s+rafael|santa\s+clara|santa\s+barbara|santa\s+monica|santa\s+ana|santa\s+cruz|santa\s+fe|santa\s+rosa|los\s+angeles|las\s+vegas|kuala\s+lumpur|hong\s+kong|batu\s+pahat|johor\s+bahru|petaling\s+jaya|subang\s+jaya|shah\s+alam|george\s+town|port\s+elizabeth|cape\s+town|fort\s+worth|fort\s+wayne|fort\s+lauderdale|salt\s+lake\s+city)$/i.test(compound);
+    if (isKnownCompound) return `${p1} ${p2}`;
+    if (isStandaloneStateOrCounty(p2)) return match;
+    return `${p1} ${p2}`;
+  });
 
   // 6. Comprehensive global states, provinces, regions, and counties
   const states = [
