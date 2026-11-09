@@ -11,11 +11,11 @@ const DEFAULT_API_KEY =
 const DEFAULT_MODEL =
   (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
   (typeof self !== "undefined" && self.ENV && self.ENV.DEFAULT_MODEL) ||
-  "gemini-3.5-flash-lite";
+  "gemini-2.5-flash";
 
-const DEPRECATED_MODELS = new Set([
-  "gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro",
-  "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash-latest"
+const INVALID_MODELS = new Set([
+  "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite",
+  "gemini-flash-lite-latest", "gemini-2.0-flash-exp"
 ]);
 
 // Primary prohibited core industries per Instruction Sheet Note 2
@@ -626,9 +626,9 @@ async function handleCrawlAndExtract(rawUrl) {
   const settings = await chrome.storage.sync.get(["apiKey", "model"]);
   const apiKey = (settings.apiKey && settings.apiKey.trim()) ? settings.apiKey.trim() : DEFAULT_API_KEY;
   let model = (settings.model && settings.model.trim()) ? settings.model.trim() : DEFAULT_MODEL;
-  if (DEPRECATED_MODELS.has(model)) {
-    model = "gemini-3.5-flash-lite";
-    try { chrome.storage.sync.set({ model: "gemini-3.5-flash-lite" }); } catch (e) { }
+  if (INVALID_MODELS.has(model)) {
+    model = "gemini-2.5-flash";
+    try { chrome.storage.sync.set({ model: "gemini-2.5-flash" }); } catch (e) { }
   }
 
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
@@ -4946,8 +4946,8 @@ Page Title: ${crawlData.title}
 Detected Website Brand / Logo: ${crawlData.logoText || crawlData.ogSiteName || "(None)"}
 Detected Official Legal Corporate Names (Across All Crawled Pages): ${crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0 ? crawlData.legalCompanyCandidates.slice(0, 8).join(", ") : "(None)"}
 Company Profile Evidence Detected: ${crawlData.hasCompanyProfile ? "Yes (Dedicated Profile / About page, heading, or PDF detected)" : "No"}
-All Corporate Emails Discovered on Website: ${crawlData.emails.join(", ") || "(None)"}
-Detected Contact Phones: ${crawlData.phones.join(", ") || "(None)"}
+All Corporate Emails Discovered on Website: ${(crawlData.emails || []).join(", ") || "(None)"}
+Detected Contact Phones: ${(crawlData.phones || []).join(", ") || "(None)"}
 Product Items / Units Detected: ${crawlData.detectedProductCount}
 Product Images Detected: ${crawlData.detectedImageCount}
 Product Descriptions Detected: ${crawlData.detectedDescCount}
@@ -4968,11 +4968,17 @@ PAGE BODY TEXT:
 ${(crawlData.bodyText || "").slice(0, 2500)}
 `;
 
-  const candidateModels = [
-    (modelName && !DEPRECATED_MODELS.has(modelName)) ? modelName : "gemini-3.5-flash-lite",
-    "gemini-3.5-flash-lite",
-    "gemini-2.5-flash"
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i && !DEPRECATED_MODELS.has(m)).slice(0, 2);
+  const selectedModel = (modelName && !INVALID_MODELS.has(modelName)) ? modelName : "gemini-2.5-flash";
+  const accuracyFallbackChain = [
+    selectedModel,
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+    "gemini-2.0-flash-lite"
+  ];
+  const candidateModels = Array.from(new Set(accuracyFallbackChain)).filter(m => m && !INVALID_MODELS.has(m));
 
   let lastError = null;
   let parsed = null;
@@ -4981,7 +4987,7 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${apiKey}`;
     try {
       const abortCtrl = new AbortController();
-      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 8000 : 5000;
+      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 10000 : 7000;
       const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
       let response;
       try {
@@ -5004,12 +5010,44 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
 
       if (!response.ok) {
         const errText = await response.text();
-        if (response.status === 400 || response.status === 401 || response.status === 403) {
-          console.warn(`[AI Assistant] Gemini API key invalid / permission denied (${response.status}). Fast-falling back to local rule engine.`);
-          lastError = new Error(`Gemini authorization error ${response.status}: ${errText}`);
+        if (response.status === 401) {
+          console.warn(`[AI Assistant] Gemini API key invalid / unauthenticated (401).`);
+          lastError = new Error(`Gemini authorization error 401: ${errText}`);
           break; // Stop immediately! Invalid key will fail on all models!
         }
-        throw new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
+
+        // If 400 Bad Request, model might not support responseSchema; retry once without responseSchema
+        if (response.status === 400) {
+          try {
+            const fallbackRes = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt + "\nReturn strictly a valid JSON object matching the requested schema." }] }],
+                generationConfig: {
+                  temperature: 0.1,
+                  responseMimeType: "application/json"
+                }
+              })
+            });
+            if (fallbackRes.ok) {
+              const resJson = await fallbackRes.json();
+              const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (rawText) {
+                const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+                parsed = JSON.parse(cleaned);
+                if (parsed) {
+                  console.log(`[AI Assistant] Successfully extracted data with model ${modelToTry} (standard JSON fallback)!`);
+                  break;
+                }
+              }
+            }
+          } catch (e) { }
+        }
+
+        console.warn(`[AI Assistant] Model ${modelToTry} failed (${response.status}): ${errText}. Falling back to next model in accuracy chain.`);
+        lastError = new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
+        continue;
       }
 
       const resJson = await response.json();
@@ -5019,13 +5057,14 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
       const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
       parsed = JSON.parse(cleaned);
       if (parsed) {
+        console.log(`[AI Assistant] Successfully extracted data with Gemini model: ${modelToTry}`);
         if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
           parsed.secondaryEmailId = "";
         }
         break;
       }
     } catch (err) {
-      console.warn(`Model ${modelToTry} attempt failed:`, err.message);
+      console.warn(`[AI Assistant] Model ${modelToTry} attempt failed:`, err.message, ". Falling back to next candidate.");
       lastError = err;
     }
   }
@@ -10357,14 +10396,16 @@ function extractLikelyAddress(text) {
 }
 
 async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
-  const modelsToTry = [
-    (modelName && !DEPRECATED_MODELS.has(modelName)) ? modelName : "gemini-3.5-flash-lite",
-    "gemini-3.5-flash-lite",
-    "gemini-3.8-flash",
-    "gemini-3.6-flash",
-    "gemini-3.1-flash-lite",
-    "gemini-flash-lite-latest",
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i && !DEPRECATED_MODELS.has(m));
+  const selected = (modelName && !INVALID_MODELS.has(modelName)) ? modelName : "gemini-2.5-flash";
+  const modelsToTry = Array.from(new Set([
+    selected,
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-pro",
+    "gemini-1.5-flash",
+    "gemini-2.0-flash-lite"
+  ])).filter(m => m && !INVALID_MODELS.has(m));
 
   let lastError = null;
 
@@ -10379,12 +10420,12 @@ async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
         })
       });
       if (res.ok) {
-        return { success: true, message: `Connected successfully with Gemini (${model})!` };
+        return { success: true, message: `Connected successfully with Gemini (${model})!`, activeModel: model };
       }
       const err = await res.text();
       lastError = `API HTTP ${res.status}: ${err}`;
-      if (res.status === 400 || res.status === 401 || res.status === 403) {
-        break; // Key invalid or unauthorized, no other model will succeed
+      if (res.status === 401) {
+        break; // Key invalid, no other model will succeed
       }
     } catch (e) {
       lastError = e.message;
