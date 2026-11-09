@@ -4192,7 +4192,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     countryName: {
       type: "STRING",
-      description: "You must write the country name in full form in Title Case where EVERY single word starts with a Capital letter (e.g. Czechia, Turkiye, United States Of America, United Kingdom, Canada, Australia, Taiwan, India). If the country name is available on the website (e.g. website address says 'United Kingdom'), write that country name in full form (e.g. 'United Kingdom'). DO NOT change 'United Kingdom' to 'England' if the website writes 'United Kingdom' and does NOT mention 'England'! If both 'England' and 'United Kingdom' are mentioned on the website, take England as the country name. If the country name is NOT available on the site, check social media or search Google using the city and state name to determine the country based on locality (e.g. England, Wales, Scotland, Northern Ireland)."
+      description: "Official country name in full form Title Case (e.g. United Kingdom, United States Of America, Canada, Taiwan, Germany, Australia, India). CRITICAL MANDATORY QC RULE: If the website or contact address explicitly writes 'United Kingdom' or 'UK', you MUST return 'United Kingdom'. NEVER return 'England', 'Scotland', or 'Wales' if the website writes 'United Kingdom' or 'UK'! Only return 'England' if 'England' is explicitly written on the website, or if 'England' and 'United Kingdom' are both written on the site. If the country name is not available on the website, search Google using city/state and return the country based on locality."
     },
     companyAddress: {
       type: "STRING",
@@ -4401,9 +4401,9 @@ CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME
   * Special characters MUST NOT start and MUST NOT end "companyName" or "companyAddress".
 - MANDATORY COUNTRY NAME QC RULE (CRITICAL QUALITY CONTROL REQUIREMENT):
   * "You must write the country name in full form Title Case (e.g. 'United Kingdom', 'United States Of America', 'Canada', 'Taiwan', 'Germany', 'Australia').
-    1. If the country name IS AVAILABLE on the website or in the contact address (e.g. website address says 'United Kingdom'), you MUST write that country name in full form (e.g. 'United Kingdom')! DO NOT change 'United Kingdom' to 'England' if the website writes 'United Kingdom' and does NOT mention 'England'!
-    2. If BOTH 'England' and 'United Kingdom' are mentioned on the website, only then take England as the country name (same for Wales, Scotland, Northern Ireland).
-    3. If the country name is NOT AVAILABLE on the site or in the address, check social media or search Google using the city and state name, and determine the country based on locality (e.g. England, Wales, Scotland, Northern Ireland)."
+    1. CRITICAL UK RULE: If the website or contact address explicitly writes 'United Kingdom' or 'UK' (e.g. 'Delves Road, Heanor Gate, Derbyshire, DE75 7SJ, United Kingdom'), you MUST return 'United Kingdom'! NEVER return 'England', 'Scotland', or 'Wales' when the website specifically says 'United Kingdom' or 'UK'!
+    2. Only return 'England' if 'England' is actually written on the website, or if BOTH 'England' and 'United Kingdom' are written on the website ('If England and United Kingdom both are mentioned, you must take England as the country name').
+    3. If the country name is NOT AVAILABLE anywhere on the website, search Google using the city and state name, and determine the country based on locality (e.g. England, Wales, Scotland, Northern Ireland)."
   * Every single word in countryName MUST start with a Capital letter (Title Case).
 - MANDATORY PHONE NUMBER QC RULE:
   * "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
@@ -5608,24 +5608,33 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       .trim();
 
     // 2. Country Name: Full form Title Case, and UK constituent refinement (Mandatory QC Rule)
-    // "United Kingdom (England, Wales, Scotland, Northern Ireland). If 'England' and 'United Kingdom' both are mentioned, you must take England as the country name."
+    // "If website country available means it should written UK (United Kingdom) else we can search google and put country"
     let country = toTitleCase(normalizeCountryName(result.countryName));
     if (!country && result.companyAddress) {
       country = toTitleCase(detectCountryFromAddress(result.companyAddress));
     }
-    if (country === "United Kingdom") {
-      const rawCandidatesText = (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
-      const fullCheckText = ((result.companyAddress || "") + " " + rawCandidatesText + " " + (crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
-      if (/\bengland\b/i.test(fullCheckText)) {
+
+    const rawCandidatesText = (crawlData && crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
+    const fullCheckText = ((result.companyAddress || "") + " " + rawCandidatesText + " " + (crawlData && crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData && crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
+    const hasExplicitUk = /\b(united\s*kingdom|great\s*britain|uk)\b/i.test(fullCheckText);
+    const hasExplicitEngland = /\bengland\b/i.test(fullCheckText);
+    const hasExplicitScotland = /\bscotland\b/i.test(fullCheckText);
+    const hasExplicitWales = /(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText);
+    const hasExplicitNI = /\bnorthern\s*ireland\b/i.test(fullCheckText);
+
+    // If website explicitly wrote "United Kingdom" or "UK" and did NOT mention England/Scotland/Wales/NI, MUST retain "United Kingdom"!
+    if (hasExplicitUk && !hasExplicitEngland && !hasExplicitScotland && !hasExplicitWales && !hasExplicitNI) {
+      country = "United Kingdom";
+    } else if (country === "United Kingdom") {
+      if (hasExplicitEngland) {
         country = "England";
-      } else if (/\bscotland\b/i.test(fullCheckText)) {
+      } else if (hasExplicitScotland) {
         country = "Scotland";
-      } else if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText)) {
+      } else if (hasExplicitWales) {
         country = "Wales";
-      } else if (/\bnorthern\s*ireland\b/i.test(fullCheckText)) {
+      } else if (hasExplicitNI) {
         country = "Northern Ireland";
       }
-      // Rule: If website explicitly wrote "United Kingdom" or "UK" and did NOT mention England/Scotland/Wales/NI, keep "United Kingdom"!
     }
     result.countryName = country;
 
@@ -6304,20 +6313,27 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
   country = toTitleCase(normalizeCountryName(country));
   // UK Constituent Country refinement (Mandatory QC Rule):
-  // "United Kingdom (England, Wales, Scotland, Northern Ireland). If 'England' and 'United Kingdom' both are mentioned, you must take England as the country name."
-  if (country === "United Kingdom") {
-    const rawCandidatesText = (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
-    const fullCheckText = (addr + " " + rawCandidatesText + " " + (crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
-    if (/\bengland\b/i.test(fullCheckText)) {
+  // "If website country available means it should written UK (United Kingdom) else we can search google and put country"
+  const rawCandidatesText = (crawlData && crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
+  const fullCheckText = (addr + " " + rawCandidatesText + " " + (crawlData && crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData && crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
+  const hasExplicitUk = /\b(united\s*kingdom|great\s*britain|uk)\b/i.test(fullCheckText);
+  const hasExplicitEngland = /\bengland\b/i.test(fullCheckText);
+  const hasExplicitScotland = /\bscotland\b/i.test(fullCheckText);
+  const hasExplicitWales = /(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText);
+  const hasExplicitNI = /\bnorthern\s*ireland\b/i.test(fullCheckText);
+
+  if (hasExplicitUk && !hasExplicitEngland && !hasExplicitScotland && !hasExplicitWales && !hasExplicitNI) {
+    country = "United Kingdom";
+  } else if (country === "United Kingdom") {
+    if (hasExplicitEngland) {
       country = "England";
-    } else if (/\bscotland\b/i.test(fullCheckText)) {
+    } else if (hasExplicitScotland) {
       country = "Scotland";
-    } else if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText)) {
+    } else if (hasExplicitWales) {
       country = "Wales";
-    } else if (/\bnorthern\s*ireland\b/i.test(fullCheckText)) {
+    } else if (hasExplicitNI) {
       country = "Northern Ireland";
     }
-    // Rule: If website explicitly wrote "United Kingdom" or "UK" and did NOT mention England/Scotland/Wales/NI, keep "United Kingdom"!
   }
   result.countryName = country;
 
