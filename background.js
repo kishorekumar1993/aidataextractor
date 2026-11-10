@@ -1187,6 +1187,86 @@ function isFullAddressCandidate(raw) {
 }
 
 /**
+ * Silently renders a page in an inactive background tab when raw HTTP fetch hits
+ * an empty JS SPA shell or Cloudflare/anti-bot 403/503 challenge.
+ */
+async function fetchViaSilentBackgroundTab(targetUrl, timeoutMs = 5000) {
+  if (typeof chrome === "undefined" || !chrome.tabs || !chrome.tabs.create || !chrome.tabs.remove || !chrome.scripting || !chrome.scripting.executeScript) {
+    return null;
+  }
+  let createdTabId = null;
+  try {
+    const tab = await chrome.tabs.create({ url: targetUrl, active: false });
+    if (!tab || !tab.id) return null;
+    createdTabId = tab.id;
+
+    // Wait for page load completion up to timeoutMs
+    await new Promise((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        try { chrome.tabs.onUpdated.removeListener(onUpdated); } catch (e) { }
+        clearTimeout(timer);
+        resolve();
+      };
+      const onUpdated = (tabId, changeInfo) => {
+        if (tabId === createdTabId && changeInfo.status === "complete") {
+          done();
+        }
+      };
+      try { chrome.tabs.onUpdated.addListener(onUpdated); } catch (e) { }
+      const timer = setTimeout(done, Math.min(timeoutMs, 4000));
+    });
+
+    // Brief hydration window for React/Next/Vue/Wix/Cloudflare JS
+    await new Promise(r => setTimeout(r, 1200));
+
+    let injected = await chrome.scripting.executeScript({
+      target: { tabId: createdTabId },
+      func: () => ({
+        html: document.documentElement ? document.documentElement.outerHTML : "",
+        url: window.location.href,
+        title: document.title || "",
+        textLen: document.body && document.body.innerText ? document.body.innerText.trim().length : 0
+      })
+    });
+
+    let tabData = injected && injected[0] && injected[0].result;
+    // If Cloudflare/bot screen is still transitioning, allow one extra short wait
+    if (tabData && tabData.textLen < 200 && /just a moment|checking your browser|cloudflare/i.test(tabData.title + " " + tabData.html.slice(0, 1500))) {
+      await new Promise(r => setTimeout(r, 1800));
+      injected = await chrome.scripting.executeScript({
+        target: { tabId: createdTabId },
+        func: () => ({
+          html: document.documentElement ? document.documentElement.outerHTML : "",
+          url: window.location.href,
+          title: document.title || "",
+          textLen: document.body && document.body.innerText ? document.body.innerText.trim().length : 0
+        })
+      });
+      tabData = injected && injected[0] && injected[0].result;
+    }
+
+    if (tabData && tabData.html && tabData.html.length > 500 && !isAntiBotChallenge(tabData.html, 200)) {
+      return {
+        ok: true,
+        status: 200,
+        url: tabData.url || targetUrl,
+        html: tabData.html
+      };
+    }
+  } catch (e) {
+    console.warn("[AI Assistant] Background tab fallback failed:", e);
+  } finally {
+    if (createdTabId !== null) {
+      try { await chrome.tabs.remove(createdTabId); } catch (e) { }
+    }
+  }
+  return null;
+}
+
+/**
  * Deep crawls homepage, handles HTML <frameset>/<frame>, contact pages, footer, JSON-LD, products.
  */
 async function crawlWebsite(targetUrl) {
@@ -1304,7 +1384,22 @@ async function crawlWebsite(targetUrl) {
       }
     }
 
-    httpStatus = mainRes.status || 0;
+    // Silent background browser tab fallback ONLY when raw HTTP fetch hit a JS SPA shell (<500 chars)
+    // or a Cloudflare / anti-bot 401/403/503 challenge (skip genuinely dead DNS/404 domains).
+    const rawVisibleLen = (mainRes && mainRes.html) ? stripHtml(mainRes.html).length : 0;
+    const looksLikeSpaShell = mainRes && mainRes.ok && rawVisibleLen < 500 &&
+      (/<div[^>]+id=["'](?:app|root|__next|__nuxt|main-content)["'][^>]*>\s*<\/div>/i.test(mainRes.html) || /<script\b/i.test(mainRes.html));
+    const looksBlocked = isMainFailed && mainRes && (mainRes.status === 403 || mainRes.status === 401 || mainRes.status === 503 || isAntiBotChallenge(mainRes.html, mainRes.status));
+    if (looksLikeSpaShell || looksBlocked) {
+      const tabRes = await fetchViaSilentBackgroundTab((mainRes && mainRes.url) || targetUrl, 5000);
+      if (tabRes && tabRes.ok && stripHtml(tabRes.html).length > rawVisibleLen) {
+        mainRes = tabRes;
+        isMainFailed = false;
+        console.log(`[AI Assistant] Rescued ${looksBlocked ? "protected" : "SPA"} page via silent background tab (${stripHtml(tabRes.html).length} chars)`);
+      }
+    }
+
+    httpStatus = (mainRes && mainRes.status) || 0;
     if (mainRes.url && mainRes.url.trim().length > 0) {
       finalUrl = mainRes.url;
     }
@@ -1512,8 +1607,8 @@ async function crawlWebsite(targetUrl) {
             const isProductPage = /(?:products?|catalog(?:ue)?|categories|category|items?|collection|services?|solutions?)/i.test(cUrl);
             crawledPages.push({ url: cUrl, html: cText, text: stripHtml(cText), isProductPage });
             const isDistributorPage = /(?:dealers?|distributors?|stockists?|resellers?|partners?)/i.test(cUrl);
-            const isProfilePage = !isDistributorPage && /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history)/i.test(cUrl);
-            const isContactPage = !isDistributorPage && /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)/i.test(cUrl);
+            const isProfilePage = !isDistributorPage && /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history|quienes[-_]?somos|sobre[-_]?nosotros|nosotros|empresa|nuestra[-_]?empresa|chi[-_]?siamo|azienda|u(?:e)?ber[-_]?uns|unternehmen|a[-_]?propos|qui[-_]?sommes[-_]?nous|quem[-_]?somos|sobre[-_]?nos|tentang[-_]?kami)/i.test(cUrl);
+            const isContactPage = !isDistributorPage && /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak)/i.test(cUrl);
             const isLowQualitySubpage = /(?:terms|privacy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)/i.test(cUrl);
             const pageSource = isDistributorPage ? "distributor" : (isProfilePage ? "profile" : (isContactPage ? "contact" : (isProductPage ? "product" : "other")));
 
@@ -2061,9 +2156,9 @@ function discoverContactLinks(html, baseUrl) {
     if (!raw || /^(javascript:|mailto:|tel:|#)/i.test(raw)) continue;
 
     let score = 0;
-    if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us)\b/i.test(rawLower)) score += 10;
-    if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile)\b/i.test(rawLower)) score += 8;
-    if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|impressum|imprint|mentions-legales|warranty|warranties|guarantee|returns)\b/i.test(rawLower)) score += 7;
+    if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us|kontakt|contacto|contactenos|contáctenos|contatti|contattaci|contactez-nous|nous-contacter|contato|fale-conosco|hubungi|hubungi-kami|kontak)\b/i.test(rawLower)) score += 10;
+    if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile|quienes-somos|sobre-nosotros|nosotros|empresa|nuestra-empresa|chi-siamo|azienda|uber-uns|ueber-uns|unternehmen|wir-ueber-uns|a-propos|qui-sommes-nous|sobre-nos|quem-somos|tentang-kami|profil-perusahaan)\b/i.test(rawLower)) score += 8;
+    if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|impressum|imprint|mentions-legales|aviso-legal|note-legali|datenschutz|politica-de-privacidad|confidentialite|warranty|warranties|guarantee|returns)\b/i.test(rawLower)) score += 7;
     if (/\b(support|customer-support|service|customer-service|help|help-desk|faq)\b/i.test(rawLower)) score += 8;
     if (/\b(sales|inquiry|enquiry|inquiries|enquiries|quote|request-quote|request-a-quote|order|orders)\b/i.test(rawLower)) score += 8;
     if (/\b(shop|store|online-store|cart|basket)\b/i.test(rawLower)) score += 8;
@@ -2073,10 +2168,10 @@ function discoverContactLinks(html, baseUrl) {
     if (/\b(careers|career|jobs|job|employment|work-with-us|join-our-team)\b/i.test(rawLower)) score += 9;
     if (/\b(careers|career|jobs|employment|work\s*with\s*us|join\s*our\s*team)\b/i.test(innerText)) score += 9;
     if (/\b(feedback|complaints|directory)\b/i.test(rawLower)) score += 5;
-    if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us)\b/i.test(innerText)) score += 12;
-    if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile)\b/i.test(innerText)) score += 10;
+    if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us|kontakt|contacto|contáctenos|contatti|contattaci|contactez[-\s]*nous|nous\s*contacter|contato|fale\s*conosco|hubungi\s*kami)\b/i.test(innerText)) score += 12;
+    if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile|quienes\s*somos|quiénes\s*somos|sobre\s*nosotros|nuestra\s*empresa|chi\s*siamo|la\s*azienda|über\s*uns|ueber\s*uns|das\s*unternehmen|à\s*propos|qui\s*sommes[-\s]*nous|quem\s*somos|sobre\s*nós|tentang\s*kami)\b/i.test(innerText)) score += 10;
     if (/\b(shop|store|online\s*store|cart|basket|buy\s*online)\b/i.test(innerText)) score += 9;
-    if (/\b(terms|terms\s*and\s*conditions|terms\s*of\s*(?:service|use)|privacy\s*policy|legal\s*notice|company\s*info|imprint|impressum|warranty|warranties|guarantee)\b/i.test(innerText)) score += 8;
+    if (/\b(terms|terms\s*and\s*conditions|terms\s*of\s*(?:service|use)|privacy\s*policy|legal\s*notice|company\s*info|imprint|impressum|mentions\s*légales|aviso\s*legal|note\s*legali|datenschutz|warranty|warranties|guarantee)\b/i.test(innerText)) score += 8;
     if (/\b(customer\s*support|customer\s*service|technical\s*support|help\s*center|support)\b/i.test(innerText)) score += 10;
     if (/\b(sales|sales\s*enquiry|sales\s*inquiry|request\s*a\s*quote|quote|orders)\b/i.test(innerText)) score += 10;
     if (/\b(en|english)\b/i.test(innerText) || /[\/_](?:en|eng)\b/i.test(rawLower) || /[?&]lang=en/i.test(rawLower)) score += 7;
@@ -5051,6 +5146,41 @@ function determineCompanyNameSource(compName, crawlData) {
 }
 
 /**
+ * Resolves United Kingdom vs. constituent countries (England, Scotland, Wales, Northern Ireland):
+ * preserves "United Kingdom" when explicitly written in the address/contact block or when UK is
+ * stated on-site, and uses constituent nations only when UK is not explicitly mentioned.
+ */
+function resolveUkCountryName(currentCountry, addrStr, crawlData) {
+  const country = currentCountry || "";
+  const rawCandidatesText = (crawlData && crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
+  const addressBlockText = ((addrStr || "") + " " + rawCandidatesText).toLowerCase();
+  const fullCheckText = (addressBlockText + " " + (crawlData && crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData && crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
+
+  const addressHasExplicitUk = /\b(united\s*kingdom|great\s*britain|uk)\b/i.test(addressBlockText);
+  const hasExplicitUk = /\b(united\s*kingdom|great\s*britain|uk)\b/i.test(fullCheckText);
+  const hasExplicitEngland = /\bengland\b/i.test(fullCheckText);
+  const hasExplicitScotland = /\bscotland\b/i.test(fullCheckText);
+  const hasExplicitWales = /(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText);
+  const hasExplicitNI = /\bnorthern\s*ireland\b/i.test(fullCheckText);
+
+  const isUkOrConstituentContext = country === "United Kingdom" || addressHasExplicitUk ||
+    (!country && (hasExplicitUk || hasExplicitEngland || hasExplicitScotland || hasExplicitWales || hasExplicitNI));
+
+  if (!isUkOrConstituentContext) {
+    return country;
+  }
+
+  if (addressHasExplicitUk || (country === "United Kingdom" && hasExplicitUk)) {
+    return "United Kingdom";
+  }
+  if (hasExplicitEngland) return "England";
+  if (hasExplicitScotland) return "Scotland";
+  if (hasExplicitWales) return "Wales";
+  if (hasExplicitNI) return "Northern Ireland";
+  return "United Kingdom";
+}
+
+/**
  * Enforces all 14 instructions deterministically based on physical address evidence.
  */
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
@@ -5120,40 +5250,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       .trim();
 
     // 2. Country Name: Full form Title Case, and UK constituent refinement (Mandatory QC Rule)
-    // "If website country available means it should written UK (United Kingdom) else we can search google and put country"
     let country = toTitleCase(normalizeCountryName(result.countryName));
     if (!country && result.companyAddress) {
       country = toTitleCase(detectCountryFromAddress(result.companyAddress));
     }
-
-    const rawCandidatesText = (crawlData && crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
-    const addressBlockText = ((result.companyAddress || "") + " " + rawCandidatesText).toLowerCase();
-    const fullCheckText = (addressBlockText + " " + (crawlData && crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData && crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
-    const addressHasExplicitUk = /\b(united\s*kingdom|great\s*britain|uk)\b/i.test(addressBlockText);
-    const hasExplicitUk = /\b(united\s*kingdom|great\s*britain|uk)\b/i.test(fullCheckText);
-    const hasExplicitEngland = /\bengland\b/i.test(fullCheckText);
-    const hasExplicitScotland = /\bscotland\b/i.test(fullCheckText);
-    const hasExplicitWales = /(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText);
-    const hasExplicitNI = /\bnorthern\s*ireland\b/i.test(fullCheckText);
-
-    // CRITICAL QC RULE: "If website country available means it should written UK (United Kingdom) else we can search google and put country"
-    // If the address block or website explicitly wrote "United Kingdom" or "UK", it MUST be "United Kingdom"!
-    // NEVER override "United Kingdom" to "England" just because "Registered in England" appears in corporate footer!
-    if (addressHasExplicitUk || (country === "United Kingdom" && hasExplicitUk)) {
-      country = "United Kingdom";
-    } else if (country === "United Kingdom" || !country) {
-      if (hasExplicitEngland) {
-        country = "England";
-      } else if (hasExplicitScotland) {
-        country = "Scotland";
-      } else if (hasExplicitWales) {
-        country = "Wales";
-      } else if (hasExplicitNI) {
-        country = "Northern Ireland";
-      } else {
-        country = "United Kingdom";
-      }
-    }
+    country = resolveUkCountryName(country, result.companyAddress || "", crawlData);
     result.countryName = country;
 
     // 3. Company Address: Strict QC sanitization - No Extra Words, expand abbreviations, remove postal codes & country
@@ -5834,29 +5935,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
   }
   country = toTitleCase(normalizeCountryName(country));
-  // UK Constituent Country refinement (Mandatory QC Rule):
-  // "If website country available means it should written UK (United Kingdom) else we can search google and put country"
-  const rawCandidatesText = (crawlData && crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ");
-  const fullCheckText = (addr + " " + rawCandidatesText + " " + (crawlData && crawlData.bodyText ? crawlData.bodyText.slice(0, 5000) : "") + " " + (crawlData && crawlData.contactPageText ? crawlData.contactPageText.slice(0, 5000) : "")).toLowerCase();
-  const hasExplicitUk = /\b(united\s*kingdom|great\s*britain|uk)\b/i.test(fullCheckText);
-  const hasExplicitEngland = /\bengland\b/i.test(fullCheckText);
-  const hasExplicitScotland = /\bscotland\b/i.test(fullCheckText);
-  const hasExplicitWales = /(?<!\bnew\s+south\s+)\bwales\b/i.test(fullCheckText);
-  const hasExplicitNI = /\bnorthern\s*ireland\b/i.test(fullCheckText);
-
-  if (hasExplicitUk && !hasExplicitEngland && !hasExplicitScotland && !hasExplicitWales && !hasExplicitNI) {
-    country = "United Kingdom";
-  } else if (country === "United Kingdom") {
-    if (hasExplicitEngland) {
-      country = "England";
-    } else if (hasExplicitScotland) {
-      country = "Scotland";
-    } else if (hasExplicitWales) {
-      country = "Wales";
-    } else if (hasExplicitNI) {
-      country = "Northern Ireland";
-    }
-  }
+  country = resolveUkCountryName(country, addr, crawlData);
   result.countryName = country;
 
   // Helper for cross-country equivalence (UK constituent nations, USA variants)

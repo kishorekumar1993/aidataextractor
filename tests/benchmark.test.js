@@ -9,6 +9,7 @@ console.log('========================================================\n');
 // Load background.js in VM
 const bgCode = fs.readFileSync('background.js', 'utf8');
 const ctx = vm.createContext({
+  URL,
   chrome: {
     runtime: { onMessage: { addListener: () => {} } },
     storage: { sync: { get: async () => ({}) } }
@@ -294,6 +295,53 @@ runTest('Company name abbreviations expand to full legal & industry forms', () =
   assert.strictEqual(ctx.expandCompanyAbbreviations("PT Karya Ind. Tbk", "Indonesia").trim(), "Perseroan Terbatas Karya Industries Terbuka");
   assert.strictEqual(ctx.expandCompanyAbbreviations("Krupp Tech. GmbH", "Germany").trim(), "Krupp Technology Gesellschaft mit beschränkter Haftung");
   assert.strictEqual(ctx.expandCompanyAbbreviations("Pacific Precision Pty Ltd", "Australia").trim(), "Pacific Precision Proprietary Limited");
+});
+
+// 16. Synced UK Country Resolution (Fallback matches AI path) & International Contact Slugs
+runTest('Deterministic UK country resolution matches AI path & resolves England when UK omitted', () => {
+  const ukAddrCrawl = {
+    addressCandidates: [{ raw: "Unit 1, Example Way, London, United Kingdom" }],
+    bodyText: "Registered in England and Wales no. 123456",
+    contactPageText: "London, United Kingdom"
+  };
+  assert.strictEqual(
+    ctx.resolveUkCountryName("United Kingdom", "Unit 1, Example Way, London", ukAddrCrawl),
+    "United Kingdom",
+    "Fallback resolver must preserve United Kingdom when UK is explicitly in addressCandidates"
+  );
+
+  const englandOnlyCrawl = {
+    addressCandidates: [{ raw: "42 High Street, Manchester, M1 1AA" }],
+    bodyText: "Registered in England. Precision manufacturer.",
+    contactPageText: "42 High Street, Manchester"
+  };
+  assert.strictEqual(
+    ctx.resolveUkCountryName("United Kingdom", "42 High Street, Manchester", englandOnlyCrawl),
+    "England",
+    "Resolver must refine to England when UK is omitted and England is stated"
+  );
+});
+
+runTest('discoverContactLinks finds international contact and about pages', () => {
+  const html = `
+    <nav>
+      <a href="/kontakt">Kontakt</a>
+      <a href="/ueber-uns">Über uns</a>
+      <a href="/contacto">Contacto</a>
+      <a href="/quienes-somos">Quiénes somos</a>
+      <a href="/contatti">Contatti</a>
+      <a href="/chi-siamo">Chi siamo</a>
+      <a href="/contactez-nous">Contactez-nous</a>
+    </nav>
+  `;
+  const links = ctx.discoverContactLinks(html, "https://example.eu/");
+  assert.ok(links.includes("https://example.eu/kontakt"), "Must discover German /kontakt");
+  assert.ok(links.includes("https://example.eu/ueber-uns"), "Must discover German /ueber-uns");
+  assert.ok(links.includes("https://example.eu/contacto"), "Must discover Spanish /contacto");
+  assert.ok(links.includes("https://example.eu/quienes-somos"), "Must discover Spanish /quienes-somos");
+  assert.ok(links.includes("https://example.eu/contatti"), "Must discover Italian /contatti");
+  assert.ok(links.includes("https://example.eu/chi-siamo"), "Must discover Italian /chi-siamo");
+  assert.ok(links.includes("https://example.eu/contactez-nous"), "Must discover French /contactez-nous");
 });
 
 console.log('\n========================================================');
