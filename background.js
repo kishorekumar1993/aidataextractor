@@ -983,6 +983,11 @@ function extractCopyrightCompanyName(html) {
   return "";
 }
 
+function stripBoundarySpecialChars(str) {
+  if (!str || typeof str !== "string") return "";
+  return str.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").replace(/\s+/g, " ").trim();
+}
+
 /**
  * Strips navigational, CTA, and page-context prefixes and marketing taglines from company names.
  * Ensures official registered names are clean, complete, and free of extraneous artifacts.
@@ -1006,7 +1011,7 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   // 1b. Strip embedded CTA / navigational breadcrumbs if present:
   // e.g. "Aerospace Contact Us Data Plastics Ltd" -> "Data Plastics Ltd"
   name = name.replace(/^.*?\b(?:contact(?:\s+us)?|about(?:\s+us)?|welcome(?:\s+to(?:\s+the\s+official\s+website\s+of)?)?|get\s+in\s+touch(?:\s+with)?|reach\s+us|visit\s+us|find\s+us)\b\s*[:\-–—|•·*\/]?\s*/i, "").trim();
-  name = name.replace(/^[A-Za-z0-9\s]+[•·|*\/]\s*/, "").trim();
+  name = name.replace(/^(?:(?:[A-Za-z0-9\s]{1,30}\s+[•·|*]\s+)|(?:(?:home|about(?:\s+us)?|contact(?:\s+us)?|products?|services?|shop|store|catalog|news|blog)\s*\/\s+))/i, "").trim();
 
   // 2. Strip common unwanted leading prefixes (iterative loop to handle chained prefixes like "Submit scroll to top Contact")
   const prefixRegex = /^(?:(?:contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+the\s+official\s+website\s+of)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo|facebook|instagram|linkedin|twitter|youtube|pinterest|tiktok|vimeo|social\s*media|follow\s*us|connect\s*with\s*us)\b[\s\-_|:•·,]*)+/i;
@@ -1029,11 +1034,7 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
 
   // 5. Clean boundary punctuation and special characters per Rule 4
   // Rule: Special character should not start and should not end
-  name = name.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
-  name = name.replace(/[^\p{L}\p{N}]+$/gu, "").trim();
-  name = name.replace(/\s+/g, " ").trim();
-
-  return name;
+  return stripBoundarySpecialChars(name);
 }
 
 /**
@@ -4633,8 +4634,9 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
   * PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata.
   * Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises.
 - Remove brackets ()/[] keeping inner text (e.g. "Company (Malaysia) Sdn Bhd" -> "Company Malaysia Sendirian Berhad"). If country name is inside company name, keep it as is.
-- Do NOT truncate names containing "&" or "and" (e.g. "CJ Tool & Mouldings Limited", NEVER omit words before & or expand "&" to "And").
-- Format in Title Case where EVERY word starts with a capital letter (keep brand acronyms like PEM, BMW in UPPERCASE). Remove special characters at start/end.
+- NEVER expand special characters or symbols into words (do NOT convert "&" to "And", "+" to "Plus", "@" to "At", "/" to "Slash"/"Or", "%" to "Percent", "#" to "Number"; keep internal symbols as-is such as "CJ Tool & Mouldings Limited", "H&R Manufacturing", "Design+Build").
+- Format in Title Case where EVERY word starts with a capital letter (keep brand acronyms like PEM, BMW in UPPERCASE).
+- Strictly REMOVE ANY special characters from the beginning or end of the company name (no leading or trailing ".", ",", "-", "!", "*", "&", "+", "/", "#", "@", "®", "™", "©", quotes, brackets, or symbols).
 - Preserve comma before corporate suffix if standard or present on website (e.g. "ECU Testing, Limited", "Mocap, Limited Liability Company").
 
 5. COUNTRY NAME (CRITICAL QC RULE - SUPPORT ALL 135+ COUNTRIES GLOBALLY WITH FULL NAME EXPANSION):
@@ -5578,10 +5580,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     compName = toTitleCase(compName);
     compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
     compName = restoreOriginalSymbolsInCompanyName(compName, crawlData);
-    result.companyName = compName
-      .replace(/^[^\p{L}\p{N}]+/gu, "")
-      .replace(/[^\p{L}\p{N}]+$/gu, "")
-      .trim();
+    result.companyName = stripBoundarySpecialChars(compName);
 
     // 2. Country Name: Full form Title Case, and UK constituent refinement (Mandatory QC Rule)
     let country = toTitleCase(normalizeCountryName(result.countryName));
@@ -5978,7 +5977,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const curNormComp = normalizeNameForComparison(compName);
   const compMatchesDomain = dStemNorm && (curNormComp.includes(dStemNorm) || dStemNorm.includes(curNormComp));
   const hasLegalCandidates = crawlData && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0;
-  const hasExpandedSymbol = /\bAnd\b/i.test(compName) && ((crawlData && (crawlData.logoText || crawlData.title || crawlData.copyrightText || (crawlData.mainHtml || "").slice(0, 10000))).includes("&"));
+  const companyEvidenceSnippet = crawlData ? `${crawlData.logoText || ""} ${crawlData.ogSiteName || ""} ${crawlData.title || ""} ${crawlData.copyrightText || ""} ${(crawlData.mainHtml || "").slice(0, 10000)}` : "";
+  const hasExpandedSymbol = (
+    (/\bAnd\b/i.test(compName) && companyEvidenceSnippet.includes("&")) ||
+    (/\bPlus\b/i.test(compName) && companyEvidenceSnippet.includes("+")) ||
+    (/\bAt\b/i.test(compName) && companyEvidenceSnippet.includes("@")) ||
+    (/\bPer\s*cent\b/i.test(compName) && companyEvidenceSnippet.includes("%")) ||
+    (/\bSlash\b/i.test(compName) && companyEvidenceSnippet.includes("/"))
+  );
 
   if (!compName || !hasSuffix || (!compMatchesDomain && hasLegalCandidates) || hasExpandedSymbol) {
     compName = preferOfficialCompanyName(compName, crawlData);
@@ -5995,13 +6001,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = compName.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
   compName = compName.replace(/[\(\)\[\]\{\}]/g, " ");
   // Rule: Special character should not start and should not end
-  compName = compName.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
-  compName = compName.replace(/[^\p{L}\p{N}]+$/gu, "").trim();
-  compName = compName.replace(/\s+/g, " ").trim();
+  compName = stripBoundarySpecialChars(compName);
   compName = toTitleCase(compName);
   compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
   compName = restoreOriginalSymbolsInCompanyName(compName, crawlData);
-  compName = compName.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N}]+$/gu, "").trim();
+  compName = stripBoundarySpecialChars(compName);
   result.companyName = compName;
 
   // 6. Company Address: Use Gemini's extracted address directly as source of truth; fall back to website candidates only if empty
@@ -6515,11 +6519,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // Internal special characters like & in "AT&T", # in "Suite #4" must be preserved!
   for (const key of ["companyName", "companyAddress", "businessType", "countryName"]) {
     if (result[key] && typeof result[key] === "string" && result[key] !== "Not Available") {
-      result[key] = result[key].replace(/^[^\p{L}\p{N}]+/gu, "").trim();
       if (key === "companyName") {
-        result[key] = result[key].replace(/[^\p{L}\p{N}.)]+$/gu, "").trim();
+        result[key] = stripBoundarySpecialChars(result[key]);
       } else {
-        result[key] = result[key].replace(/[^\p{L}\p{N})]+$/gu, "").trim();
+        result[key] = result[key].replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N})]+$/gu, "").trim();
       }
     }
   }
@@ -7872,7 +7875,14 @@ function preferOfficialCompanyName(name, crawlData) {
 
   for (const official of allCandidates) {
     const hasSuffix = hasCompleteLegalSuffix(official) || /\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|company|co)\b/i.test(official);
-    const hasSymbolMatch = official.includes("&") && (current.toLowerCase().includes(" and ") || companyNamesMatch(current, official));
+    const hasSymbolMatch = (
+      (official.includes("&") && current.toLowerCase().includes(" and ")) ||
+      (official.includes("+") && current.toLowerCase().includes(" plus ")) ||
+      (official.includes("@") && current.toLowerCase().includes(" at ")) ||
+      (official.includes("%") && /\bper\s*cent\b/i.test(current)) ||
+      (official.includes("/") && /\bslash\b/i.test(current)) ||
+      (official.includes("&") && companyNamesMatch(current, official))
+    );
     if (!hasSuffix && !hasSymbolMatch) {
       continue;
     }
@@ -7972,9 +7982,10 @@ function preferOfficialCompanyName(name, crawlData) {
 }
 
 /**
- * Restores original symbols (such as "&") in company name when AI incorrectly expanded them to words ("And"),
- * and strips extraneous "Company" when the official website brand is without "Company".
- * Strictly satisfies QC rule: "dont expand the symbols it should be as it is H&R Manufacturing"
+ * Restores original symbols (such as "&", "+", "@", "%", "/") in company name when AI incorrectly
+ * expanded them to words ("And", "Plus", "At", "Percent", "Slash"), and strips extraneous "Company"
+ * when the official website brand is without "Company".
+ * Strictly satisfies QC rule: "dont expand special charaters"
  */
 function restoreOriginalSymbolsInCompanyName(name, crawlData) {
   if (!name || typeof name !== "string") return name;
@@ -7982,28 +7993,59 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
 
   const evidenceSources = [
     crawlData && crawlData.logoText,
+    crawlData && crawlData.ogSiteName,
     crawlData && crawlData.title,
     crawlData && crawlData.copyrightText,
     ...(crawlData && crawlData.legalCompanyCandidates || []),
     ...(crawlData && crawlData.companySocials ? Object.values(crawlData.companySocials) : []),
+    crawlData && crawlData.contactHtml,
+    crawlData && crawlData.renderedText,
+    crawlData && crawlData.bodyText,
     crawlData && crawlData.mainHtml
   ].filter(Boolean);
 
-  const combinedEvidence = evidenceSources.join(" ");
+  const combinedEvidence = decodeHtmlEntities(evidenceSources.join(" "));
+  const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-  // 1. Restore "&" when AI expanded it to "And"
-  // e.g. "H And R Manufacturing" -> "H&R Manufacturing" or "H & R Manufacturing"
-  if (/\b(?:and)\b/i.test(n) && combinedEvidence.includes("&")) {
-    n = n.replace(/\b([A-Za-z0-9]+)\s+And\s+([A-Za-z0-9]+)\b/g, (match, p1, p2) => {
-      const noSpaceRegex = new RegExp(`\\b${p1}&${p2}\\b`, "i");
-      const spaceRegex = new RegExp(`\\b${p1}\\s+&\\s+${p2}\\b`, "i");
-      if (noSpaceRegex.test(combinedEvidence)) {
-        return `${p1}&${p2}`;
-      } else if (spaceRegex.test(combinedEvidence)) {
-        return `${p1} & ${p2}`;
-      }
-      return match;
-    });
+  // 1. Restore symbols when AI/upstream expanded them to words
+  const symbolSpecs = [
+    { sym: "&", words: ["And"] },
+    { sym: "+", words: ["Plus"] },
+    { sym: "@", words: ["At"] },
+    { sym: "%", words: ["Percent", "Per\\s+Cent"] },
+    { sym: "/", words: ["Slash", "Or"] }
+  ];
+
+  for (const spec of symbolSpecs) {
+    if (!combinedEvidence.includes(spec.sym)) continue;
+    const symEsc = escRe(spec.sym);
+    const wordAlt = spec.words.join("|");
+    // Repeat up to 3 passes so chained symbols (e.g. "A And B And C" -> "A&B&C") all restore
+    for (let pass = 0; pass < 3; pass++) {
+      const pairRegex = new RegExp(`([\\p{L}\\p{N}.'\\-]+)\\s+(?:${wordAlt})\\s+([\\p{L}\\p{N}.'\\-]+)`, "giu");
+      const updated = n.replace(pairRegex, (match, p1, p2) => {
+        const p1Esc = escRe(p1);
+        const p2Esc = escRe(p2);
+        const noSpaceRegex = new RegExp(`(?:^|[^\\p{L}\\p{N}])${p1Esc}${symEsc}${p2Esc}(?:$|[^\\p{L}\\p{N}])`, "iu");
+        const spaceRegex = new RegExp(`(?:^|[^\\p{L}\\p{N}])${p1Esc}\\s+${symEsc}\\s+${p2Esc}(?:$|[^\\p{L}\\p{N}])`, "iu");
+        if (noSpaceRegex.test(combinedEvidence)) {
+          return `${p1}${spec.sym}${p2}`;
+        }
+        if (spaceRegex.test(combinedEvidence)) {
+          return `${p1} ${spec.sym} ${p2}`;
+        }
+        return match;
+      });
+      if (updated === n) break;
+      n = updated;
+    }
+    if (spec.sym === "%") {
+      // Handle standalone "100 Percent ..." when evidence has "100%"
+      n = n.replace(/(\b\d+(?:\.\d+)?)\s+(?:Percent|Per\s+Cent)\b/gi, (match, num) => {
+        const pctRegex = new RegExp(`(?:^|[^\\d])${escRe(num)}%`, "i");
+        return pctRegex.test(combinedEvidence) ? `${num}%` : match;
+      });
+    }
   }
 
   // 2. If name ends with "Company" but the official website brand / title / logo is without "Company"
@@ -8207,8 +8249,15 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\bplt\b\.?/gi, "Perkongsian Liabiliti Terhad");
 
   // 6. Germany / Austria / Switzerland (DACH)
-  n = n.replace(/\bgmbh\s*(?:&|\+|und|and|u\.)\s*co\.?\s*kg\.?\b/gi, "Gesellschaft mit beschränkter Haftung and Compagnie Kommanditgesellschaft");
-  n = n.replace(/\bgmbh\s*(?:&|\+|und|and|u\.)\s*co\.?\b/gi, "Gesellschaft mit beschränkter Haftung and Compagnie");
+  // Preserve special characters like "&" or "+" unexpanded (do NOT turn "&" / "+" into "and")
+  n = n.replace(/\bgmbh\s*(&|\+|und|and|u\.?)\s*co\.?\s*kg\.?\b/gi, (_, op) => {
+    const conn = /^(&|\+)$/.test(op) ? op : (/^and$/i.test(op) ? "and" : "und");
+    return `Gesellschaft mit beschränkter Haftung ${conn} Compagnie Kommanditgesellschaft`;
+  });
+  n = n.replace(/\bgmbh\s*(&|\+|und|and|u\.?)\s*co\.?\b/gi, (_, op) => {
+    const conn = /^(&|\+)$/.test(op) ? op : (/^and$/i.test(op) ? "and" : "und");
+    return `Gesellschaft mit beschränkter Haftung ${conn} Compagnie`;
+  });
   n = n.replace(/\b(?:g[\.\s]*m[\.\s]*b[\.\s]*h|gmbh)\b\.?/gi, "Gesellschaft mit beschränkter Haftung");
   n = n.replace(/\b(?:u[\.\s]*g|ug)\s*(?:\(haftungsbeschr[äa]nkt\)|haftungsbeschr[äa]nkt)?\b\.?/gi, "Unternehmergesellschaft haftungsbeschränkt");
   n = n.replace(/\b(?:k[\.\s]*g[\.\s]*a[\.\s]*a|kgaa)\b\.?/gi, "Kommanditgesellschaft auf Aktien");
@@ -8419,10 +8468,7 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\s+/g, " ").trim();
 
   // Rule: Special character should not start and should not end
-  n = n.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
-  n = n.replace(/[^\p{L}\p{N}]+$/gu, "").trim();
-
-  return n;
+  return stripBoundarySpecialChars(n);
 }
 
 /**
@@ -10414,6 +10460,18 @@ function decodeHtmlEntities(str) {
       .replace(/&apos;/gi, "'")
       .replace(/&quot;/gi, '"')
       .replace(/&amp;/gi, "&")
+      .replace(/&plus;/gi, "+")
+      .replace(/&commat;/gi, "@")
+      .replace(/&percnt;/gi, "%")
+      .replace(/&num;/gi, "#")
+      .replace(/&sol;/gi, "/")
+      .replace(/&reg;/gi, "®")
+      .replace(/&trade;/gi, "™")
+      .replace(/&copy;/gi, "©")
+      .replace(/&ndash;/gi, "–")
+      .replace(/&mdash;/gi, "—")
+      .replace(/&bull;/gi, "•")
+      .replace(/&middot;/gi, "·")
       .replace(/&lt;/gi, "<")
       .replace(/&gt;/gi, ">")
       .replace(/&nbsp;/gi, " ")

@@ -639,6 +639,108 @@ runTest('Indonesia address expansion & Contact Us #1 priority ranking', () => {
   assert.strictEqual(ranked[0], "sales@example.co.id", `Contact Us email must rank #1 (got: ${ranked.join(", ")})`);
 });
 
+// Test 24: Remove leading/trailing special characters & preserve internal special characters unexpanded
+runTest('Remove leading/trailing special characters & do not expand internal symbols', () => {
+  // 1. Remove ANY special characters from beginning or end (including ., ), *, -, ®, ™, #, &)
+  assert.strictEqual(
+    ctx.expandCompanyAbbreviations("* H&R Mfg. Co. ®", "United States Of America"),
+    "H&R Manufacturing Company"
+  );
+  assert.strictEqual(
+    ctx.expandCompanyAbbreviations("- Acme Corp.)", "United States Of America"),
+    "Acme Corporation"
+  );
+  assert.strictEqual(
+    ctx.expandCompanyAbbreviations("© \"Smith & Sons\" ™ !", "United Kingdom"),
+    "Smith & Sons"
+  );
+  assert.strictEqual(
+    ctx.cleanCompanyPrefixesAndSuffixes("R/C Electronics Ltd."),
+    "R/C Electronics Ltd"
+  );
+
+  // 2. Do NOT expand "&" or "+" in GmbH & Co. KG / GmbH + Co. KG
+  assert.strictEqual(
+    ctx.expandCompanyAbbreviations("Müller GmbH & Co. KG", "Germany"),
+    "Müller Gesellschaft mit beschränkter Haftung & Compagnie Kommanditgesellschaft"
+  );
+  assert.strictEqual(
+    ctx.expandCompanyAbbreviations("Meyer GmbH + Co. KG", "Germany"),
+    "Meyer Gesellschaft mit beschränkter Haftung + Compagnie Kommanditgesellschaft"
+  );
+
+  // 3. Full applyStrictInstructions (AI mode): strip end "." and ")" AND restore expanded symbols (&, +, %, /)
+  const symCrawl = {
+    originalUrl: "https://hrdesign.example.com/",
+    finalUrl: "https://hrdesign.example.com/",
+    status: "Working",
+    title: "H&R Manufacturing | Design+Build",
+    logoText: "H&R Manufacturing",
+    mainHtml: "<html><body><h1>Design+Build</h1><p>100% Plastics Co.</p><p>Contact: sales@hrdesign.example.com</p></body></html>",
+    bodyText: "H&R Manufacturing Design+Build 100% Plastics Co. Industrial equipment.",
+    contactHtml: "",
+    contactPageText: "100 Main Street, Chicago, Illinois",
+    footerText: "Copyright 2026 H&R Manufacturing",
+    emails: ["sales@hrdesign.example.com"],
+    phones: ["3125551234"],
+    addressCandidates: [{ raw: "100 Main Street, Chicago, Illinois", source: "contact", isHeadquarters: true, priority: 0.5 }],
+    detectedProductCount: 3,
+    detectedImageCount: 3,
+    detectedDescCount: 3
+  };
+
+  const aiDotEnd = ctx.applyStrictInstructions({
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "® *H And R Manufacturing.) *",
+    countryName: "United States",
+    companyAddress: "100 Main Street, Chicago, Illinois",
+    state: "Available",
+    city: "Available",
+    emailId: "sales@hrdesign.example.com",
+    phoneNumber: "3125551234",
+    numberOfProducts: "3",
+    productImages: "3",
+    numberOfProductDescriptions: "3"
+  }, symCrawl, { isRestricted: false });
+  assert.strictEqual(aiDotEnd.companyName, "H&R Manufacturing");
+
+  const aiPlus = ctx.applyStrictInstructions({
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "Design Plus Build Ltd.",
+    countryName: "United States",
+    companyAddress: "100 Main Street, Chicago, Illinois",
+    state: "Available",
+    city: "Available",
+    emailId: "sales@hrdesign.example.com",
+    phoneNumber: "3125551234",
+    numberOfProducts: "3",
+    productImages: "3",
+    numberOfProductDescriptions: "3"
+  }, symCrawl, { isRestricted: false });
+  assert.strictEqual(aiPlus.companyName, "Design+Build Limited");
+
+  const aiPct = ctx.applyStrictInstructions({
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "& 100 Percent Plastics Co. -",
+    countryName: "United States",
+    companyAddress: "100 Main Street, Chicago, Illinois",
+    state: "Available",
+    city: "Available",
+    emailId: "sales@hrdesign.example.com",
+    phoneNumber: "3125551234",
+    numberOfProducts: "3",
+    productImages: "3",
+    numberOfProductDescriptions: "3"
+  }, symCrawl, { isRestricted: false });
+  assert.strictEqual(aiPct.companyName, "100% Plastics Company");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');
