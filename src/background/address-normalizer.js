@@ -411,13 +411,6 @@ function normalizeTaiwanDivisions(addr) {
   return a;
 }
 
-function hasIndonesiaAddressSignal(text, country = "") {
-  const cLower = (country || "").toLowerCase();
-  if (cLower.includes("indonesia")) return true;
-  if (!text) return false;
-  return /\b(?:jalan|jl\.?|jln\.?|gang|gg\.?|komp\.?|kompl\.?|perum\.?|perumahan|kav\.?|kavling|blok|kel\.?|kelurahan|kec\.?|kecamatan|kab\.?|kabupaten|kodya|kotamadya|prov\.?|prop\.?|provinsi|desa|ds\.?|dusun|dsn\.?|dukuh|dk\.?|dkh\.?|lingkungan|lingk\.?|lk\.?|kp\.?|kampung|rukun\s+tetangga|rukun\s+warga|rt\.?\s*\d+(?:\s*[-/,]\s*rw\.?\s*\d+)?|rw\.?\s*\d+|kawasan|kaw\.?\s*ind|mm2100|jababeka|ejip|kiic|cibitung|jepara|pakis\s+aji|batealit|tahunan|mayong|pecangaan|welahan|bangsri|mlonggo|kalinyamatan|nalumsari|tawangmas|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|serang|cilegon|cirebon|kudus|klaten|sukoharjo|pati|demak|pekalongan|tegal|magelang|salatiga|purwokerto|cilacap|pemalang|mojokerto|kediri|madiun|jambi|padang|banjarmasin|samarinda|pontianak|manado|jawa|central\s+java|west\s+java|east\s+java|north\s+sumatra|west\s+sumatra|south\s+sumatra|south\s+sulawesi|east\s+kalimantan|sumatra|sumatera|kalimantan|sulawesi|banten|bali|aceh|gorontalo|papua|maluku|jateng|jabar|jatim|sumut|sumbar|sumsel|sulsel|sulut|sulteng|sultra|sulbar|kaltim|kalbar|kalsel|kalteng|kalut|kaltara|kepri|malut|ntb|ntt|babel|dki|diy)\b/i.test(text);
-}
-
 function expandAddressAndStateAbbreviations(addr, country = "") {
   if (!addr) return "";
   const cLower = (country || "").toLowerCase();
@@ -448,7 +441,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\s*&\s*/g, " & ");
 
   // 1. "St" as "Saint" in city, place, or street names (e.g. St Louis, Port St Lucie, St. James Road, St. Patrick Street)
-  a = a.replace(/\b(?:port\s+|mount\s+)?st\.?\s+(lucie|louis|paul|petersburg|cloud|albans|kilda|george|john|johns|john's|andrews|charles|joseph|moritz|leonards|marys|mary's|peters|helens|ives|clair|james|patrick|thomas|martin|francis|anne|anne's|catherine|michael|jude|stephen|christopher|anthony|lawrence|luke|mark|matthew|david|nicholas)\b/gi, function (m, p) {
+  a = a.replace(/\b(?:port\s+|mount\s+)?st\.?\s+(lucie|louis|paul|petersburg|cloud|albans|kilda|george|john|johns|john's|andrews|charles|joseph|moritz|leonards|marys|mary's|peters|helens|ives|clair|james|patrick|thomas|martin|francis|anne|anne's|catherine|michael|jude|stephen|christopher|anthony|lawrence|luke|mark|matthew|david|nicholas|polten|pölten|gallen|johann|veit|anton)\b/gi, function (m, p) {
     if (/^port/i.test(m)) return "Port Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
     if (/^mount/i.test(m)) return "Mount Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
     return "Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
@@ -529,7 +522,14 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bNr\b\.?/gi, "Near");
   a = a.replace(/\bhsien\b/gi, "County");
 
-  // 5. Street types expansion (Global) - standard set only (avoids corrupting normal words)
+  const isSpanishOrLatam = /\b(?:spain|espana|españa|mexico|méxico|argentina|colombia|peru|perú|costa\s*rica|panama|panamá|guatemala|nicaragua|uruguay|paraguay|bolivia|dominican\s*republic)\b/i.test(cLower) || /\b(?:col\.?|fracc\.?|calz\.?|prol\.?|mza\.?|cte\.?|avda\.?|pol\.?\s*ind\.?)\b/i.test(a) || (typeof isSpanishLocation === "function" && isSpanishLocation(a, country));
+  const isPortugueseOrBrazil = /\b(?:brazil|brasil|portugal)\b/i.test(cLower) || /\b(?:rodovia|estr\.?|pça?\.?|rua|sao\s*paulo|são\s*paulo|rio\s*de\s*janeiro|belo\s*horizonte|curitiba|lisboa|porto)\b/i.test(a);
+  const isPolishAddr = /\b(?:poland|polska)\b/i.test(cLower) || /\b(?:ul\.|al\.|os\.|woj\.|pow\.|warsaw|warszawa|krak[oó]w|wroc[lł]aw|pozna[nń]|gda[nń]sk|katowice|gryfino|szczecin)\b/i.test(a);
+  const isDutchOrBelgianAddr = /\b(?:netherlands|nederland|holland|belgium|belgi[eë]|belgique)\b/i.test(cLower) || /\b(?:amsterdam|rotterdam|utrecht|eindhoven|den\s*haag|antwerp|antwerpen|brussels|bruxelles|ghent|gent|industrieterrein|postbus)\b/i.test(a);
+  const isDachAddr = /\b(?:germany|deutschland|austria|[oö]sterreich|oesterreich|switzerland|schweiz|suisse|svizzera)\b/i.test(cLower) || /\b(?:strasse|straße|platz|gewerbegebiet|industriegebiet|berlin|munich|m[uü]nchen|hamburg|frankfurt|stuttgart|vienna|wien|graz|linz|zurich|z[uü]rich|basel|bern)\b/i.test(a);
+  const isFrenchAddr = /\b(?:france|belgique)\b/i.test(cLower) || /\b(?:rue|cedex|z\.?i\.?|z\.?a\.?c?\.?|impasse|all[eé]e|chemin|boite\s*postale|paris|lyon|marseille|toulouse|nice|nantes|strasbourg|bordeaux|lille)\b/i.test(a);
+
+  // 5. Street types expansion (Global) - language-aware before generic English fallbacks
   a = a.replace(/\b(?:pkwy|pky|pwy)\b\.?/gi, "Parkway");
   a = a.replace(/\bmwy\b\.?/gi, "Motorway");
   a = a.replace(/\bblvd\b\.?/gi, "Boulevard");
@@ -543,8 +543,8 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bhwy\b\.?/gi, "Highway");
   a = a.replace(/\bexp(?:ress)?wy\b\.?/gi, "Expressway");
   a = a.replace(/\bcir\b\.?/gi, "Circle");
-  a = a.replace(/\bave\b\.?/gi, "Avenue");
-  a = a.replace(/\bav\b\.?/gi, "Avenue");
+  a = a.replace(/\bave\b\.?/gi, (isSpanishOrLatam || isPortugueseOrBrazil) ? "Avenida" : "Avenue");
+  a = a.replace(/\bav\b\.?/gi, (isSpanishOrLatam || isPortugueseOrBrazil) ? "Avenida" : "Avenue");
   a = a.replace(/\bcnr\b\.?/gi, "Corner");
   a = a.replace(/\b(?:terr|tce|ter)\b\.?/gi, "Terrace");
   a = a.replace(/\bpde\b\.?/gi, "Parade");
@@ -556,7 +556,15 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bwks\b\.?/gi, "Works");
   a = a.replace(/\bcl\b\.?/gi, "Close");
   a = a.replace(/(?<!,\s*)\b(?:crt|ct)\b\.?(?!\s*\d{5})/gi, "Court");
-  a = a.replace(/\bpl\b\.?/gi, "Place");
+  if (isPolishAddr) {
+    a = a.replace(/(^|[,\s])pl\b\.?(?=\s+[A-ZŻŹĆĄŚĘŁÓŃa-z])/g, "$1Plac");
+  } else if (isDutchOrBelgianAddr) {
+    a = a.replace(/(^|[,\s])pl\b\.?(?=\s+[A-Za-z])/g, "$1Plein");
+  } else if (isSpanishOrLatam) {
+    a = a.replace(/(^|[,\s])pl\b\.?(?=\s+[A-Za-z])/g, "$1Plaza");
+  } else if (!isDachAddr) {
+    a = a.replace(/\bpl\b\.?/gi, "Place");
+  }
   a = a.replace(/\b(?:sqr|sq)\b\.?/gi, "Square");
   a = a.replace(/\bst\b\.?(?!\s+(?:[A-Z][a-z']+\s+)*(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Rd|Ave|Dr|Ln|Blvd)\b)/gi, "Street");
   a = a.replace(/\brd\b\.?/gi, "Road");
@@ -756,8 +764,10 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/(^|[,\s])sud\b/gi, '$1South');
   }
 
-  // Roads: Strada, SP, SS, SR
-  a = a.replace(/(^|[,\s])str\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Strada ');
+  // Roads: Strada, SP, SS, SR (do not override German/Austrian/Swiss Strasse or Dutch/Belgian Straat)
+  if (!isDutchOrBelgianAddr && !isDachAddr) {
+    a = a.replace(/(^|[,\s])str\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Strada ');
+  }
   a = a.replace(/\bs\.?p\.?\s*(?=\d)/gi, 'Strada Provinciale ');
   a = a.replace(/\bs\.?s\.?\s*(?=\d)/gi, 'Strada Statale ');
   a = a.replace(/\bs\.?r\.?\s*(?=\d)/gi, 'Strada Regionale ');
@@ -765,16 +775,18 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // Internal details (Scala, Palazzina, etc.)
   a = a.replace(/\bsc\b\.?\s*(?=[A-Za-z0-9])/gi, 'Scala ');
   a = a.replace(/\bpal\b\.?\s*(?=[A-Za-z0-9])/gi, 'Palazzina ');
-  a = a.replace(/\bint\b\.?\s*(?=\d|[A-Za-z])/gi, 'Interno ');
+  a = a.replace(/\bint\b\.?\s*(?=\d|[A-Za-z])/gi, isSpanishOrLatam ? 'Interior ' : 'Interno ');
   a = a.replace(/(^|[,\s])p\b\.?\s*(?=\d)/gi, '$1Piano ');
   a = a.replace(/\bp\.?to\b\.?\s*(?=\d)/gi, 'Piano ');
   a = a.replace(/\bciv(?:ico)?\.?\s*(?=\d)/gi, 'Numero ');
   a = a.replace(/\bn\.?ro\b\.?\s*(?=\d)/gi, 'Numero ');
   a = a.replace(/(^|[,\s])n\.\s*(?=\d)/gi, '$1Numero ');
 
-  // Administrative / Zones
-  a = a.replace(/\b(?:zona\s+ind\.?|z\.?i\.?|z\.?\s*ind\.?|zona\s+ind\.?le)\b\.?/gi, 'Zona Industriale');
-  a = a.replace(/\b(?:zona\s+art\.?|z\.?a\.?|zona\s+art\.?le)\b\.?/gi, 'Zona Artigianale');
+  // Administrative / Zones (only expand Z.I./Z.A. as Italian when NOT a French address)
+  if (!isFrenchAddr || cLower.includes("italy") || cLower.includes("italia")) {
+    a = a.replace(/\b(?:zona\s+ind\.?|z\.?i\.?|z\.?\s*ind\.?|zona\s+ind\.?le)\b\.?/gi, 'Zona Industriale');
+    a = a.replace(/\b(?:zona\s+art\.?|z\.?a\.?|zona\s+art\.?le)\b\.?/gi, 'Zona Artigianale');
+  }
   a = a.replace(/(^|[,\s])loc\b\.?\s+(?=[A-Za-z])/gi, '$1Località ');
   a = a.replace(/(^|[,\s])fraz\b\.?\s+(?=[A-Za-z])/gi, '$1Frazione ');
   a = a.replace(/(^|[,\s])c\.?da\b\.?\s+(?=[A-Za-z])/gi, '$1Contrada ');
@@ -864,14 +876,18 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // 9. Germany (Deutschland) Abbreviations
   // ==========================================
   // Street & Square: Compound suffixes (e.g. Industriestr. -> Industriestrasse, Marktpl. -> Marktplatz)
-  a = a.replace(/([a-zA-ZäöüÄÖÜß\-]+)str\b\.?(?=\s*\d|\s*,|\s*$|\s+[A-Za-z])/gi, function (match, base) {
-    return base + (base === base.toUpperCase() ? 'STRASSE' : 'strasse');
-  });
-  a = a.replace(/(^|[,\s])str\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Strasse ');
-  a = a.replace(/([a-zA-ZäöüÄÖÜß\-]+)pl\b\.?(?=\s*\d|\s*,|\s*$|\s+[A-Za-z])/gi, function (match, base) {
-    return base + (base === base.toUpperCase() ? 'PLATZ' : 'platz');
-  });
-  a = a.replace(/(^|[,\s])pl\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Platz ');
+  if (!isDutchOrBelgianAddr && !cLower.includes('romania')) {
+    a = a.replace(/([a-zA-ZäöüÄÖÜß\-]+)str\b\.?(?=\s*\d|\s*,|\s*$|\s+[A-Za-z])/gi, function (match, base) {
+      return base + (base === base.toUpperCase() ? 'STRASSE' : 'strasse');
+    });
+    a = a.replace(/(^|[,\s])str\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Strasse ');
+  }
+  if (!isPolishAddr && !isDutchOrBelgianAddr && !isSpanishOrLatam) {
+    a = a.replace(/([a-zA-ZäöüÄÖÜß\-]+)pl\b\.?(?=\s*\d|\s*,|\s*$|\s+[A-Za-z])/gi, function (match, base) {
+      return base + (base === base.toUpperCase() ? 'PLATZ' : 'platz');
+    });
+    a = a.replace(/(^|[,\s])pl\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Platz ');
+  }
 
   // Commercial / Industrial zones
   a = a.replace(/\bgew(?:erbe)?\.?\s*gebiet\b/gi, 'Gewerbegebiet');
@@ -1037,9 +1053,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // 12. France Abbreviations
   // ==========================================
   if (cLower.includes('france') || /\b(?:rue|avenue|boulevard|cedex|z\.?i\.?|z\.?a\.?c?\.?)\b/i.test(a)) {
-    a = a.replace(/\b(?:z\.?i\.?)\b/gi, "Zone Industrielle");
-    a = a.replace(/\b(?:z\.?a\.?c\.?)\b/gi, "Zone d'Amenagement Concerte");
-    a = a.replace(/\b(?:z\.?a\.?)\b/gi, "Zone Artisanale");
+    a = a.replace(/\b(?:z\.?i)\b\.?/gi, "Zone Industrielle");
+    a = a.replace(/\b(?:z\.?a\.?c)\b\.?/gi, "Zone d'Amenagement Concerte");
+    a = a.replace(/\b(?:z\.?a)\b\.?/gi, "Zone Artisanale");
     a = a.replace(/(^|[,\s])bd\.?\s+(?=[A-Za-z])/gi, "$1Boulevard ");
     a = a.replace(/(^|[,\s])imp\.?\s+(?=[A-Za-z])/gi, "$1Impasse ");
     a = a.replace(/(^|[,\s])all\.?\s+(?=[A-Za-z])/gi, "$1Allee ");
@@ -1048,7 +1064,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   }
 
   // ==========================================
-  // 13. South Africa & India State/Province Abbreviations
+  // 13. South Africa & India Abbreviations & State/Province Expansions
   // ==========================================
   if (cLower.includes('south africa')) {
     a = a.replace(/,\s*\b(?:gp)\b\.?/gi, ", Gauteng");
@@ -1062,6 +1078,20 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/,\s*\b(?:lp)\b\.?/gi, ", Limpopo");
   }
   if (cLower.includes('india')) {
+    a = a.replace(/\bmidc\b\.?/gi, "Maharashtra Industrial Development Corporation");
+    a = a.replace(/\bgidc\b\.?/gi, "Gujarat Industrial Development Corporation");
+    a = a.replace(/\bsidco\b\.?/gi, "Small Industries Development Corporation");
+    a = a.replace(/\briico\b\.?/gi, "Rajasthan State Industrial Development and Investment Corporation");
+    a = a.replace(/\b(?:sy|s)\.?\s*no\.?\s*(?=\d)/gi, "Survey Number ");
+    a = a.replace(/\bsr\.?\s*no\.?\s*(?=\d)/gi, "Serial Number ");
+    a = a.replace(/(^|[,\s])opp\.?\s+(?=[A-Za-z0-9])/gi, "$1Opposite ");
+    a = a.replace(/(^|[,\s])b\/h\s+(?=[A-Za-z0-9])/gi, "$1Behind ");
+    a = a.replace(/\bn\.?\s*h\.?\s*(?=\d)/gi, "National Highway ");
+    a = a.replace(/\bs\.?\s*h\.?\s*(?=\d)/gi, "State Highway ");
+    a = a.replace(/(^|[,\s])tal\.?\s+(?=[A-Za-z])/gi, "$1Taluka ");
+    a = a.replace(/(^|[,\s])ph\.?\s*(?=\d|[IVX]+\b)/gi, "$1Phase ");
+    a = a.replace(/(^|[,\s])indl\.?\s*area\b/gi, "$1Industrial Area");
+    a = a.replace(/(^|[,\s])indl\.?\s*est\.?\b/gi, "$1Industrial Estate");
     a = a.replace(/,\s*\b(?:mh)\b\.?/gi, ", Maharashtra");
     a = a.replace(/,\s*\b(?:ka)\b\.?/gi, ", Karnataka");
     a = a.replace(/,\s*\b(?:tn)\b\.?/gi, ", Tamil Nadu");
@@ -1075,6 +1105,154 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/,\s*\b(?:pb)\b\.?/gi, ", Punjab");
     a = a.replace(/,\s*\b(?:rj)\b\.?/gi, ", Rajasthan");
     a = a.replace(/,\s*\b(?:kl)\b\.?/gi, ", Kerala");
+    a = a.replace(/,\s*\b(?:mp)\b\.?/gi, ", Madhya Pradesh");
+    a = a.replace(/,\s*\b(?:od|or)\b\.?/gi, ", Odisha");
+    a = a.replace(/,\s*\b(?:br)\b\.?/gi, ", Bihar");
+    a = a.replace(/,\s*\b(?:jh)\b\.?/gi, ", Jharkhand");
+    a = a.replace(/,\s*\b(?:cg)\b\.?/gi, ", Chhattisgarh");
+    a = a.replace(/,\s*\b(?:uk|ut)\b\.?/gi, ", Uttarakhand");
+    a = a.replace(/,\s*\b(?:hp)\b\.?/gi, ", Himachal Pradesh");
+    a = a.replace(/,\s*\b(?:as)\b\.?/gi, ", Assam");
+    a = a.replace(/,\s*\b(?:ga)\b\.?/gi, ", Goa");
+    a = a.replace(/,\s*\b(?:ch)\b\.?/gi, ", Chandigarh");
+  }
+
+  // ==========================================
+  // 14. Poland, Czech Republic & Slovakia Abbreviations
+  // ==========================================
+  if (isPolishAddr) {
+    a = a.replace(/(^|[,\s])ul\.?\s+(?=[A-ZŻŹĆĄŚĘŁÓŃa-z0-9])/g, "$1Ulica ");
+    a = a.replace(/(^|[,\s])al\.?\s+(?=[A-ZŻŹĆĄŚĘŁÓŃa-z0-9])/g, "$1Aleja ");
+    a = a.replace(/(^|[,\s])os\.?\s+(?=[A-ZŻŹĆĄŚĘŁÓŃa-z0-9])/g, "$1Osiedle ");
+    a = a.replace(/(^|[,\s])pow\.?\s+(?=[A-ZŻŹĆĄŚĘŁÓŃa-z])/g, "$1Powiat ");
+    a = a.replace(/(^|[,\s])woj\.?\s+(?=[A-ZŻŹĆĄŚĘŁÓŃa-z])/g, "$1Wojewodztwo ");
+    a = a.replace(/(^|[,\s])lok\.?\s*(?=\d|[A-Za-z])/gi, "$1Lokal ");
+  }
+  if (cLower.includes('czech') || cLower.includes('slovak') || /\b(?:praha|brno|ostrava|bratislava|kosice|n[aá]m\.|t[rř]\.)\b/i.test(a)) {
+    a = a.replace(/(^|[,\s])ul\.?\s+(?=[A-Za-z0-9\u00C0-\u024F])/g, cLower.includes('slovak') ? "$1Ulica " : "$1Ulice ");
+    a = a.replace(/(^|[,\s])n[aá]m\.?\s+(?=[A-Za-z0-9\u00C0-\u024F])/gi, "$1Namesti ");
+    a = a.replace(/(^|[,\s])t[rř]\.?\s+(?=[A-Za-z0-9\u00C0-\u024F])/gi, "$1Trida ");
+    a = a.replace(/(^|[,\s])č\.?\s*p\.?\s*(?=\d)/gi, "$1Cislo Popisne ");
+  }
+
+  // ==========================================
+  // 15. Netherlands & Belgium Abbreviations
+  // ==========================================
+  if (isDutchOrBelgianAddr) {
+    a = a.replace(/(^|[,\s])str\.?\s+(?=[A-Za-z0-9])/gi, "$1Straat ");
+    a = a.replace(/([a-zA-Z]+)str\b\.?(?=\s*\d|\s*,|\s*$)/gi, "$1straat");
+    a = a.replace(/(^|[,\s])wg\.?\s+(?=[A-Za-z])/gi, "$1Weg ");
+    a = a.replace(/(^|[,\s])geb\.?\s+(?=[A-Za-z0-9])/gi, "$1Gebouw ");
+    a = a.replace(/(^|[,\s])verd\.?\s*(?=\d)/gi, "$1Verdieping ");
+    a = a.replace(/\bind\.?\s*terrein\b/gi, "Industrieterrein");
+  }
+
+  // ==========================================
+  // 16. Austria & Switzerland State / Canton Abbreviations
+  // ==========================================
+  if (cLower.includes('austria') || /[öo]sterreich/i.test(a)) {
+    a = a.replace(/,\s*\bn[öo]\.?(?=[,\s]|$)/gi, ", Niederösterreich");
+    a = a.replace(/,\s*\bo[öo]\.?(?=[,\s]|$)/gi, ", Oberösterreich");
+    a = a.replace(/,\s*\bstmk\b\.?/gi, ", Steiermark");
+    a = a.replace(/,\s*\bktn\b\.?/gi, ", Kärnten");
+    a = a.replace(/,\s*\bsbg\b\.?/gi, ", Salzburg");
+    a = a.replace(/,\s*\bvbg\b\.?/gi, ", Vorarlberg");
+    a = a.replace(/,\s*\bbgld\b\.?/gi, ", Burgenland");
+  }
+  if (cLower.includes('switzerland') || /\b(?:schweiz|suisse|svizzera|zurich|zürich|geneva|basel|bern)\b/i.test(a)) {
+    a = a.replace(/(^|[,\s])ch\.?\s+(?=[A-Za-z])/gi, "$1Chemin ");
+    const swissCantons = [
+      ["zh", "Zürich"], ["be", "Bern"], ["lu", "Luzern"], ["zg", "Zug"],
+      ["so", "Solothurn"], ["bs", "Basel-Stadt"], ["bl", "Basel-Landschaft"],
+      ["sh", "Schaffhausen"], ["sg", "St. Gallen"], ["ag", "Aargau"],
+      ["tg", "Thurgau"], ["ti", "Ticino"], ["vd", "Vaud"], ["vs", "Valais"],
+      ["ne", "Neuchâtel"], ["ge", "Genève"], ["fr", "Fribourg"]
+    ];
+    for (const [abbr, full] of swissCantons) {
+      a = a.replace(new RegExp(`,\\s*\\b${abbr}\\b\\.?`, "gi"), `, ${full}`);
+    }
+  }
+
+  // ==========================================
+  // 17. Portugal, Brazil & Latin America Abbreviations
+  // ==========================================
+  if (isPortugueseOrBrazil) {
+    a = a.replace(/(^|[,\s])r\.?\s+(?=[A-ZÁÂÃÉÊÍÓÔÕÚÇ][a-z])/g, "$1Rua ");
+    a = a.replace(/(^|[,\s])p[çc]a?\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Praça ");
+    a = a.replace(/(^|[,\s])estr\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Estrada ");
+    a = a.replace(/(^|[,\s])rod\.?\s+(?=[A-Za-z0-9\u00C0-\u024F])/gi, "$1Rodovia ");
+    a = a.replace(/\bdist\.?\s*ind(?:ustrial)?\.?/gi, "Distrito Industrial");
+    a = a.replace(/(^|[,\s])cj\.?\s*(?=\d|[A-Za-z])/gi, "$1Conjunto ");
+    if (cLower.includes('brazil') || cLower.includes('brasil') || /\b(?:rodovia|s[aã]o\s*paulo|rio\s*de\s*janeiro|belo\s*horizonte|curitiba)\b/i.test(a)) {
+      const brStates = [
+        ["sp", "São Paulo"], ["rj", "Rio de Janeiro"], ["mg", "Minas Gerais"],
+        ["rs", "Rio Grande do Sul"], ["pr", "Paraná"], ["sc", "Santa Catarina"],
+        ["ba", "Bahia"], ["pe", "Pernambuco"], ["ce", "Ceará"],
+        ["go", "Goiás"], ["df", "Distrito Federal"], ["es", "Espírito Santo"],
+        ["mt", "Mato Grosso"], ["ms", "Mato Grosso do Sul"]
+      ];
+      for (const [abbr, full] of brStates) {
+        a = a.replace(new RegExp(`,\\s*\\b${abbr}\\b\\.?`, "gi"), `, ${full}`);
+      }
+    }
+  }
+  if (isSpanishOrLatam && !cLower.includes('spain') && !cLower.includes('espana') && !cLower.includes('españa')) {
+    a = a.replace(/(^|[,\s])col\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Colonia ");
+    a = a.replace(/(^|[,\s])fracc\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Fraccionamiento ");
+    a = a.replace(/(^|[,\s])cd\.?\s+(?=[A-ZÁÉÍÓÚÑ][a-z])/g, "$1Ciudad ");
+    a = a.replace(/(^|[,\s])edo\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Estado ");
+    a = a.replace(/(^|[,\s])mpio\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Municipio ");
+    a = a.replace(/(^|[,\s])del\.?\s+(?=[A-ZÁÉÍÓÚÑ][a-z])/g, "$1Delegacion ");
+    a = a.replace(/(^|[,\s])mza\.?\s*(?=\d|[A-Za-z])/gi, "$1Manzana ");
+    a = a.replace(/(^|[,\s])lte\.?\s*(?=\d|[A-Za-z])/gi, "$1Lote ");
+    a = a.replace(/(^|[,\s])prol\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Prolongacion ");
+    a = a.replace(/(^|[,\s])calz\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Calzada ");
+    a = a.replace(/\bp(?:que)?\.?\s*ind(?:ustrial)?\.?/gi, "Parque Industrial");
+    a = a.replace(/(^|[,\s])carr\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Carretera ");
+    if (cLower.includes('mexico') || cLower.includes('méxico') || /\b(?:colonia|fraccionamiento|cdmx|monterrey|guadalajara|quer[eé]taro)\b/i.test(a)) {
+      const mxStates = [
+        ["cdmx", "Ciudad de Mexico"], ["edomex", "Estado de Mexico"],
+        ["nl", "Nuevo Leon"], ["jal", "Jalisco"], ["gto", "Guanajuato"],
+        ["qro", "Queretaro"], ["pue", "Puebla"], ["bc", "Baja California"],
+        ["son", "Sonora"], ["coah", "Coahuila"], ["chih", "Chihuahua"],
+        ["tamps", "Tamaulipas"]
+      ];
+      for (const [abbr, full] of mxStates) {
+        a = a.replace(new RegExp(`,\\s*\\b${abbr}\\b\\.?`, "gi"), `, ${full}`);
+      }
+    }
+  }
+
+  // ==========================================
+  // 18. Türkiye, Romania & Hungary Abbreviations
+  // ==========================================
+  if (cLower.includes('türkiye') || cLower.includes('turkiye') || cLower.includes('turkey') || /\b(?:mah\.?|cad\.?|sok\.?|bulv\.?|osb|istanbul|ankara|izmir)\b/i.test(a)) {
+    a = a.replace(/\bcad\b\.?/gi, "Caddesi");
+    a = a.replace(/\b(?:sok|sk)\b\.?/gi, "Sokak");
+    a = a.replace(/\bbulv?\b\.?/gi, "Bulvari");
+    a = a.replace(/\b(?:mah|mh)\b\.?/gi, "Mahallesi");
+    a = a.replace(/\bosb\b/gi, "Organize Sanayi Bolgesi");
+    a = a.replace(/\bsan\.?\s*sit\.?/gi, "Sanayi Sitesi");
+  }
+  if (cLower.includes('romania') || /\b(?:bucure[sş]ti|bucharest|jud\.?|bd\.?|cal\.)\b/i.test(a)) {
+    a = a.replace(/(^|[,\s])str\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Strada ");
+    a = a.replace(/(^|[,\s])bd\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Bulevardul ");
+    a = a.replace(/(^|[,\s])cal\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Calea ");
+    a = a.replace(/(^|[,\s])jud\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Judetul ");
+  }
+  if (cLower.includes('hungary') || /\b(?:budapest|debrecen|krt\.?|utca)\b/i.test(a)) {
+    a = a.replace(/(^|[,\s])u\.?\s+(?=\d|[A-Za-z])/gi, "$1Utca ");
+    a = a.replace(/(^|[,\s])krt\.?\s+(?=\d|[A-Za-z])/gi, "$1Korut ");
+  }
+
+  // ==========================================
+  // 19. United Arab Emirates & Middle East Abbreviations
+  // ==========================================
+  if (cLower.includes('united arab emirates') || cLower.includes('saudi arabia') || cLower.includes('qatar') || cLower.includes('bahrain') || cLower.includes('oman') || cLower.includes('kuwait') || /\b(?:dubai|abu\s*dhabi|sharjah|jebel\s*ali|riyadh|jeddah|dammam)\b/i.test(a)) {
+    a = a.replace(/\bind\.?\s*area\b/gi, "Industrial Area");
+    a = a.replace(/,\s*\bdxb\b/gi, ", Dubai");
+    a = a.replace(/,\s*\bauh\b/gi, ", Abu Dhabi");
+    a = a.replace(/,\s*\bshj\b/gi, ", Sharjah");
   }
 
   // Clean up any double spaces introduced

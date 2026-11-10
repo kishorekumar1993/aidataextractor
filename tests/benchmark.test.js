@@ -1117,6 +1117,82 @@ runTest('Rule 4 company name formatting preserves U.S. dots, symbols, commas, an
   assert.strictEqual(formatCompanyName("High Precision, Inc. //", "United States Of America"), "High Precision, Incorporated");
 });
 
+// 30. Full 135-country valid list & accented QC address detection (incl. Greenland, Österreich, Türkiye)
+runTest('All 135 valid countries normalize & detect from address including accented QC entries', () => {
+  const valid135 = [
+    'Afghanistan','Albania','Algeria','Andorra','Angola','Argentina','Armenia','Australia','Austria','Azerbaijan',
+    'Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Bhutan','Bolivia','Botswana',
+    'Brazil','Brunei Darussalam','Bulgaria','Cambodia','Canada','Cayman Islands','China','Colombia','Costa Rica','Croatia',
+    'Cyprus','Czech Republic','Denmark','Dominican Republic','Egypt','Estonia','Ethiopia','Fiji','Finland','France',
+    'Germany','Ghana','Greece','Greenland','Guatemala','Guyana','Hong Kong','Hungary','Iceland','India',
+    'Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan',
+    'Kenya','Kuwait','Latvia','Lebanon','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malaysia','Maldives',
+    'Malta','Mauritius','Mexico','Moldova','Mongolia','Morocco','Mozambique','Myanmar','Namibia','Nepal',
+    'Netherlands','New Zealand','Nicaragua','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Panama',
+    'Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda',
+    'Saint Lucia','Samoa','Saudi Arabia','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','South Africa',
+    'South Korea','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tanzania',
+    'Thailand','Trinidad and Tobago','Tunisia','Türkiye','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States',
+    'Uruguay','Uzbekistan','Vanuatu','Vietnam','Zambia','Zimbabwe'
+  ];
+
+  for (const c of valid135) {
+    const exp = c === 'United States' ? 'United States Of America' : c;
+    assert.strictEqual(ctx.normalizeCountryName(c), exp, `normalizeCountryName failed for ${c}`);
+    assert.strictEqual(ctx.detectCountryFromAddress(`123 Main St, ${c}`), exp, `detectCountryFromAddress failed for ${c}`);
+  }
+
+  assert.strictEqual(ctx.detectCountryFromAddress('Ringstrasse 1, Wien, Österreich'), 'Austria');
+  assert.strictEqual(ctx.detectCountryFromAddress('Nuuk, Greenland'), 'Greenland');
+  assert.strictEqual(ctx.detectCountryFromAddress('Imaneq 12, Nuuk'), 'Greenland');
+  assert.strictEqual(ctx.detectCountryFromAddress('Calle Mayor 5, España'), 'Spain');
+  assert.strictEqual(ctx.detectCountryFromAddress('Ilica 1, Hrvatska'), 'Croatia');
+  assert.strictEqual(ctx.normalizeCountryName('Peoples Republic of China'), 'China');
+  assert.strictEqual(ctx.normalizeCountryName('Republic of China'), 'Taiwan');
+  assert.strictEqual(ctx.normalizeCountryName('Kingdom of Bahrain'), 'Bahrain');
+  assert.strictEqual(ctx.normalizeCountryName('Sultanate of Oman'), 'Oman');
+});
+
+// 31. Expanded global address abbreviations & dangling Ges truncation cleanup
+runTest('Global address expansions (PL, FR, NL, BR, MX, TR, AT, CH, IN) & truncated Ges cleanup', () => {
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations('Z.I. des Platanes, Lyon', 'France'),
+    'Zone Industrielle des Platanes, Lyon'
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations('ul. Innowacyjna 6, pl. Zamkowy, Warszawa', 'Poland'),
+    'Ulica Innowacyjna 6, Plac Zamkowy, Warszawa'
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations('Ind. Terrein De Hurk, Str. 5, Eindhoven', 'Netherlands'),
+    'Industrieterrein De Hurk, Straat 5, Eindhoven'
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations('Rod. Anhanguera 10, Campinas, SP', 'Brazil'),
+    'Rodovia Anhanguera 10, Campinas, São Paulo'
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations('Col. Industrial Vallejo, Pque. Ind. Norte, CDMX', 'Mexico'),
+    'Colonia Industrial Vallejo, Parque Industrial Norte, Ciudad de Mexico'
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations('Ataturk Cad. 12, Merkez Mah., OSB, Bursa', 'Türkiye'),
+    'Ataturk Caddesi 12, Merkez Mahallesi, Organize Sanayi Bolgesi, Bursa'
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations('MIDC Area, Opp. Railway Station, Pune, MH', 'India'),
+    'Maharashtra Industrial Development Corporation Area, Opposite Railway Station, Pune, Maharashtra'
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations('Hauptstrasse 1, St. Polten, NÖ', 'Austria'),
+    'Hauptstrasse 1, Saint Polten, Niederösterreich'
+  );
+  assert.strictEqual(
+    ctx.cleanCompanyPrefixesAndSuffixes('Engineering Was Transformed Into Mechatronic Systems Ges'),
+    'Mechatronic Systems'
+  );
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');

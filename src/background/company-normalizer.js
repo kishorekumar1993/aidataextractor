@@ -115,6 +115,9 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   // 4. Strip trailing SEO taglines even without separator if starts with " - Manufacturer of...", " | Suppliers of..."
   name = name.replace(/\s*[-–—|:•·]\s*(?:manufacturer|supplier|wholesaler|distributor|timber\s*merchants|specialists|services|official\s*website|home|online\s*store).*$/i, "");
 
+  // 4b. Strip dangling truncated German legal fragment (e.g. "... Systems Ges" truncated from Ges.m.b.H.)
+  name = name.replace(/\s+\bGes\.?$/i, "");
+
   // 5. Clean boundary punctuation and special characters per Rule 4
   // Rule: Special character should not start and should not end
   return stripBoundarySpecialChars(name);

@@ -874,3 +874,259 @@ function evaluateCityQC(address, country) {
   return "Not Available";
 }
 
+/**
+ * Determines Country Name EXCLUSIVELY from the physical address string.
+ * Strictly NEVER checks or guesses from the domain name or URL extension.
+ */
+function detectCountryFromAddress(address) {
+  if (!address || typeof address !== "string" || address.trim().length < 3) return "";
+  const lower = address.toLowerCase();
+  // Strip combining diacritics so JS ASCII \b word boundaries work on "Österreich", "España", "Türkiye", "São Paulo", etc.
+  const unaccented = lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // 1. Explicit country mentioned in the physical address text
+  if (/\b(?:czech\s*republic|ceska\s*republika|cesko|czechia)\b/i.test(unaccented)) return "Czech Republic";
+  if (/\b(south\s*africa)\b/i.test(unaccented)) return "South Africa";
+  if (/\b(people['’]?s?\s*republic\s*of\s*china|p\.?r\.?c\.?)\b/i.test(unaccented)) return "China";
+  if (/\b(taiwan|republic\s*of\s*china|r\.?o\.?c\.?)\b/i.test(unaccented) || /(?:臺灣|台灣|臺北|台北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|彰化|苗栗|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江|大里區|草堤路)/.test(address)) return "Taiwan";
+  if (/\b(england)\b/i.test(unaccented)) return "England";
+  if (/\b(scotland)\b/i.test(unaccented)) return "Scotland";
+  if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(unaccented)) return "Wales";
+  if (/\b(northern\s*ireland)\b/i.test(unaccented)) return "Northern Ireland";
+  if (/\b(united\s*kingdom|great\s*britain|uk)\b/i.test(unaccented)) {
+    if (/\b(?:england)\b/i.test(unaccented)) return "England";
+    if (/\b(?:scotland)\b/i.test(unaccented)) return "Scotland";
+    if (/(?<!\bnew\s+south\s+)\b(?:wales)\b/i.test(unaccented)) return "Wales";
+    if (/\b(?:northern\s*ireland)\b/i.test(unaccented)) return "Northern Ireland";
+    return "United Kingdom";
+  }
+  if (/\b(united\s*states(?:\s*of\s*america)?|usa|u\.s\.a\.?|u\.s\.?)\b/i.test(unaccented)) return "United States Of America";
+  if (/\b(australia)\b/i.test(unaccented)) return "Australia";
+  if (/\b(canada)\b/i.test(unaccented)) return "Canada";
+  if (/\b(germany|deutschland)\b/i.test(unaccented)) return "Germany";
+  if (/\b(india)\b/i.test(unaccented)) return "India";
+  if (/\b(france)\b/i.test(unaccented)) return "France";
+  if (/\b(people'?s?\s*republic\s*of\s*china|p\.?r\.?c\.?|china)\b/i.test(unaccented)) return "China";
+  if (/\b(japan)\b/i.test(unaccented)) return "Japan";
+  if (/\b(north\s*korea|d\.?p\.?r\.?k\.?)\b/i.test(unaccented)) return "North Korea";
+  if (/\b(south\s*korea|republic\s*of\s*korea|korea)\b/i.test(unaccented)) return "South Korea";
+  if (/\b(singapore)\b/i.test(unaccented)) return "Singapore";
+  if (/\b(netherlands|nederland|holland)\b/i.test(unaccented)) return "Netherlands";
+  if (/\b(?:new\s*zealand|aotearoa)\b/i.test(unaccented) || /,\s*nz\b/i.test(unaccented) || /\bnz\s+\d{4}\b/i.test(unaccented)) return "New Zealand";
+  if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(unaccented)) return "Malaysia";
+  if (/\b(?:indonesia|republik\s*indonesia|republic\s*of\s*indonesia)\b/i.test(unaccented)) return "Indonesia";
+  if (/\b(united\s*arab\s*emirates|uae)\b/i.test(unaccented)) return "United Arab Emirates";
+  if (/\b(italy|italia)\b/i.test(unaccented)) return "Italy";
+  if (/\b(spain|espana)\b/i.test(unaccented)) return "Spain";
+  if (/\b(turkiye|turkey|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented)) return "Türkiye";
+  if (/\b(austria|osterreich|oesterreich)\b/i.test(unaccented)) return "Austria";
+  if (/\b(switzerland|schweiz|suisse|svizzera)\b/i.test(unaccented)) return "Switzerland";
+  if (/\b(croatia|hrvatska)\b/i.test(unaccented)) return "Croatia";
+  if (/\b(kingdom\s*of\s*bahrain|bahrain)\b/i.test(unaccented)) return "Bahrain";
+  if (/\b(sultanate\s*of\s*oman|oman)\b/i.test(unaccented)) return "Oman";
+  if (/\b(brunei\s*darussalam|brunei)\b/i.test(unaccented)) return "Brunei Darussalam";
+  if (/\b(hong\s*kong)\b/i.test(unaccented)) return "Hong Kong";
+  if (/\b(greenland|kalaallit\s*nunaat)\b/i.test(unaccented)) return "Greenland";
+  if (/\b(saudi\s*arabia)\b/i.test(unaccented)) return "Saudi Arabia";
+  if (/\b(qatar|kuwait|jordan|lebanon|israel|egypt|morocco|tunisia|algeria)\b/i.test(unaccented)) {
+    const m = unaccented.match(/\b(qatar|kuwait|jordan|lebanon|israel|egypt|morocco|tunisia|algeria)\b/i);
+    if (m) return toTitleCase(m[1]);
+  }
+  if (/\b(belgium|belgie|belgique|poland|polska|portugal|greece|hellas|sweden|sverige|norway|norge|denmark|danmark|finland|suomi|hungary|magyarorszag|romania|bulgaria|slovakia|slovensko|slovenia|slovenija|serbia|srbija|ukraine|russia|russian\s*federation|belarus|estonia|latvia|lithuania|luxembourg|iceland|malta|cyprus|andorra|liechtenstein|albania|moldova|north\s*macedonia|armenia|azerbaijan|kazakhstan|uzbekistan)\b/i.test(unaccented)) {
+    if (/\b(belgium|belgie|belgique)\b/i.test(unaccented)) return "Belgium";
+    if (/\b(poland|polska)\b/i.test(unaccented)) return "Poland";
+    if (/\b(greece|hellas)\b/i.test(unaccented)) return "Greece";
+    if (/\b(sweden|sverige)\b/i.test(unaccented)) return "Sweden";
+    if (/\b(norway|norge)\b/i.test(unaccented)) return "Norway";
+    if (/\b(denmark|danmark)\b/i.test(unaccented)) return "Denmark";
+    if (/\b(finland|suomi)\b/i.test(unaccented)) return "Finland";
+    if (/\b(hungary|magyarorszag)\b/i.test(unaccented)) return "Hungary";
+    if (/\b(slovakia|slovensko)\b/i.test(unaccented)) return "Slovakia";
+    if (/\b(slovenia|slovenija)\b/i.test(unaccented)) return "Slovenia";
+    if (/\b(serbia|srbija)\b/i.test(unaccented)) return "Serbia";
+    if (/\b(russia|russian\s*federation)\b/i.test(unaccented)) return "Russia";
+    if (/\b(north\s*macedonia)\b/i.test(unaccented)) return "North Macedonia";
+    const m = unaccented.match(/\b(portugal|romania|bulgaria|ukraine|belarus|estonia|latvia|lithuania|luxembourg|iceland|malta|cyprus|andorra|liechtenstein|albania|moldova|armenia|azerbaijan|kazakhstan|uzbekistan)\b/i);
+    if (m) return toTitleCase(m[1]);
+  }
+  if (/\b(viet\s*nam|vietnam|philippines|pakistan|bangladesh|sri\s*lanka|nepal|bhutan|myanmar|cambodia|maldives|mongolia|afghanistan|iran|iraq|syria)\b/i.test(unaccented)) {
+    if (/\b(viet\s*nam|vietnam)\b/i.test(unaccented)) return "Vietnam";
+    if (/\b(sri\s*lanka)\b/i.test(unaccented)) return "Sri Lanka";
+    const m = unaccented.match(/\b(philippines|pakistan|bangladesh|nepal|bhutan|myanmar|cambodia|maldives|mongolia|afghanistan|iran|iraq|syria)\b/i);
+    if (m) return toTitleCase(m[1]);
+  }
+  if (/\b(mexico|brazil|brasil|argentina|colombia|peru|uruguay|paraguay|bolivia|costa\s*rica|panama|guatemala|nicaragua|belize|guyana|suriname|jamaica|bahamas|barbados|dominican\s*republic|cayman\s*islands|saint\s*lucia|trinidad\s*(?:and|&)\s*tobago|fiji|papua\s*new\s*guinea|samoa|vanuatu)\b/i.test(unaccented)) {
+    if (/\b(mexico)\b/i.test(unaccented)) return "Mexico";
+    if (/\b(brazil|brasil)\b/i.test(unaccented)) return "Brazil";
+    if (/\b(peru)\b/i.test(unaccented)) return "Peru";
+    if (/\b(trinidad\s*(?:and|&)\s*tobago)\b/i.test(unaccented)) return "Trinidad and Tobago";
+    if (/\b(costa\s*rica|dominican\s*republic|cayman\s*islands|saint\s*lucia|papua\s*new\s*guinea)\b/i.test(unaccented)) {
+      const m2 = unaccented.match(/\b(costa\s*rica|dominican\s*republic|cayman\s*islands|saint\s*lucia|papua\s*new\s*guinea)\b/i);
+      if (m2) return toTitleCase(m2[1]);
+    }
+    const m = unaccented.match(/\b(argentina|colombia|uruguay|paraguay|bolivia|panama|guatemala|nicaragua|belize|guyana|suriname|jamaica|bahamas|barbados|fiji|samoa|vanuatu)\b/i);
+    if (m) return toTitleCase(m[1]);
+  }
+  if (/\b(nigeria|kenya|ghana|ethiopia|tanzania|uganda|rwanda|botswana|namibia|zambia|zimbabwe|mozambique|angola|madagascar|mauritius|seychelles|sierra\s*leone|sudan)\b/i.test(unaccented)) {
+    if (/\b(sierra\s*leone)\b/i.test(unaccented)) return "Sierra Leone";
+    const m = unaccented.match(/\b(nigeria|kenya|ghana|ethiopia|tanzania|uganda|rwanda|botswana|namibia|zambia|zimbabwe|mozambique|angola|madagascar|mauritius|seychelles|sudan)\b/i);
+    if (m) return toTitleCase(m[1]);
+  }
+
+  // 2. Definitive administrative regions/towns explicitly appearing in physical address
+  if (/\b(?:prague|praha|brno|ostrava|plzen|olomouc|liberec|ceske\s*budejovice|hradec\s*kralove|usti\s*nad\s*labem|pardubice|zlin|havirov|kladno|most|karvina|opava|frydek-mistek)\b/i.test(unaccented)) {
+    return "Czech Republic";
+  }
+  if (/\b(taoyuan\s*hsien|taoyuan|yangmei|taipei|new\s*taipei|kaohsiung|taichung|tainan|hsinchu)\b/i.test(unaccented)) {
+    return "Taiwan";
+  }
+  if (/\b(boksburg|johannesburg|pretoria|durban|cape\s*town|sandton|midrand|centurion|gauteng|ekurhuleni)\b/i.test(unaccented)) {
+    return "South Africa";
+  }
+  if (/\b(ireland)\b/i.test(unaccented)) return "Ireland";
+  if (/\b(thailand)\b/i.test(unaccented)) return "Thailand";
+
+  // Canada provinces, territory codes, Canadian postal code pattern (A1A 1A1)
+  if (/\b(?:ontario|quebec|british\s*columbia|alberta|manitoba|saskatchewan|nova\s*scotia|new\s*brunswick|newfoundland|prince\s*edward\s*island)\b/i.test(unaccented) ||
+    /\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/i.test(address) ||
+    /(?:^|[,\s])(?:QC|BC|AB|ON|MB|SK|NS|NB|NL|PE)\b/i.test(address) && /\b(?:Canada|CA)\b/i.test(address) ||
+    /,\s*(?:QC|BC|AB|ON|MB|SK|NS|NB|NL|PE)(?:,\s*CA)?\s*$/i.test(address) ||
+    /\b(?:Montreal|Toronto|Vancouver|Calgary|Edmonton|Ottawa|Winnipeg|Quebec\s*City|Hamilton|Kitchener|London|Victoria|Halifax|Longueuil|Laval|Gatineau|Burnaby|Richmond|Saskatoon|Regina)\b/i.test(unaccented) && /\b(?:Canada|CA|QC|BC|AB|ON|MB|SK)\b/i.test(address)) {
+    return "Canada";
+  }
+
+  // Indonesia check MUST run before US 2-letter state code + 5-digit zip fallback
+  if (hasIndonesiaAddressSignal(address, "") || (/\b(?:jepara|semarang|surabaya|bandung|bekasi|tangerang|jakarta|jawa|kabupaten|kecamatan|jalan|perumahan)\b/i.test(unaccented) && /,\s*id\s*$/i.test(unaccented))) {
+    return "Indonesia";
+  }
+
+  const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
+  if (new RegExp(`(?:^|[,\\s])(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(unaccented)) return "United States Of America";
+  if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})\\s*$`, "i").test(unaccented)) return "United States Of America";
+  if (/\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s*hampshire|new\s*jersey|new\s*mexico|new\s*york|north\s*carolina|north\s*dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s*island|south\s*carolina|south\s*dakota|tennessee|texas|utah|vermont|virginia|washington|west\s*virginia|wisconsin|wyoming|district\s*of\s*columbia)\b/i.test(unaccented)) return "United States Of America";
+  if (/\b(?:new\s*south\s*wales|victoria|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|sydney|melbourne|brisbane|perth|adelaide|canberra|hobart|darwin|gold\s*coast|newcastle|wollongong|geelong|cairns|townsville)\b/i.test(unaccented) ||
+    /\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(unaccented) ||
+    /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(unaccented)) return "Australia";
+  if (/\b(bavaria|bayern|baden-wurttemberg|nordrhein-westfalen|hessen|sachsen)\b/i.test(unaccented)) return "Germany";
+  if (/\b(andalucia|cataluna|galicia|pais\s*vasco|aragon|asturias|baleares|canarias|cantabria|castilla|extremadura|navarra|rioja|barcelona|valencia|sevilla|zaragoza|malaga|murcia|alicante|cordoba|valladolid|vigo|gijon|coruna|toledo|vizcaya|bizkaia)\b/i.test(unaccented)) return "Spain";
+  if (/\b(maharashtra|karnataka|tamil\s*nadu|gujarat|uttar\s*pradesh|telangana|delhi)\b/i.test(unaccented)) return "India";
+  if (/\b(taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung)\s*(hsien|county)\b/i.test(unaccented)) return "Taiwan";
+  if (/\b(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon)\b/i.test(unaccented)) return "Türkiye";
+  if (/\b(selangor|johor|perak|kedah|pahang|negeri\s*sembilan|melaka|malacca|terengganu|kelantan|sabah|sarawak|perlis|wilayah\s*persekutuan|labuan|subang\s*jaya|petaling\s*jaya|shah\s*alam|klang|johor\s*bahru|george\s*town|ipoh|kota\s*kinabalu|kuching|seremban|batu\s*pahat|pasir\s*gudang|iskandar\s*puteri|puchong|cheras|cyberjaya|rawang|kajang|kuantan|alor\s*setar|taiping|sungai\s*petani|bintulu|miri|sibu|sandakan|tawau|butterworth|bukit\s*mertajam|nilai|semenyih)\b/i.test(unaccented)) return "Malaysia";
+  if (/\b(penang|pulau\s*pinang)\b/i.test(unaccented) && !/\b(?:penang\s+road|penang\s+street|penang\s+lane)\b/i.test(unaccented)) return "Malaysia";
+  if (/\b(jawa\s*barat|jawa\s*tengah|jawa\s*timur|west\s*java|central\s*java|east\s*java|banten|sumatera\s*utara|sumatera\s*barat|sumatera\s*selatan|north\s*sumatra|west\s*sumatra|south\s*sumatra|kalimantan\s*(?:timur|barat|selatan|tengah|utara)?|sulawesi\s*(?:selatan|utara|tengah|tenggara|barat)?|kepulauan\s*riau|bangka\s*belitung|nusa\s*tenggara\s*(?:barat|timur)?|dki\s*jakarta|di\s*yogyakarta|surabaya|bandung|medan|semarang|makassar|palembang|tangerang|tangerang\s*selatan|bekasi|depok|bogor|batam|pekanbaru|bandar\s*lampung|balikpapan|denpasar|samarinda|cikarang|karawang|sidoarjo|gresik|serang|cilegon|solo|surakarta|malang|pontianak|manado|banjarmasin|cimahi|sukabumi|cirebon|tasikmalaya|purwakarta|jepara)\b/i.test(unaccented)) return "Indonesia";
+  if (/\b(canterbury|waikato|bay\s*of\s*plenty|otago|hawke's\s*bay|hawkes\s*bay|taranaki|manawatu|southland|northland|marlborough|tasman|west\s*coast|auckland|christchurch|hamilton|tauranga|dunedin|lower\s*hutt|upper\s*hutt|palmerston\s*north|invercargill|rotorua|whangarei|napier|porirua|new\s*plymouth|queenstown|blenheim|timaru|taupo|pukekohe|cambridge|whakatane|hastings|gisborne|nelson|whanganui|feilding|levin|masterton|ashburton|rangiora|rolleston|wanaka)\b/i.test(unaccented)) return "New Zealand";
+  if (/\b(guangdong|jiangsu|zhejiang|shandong|henan|sichuan|hubei|hunan|hebei|fujian|anhui|liaoning|shaanxi|jiangxi|huizhou|shenzhen|guangzhou|dongguan|foshan|zhongshan|zhuhai|suzhou|wuxi|changzhou|nanjing|hangzhou|ningbo|wenzhou|jiaxing|qingdao|jinan|yantai|weifang|xiamen|fuzhou|quanzhou|chengdu|wuhan|changsha|zhengzhou)\b/i.test(unaccented) || /[\u4e00-\u9fa5]/.test(address)) {
+    return "China";
+  }
+
+  // Global major cities/provinces for additional 135-country coverage
+  if (/\b(dubai|abu\s*dhabi|sharjah|ajman|ras\s*al\s*khaimah|fujairah)\b/i.test(unaccented)) return "United Arab Emirates";
+  if (/\b(riyadh|jeddah|dammam|khobar|makkah|madinah)\b/i.test(unaccented)) return "Saudi Arabia";
+  if (/\b(doha|al\s*wakrah)\b/i.test(unaccented)) return "Qatar";
+  if (/\b(manama|muharraq)\b/i.test(unaccented)) return "Bahrain";
+  if (/\b(muscat|salalah|sohar)\b/i.test(unaccented)) return "Oman";
+  if (/\b(kuwait\s*city|hawalli)\b/i.test(unaccented)) return "Kuwait";
+  if (/\b(zagreb|split|rijeka|osijek|zadar|dubrovnik)\b/i.test(unaccented)) return "Croatia";
+  if (/\b(warsaw|warszawa|krakow|wroclaw|poznan|gdansk|lodz|katowice|gryfino|szczecin|lublin)\b/i.test(unaccented)) return "Poland";
+  if (/\b(bucharest|bucuresti|cluj-napoca|timisoara|iasi|brasov|constanta)\b/i.test(unaccented)) return "Romania";
+  if (/\b(budapest|debrecen|szeged|miskolc)\b/i.test(unaccented)) return "Hungary";
+  if (/\b(sofia|plovdiv|varna|burgas)\b/i.test(unaccented)) return "Bulgaria";
+  if (/\b(bratislava|kosice)\b/i.test(unaccented)) return "Slovakia";
+  if (/\b(ljubljana|maribor)\b/i.test(unaccented)) return "Slovenia";
+  if (/\b(belgrade|beograd|novi\s*sad)\b/i.test(unaccented)) return "Serbia";
+  if (/\b(athens|athina|thessaloniki)\b/i.test(unaccented)) return "Greece";
+  if (/\b(lisbon|lisboa|porto)\b/i.test(unaccented)) return "Portugal";
+  if (/\b(vienna|wien|graz|linz|salzburg|innsbruck)\b/i.test(unaccented)) return "Austria";
+  if (/\b(brussels|bruxelles|brussel|antwerp|antwerpen|ghent|gent)\b/i.test(unaccented)) return "Belgium";
+  if (/\b(stockholm|gothenburg|goteborg|malmo|uppsala)\b/i.test(unaccented)) return "Sweden";
+  if (/\b(oslo|bergen|trondheim|stavanger)\b/i.test(unaccented)) return "Norway";
+  if (/\b(copenhagen|kobenhavn|aarhus|odense)\b/i.test(unaccented)) return "Denmark";
+  if (/\b(helsinki|espoo|tampere|turku|oulu)\b/i.test(unaccented)) return "Finland";
+  if (/\b(moscow|moskva|saint\s*petersburg|novosibirsk|yekaterinburg|kazan)\b/i.test(unaccented)) return "Russia";
+  if (/\b(kyiv|kiev|kharkiv|odesa|odessa|dnipro|lviv)\b/i.test(unaccented)) return "Ukraine";
+  if (/\b(tel\s*aviv|jerusalem|haifa)\b/i.test(unaccented)) return "Israel";
+  if (/\b(cairo|alexandria|giza)\b/i.test(unaccented)) return "Egypt";
+  if (/\b(casablanca|rabat|marrakech|tangier)\b/i.test(unaccented)) return "Morocco";
+  if (/\b(lagos|abuja|kano|ibadan)\b/i.test(unaccented)) return "Nigeria";
+  if (/\b(nairobi|mombasa)\b/i.test(unaccented)) return "Kenya";
+  if (/\b(karachi|lahore|islamabad|faisalabad|rawalpindi|sialkot|gujranwala|punjab|sindh|khyber\s*pakhtunkhwa|balochistan)\b/i.test(unaccented)) return "Pakistan";
+  if (/\b(dhaka|chattogram|chittagong|khulna|sylhet|rajshahi)\b/i.test(unaccented)) return "Bangladesh";
+  if (/\b(colombo|kandy|galle)\b/i.test(unaccented)) return "Sri Lanka";
+  if (/\b(manila|quezon\s*city|cebu|makati|taguig|pasig|davao)\b/i.test(unaccented)) return "Philippines";
+  if (/\b(ho\s*chi\s*minh|hanoi|ha\s*noi|da\s*nang|hai\s*phong)\b/i.test(unaccented)) return "Vietnam";
+  if (/\b(sao\s*paulo|rio\s*de\s*janeiro|belo\s*horizonte|curitiba|porto\s*alegre|brasilia|campinas)\b/i.test(unaccented)) return "Brazil";
+  if (/\b(mexico\s*city|ciudad\s*de\s*mexico|guadalajara|monterrey|puebla|tijuana|queretaro)\b/i.test(unaccented)) return "Mexico";
+  if (/\b(buenos\s*aires|cordoba\s*capital|rosario|mendoza)\b/i.test(unaccented)) return "Argentina";
+  if (/\b(bogota|medellin|cali|barranquilla)\b/i.test(unaccented)) return "Colombia";
+  if (/\b(arequipa|trujillo|callao)\b/i.test(unaccented)) return "Peru";
+  if (/\b(bandar\s*seri\s*begawan|kuala\s*belait)\b/i.test(unaccented)) return "Brunei Darussalam";
+  if (/\b(kowloon|tsim\s*sha\s*tsui|tsuen\s*wan|kwun\s*tong|sha\s*tin|causeway\s*bay|wan\s*chai)\b/i.test(unaccented)) return "Hong Kong";
+
+  // UK postcodes & major UK counties / administrative regions
+  if (/\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(unaccented)) {
+    if (/\b(?:eh|g|ab|dd|dg|fk|hs|iv|ka|kw|ky|ml|pa|ph|td|ze)\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(unaccented)) return "Scotland";
+    if (/\b(?:cf|ld|ll|np|sa)\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(unaccented)) return "Wales";
+    if (/\bbt\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(unaccented)) return "Northern Ireland";
+    return "England";
+  }
+  if (/\b(greater\s*london|greater\s*manchester|west\s*midlands|west\s*yorkshire|south\s*yorkshire|tyne\s*and\s*wear|merseyside|berkshire|buckinghamshire|cambridgeshire|cheshire|cornwall|cumbria|derbyshire|devon|dorset|durham|county\s*durham|essex|gloucestershire|hampshire|hertfordshire|kent|lancashire|leicestershire|lincolnshire|middlesex|norfolk|northamptonshire|northumberland|nottinghamshire|oxfordshire|shropshire|somerset|staffordshire|suffolk|surrey|sussex|east\s*sussex|west\s*sussex|warwickshire|wiltshire|worcestershire|yorkshire|east\s*yorkshire|north\s*yorkshire|bedfordshire|rutland|herefordshire|isle\s*of\s*wight)\b/i.test(unaccented)) {
+    return "England";
+  }
+
+  // 3. National Capital mentioned in the physical address text
+  if (isNewTaipeiCity(unaccented)) return "Taiwan";
+  if (/\b(taipei|taipei\s*city)\b/i.test(unaccented)) return "Taiwan";
+  if (/\b(pretoria|cape\s*town|bloemfontein)\b/i.test(unaccented)) return "South Africa";
+  if (/\b(london)\b/i.test(unaccented)) return "England";
+  if (/\b(edinburgh)\b/i.test(unaccented)) return "Scotland";
+  if (/\b(cardiff)\b/i.test(unaccented)) return "Wales";
+  if (/\b(belfast)\b/i.test(unaccented)) return "Northern Ireland";
+  if (/\b(washington\s*d\.?c\.?)\b/i.test(unaccented)) return "United States Of America";
+  if (/\b(ottawa)\b/i.test(unaccented)) return "Canada";
+  if (/\b(canberra)\b/i.test(unaccented)) return "Australia";
+  if (/\b(berlin)\b/i.test(unaccented)) return "Germany";
+  if (/\b(paris|rixheim|mulhouse|lyon|marseille|toulouse|nice|nantes|strasbourg|bordeaux|lille)\b/i.test(unaccented)) return "France";
+  if (/\b(madrid)\b/i.test(unaccented)) return "Spain";
+  if (/\b(roma|rome|milan|milano|turin|torino|bologna|florence|firenze|naples|napoli)\b/i.test(unaccented)) return "Italy";
+  if (/\b(tokyo|osaka|nagoya|yokohama|kyoto|kobe|fukuoka|sapporo)\b/i.test(unaccented)) return "Japan";
+  if (/\b(beijing)\b/i.test(unaccented)) return "China";
+  if (/\b(new\s*delhi)\b/i.test(unaccented)) return "India";
+  if (/\b(seoul|busan|incheon|daegu|daejeon|suwon)\b/i.test(unaccented)) return "South Korea";
+  if (/\b(ankara)\b/i.test(unaccented)) return "Türkiye";
+  if (/\b(wellington)\b/i.test(unaccented) && !/\b(?:mount|mt\.?)\s+wellington\b/i.test(unaccented) && !isPlaceUsedAsStreetName(unaccented, "wellington")) return "New Zealand";
+  if (/\b(kuala\s*lumpur|putrajaya)\b/i.test(unaccented)) return "Malaysia";
+  if (/\b(jakarta|dki\s*jakarta|nusantara)\b/i.test(unaccented)) return "Indonesia";
+  if (/\b(prague|praha)\b/i.test(unaccented)) return "Czech Republic";
+  if (/\b(amsterdam|rotterdam|the\s*hague|den\s*haag|utrecht|eindhoven)\b/i.test(unaccented)) return "Netherlands";
+  if (/\b(zurich|geneva|basel|bern|lausanne)\b/i.test(unaccented)) return "Switzerland";
+  if (/\b(dublin|cork|galway|limerick)\b/i.test(unaccented)) return "Ireland";
+  if (/\b(bangkok|nonthaburi|chiang\s*mai|chonburi|rayong|samut\s*prakan)\b/i.test(unaccented)) return "Thailand";
+  if (/\b(nuuk|amman|beirut|nicosia|valletta|reykjavik|tallinn|riga|vilnius|minsk|chisinau|tirana|skopje|yerevan|baku|astana|tashkent|kathmandu|thimphu|yangon|phnom\s*penh|ulaanbaatar|baghdad|tehran|damascus|kabul|khartoum|addis\s*ababa|kampala|kigali|gaborone|windhoek|lusaka|harare|maputo|luanda|antananarivo|port\s*louis|victoria|freetown|accra|kingston|nassau|bridgetown|santo\s*domingo|belmopan|georgetown|paramaribo|panama\s*city|managua|san\s*jose|guatemala\s*city|suva|port\s*moresby|apia|port\s*vila|asuncion|la\s*paz|sucre|montevideo|lima)\b/i.test(unaccented)) {
+    const capMap = {
+      "nuuk": "Greenland", "amman": "Jordan", "beirut": "Lebanon", "nicosia": "Cyprus", "valletta": "Malta",
+      "reykjavik": "Iceland", "tallinn": "Estonia", "riga": "Latvia", "vilnius": "Lithuania",
+      "minsk": "Belarus", "chisinau": "Moldova", "tirana": "Albania", "skopje": "North Macedonia",
+      "yerevan": "Armenia", "baku": "Azerbaijan", "astana": "Kazakhstan", "tashkent": "Uzbekistan",
+      "kathmandu": "Nepal", "thimphu": "Bhutan", "yangon": "Myanmar", "phnom penh": "Cambodia",
+      "ulaanbaatar": "Mongolia", "baghdad": "Iraq", "tehran": "Iran", "damascus": "Syria",
+      "kabul": "Afghanistan", "khartoum": "Sudan", "addis ababa": "Ethiopia", "kampala": "Uganda",
+      "kigali": "Rwanda", "gaborone": "Botswana", "windhoek": "Namibia", "lusaka": "Zambia",
+      "harare": "Zimbabwe", "maputo": "Mozambique", "luanda": "Angola", "antananarivo": "Madagascar",
+      "port louis": "Mauritius", "freetown": "Sierra Leone", "accra": "Ghana", "kingston": "Jamaica",
+      "nassau": "Bahamas", "bridgetown": "Barbados", "santo domingo": "Dominican Republic",
+      "belmopan": "Belize", "georgetown": "Guyana", "paramaribo": "Suriname", "panama city": "Panama",
+      "managua": "Nicaragua", "san jose": "Costa Rica", "guatemala city": "Guatemala", "suva": "Fiji",
+      "port moresby": "Papua New Guinea", "apia": "Samoa", "port vila": "Vanuatu", "asuncion": "Paraguay",
+      "la paz": "Bolivia", "sucre": "Bolivia", "montevideo": "Uruguay", "lima": "Peru"
+    };
+    const m = unaccented.match(/\b(nuuk|amman|beirut|nicosia|valletta|reykjavik|tallinn|riga|vilnius|minsk|chisinau|tirana|skopje|yerevan|baku|astana|tashkent|kathmandu|thimphu|yangon|phnom\s*penh|ulaanbaatar|baghdad|tehran|damascus|kabul|khartoum|addis\s*ababa|kampala|kigali|gaborone|windhoek|lusaka|harare|maputo|luanda|antananarivo|port\s*louis|freetown|accra|kingston|nassau|bridgetown|santo\s*domingo|belmopan|georgetown|paramaribo|panama\s*city|managua|san\s*jose|guatemala\s*city|suva|port\s*moresby|apia|port\s*vila|asuncion|la\s*paz|sucre|montevideo|lima)\b/i);
+    if (m) {
+      const k = m[1].replace(/\s+/g, " ");
+      if (capMap[k]) return capMap[k];
+    }
+  }
+
+  return "";
+}
+
