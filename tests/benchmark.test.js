@@ -477,24 +477,39 @@ runTest('updateEmailSource handles international contact slugs like /kontakt and
   assert.strictEqual(mapEs["hola@empresa.es"], "https://empresa.es/contacto/", "Spanish /contacto/ must beat homepage");
 });
 
-// 19. State and City strictly trust Gemini AI values directly (no local crawler override)
-runTest('State and City use Gemini API returned values directly in AI mode', () => {
-  const aiCase1 = {
+// 19. State and City strictly enforce instruction sheet rules in AI mode (suburbs never allowed; missing state never invented)
+runTest('State and City enforce instruction sheet rules in AI mode (reject suburbs, require written state)', () => {
+  const aiSuburbCase = {
     _isFromAi: true,
     websiteStatus: "Working",
     businessType: "Manufacturer",
     companyName: "Global Example Ltd",
+    countryName: "Australia",
+    companyAddress: "Building 2, 1090 Centre Road, Oakleigh South, Victoria",
+    state: "Available",
+    city: "Available",
+    productImages: "3"
+  };
+  const res1 = ctx.applyStrictInstructions(aiSuburbCase, {}, {});
+  assert.strictEqual(res1.state, "Available", "Victoria in address must keep state=Available");
+  assert.strictEqual(res1.city, "Not Available", "Suburb Oakleigh South must be overridden to city=Not Available even if Gemini says Available");
+
+  const aiUnknownSuburb = {
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "Sample Co Ltd",
     countryName: "Australia",
     companyAddress: "40 Sample Road, Unknown Suburb",
     state: "Available",
     city: "Available",
     productImages: "3"
   };
-  const res1 = ctx.applyStrictInstructions(aiCase1, {}, {});
-  assert.strictEqual(res1.state, "Available", "Must preserve Gemini's state=Available even if local regex wouldn't find it");
-  assert.strictEqual(res1.city, "Available", "Must preserve Gemini's city=Available without local override");
+  const resUnknown = ctx.applyStrictInstructions(aiUnknownSuburb, {}, {});
+  assert.strictEqual(resUnknown.state, "Not Available", "No state written in address must be overridden to state=Not Available");
+  assert.strictEqual(resUnknown.city, "Not Available", "Unknown Suburb must be overridden to city=Not Available");
 
-  const aiCase2 = {
+  const aiMissedCityState = {
     _isFromAi: true,
     websiteStatus: "Working",
     businessType: "Manufacturer",
@@ -505,9 +520,40 @@ runTest('State and City use Gemini API returned values directly in AI mode', () 
     city: "Not Available",
     productImages: "3"
   };
-  const res2 = ctx.applyStrictInstructions(aiCase2, {}, {});
-  assert.strictEqual(res2.state, "Not Available", "Must preserve Gemini's state=Not Available");
-  assert.strictEqual(res2.city, "Not Available", "Must preserve Gemini's city=Not Available");
+  const res2 = ctx.applyStrictInstructions(aiMissedCityState, {}, {});
+  assert.strictEqual(res2.state, "Available", "Victoria in address must be fixed to state=Available");
+  assert.strictEqual(res2.city, "Available", "Melbourne in address must be fixed to city=Available");
+
+  const aiSuburbVillage = {
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "NZ Example Ltd",
+    countryName: "New Zealand",
+    companyAddress: "15 Penrose Road, Penrose",
+    state: "Available",
+    city: "Available",
+    productImages: "3"
+  };
+  const resNz = ctx.applyStrictInstructions(aiSuburbVillage, {}, {});
+  assert.strictEqual(resNz.state, "Not Available", "Penrose without region/capital must have state=Not Available");
+  assert.strictEqual(resNz.city, "Not Available", "Penrose suburb alone must have city=Not Available");
+
+  assert.strictEqual(
+    ctx.evaluateCityQC("Unit 5, Trafford Park, Greater Manchester", "United Kingdom"),
+    "Not Available",
+    "UK industrial suburb Trafford Park without city must be Not Available"
+  );
+  assert.strictEqual(
+    ctx.evaluateCityQC("Jl. Industri Raya, MM2100 Industrial Town, Cibitung", "Indonesia"),
+    "Not Available",
+    "Indonesian Industrial Town estate without city/kabupaten/kecamatan must be Not Available"
+  );
+  assert.strictEqual(
+    ctx.hasStateInAddress("Via Roma 10, MI", "Italy"),
+    false,
+    "Non-US 2-letter code MI must not falsely trigger Michigan state"
+  );
 });
 
 // 20. Global 135-Country Standardization, QC Corrections, Global State/City & Calling Codes

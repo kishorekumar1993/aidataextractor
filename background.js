@@ -192,6 +192,17 @@ const NON_CITY_SUBURBS = [
   "petone", "miramar", "thorndon", "te aro", "kilbirnie", "newtown", "johnsonville", "tawa",
   "ngaio", "khandallah", "karori", "island bay", "lyall bay", "rongotai", "kelburn", "wadestown",
   "frankton", "te rapa", "hamilton east", "claudelands", "chartwell", "rototuna", "dinsdale",
+  // United Kingdom Suburbs & Outer Localities (MUST NOT be classified as City via structural fallback)
+  "trafford", "trafford park", "chiswick", "wembley", "hendon", "finchley", "morden", "mitcham",
+  "twickenham", "teddington", "feltham", "southall", "greenford", "perivale", "ruislip", "northolt",
+  "pinner", "stanmore", "chingford", "woodford", "loughton", "wanstead", "bexleyheath", "sidcup",
+  "orpington", "erith", "purley", "coulsdon", "thornton heath", "streatham", "balham", "tooting",
+  "clapham", "brixton", "dulwich", "peckham", "camberwell", "deptford", "woolwich", "eltham",
+  "canary wharf", "shoreditch", "hoxton", "kings norton", "erdington", "edgbaston", "selly oak",
+  "perry barr", "handsworth", "small heath", "sparkbrook", "moseley", "harborne", "didsbury",
+  "chorlton", "withington", "fallowfield", "levenshulme", "gorton", "openshaw", "headingley",
+  "chapel allerton", "roundhay", "horsforth", "garforth", "pudsey", "jesmond", "gosforth", "byker",
+  "fenham", "benwell", "redland", "bedminster", "filton", "bradley stoke",
   // Taiwan Suburbs & Localities (MUST NOT be classified as City)
   "keishan", "guishan", "xizhi", "shulin", "linkou", "tamsui", "danshui",
   "sanchong", "xinzhuang", "zhonghe", "yonghe", "tucheng", "luzhou", "yingge",
@@ -208,7 +219,7 @@ const RECOGNIZED_TOWNS = [
   "kimberley", "george", "rustenburg", "potchefstroom", "paarl", "stellenbosch", "upington",
   "witbank", "emalahleni", "klerksdorp", "secunda", "middelburg", "vanderbijlpark", "vereeniging",
   // United Kingdom towns / cities / boroughs
-  "cradley heath", "hayes", "london", "manchester", "birmingham", "liverpool", "leeds", "glasgow", "edinburgh", "bristol",
+  "cradley heath", "london", "manchester", "birmingham", "liverpool", "leeds", "glasgow", "edinburgh", "bristol",
   "sheffield", "newcastle", "nottingham", "cardiff", "belfast", "cambridge", "oxford", "coventry",
   "leicester", "southampton", "aberdeen", "plymouth", "swansea", "dundee", "norwich",
   // United States cities / towns
@@ -237,7 +248,7 @@ const RECOGNIZED_TOWNS = [
   "paterson", "naperville", "syracuse", "mesquite", "dayton", "savannah", "clarksville",
   "orange", "pasadena", "fullerton", "killeen", "frisco", "hampton", "mchenry", "oshkosh",
   "mundelein", "merced", "somerville", "allenton", "westford", "hamden", "palmetto",
-  "saegertown", "wheeling", "watertown", "avon", "blomkest", "kutztown", "north hollywood",
+  "saegertown", "wheeling", "watertown", "avon", "blomkest", "kutztown",
   // Australia
   "sydney", "melbourne", "brisbane", "perth", "adelaide", "gold coast", "newcastle", "canberra",
   "sunshine coast", "wollongong", "hobart", "geelong", "townsville", "cairns", "darwin",
@@ -250,12 +261,12 @@ const RECOGNIZED_TOWNS = [
   "regina", "saskatoon", "waterloo", "barrie", "st. catharines", "saint catharines",
   "delta", "nanaimo", "kamloops", "prince george", "chilliwack", "red deer",
   "lethbridge", "st. albert", "medicine hat", "wood buffalo", "milton", "brantford", "thunder bay", "niagara falls",
-  // Taiwan districts & cities
-  "yangmei", "yangmei town", "banqiao", "banqiao district", "xinzhuang", "xinzhuang district", "zhonghe", "zhonghe district",
-  "sanchong", "sanchong district", "tamsui", "tamsui district", "xizhi", "xizhi district",
-  "yonghe", "yonghe district", "tucheng", "tucheng district", "shulin", "shulin district",
+  // Taiwan official District-qualified entries & major cities (unqualified suburbs excluded)
+  "yangmei town", "banqiao district", "xinzhuang district", "zhonghe district",
+  "sanchong district", "tamsui district", "xizhi district",
+  "yonghe district", "tucheng district", "shulin district",
   "taichung", "tainan", "kaohsiung", "keelung", "hsinchu", "chiayi", "hualien", "yilan",
-  "hsi-hu", "hsihu", "xihu", "lu-kang", "lukang", "yuan-lin", "yuanlin", "daxi", "tamsui",
+  "hsi-hu", "hsihu", "lu-kang", "lukang", "yuan-lin", "yuanlin",
   // Germany
   "berlin", "munich", "hamburg", "frankfurt", "cologne", "stuttgart", "dusseldorf", "dortmund",
   "essen", "leipzig", "bremen", "dresden", "hanover", "nuremberg", "duisburg",
@@ -5663,23 +5674,45 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.companyAddress = addr;
 
-    // 4. State & City: Directly trust Gemini AI's returned values ("Available" / "Not Available")
-    // Only fall back to local evaluator if Gemini returned empty/invalid values (e.g. non-AI or mock test objects)
+    // 4. State & City: Strictly enforce instruction-sheet QC rules in BOTH AI and deterministic modes!
+    // Suburbs alone MUST NEVER be marked City: Available, and State MUST be literally present in companyAddress (or National Capital).
     const normalizeAvailability = (val) => {
       const s = String(val || "").trim().toLowerCase();
       if (s === "available") return "Available";
       if (s === "not available") return "Not Available";
       return "";
     };
-    const aiState = normalizeAvailability(result.state);
     const aiCity = normalizeAvailability(result.city);
 
     if (!addr || addr.length < 5 || addr.toLowerCase() === "not available") {
-      result.state = aiState || "Not Available";
-      result.city = aiCity || "Not Available";
+      result.state = "Not Available";
+      result.city = "Not Available";
     } else {
-      result.state = aiState || (hasStateInAddress(addr, country) ? "Available" : "Not Available");
-      result.city = aiCity || evaluateCityQC(addr, country);
+      result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
+      const qcCity = evaluateCityQC(addr, country);
+      const isStrictCityCountry =
+        isAustralianLocation(addr, country) ||
+        isNewZealandLocation(addr, country) ||
+        isSouthAfricanLocation(addr, country) ||
+        isTaiwanLocation(addr, country) ||
+        isIndonesianLocation(addr, country) ||
+        isMalaysianLocation(addr, country) ||
+        isUkLocation(addr, country) ||
+        isUnitedStatesLocation(addr, country) ||
+        /\b(?:canada|spain|espana)\b/i.test(country || addr);
+
+      if (qcCity === "Available") {
+        result.city = "Available";
+      } else if (isStrictCityCountry || addressLooksLikeSuburbOnly(addr)) {
+        result.city = "Not Available";
+      } else if (aiCity === "Available") {
+        // Non-strict minor countries: only allow AI's Available if there is a genuine non-suburb, non-street locality segment
+        const locSegs = extractAddressLocalitySegments(addr) || [];
+        const lastLoc = locSegs.length > 0 ? locSegs[locSegs.length - 1] : "";
+        result.city = (lastLoc && !isNotCitySegment(lastLoc)) ? "Available" : "Not Available";
+      } else {
+        result.city = "Not Available";
+      }
     }
 
     result.businessType = String(result.businessType || "").trim();
@@ -6966,10 +6999,14 @@ function hasStateInAddress(addr, country) {
   // United States state abbreviations with 5-digit ZIP or comma (e.g. IL 60060, TX 78731, Allenton, WI)
   const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
   const isUSState = !country || /^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?|america)$/i.test(country) || /\b(usa|united\s*states)\b/i.test(lower);
-  const skipUsCodeFallback = hasIndonesiaAddressSignal(addr, country) || /indonesia/i.test(country || "");
-  if (!skipUsCodeFallback && new RegExp(`\\b(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return true;
-  if (!skipUsCodeFallback && new RegExp(`,\\s*(?:${US_STATE_CODES_STR})(?:\\s*,|\\s*\\d{5}|\\s*$)`, "i").test(lower)) return true;
-  if (isUSState && new RegExp(`^(?:${US_STATE_CODES_STR})(?:\\s+\\d{5}(?:-\\d{4})?)?$`, "i").test(lower.trim())) return true;
+  const nonUsSignal = !/\b(?:united\s*states|usa|u\.s\.a\.)\b/i.test(country || lower) && (
+    hasIndonesiaAddressSignal(addr, country) ||
+    /australia|united\s*kingdom|england|scotland|wales|northern\s*ireland|canada|new\s*zealand|malaysia|indonesia|taiwan|china|india|south\s*africa|germany|france|italy|spain|japan|south\s*korea|thailand|vietnam|philippines|singapore|netherlands|belgium|switzerland|austria|poland/i.test(country || "") ||
+    isAustralianLocation(addr, country) || isUkLocation(addr, country)
+  );
+  if (!nonUsSignal && new RegExp(`\\b(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return true;
+  if (!nonUsSignal && new RegExp(`,\\s*(?:${US_STATE_CODES_STR})(?:\\s*,|\\s*\\d{5}|\\s*$)`, "i").test(lower)) return true;
+  if (isUSState && !nonUsSignal && new RegExp(`^(?:${US_STATE_CODES_STR})(?:\\s+\\d{5}(?:-\\d{4})?)?$`, "i").test(lower.trim())) return true;
 
   // Canadian province abbreviations (e.g. ON, QC, BC, AB, MB, SK, NS, NB, NL, PE)
   const isCanada = (country && /canada/i.test(country)) || /\b(canada)\b/i.test(lower);
@@ -7238,6 +7275,7 @@ function isIndonesianLocation(address, country) {
   if (c && !/\b(?:indonesia|id)\b/i.test(c) && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|spain|malaysia)\b/i.test(c)) {
     return false;
   }
+  if (hasIndonesiaAddressSignal(address, country)) return true;
   const a = (address || "").toLowerCase();
   if (/\b(?:indonesia|republik\s*indonesia)\b/i.test(a)) return true;
   if (/\b(?:jakarta|dki\s*jakarta|jawa\s*barat|jawa\s*tengah|jawa\s*timur|banten|di\s*yogyakarta|yogyakarta|bali|sumatera|kalimantan|sulawesi|papua|maluku|riau|lampung|aceh|nusantara)\b/i.test(a)) return true;
@@ -7272,7 +7310,8 @@ function hasUkCityOrTown(cleanAddr) {
   const streetSuffixPattern = "\\s+(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|mews|row|wharf|park|st|rd|ave|dr|ln|blvd)\\b";
   const streetPrefixPattern = "\\b(?:street|road|avenue|lane|drive|way|close|walk|place|court|terrace|hill|gardens|crescent|boulevard|view|mews|row|wharf|park)\\s+";
 
-  for (const text of targetTexts) {
+  for (const rawText of targetTexts) {
+    const text = rawText.replace(/\bgreater\s+manchester\b/gi, " ");
     for (const name of UK_CITIES_AND_TOWNS) {
       const escaped = name.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
       const regex = new RegExp(`(?<!${streetPrefixPattern})\\b${escaped}\\b(?!${streetSuffixPattern})`, "i");
@@ -7397,9 +7436,9 @@ function hasRecognizedPlaceName(cleanAddr, names) {
 
 // City qualifying administrative designations across all 16 priority countries
 const CITY_QUALIFIERS = [
-  // English administrative designations
+  // English administrative designations (note: "village" is excluded globally to prevent suburbs/shopping villages/villages from counting as Cities)
   "town", "township", "district", "dist\\.?", "municipality", "metropolitan\\s*municipality",
-  "local\\s*municipality", "district\\s*municipality", "borough", "shire", "village",
+  "local\\s*municipality", "district\\s*municipality", "borough", "shire",
   // Non-English administrative designations across the 16 priority countries
   // Germany / Austria / Switzerland
   "stadt", "gemeinde", "marktgemeinde", "markt", "bezirk", "ortsteil",
@@ -7434,7 +7473,10 @@ function hasCityDesignation(addr) {
   // Chinese / East Asian City, Town, Township, District characters: 市 (City), 鎮/镇 (Town), 鄉/乡 (Township), 區/区 (District)
   if (/[\u5e02\u93ae\u9547\u9109\u4e61\u5340\u533a]/.test(addr)) return true;
 
-  const stripped = addr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+district\b/gi, " ").replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
+  const stripped = addr
+    .replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech|trade|trading)\s+(?:district|town|park|estate)\b/gi, " ")
+    .replace(/\b(?:china\s*town|chinatown|down\s*town|downtown)\b/gi, " ")
+    .replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
   if (hasExplicitCityWord(stripped)) return true;
   const qualRegex = new RegExp(`\\b(?:${CITY_QUALIFIERS.join("|")})\\b`, "i");
   return qualRegex.test(stripped);
@@ -7442,6 +7484,12 @@ function hasCityDesignation(addr) {
 
 function addressLooksLikeSuburbOnly(cleanAddr) {
   if (!cleanAddr) return false;
+  if (/\b(?:suburb|unknown\s*suburb|neighborhood|neighbourhood)\b/i.test(cleanAddr) &&
+      !/\b(?:city|municipality|township|borough)\b/i.test(cleanAddr) &&
+      !hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES) &&
+      !hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+    return true;
+  }
   let withoutDesignation = cleanAddr.replace(/\b(township|town|district|municipality|metropolitan\s*municipality|borough|city)\b/gi, " ");
   withoutDesignation = withoutDesignation.replace(/\b(victoria|western\s*australia|south\s*australia|new\s*south\s*wales|queensland|tasmania)\b/gi, " ");
   for (const suburb of NON_CITY_SUBURBS) {
@@ -7492,8 +7540,8 @@ function isNotCitySegment(segment) {
     return true;
   }
 
-  // Industrial / commercial parks / zones / estates
-  if (/\b(?:industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park)\b/i.test(s)) {
+  // Industrial / commercial parks / zones / estates & suburb markers
+  if (/\b(?:industrial\s*(?:estate|park|area|zone|district|town)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park|suburb|neighborhood|neighbourhood|hamlet|chinatown|downtown)\b/i.test(s)) {
     return true;
   }
 
@@ -7682,11 +7730,11 @@ function evaluateCityQC(address, country) {
     }
     // 3. Explicit qualifiers: Kota, Kabupaten, Kecamatan, Kotamadya, City, Regency, Town, District, Municipality
     const strippedID = cleanAddr.replace(/\bkawasan\s+(?:industri|berikat)(?:\s+[A-Za-z0-9]+)?/gi, " ")
-      .replace(/\b(?:industrial|business|technology)\s+(?:park|estate|area|zone|district)\b/gi, " ");
+      .replace(/\b(?:industrial|business|technology|commercial|trade|china|down)\s+(?:park|estate|area|zone|district|town)\b/gi, " ");
     if (hasExplicitCityWord(strippedID) || /\b(?:kota|kabupaten|kecamatan|kotamadya|regency|town|township|district|municipality)\b/i.test(strippedID)) {
       return "Available";
     }
-    // Industrial estate alone without a city -> Not Available
+    // Industrial estate / village / suburb alone without a city -> Not Available
     return "Not Available";
   }
 
@@ -7706,24 +7754,18 @@ function evaluateCityQC(address, country) {
     if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
       return "Available";
     }
+    if (addressLooksLikeSuburbOnly(cleanAddr)) {
+      return "Not Available";
+    }
     // 4. Structural detection: Locality preceding State/ZIP
     const structCity = detectCityFromStructure(cleanAddr, country);
     if (structCity && !isNotCitySegment(structCity)) {
       return "Available";
     }
-  }
-
-  // 1. Explicit qualifying City, Town, Township, District, Municipality, or local language designation
-  if (hasCityDesignation(cleanAddr)) {
-    return "Available";
-  }
-
-  // 2. Suburb-only addresses: If the address only has a suburb and no recognized city/town, MUST evaluate as Not Available!
-  if (addressLooksLikeSuburbOnly(cleanAddr)) {
     return "Not Available";
   }
 
-  // 3. UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
+  // UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
   if (isUkLocation(cleanAddr, country)) {
     if (hasUkCityOrTown(cleanAddr)) {
       return "Available";
@@ -7735,14 +7777,14 @@ function evaluateCityQC(address, country) {
     return "Not Available";
   }
 
-  // 4. Australian City evaluation (Strict QC Rule: SUBURB IS NOT A CITY):
+  // Australian City evaluation (Strict QC Rule: SUBURB IS NOT A CITY):
   if (isAustralianLocation(cleanAddr, country)) {
     // 1. Official Australian Cities ONLY (Melbourne, Sydney, Brisbane, Perth, Adelaide, Hobart, Darwin, Canberra, Geelong, Gold Coast, Newcastle, Wollongong, etc.)
     if (hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES)) {
       return "Available";
     }
     // 2. Explicit City, Town, Township, Shire, District, Municipality designation
-    const strippedAU = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+district\b/gi, " ");
+    const strippedAU = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech|trading)\s+(?:district|town|park|estate)\b/gi, " ");
     if (hasExplicitCityWord(strippedAU) || /\b(?:town|township|shire|district|municipality|borough)\b/i.test(strippedAU)) {
       return "Available";
     }
@@ -7750,32 +7792,42 @@ function evaluateCityQC(address, country) {
     return "Not Available";
   }
 
-  // 5. Spanish City evaluation: Recognized Spanish cities & municipal centres evaluate as Available
+  // Spanish City evaluation: Recognized Spanish cities & municipal centres evaluate as Available
   if (isSpanishLocation(cleanAddr, country)) {
     if (hasSpanishCityOrTown(cleanAddr) || hasRecognizedPlaceName(cleanAddr, SPANISH_CITIES_AND_TOWNS)) {
       return "Available";
     }
   }
 
-  // 6. South Africa: Suburbs preceding state/province MUST NOT be classified as cities!
+  // South Africa: Suburbs preceding state/province MUST NOT be classified as cities!
   if (isSouthAfricanLocation(cleanAddr, country)) {
     if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
       return "Available";
     }
-    const strippedZA = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+district\b/gi, " ");
+    const strippedZA = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech|trading)\s+(?:district|town|park|estate)\b/gi, " ");
     if (hasExplicitCityWord(strippedZA) || /\b(?:town|township|district|municipality|metropolitan\s*municipality|borough)\b/i.test(strippedZA)) {
       return "Available";
     }
     return "Not Available";
   }
 
-  // 7. Recognized International Towns/Cities
+  // Suburb-only addresses: If the address only has a suburb and no recognized city/town, MUST evaluate as Not Available!
+  if (addressLooksLikeSuburbOnly(cleanAddr)) {
+    return "Not Available";
+  }
+
+  // Explicit qualifying City, Town, Township, District, Municipality, or local language designation
+  if (hasCityDesignation(cleanAddr)) {
+    return "Available";
+  }
+
+  // Recognized International Towns/Cities
   if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
     return "Available";
   }
 
-  // 8. Structural address detection (for USA, Canada where city always precedes state/province without suburbs)
-  if (isUnitedStatesLocation(cleanAddr, country) || /\b(?:canada)\b/i.test(country || cleanAddr)) {
+  // Structural address detection (for Canada where city precedes province)
+  if (/\b(?:canada)\b/i.test(country || cleanAddr)) {
     const structCity = detectCityFromStructure(cleanAddr, country);
     if (structCity && !isNotCitySegment(structCity)) {
       return "Available";
