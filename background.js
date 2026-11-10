@@ -4286,17 +4286,17 @@ const GEMINI_RESPONSE_SCHEMA = {
     numberOfProducts: {
       type: "STRING",
       enum: ["0", "1", "2", "3"],
-      description: "Number of physical product items/catalog offerings identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website product evidence."
+      description: "Must be identical to productImages. '0', '1', '2', or '3' (for 3 or more)."
     },
     productImages: {
       type: "STRING",
       enum: ["0", "1", "2", "3"],
-      description: "Number of physical product images/photos identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website photo evidence."
+      description: "Number of physical product images/photos identified: '0', '1', '2', or '3' (for 3 or more)."
     },
     numberOfProductDescriptions: {
       type: "STRING",
       enum: ["0", "1", "2", "3"],
-      description: "Number of physical product descriptions/specifications identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website description evidence."
+      description: "Must be identical to productImages. '0', '1', '2', or '3' (for 3 or more)."
     }
   },
   required: [
@@ -4394,9 +4394,8 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
 - Valid numbers must be between 8 and 12 digits.
 
 10. PRODUCT, IMAGE & DESCRIPTION COUNTS:
-- Three INDEPENDENT measurements: "numberOfProducts", "productImages", "numberOfProductDescriptions".
 - Values: "0" | "1" | "2" | "3" (3 or more).
-- Evaluate independently from actual site evidence. Do not force them to be identical.
+- STRICT MANDATE: Count physical product images on the website ("productImages"). Whatever value "productImages" has, set "numberOfProducts" and "numberOfProductDescriptions" to that EXACT SAME value!
 
 WEBSITE DATA FOR THIS CRAWL:
 Target URL: ${crawlData.originalUrl}
@@ -5208,17 +5207,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       return !isNaN(num) && num > 0 ? (num >= 3 ? 3 : num) : 0;
     };
 
-    // Independent product measurements (Rules 12, 13, 14 - evaluated independently):
-    // In AI mode, trust Gemini's visual product counts directly without forcing crawler noise
-    if (result._isFromAi) {
-      result.numberOfProducts = String(Math.min(3, Math.max(0, parseCount(result.numberOfProducts))));
-      result.productImages = String(Math.min(3, Math.max(0, parseCount(result.productImages))));
-      result.numberOfProductDescriptions = String(Math.min(3, Math.max(0, parseCount(result.numberOfProductDescriptions))));
-    } else {
-      result.numberOfProducts = String(Math.min(3, Math.max(parseCount(result.numberOfProducts), parseCount(crawlData && crawlData.detectedProductCount))));
-      result.productImages = String(Math.min(3, Math.max(parseCount(result.productImages), parseCount(crawlData && crawlData.detectedImageCount))));
-      result.numberOfProductDescriptions = String(Math.min(3, Math.max(parseCount(result.numberOfProductDescriptions), parseCount(crawlData && crawlData.detectedDescCount))));
-    }
+    // QC Rule: "Image Product: what having put same No. of Product Description: and Number of Product both"
+    const imgCount = result._isFromAi
+      ? String(Math.min(3, Math.max(0, parseCount(result.productImages))))
+      : String(Math.min(3, Math.max(parseCount(result.productImages), parseCount(crawlData && crawlData.detectedImageCount))));
+
+    result.productImages = imgCount;
+    result.numberOfProducts = imgCount;
+    result.numberOfProductDescriptions = imgCount;
 
     return result;
   }
@@ -5978,14 +5974,13 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     return 0;
   };
 
-  // Independent product measurements (Rules 12, 13, 14 - evaluated independently):
-  const pCount = Math.min(3, Math.max(parseCount(result.numberOfProducts), parseCount(crawlData.detectedProductCount)));
+  // QC Rule: "Image Product: what having put same No. of Product Description: and Number of Product both"
   const iCount = Math.min(3, Math.max(parseCount(result.productImages), parseCount(crawlData.detectedImageCount)));
-  const dCount = Math.min(3, Math.max(parseCount(result.numberOfProductDescriptions), parseCount(crawlData.detectedDescCount)));
+  const finalProductCount = String(iCount);
 
-  result.numberOfProducts = String(pCount);
-  result.productImages = String(iCount);
-  result.numberOfProductDescriptions = String(dCount);
+  result.productImages = finalProductCount;
+  result.numberOfProducts = finalProductCount;
+  result.numberOfProductDescriptions = finalProductCount;
 
   // Final safeguard: If website has 0 products and company has no physical address, it CANNOT be a working site
   const finalHasAddr = result.companyAddress && result.companyAddress !== "Not Available" && result.companyAddress.trim().length > 5;

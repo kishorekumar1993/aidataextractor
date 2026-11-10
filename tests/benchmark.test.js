@@ -113,8 +113,8 @@ runTest('Distributor with shopping cart is Not Working', () => {
   assert.strictEqual(isMfg, false, "Distributor must not be classified as Manufacturer");
 });
 
-// 9. Independent Product Counts (Not forced to be identical)
-runTest('Independent product metrics in AI mode', () => {
+// 9. Product Metrics Synchronization (Image Product mirrors to Number of Product and No. of Product Description)
+runTest('Image Product mirrors to Number of Product and No. of Product Description', () => {
   const aiData = {
     _isFromAi: true,
     websiteStatus: "Working",
@@ -125,9 +125,23 @@ runTest('Independent product metrics in AI mode', () => {
     numberOfProductDescriptions: "1"
   };
   const res = ctx.applyStrictInstructions(aiData, {}, {});
-  assert.strictEqual(res.numberOfProducts, "0", "numberOfProducts must stay 0");
   assert.strictEqual(res.productImages, "3", "productImages must stay 3");
-  assert.strictEqual(res.numberOfProductDescriptions, "1", "numberOfProductDescriptions must stay 1");
+  assert.strictEqual(res.numberOfProducts, "3", "numberOfProducts must match productImages (3)");
+  assert.strictEqual(res.numberOfProductDescriptions, "3", "numberOfProductDescriptions must match productImages (3)");
+
+  const zeroData = {
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "Test Service Ltd",
+    numberOfProducts: "3",
+    productImages: "0",
+    numberOfProductDescriptions: "2"
+  };
+  const resZero = ctx.applyStrictInstructions(zeroData, {}, {});
+  assert.strictEqual(resZero.productImages, "0", "productImages is 0");
+  assert.strictEqual(resZero.numberOfProducts, "0", "numberOfProducts mirrors 0");
+  assert.strictEqual(resZero.numberOfProductDescriptions, "0", "numberOfProductDescriptions mirrors 0");
 });
 
 // 10. Cross-Field Sanity Check (Non-working fields cleared)

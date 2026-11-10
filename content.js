@@ -2257,11 +2257,13 @@
       return (!isNaN(n) && n > 0) ? (n >= 3 ? "3" : String(n)) : "0";
     };
 
-    // 12. Number of Products
+    // 12, 13, 14. Product Metrics: Whatever Image Product has, put the same for No. of Product Description and Number of Product
+    const imageCount = parseCountStr(data.productImages);
+
+    // 12. Number of Products (same as Image Product)
     try {
       if (elements.numberOfProducts) {
-        const prodCount = parseCountStr(data.numberOfProducts);
-        if (setSelectValue(elements.numberOfProducts, prodCount)) {
+        if (setSelectValue(elements.numberOfProducts, imageCount)) {
           highlightField(elements.numberOfProducts);
           filledCount++;
         }
@@ -2271,19 +2273,17 @@
     // 13. Product Images
     try {
       if (elements.productImages) {
-        const imgCount = parseCountStr(data.productImages);
-        if (setSelectValue(elements.productImages, imgCount)) {
+        if (setSelectValue(elements.productImages, imageCount)) {
           highlightField(elements.productImages);
           filledCount++;
         }
       }
     } catch (e) { console.warn("Error setting productImages:", e); }
 
-    // 14. Number of Product Descriptions
+    // 14. Number of Product Descriptions (same as Image Product)
     try {
       if (elements.numberOfProductDescriptions) {
-        const descCount = parseCountStr(data.numberOfProductDescriptions);
-        if (setSelectValue(elements.numberOfProductDescriptions, descCount)) {
+        if (setSelectValue(elements.numberOfProductDescriptions, imageCount)) {
           highlightField(elements.numberOfProductDescriptions);
           filledCount++;
         }
