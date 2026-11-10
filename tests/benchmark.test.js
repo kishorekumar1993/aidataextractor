@@ -114,33 +114,43 @@ runTest('Distributor with shopping cart is Not Working', () => {
   assert.strictEqual(isMfg, false, "Distributor must not be classified as Manufacturer");
 });
 
-// 9. Product Metrics Synchronization (Image Product mirrors to Number of Product and No. of Product Description)
-runTest('Image Product mirrors to Number of Product and No. of Product Description', () => {
-  const aiData = {
+// 9. Product Metrics Synchronization (Own crawl only — ignores Gemini and keeps all 3 identical)
+runTest('Product items use own crawl only (ignores Gemini) and keep all 3 fields identical', () => {
+  const aiDataWithBadZero = {
     _isFromAi: true,
     websiteStatus: "Working",
     businessType: "Manufacturer",
     companyName: "Test Manufacturing Ltd",
     numberOfProducts: "0",
-    productImages: "3",
-    numberOfProductDescriptions: "1"
+    productImages: "1",
+    numberOfProductDescriptions: "2"
   };
-  const res = ctx.applyStrictInstructions(aiData, {}, {});
-  assert.strictEqual(res.productImages, "3", "productImages must stay 3");
-  assert.strictEqual(res.numberOfProducts, "3", "numberOfProducts must match productImages (3)");
-  assert.strictEqual(res.numberOfProductDescriptions, "3", "numberOfProductDescriptions must match productImages (3)");
+  const crawlWithThree = {
+    detectedProductCount: 2,
+    detectedImageCount: 3,
+    detectedDescCount: 1
+  };
+  const res = ctx.applyStrictInstructions(aiDataWithBadZero, crawlWithThree, {});
+  assert.strictEqual(res.productImages, "3", "productImages must use own crawl (3), ignoring Gemini (1)");
+  assert.strictEqual(res.numberOfProducts, "3", "numberOfProducts must match own crawl (3)");
+  assert.strictEqual(res.numberOfProductDescriptions, "3", "numberOfProductDescriptions must match own crawl (3)");
 
-  const zeroData = {
+  const aiDataWithOvercount = {
     _isFromAi: true,
     websiteStatus: "Working",
     businessType: "Manufacturer",
-    companyName: "Test Service Ltd",
+    companyName: "Test One Product Ltd",
     numberOfProducts: "3",
-    productImages: "0",
-    numberOfProductDescriptions: "2"
+    productImages: "3",
+    numberOfProductDescriptions: "3"
   };
-  const resZero = ctx.applyStrictInstructions(zeroData, {}, {});
-  assert.strictEqual(resZero.productImages, "0", "productImages is 0");
+  const resOne = ctx.applyStrictInstructions(aiDataWithOvercount, { detectedImageCount: 1, detectedProductCount: 0, detectedDescCount: 0 }, {});
+  assert.strictEqual(resOne.productImages, "1", "productImages must use own crawl (1), ignoring Gemini (3)");
+  assert.strictEqual(resOne.numberOfProducts, "1", "numberOfProducts must match own crawl (1)");
+  assert.strictEqual(resOne.numberOfProductDescriptions, "1", "numberOfProductDescriptions must match own crawl (1)");
+
+  const resZero = ctx.applyStrictInstructions(aiDataWithOvercount, { detectedImageCount: 0, detectedProductCount: 0, detectedDescCount: 0 }, {});
+  assert.strictEqual(resZero.productImages, "0", "productImages uses own crawl (0)");
   assert.strictEqual(resZero.numberOfProducts, "0", "numberOfProducts mirrors 0");
   assert.strictEqual(resZero.numberOfProductDescriptions, "0", "numberOfProductDescriptions mirrors 0");
 });

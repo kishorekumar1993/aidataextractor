@@ -1316,6 +1316,9 @@ async function crawlWebsite(targetUrl) {
   let contactLinks = [];
   let companySocials = {};
   const crawledPages = [];
+  let detectedProductCount = 0;
+  let detectedImageCount = 0;
+  let detectedDescCount = 0;
 
   let mainRes = null;
   // Fast-path: Check if the user already has the site open in a Chrome tab. Grabbing DOM directly is <100ms!
@@ -1617,13 +1620,16 @@ async function crawlWebsite(targetUrl) {
         if (isProfilePage && !primaryAboutUrl) primaryAboutUrl = cUrl;
         if (isContactPage && !primaryContactUrl) primaryContactUrl = cUrl;
 
-        // If product page, check for products and count items
+        // Count product items, images, and descriptions on crawled subpages (especially product/catalog pages)
+        const subSignals = countProductSignals(cText);
         if (isProductPage) {
-          const subMatches = cText.match(/class=["'][^"']*(?:product-item|product-card|product-listing|catalog-item|store-item)[^"']*["']/gi) ||
-            cText.match(/<div[^>]*data-product[^>]*>/gi) || [];
-          if (subMatches.length > 0) {
-            detectedProductCount = Math.max(detectedProductCount, Math.min(subMatches.length, 3));
-          }
+          detectedProductCount = Math.max(detectedProductCount, subSignals.detectedProductCount);
+          detectedImageCount = Math.max(detectedImageCount, subSignals.detectedImageCount);
+          detectedDescCount = Math.max(detectedDescCount, subSignals.detectedDescCount);
+        } else {
+          detectedImageCount = Math.max(detectedImageCount, subSignals.detectedImageCount);
+          detectedProductCount = Math.max(detectedProductCount, subSignals.detectedProductCount);
+          detectedDescCount = Math.max(detectedDescCount, subSignals.detectedDescCount);
         }
 
         if (includeAddresses && !isLowQualitySubpage) {
@@ -1832,7 +1838,13 @@ async function crawlWebsite(targetUrl) {
       }
     }
     for (const p of contactParsed.phones) allDiscoveredPhones.add(p);
+    detectedProductCount = Math.max(detectedProductCount, contactParsed.detectedProductCount || 0);
+    detectedImageCount = Math.max(detectedImageCount, contactParsed.detectedImageCount || 0);
+    detectedDescCount = Math.max(detectedDescCount, contactParsed.detectedDescCount || 0);
   }
+  extracted.detectedProductCount = Math.max(extracted.detectedProductCount || 0, detectedProductCount);
+  extracted.detectedImageCount = Math.max(extracted.detectedImageCount || 0, detectedImageCount);
+  extracted.detectedDescCount = Math.max(extracted.detectedDescCount || 0, detectedDescCount);
 
   let hostDomain = "";
   try {
@@ -3276,6 +3288,43 @@ function resolveBestEmailSource(email, crawlData) {
   return contactUrl || finalUrl || "";
 }
 
+/**
+ * Counts product items, valid product images, and product description blocks from HTML.
+ */
+function countProductSignals(rawHtml) {
+  if (!rawHtml || typeof rawHtml !== "string") {
+    return { detectedProductCount: 0, detectedImageCount: 0, detectedDescCount: 0 };
+  }
+  const cleaned = rawHtml
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, " ")
+    .replace(/<noscript\b[^<]*(?:(?!<\/noscript>)<[^<]*)*<\/noscript>/gi, " ");
+
+  const productMatches = cleaned.match(/class=["'][^"']*(?:product-item|product-card|product-listing|catalog-item|store-item|wc-block-grid__product|type-product)[^"']*["']/gi) ||
+    cleaned.match(/<div[^>]*data-product[^>]*>/gi) ||
+    cleaned.match(/href=["'][^"']*(?:machin\d|prod\d)[^"']*["']/gi) || [];
+
+  const imgMatches = cleaned.match(/<img\b[^>]+>/gi) || [];
+  const validProductImgs = imgMatches.filter(img => {
+    if (/src=['"]data:image\/(?:svg|gif)/i.test(img) && !/data-(?:src|lazy-src|original)=/i.test(img)) return false;
+    if (/logo|icon|banner|social|arrow|pixel|loader|nav|header|footer|button|spinner|backbar|avatar|flag|badge|payment|visa|mastercard|paypal|amex|stripe|ssl|norton|mcafee|trust|award|cert|iso9001|iso|star|rating|cart|basket|search|close|menu|quote|testimonial|team|client|partner|sponsor|brand/i.test(img)) return false;
+    const wMatch = img.match(/\bwidth=["']?(\d+)["']?/i);
+    const hMatch = img.match(/\bheight=["']?(\d+)["']?/i);
+    if (wMatch && parseInt(wMatch[1], 10) < 100) return false;
+    if (hMatch && parseInt(hMatch[1], 10) < 100) return false;
+    return true;
+  });
+
+  const descMatches = cleaned.match(/class=["'][^"']*(?:product-desc|product-description|item-description|catalog-desc)[^"']*["']/gi) || [];
+
+  return {
+    detectedProductCount: Math.max(productMatches.length, cleaned.includes("Poly-cell") ? 3 : 0),
+    detectedImageCount: validProductImgs.length,
+    detectedDescCount: descMatches.length
+  };
+}
+
 function parseHtmlDetails(html, baseUrl) {
   if (!html) {
     return {
@@ -3344,24 +3393,7 @@ function parseHtmlDetails(html, baseUrl) {
   }
 
   // Count distinct product items, product images, and product descriptions
-  const productMatches = cleanHtml.match(/class=["'][^"']*(?:product-item|product-card|product-listing|catalog-item|store-item)[^"']*["']/gi) ||
-    cleanHtml.match(/<div[^>]*data-product[^>]*>/gi) ||
-    cleanHtml.match(/href=["'][^"']*(?:machin\d|prod\d)[^"']*["']/gi) || [];
-
-  const imgMatches = cleanHtml.match(/<img\b[^>]+>/gi) || [];
-  const validProductImgs = imgMatches.filter(img => {
-    if (/src=['"]data:image\/(?:svg|gif)/i.test(img) && !/data-(?:src|lazy-src|original)=/i.test(img)) return false;
-    // Exclude UI chrome, icons, logos, banners, social icons, flags, payment badges, certs, and avatars
-    if (/logo|icon|banner|social|arrow|pixel|loader|nav|header|footer|button|spinner|backbar|avatar|flag|badge|payment|visa|mastercard|paypal|amex|stripe|ssl|norton|mcafee|trust|award|cert|iso9001|iso|star|rating|cart|basket|search|close|menu|quote|testimonial|team|client|partner|sponsor|brand/i.test(img)) return false;
-    // Exclude tiny UI images (<100px width/height)
-    const wMatch = img.match(/\bwidth=["']?(\d+)["']?/i);
-    const hMatch = img.match(/\bheight=["']?(\d+)["']?/i);
-    if (wMatch && parseInt(wMatch[1], 10) < 100) return false;
-    if (hMatch && parseInt(hMatch[1], 10) < 100) return false;
-    return true;
-  });
-
-  const descMatches = cleanHtml.match(/class=["'][^"']*(?:product-desc|product-description|item-description|catalog-desc)[^"']*["']/gi) || [];
+  const productSignals = countProductSignals(cleanHtml);
 
   let bodyText = stripHtml(cleanHtml);
   const headingMatches = cleanHtml.match(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/gi) || [];
@@ -3379,9 +3411,9 @@ function parseHtmlDetails(html, baseUrl) {
     phones: uniquePhones,
     hasCompanyProfile,
     isNonEnglish,
-    detectedProductCount: Math.max(productMatches.length, cleanHtml.includes("Poly-cell") ? 3 : 0),
-    detectedImageCount: validProductImgs.length,
-    detectedDescCount: descMatches.length
+    detectedProductCount: productSignals.detectedProductCount,
+    detectedImageCount: productSignals.detectedImageCount,
+    detectedDescCount: productSignals.detectedDescCount
   };
 }
 
@@ -4763,6 +4795,16 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
   if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
     parsed.phoneNumber = crawlData.phones[0];
   }
+  const ownCrawlProdCount = computeOwnCrawlProductCount(crawlData);
+  if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {
+    parsed.numberOfProducts = ownCrawlProdCount;
+    parsed.productImages = ownCrawlProdCount;
+    parsed.numberOfProductDescriptions = ownCrawlProdCount;
+  } else {
+    parsed.numberOfProducts = "";
+    parsed.productImages = "";
+    parsed.numberOfProductDescriptions = "";
+  }
   parsed._isFromAi = true;
 
   return parsed;
@@ -5027,10 +5069,11 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   const secondaryEmailId = (secCandidate && secCandidate !== emailId) ? secCandidate : "";
   const phoneNumber = crawlData.phones.length > 0 ? crawlData.phones[0] : "";
 
-  // Dynamic product counts preserving 0
-  const prodCount = crawlData.detectedProductCount >= 3 ? "3" : (crawlData.detectedProductCount > 0 ? String(crawlData.detectedProductCount) : "0");
-  const imgCount = crawlData.detectedImageCount >= 3 ? "3" : (crawlData.detectedImageCount > 0 ? String(crawlData.detectedImageCount) : "0");
-  const descCount = crawlData.detectedDescCount >= 3 ? "3" : (crawlData.detectedDescCount > 0 ? String(crawlData.detectedDescCount) : "0");
+  // Own-crawl product count (never uses Gemini; all 3 product fields stay identical)
+  const ownProdCount = computeOwnCrawlProductCount(crawlData);
+  const prodCount = ownProdCount;
+  const imgCount = ownProdCount;
+  const descCount = ownProdCount;
 
   const hasState = address && hasStateInAddress(address, country);
   const hasCity = address && hasCityInAddress(address, country);
@@ -5400,6 +5443,20 @@ function resolveUkCountryName(currentCountry, addrStr, crawlData) {
 }
 
 /**
+ * Computes the unified product item count ("0", "1", "2", or "3") exclusively from own-crawl data.
+ * Never uses Gemini values; ensures numberOfProducts, productImages, and numberOfProductDescriptions always match.
+ */
+function computeOwnCrawlProductCount(crawlData) {
+  if (!crawlData || typeof crawlData !== "object") return "0";
+  const best = Math.max(
+    Number(crawlData.detectedImageCount) || 0,
+    Number(crawlData.detectedProductCount) || 0,
+    Number(crawlData.detectedDescCount) || 0
+  );
+  return String(Math.min(3, Math.max(0, best)));
+}
+
+/**
  * Enforces all 14 instructions deterministically based on physical address evidence.
  */
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
@@ -5592,25 +5649,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
     }
     // Product metrics synchronization (Rules 12, 13, 14):
-    // "all should be large 3 means 3 only check and crawl properly all should be same only"
-    const parseCount = (v) => {
-      if (!v) return 0;
-      const s = String(v).trim().toLowerCase();
-      if (s === "three" || s === "3") return 3;
-      if (s === "two" || s === "2") return 2;
-      if (s === "one" || s === "1") return 1;
-      const num = parseInt(s, 10);
-      return !isNaN(num) && num > 0 ? (num >= 3 ? 3 : num) : 0;
-    };
-
-    // QC Rule: "Image Product: what having put same No. of Product Description: and Number of Product both"
-    const imgCount = result._isFromAi
-      ? String(Math.min(3, Math.max(0, parseCount(result.productImages))))
-      : String(Math.min(3, Math.max(parseCount(result.productImages), parseCount(crawlData && crawlData.detectedImageCount))));
-
-    result.productImages = imgCount;
-    result.numberOfProducts = imgCount;
-    result.numberOfProductDescriptions = imgCount;
+    // Product items use OWN CRAWL ONLY (never Gemini), and all 3 fields must stay identical
+    const ownCrawlCount = computeOwnCrawlProductCount(crawlData);
+    result.productImages = ownCrawlCount;
+    result.numberOfProducts = ownCrawlCount;
+    result.numberOfProductDescriptions = ownCrawlCount;
 
     populateEvidenceAndSourceLinks(result, crawlData, selectedAiCandidate, bestRaw);
     return result;
@@ -6351,9 +6394,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     return 0;
   };
 
-  // QC Rule: "Image Product: what having put same No. of Product Description: and Number of Product both"
-  const iCount = Math.min(3, Math.max(parseCount(result.productImages), parseCount(crawlData.detectedImageCount)));
-  const finalProductCount = String(iCount);
+  // Product items use OWN CRAWL ONLY (never Gemini), and all 3 fields must stay identical
+  const finalProductCount = computeOwnCrawlProductCount(crawlData);
+  const iCount = parseInt(finalProductCount, 10) || 0;
 
   result.productImages = finalProductCount;
   result.numberOfProducts = finalProductCount;
