@@ -2871,6 +2871,9 @@ function isUnwantedEmail(email) {
 function stripTrailingContactWordsFromEmail(email) {
   if (!email || typeof email !== "string") return "";
   let em = email.trim();
+  // Strip malformed mailto / protocol prefixes (e.g. "mailto:info@...", "http://mailtoinfo@...", "mailtoinfo@...")
+  em = em.replace(/^(?:https?:\/\/)?mailto:/i, "");
+  em = em.replace(/^(?:https?:\/\/)?mailto(?=(?:info|sales|contact|enquir(?:y|ies)|hello|hi|office|support|admin|service|customercare|customer|marketing|orders?|export|import|hr|jobs|careers|mail|general|team|feedback|billing|accounts)[a-z0-9._%+-]*@)/i, "");
   const contactSuffixes = "address|addr|tel|telephone|phone|fax|email|mail|contact|mobile|cell|whatsapp|postcode|postal|zip|website|web|url|loc|location";
   em = em.replace(new RegExp(`(\\.(?:com|org|net|edu|gov|io|co|cn|tw|uk|de|jp|fr|it|es|au|ca|in|biz|info|me|cc|tv|xyz|eu|nl|se|no|ch|at|ru|pl|br|mx|za|nz|asia|mobi|name|pro|tech|store|shop|online|site|vip|club|top))(?:${contactSuffixes})[\\s:：\\-–].*$`, "i"), "$1");
   em = em.replace(new RegExp(`(\\.(?:com|org|net|edu|gov|io|co|cn|tw|uk|de|jp|fr|it|es|au|ca|in|biz|info|me|cc|tv|xyz|eu|nl|se|no|ch|at|ru|pl|br|mx|za|nz|asia|mobi|name|pro|tech|store|shop|online|site|vip|club|top))(?:${contactSuffixes})$`, "i"), "$1");
@@ -3039,7 +3042,13 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     }
   }
 
-  return rankEmails(uniqueEmails, hostDomain);
+  // Deduplicate any remaining "mailto<email>" where "<email>" is also present in uniqueEmails
+  const cleanedUnique = uniqueEmails.filter(em => {
+    if (em.startsWith("mailto") && uniqueEmails.includes(em.slice(6))) return false;
+    return true;
+  });
+
+  return rankEmails(cleanedUnique, hostDomain);
 }
 
 /**
@@ -5203,27 +5212,33 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
     result.businessType = String(result.businessType || "").trim();
     result.companyProfile = String(result.companyProfile || "").trim();
-    result.emailId = String(result.emailId || "").trim();
-    result.secondaryEmailId = String(result.secondaryEmailId || "").trim();
+    result.emailId = stripTrailingContactWordsFromEmail(String(result.emailId || "").trim().toLowerCase());
+    result.secondaryEmailId = stripTrailingContactWordsFromEmail(String(result.secondaryEmailId || "").trim().toLowerCase());
     if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(result.secondaryEmailId)) {
       result.secondaryEmailId = "";
     }
-    // QC Rule: Primary email and secondary email MUST NOT be the same!
-    if (result.secondaryEmailId && result.emailId && result.secondaryEmailId.toLowerCase() === result.emailId.toLowerCase()) {
+    // QC Rule: Primary email and secondary email MUST NOT be the same (or malformed mailto duplicate)!
+    if (result.secondaryEmailId && result.emailId && (
+      result.secondaryEmailId.toLowerCase() === result.emailId.toLowerCase() ||
+      result.secondaryEmailId.toLowerCase() === ("mailto" + result.emailId.toLowerCase())
+    )) {
       result.secondaryEmailId = "";
     }
     // If secondaryEmailId is empty or duplicate, attempt to find a distinct corporate email from crawlData
     if (!result.secondaryEmailId && crawlData && Array.isArray(crawlData.emails) && crawlData.emails.length > 0) {
       const primLower = (result.emailId || "").toLowerCase();
       const distinctCand = crawlData.emails.find(e => {
-        const eClean = String(e || "").trim();
-        return eClean && eClean.toLowerCase() !== primLower && isValidCorporateEmail(eClean) && !isUnwantedEmail(eClean);
+        const eClean = stripTrailingContactWordsFromEmail(String(e || "").trim().toLowerCase());
+        return eClean && eClean !== primLower && eClean !== ("mailto" + primLower) && isValidCorporateEmail(eClean) && !isUnwantedEmail(eClean);
       });
       if (distinctCand) {
-        result.secondaryEmailId = distinctCand.trim();
+        result.secondaryEmailId = stripTrailingContactWordsFromEmail(distinctCand.trim().toLowerCase());
       }
     }
-    if (result.secondaryEmailId && result.emailId && result.secondaryEmailId.toLowerCase() === result.emailId.toLowerCase()) {
+    if (result.secondaryEmailId && result.emailId && (
+      result.secondaryEmailId.toLowerCase() === result.emailId.toLowerCase() ||
+      result.secondaryEmailId.toLowerCase() === ("mailto" + result.emailId.toLowerCase())
+    )) {
       result.secondaryEmailId = "";
     }
     // QC Rule: Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero.
@@ -9599,21 +9614,21 @@ function cleanPhoneNumber(rawPhone, country) {
   ];
 
   let codeRemoved = false;
-  // Match by detected country - unconditionally strip country code if digits start with it
-  for (const cc of countryCodes) {
-    if (cc.match.some(m => cLower.includes(m))) {
-      if (digits.startsWith(cc.code)) {
-        digits = digits.slice(cc.code.length);
-        codeRemoved = true;
-        break;
-      }
+  const matchedCountryCc = countryCodes.find(cc => cc.match.some(m => cLower.includes(m)));
+
+  // 1. Match by detected country strictly: ONLY strip this specific country's calling code
+  if (matchedCountryCc) {
+    if (digits.startsWith(matchedCountryCc.code) && (hasPlus || has00 || digits.length >= (matchedCountryCc.minLen - 1))) {
+      digits = digits.slice(matchedCountryCc.code.length);
+      codeRemoved = true;
     }
   }
 
-  // If phone had '+' or '00' or starts with country code without plus and wasn't removed yet
-  if (!codeRemoved) {
+  // 2. Fallback ONLY when country is unknown OR explicit international prefix (+ or 00) was present
+  // NEVER strip foreign country codes (e.g. South Korea +82) from an already-stripped domestic number (e.g. Indonesia 82136903270)
+  if (!codeRemoved && (!matchedCountryCc || hasPlus || has00)) {
     for (const cc of countryCodes) {
-      if (digits.startsWith(cc.code) && digits.length >= (cc.minLen - 2)) {
+      if (digits.startsWith(cc.code) && digits.length >= ((hasPlus || has00) ? cc.minLen - 1 : cc.minLen)) {
         digits = digits.slice(cc.code.length);
         codeRemoved = true;
         break;

@@ -1751,21 +1751,20 @@
     ];
 
     let codeRemoved = false;
-    // Match by detected country
-    for (const cc of countryCodes) {
-      if (cc.match.some(m => cLower.includes(m))) {
-        if (digits.startsWith(cc.code) && digits.length >= (cc.minLen - 1)) {
-          digits = digits.slice(cc.code.length);
-          codeRemoved = true;
-          break;
-        }
+    const matchedCountryCc = countryCodes.find(cc => cc.match.some(m => cLower.includes(m)));
+
+    // 1. Match by detected country strictly: ONLY strip this specific country's calling code
+    if (matchedCountryCc) {
+      if (digits.startsWith(matchedCountryCc.code) && (hasPlus || has00 || digits.length >= (matchedCountryCc.minLen - 1))) {
+        digits = digits.slice(matchedCountryCc.code.length);
+        codeRemoved = true;
       }
     }
 
-    // If phone had '+' or '00' or starts with country code without plus and wasn't removed yet
-    if (!codeRemoved) {
+    // 2. Fallback ONLY when country is unknown OR explicit international prefix (+ or 00) was present
+    if (!codeRemoved && (!matchedCountryCc || hasPlus || has00)) {
       for (const cc of countryCodes) {
-        if (digits.startsWith(cc.code) && digits.length >= (hasPlus ? cc.minLen - 1 : cc.minLen)) {
+        if (digits.startsWith(cc.code) && digits.length >= ((hasPlus || has00) ? cc.minLen - 1 : cc.minLen)) {
           digits = digits.slice(cc.code.length);
           codeRemoved = true;
           break;
@@ -1825,6 +1824,9 @@
   function stripTrailingContactWordsFromEmail(email) {
     if (!email || typeof email !== "string") return "";
     let em = email.trim();
+    // Strip malformed mailto / protocol prefixes (e.g. "mailto:info@...", "http://mailtoinfo@...", "mailtoinfo@...")
+    em = em.replace(/^(?:https?:\/\/)?mailto:/i, "");
+    em = em.replace(/^(?:https?:\/\/)?mailto(?=(?:info|sales|contact|enquir(?:y|ies)|hello|hi|office|support|admin|service|customercare|customer|marketing|orders?|export|import|hr|jobs|careers|mail|general|team|feedback|billing|accounts)[a-z0-9._%+-]*@)/i, "");
     const contactSuffixes = "address|addr|tel|telephone|phone|fax|email|mail|contact|mobile|cell|whatsapp|postcode|postal|zip|website|web|url|loc|location";
     em = em.replace(new RegExp(`(\\.(?:com|org|net|edu|gov|io|co|cn|tw|uk|de|jp|fr|it|es|au|ca|in|biz|info|me|cc|tv|xyz|eu|nl|se|no|ch|at|ru|pl|br|mx|za|nz|asia|mobi|name|pro|tech|store|shop|online|site|vip|club|top))(?:${contactSuffixes})[\\s:：\\-–].*$`, "i"), "$1");
     em = em.replace(new RegExp(`(\\.(?:com|org|net|edu|gov|io|co|cn|tw|uk|de|jp|fr|it|es|au|ca|in|biz|info|me|cc|tv|xyz|eu|nl|se|no|ch|at|ru|pl|br|mx|za|nz|asia|mobi|name|pro|tech|store|shop|online|site|vip|club|top))(?:${contactSuffixes})$`, "i"), "$1");

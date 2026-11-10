@@ -211,6 +211,37 @@ runTest('Taiwan Google Maps embed merge & village restoration (Yi-Shyang test ca
   assert.strictEqual(res.city, "Available", "Chiayi City is Available");
 });
 
+// 12. Global Phone Country Code Double-Stripping Guard
+runTest('Phone cleaner does not strip foreign country codes from domestic numbers (Indonesia 82136903270 / Australia 395620780)', () => {
+  assert.strictEqual(ctx.cleanPhoneNumber("+6282136903270", "Indonesia"), "82136903270", "Should strip +62 and keep 82136903270");
+  assert.strictEqual(ctx.cleanPhoneNumber("82136903270", "Indonesia"), "82136903270", "Must NOT strip 82 (South Korea) from Indonesia domestic number");
+  assert.strictEqual(ctx.cleanPhoneNumber("395620780", "Australia"), "395620780", "Must NOT strip 39 (Italy) from Australia domestic number");
+});
+
+// 13. Global Malformed mailto Email Artifact Cleanup & Deduplication
+runTest('Malformed mailto prefix in href or email string is cleaned and deduplicated', () => {
+  const html = `<a href="http://mailtoinfo@auliajati.com">Email</a> and info@auliajati.com`;
+  const emails = ctx.extractEmailsFromHtml(html, "auliajati.com");
+  assert.strictEqual(JSON.stringify(emails), JSON.stringify(["info@auliajati.com"]), "Should clean http://mailtoinfo@ to info@ and avoid duplicate");
+
+  const mockAi = {
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "Aulia Jati",
+    countryName: "Indonesia",
+    companyAddress: "Jalan R. A. Kardinah, Ring Road, Senenan, Jepara, Central Java",
+    emailId: "info@auliajati.com",
+    secondaryEmailId: "mailtoinfo@auliajati.com",
+    phoneNumber: "82136903270",
+    productImages: "3"
+  };
+  const res = ctx.applyStrictInstructions(mockAi, { emails: ["info@auliajati.com", "mailtoinfo@auliajati.com"] }, {});
+  assert.strictEqual(res.emailId, "info@auliajati.com");
+  assert.strictEqual(res.secondaryEmailId, "", "mailtoinfo@ must be cleaned and deduplicated so secondaryEmailId is empty");
+  assert.strictEqual(res.phoneNumber, "82136903270", "Indonesian phone 82136903270 must remain intact");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');
