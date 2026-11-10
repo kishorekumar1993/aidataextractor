@@ -1313,6 +1313,8 @@ async function crawlWebsite(targetUrl) {
   const allDiscoveredEmails = new Set();
   const emailSourceMap = {};
   const allDiscoveredPhones = new Set();
+  const dedicatedContactPhones = new Set();
+  let dedicatedContactHtml = "";
   let contactLinks = [];
   let companySocials = {};
   const crawledPages = [];
@@ -1533,11 +1535,11 @@ async function crawlWebsite(targetUrl) {
       extractHtmlAddresses(footerMatch[1], addressCandidates, "footer", finalUrl);
     }
 
-    // Extract from Homepage body
+    // Extract from Homepage body (tagged as "homepage" so dedicated Contact Us page takes #1 priority)
     extractJsonLdAddresses(mainHtml, addressCandidates, finalUrl);
     extractMapAddresses(mainHtml, addressCandidates, finalUrl);
     extractMetaAddresses(mainHtml, addressCandidates, finalUrl);
-    extractHtmlAddresses(mainHtml, addressCandidates, "contact", finalUrl);
+    extractHtmlAddresses(mainHtml, addressCandidates, "homepage", finalUrl);
 
     // Extract official registered legal company candidates across homepage
     for (const cand of extractLegalCandidatesFromHtml(mainHtml)) {
@@ -1558,67 +1560,85 @@ async function crawlWebsite(targetUrl) {
     const shouldSkipSubpages = earlyRestricted.isRestricted;
 
     if (!shouldSkipSubpages) {
-      // Pick balanced target subpages (max 2-3 distinct subpages for fast crawl):
-      // 1. Any link matching high-alert restricted hints (e.g. /products/medical, /knives, /defense)
-      // 2. Top contact/about link (for physical address, legal company name, profile)
-      // 3. Top product/catalog link (for product catalog, products, and restriction verification)
-      const topLinks = [];
+      // STRICT PRIORITY ORDER:
+      // Phase 1: Crawl dedicated Contact Us page(s) FIRST and wait for results before checking other pages.
+      // Phase 2: Crawl About / Profile / Product / Restricted / Remaining pages AFTER Contact Us.
+      const isDedicatedContactUrl = (u) => /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint)/i.test(u || "");
+      const contactPriorityLinks = [];
+      const otherTopLinks = [];
       const seenPaths = new Set();
 
-      // (a) First: add any links flagged with prohibited / restricted hints (max 1)
+      // Identify dedicated Contact Us URLs first
+      for (const link of contactLinks) {
+        if (fetchedUrls.has(link) || !isDedicatedContactUrl(link)) continue;
+        try {
+          const uPath = new URL(link).pathname.toLowerCase().replace(/\/$/, "");
+          if (seenPaths.has(uPath)) continue;
+          seenPaths.add(uPath);
+          contactPriorityLinks.push(link);
+          fetchedUrls.add(link);
+          if (contactPriorityLinks.length >= 2) break;
+        } catch (e) { }
+      }
+
+      // (a) Next: restricted hints (max 1)
       for (const item of productCandidates.filter(c => c.isRestrictedHint)) {
         try {
           const uPath = new URL(item.url).pathname.toLowerCase().replace(/\/$/, "");
           if (!seenPaths.has(uPath) && !fetchedUrls.has(item.url)) {
             seenPaths.add(uPath);
-            topLinks.push(item.url);
+            otherTopLinks.push(item.url);
             fetchedUrls.add(item.url);
             break;
           }
         } catch (e) { }
       }
 
-      // (b) Add top contact/about/career links (max 2 for high speed & full coverage)
-      let contactCount = 0;
+      // (b) Next: non-contact About / Profile / Support links (max 2)
+      let otherContactCount = 0;
       for (const link of contactLinks) {
         if (fetchedUrls.has(link)) continue;
         try {
           const uPath = new URL(link).pathname.toLowerCase().replace(/\/$/, "");
           if (seenPaths.has(uPath)) continue;
           seenPaths.add(uPath);
-          topLinks.push(link);
+          otherTopLinks.push(link);
           fetchedUrls.add(link);
-          contactCount++;
-          if (contactCount >= 2) break;
+          otherContactCount++;
+          if (otherContactCount >= 2) break;
         } catch (e) { }
       }
 
-      // (c) Add top product/catalog link (max 1 for high speed)
+      // (c) Next: top product/catalog link (max 1)
       for (const item of productCandidates.filter(c => !c.isRestrictedHint)) {
         if (fetchedUrls.has(item.url)) continue;
         try {
           const uPath = new URL(item.url).pathname.toLowerCase().replace(/\/$/, "");
           if (seenPaths.has(uPath)) continue;
           seenPaths.add(uPath);
-          topLinks.push(item.url);
+          otherTopLinks.push(item.url);
           fetchedUrls.add(item.url);
           break;
         } catch (e) { }
       }
 
       const recordSubpageContent = (cUrl, cText, { includeAddresses = true, includeProfileText = true } = {}) => {
-        contactHtml += "\n" + cText;
         const isProductPage = /(?:products?|catalog(?:ue)?|categories|category|items?|collection|services?|solutions?)/i.test(cUrl);
         const pageText = stripHtml(cText);
         crawledPages.push({ url: cUrl, html: cText, text: pageText, isProductPage });
         const isDistributorPage = /(?:dealers?|distributors?|stockists?|resellers?|partners?)/i.test(cUrl);
         const isProfilePage = !isDistributorPage && /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history|quienes[-_]?somos|sobre[-_]?nosotros|nosotros|empresa|nuestra[-_]?empresa|chi[-_]?siamo|azienda|u(?:e)?ber[-_]?uns|unternehmen|a[-_]?propos|qui[-_]?sommes[-_]?nous|quem[-_]?somos|sobre[-_]?nos|tentang[-_]?kami)/i.test(cUrl);
-        const isContactPage = !isDistributorPage && /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint)/i.test(cUrl);
+        const isContactPage = !isDistributorPage && isDedicatedContactUrl(cUrl);
         const isLowQualitySubpage = /(?:terms|privacy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)/i.test(cUrl);
-        const pageSource = isDistributorPage ? "distributor" : (isProfilePage ? "profile" : (isContactPage ? "contact" : (isProductPage ? "product" : "other")));
+        const pageSource = isDistributorPage ? "distributor" : (isContactPage ? "contact" : (isProfilePage ? "profile" : (isProductPage ? "product" : "other")));
 
+        if (isContactPage) {
+          dedicatedContactHtml += "\n" + cText;
+          if (!primaryContactUrl) primaryContactUrl = cUrl;
+        } else {
+          contactHtml += "\n" + cText;
+        }
         if (isProfilePage && !primaryAboutUrl) primaryAboutUrl = cUrl;
-        if (isContactPage && !primaryContactUrl) primaryContactUrl = cUrl;
 
         // Count product items, images, and descriptions on crawled subpages (especially product/catalog pages)
         const subSignals = countProductSignals(cText);
@@ -1653,13 +1673,17 @@ async function crawlWebsite(targetUrl) {
           }
         }
 
-        // Extract all corporate emails and phones across this page
+        // Extract all corporate emails and phones across this page (Contact Us phones get first priority)
         for (const em of extractEmailsFromHtml(cText, finalUrl)) {
           allDiscoveredEmails.add(em);
           updateEmailSource(emailSourceMap, em, cUrl, finalUrl, targetUrl);
         }
-        const pagePhoneLinks = [...cText.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
-        for (const p of pagePhoneLinks) allDiscoveredPhones.add(p);
+        const subParsed = parseHtmlDetails(cText, cUrl);
+        if (isContactPage) {
+          for (const p of subParsed.phones) dedicatedContactPhones.add(p);
+        } else {
+          for (const p of subParsed.phones) allDiscoveredPhones.add(p);
+        }
 
         // Extract copyright on this page if homepage lacked complete legal suffix
         if (!isLowQualitySubpage) {
@@ -1671,12 +1695,11 @@ async function crawlWebsite(targetUrl) {
         }
       };
 
-      const candidateSubpages = topLinks.slice(0, 3);
-      if (candidateSubpages.length > 0) {
-        // High-speed concurrent parallel fetching of candidate subpages (3.5s timeout for fast, non-blocking delivery)
-        const subpageResults = await Promise.allSettled(
-          candidateSubpages.map(cUrl => fetchDecodedHtml(cUrl, {
-            timeoutMs: 3500,
+      const fetchSubpageBatch = async (urls, timeoutMs = 3500) => {
+        if (!urls || urls.length === 0) return [];
+        return Promise.allSettled(
+          urls.map(cUrl => fetchDecodedHtml(cUrl, {
+            timeoutMs,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
               "Accept-Language": "en-US,en;q=0.9",
@@ -1685,7 +1708,24 @@ async function crawlWebsite(targetUrl) {
             }
           }))
         );
+      };
 
+      // PHASE 1: Fetch dedicated Contact Us page(s) FIRST and wait before checking other pages
+      if (contactPriorityLinks.length > 0) {
+        const contactResults = await fetchSubpageBatch(contactPriorityLinks, 4000);
+        for (let i = 0; i < contactPriorityLinks.length; i++) {
+          const cUrl = contactPriorityLinks[i];
+          const settled = contactResults[i];
+          if (settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
+            recordSubpageContent(settled.value.url || cUrl, settled.value.html, { includeAddresses: true, includeProfileText: true });
+          }
+        }
+      }
+
+      // PHASE 2: After Contact Us, fetch About / Profile / Product subpages
+      const candidateSubpages = otherTopLinks.slice(0, 3);
+      if (candidateSubpages.length > 0) {
+        const subpageResults = await fetchSubpageBatch(candidateSubpages, 3500);
         for (let i = 0; i < candidateSubpages.length; i++) {
           const cUrl = candidateSubpages[i];
           const settled = subpageResults[i];
@@ -1738,8 +1778,9 @@ async function crawlWebsite(targetUrl) {
       }
     }
 
-    // Merge Contact text
-    contactPageText = stripHtml(contactHtml);
+    // Merge Contact text (Dedicated Contact Us page strictly FIRST, then other subpages)
+    contactPageText = (dedicatedContactHtml ? stripHtml(dedicatedContactHtml) + "\n" : "") + stripHtml(contactHtml);
+    contactHtml = dedicatedContactHtml + "\n" + contactHtml;
 
     // Check homepage profile text snippet
     const homeProfileMatch = stripHtml(mainHtml).match(/(?:about\s+us|our\s+company|company\s+profile|our\s+story|who\s+we\s+are|about\s+our\s+company)[\s\S]{50,1500}/i);
@@ -1852,7 +1893,8 @@ async function crawlWebsite(targetUrl) {
   } catch (e) { }
 
   extracted.emails = rankEmails(Array.from(allDiscoveredEmails), hostDomain, emailSourceMap);
-  extracted.phones = Array.from(allDiscoveredPhones);
+  const combinedOrderedPhones = new Set([...dedicatedContactPhones, ...allDiscoveredPhones]);
+  extracted.phones = Array.from(combinedOrderedPhones);
 
   // Sort candidates strictly by priority hierarchy:
   // Headquarters (Tier 1) > Contact (Tier 2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > Branch (Tier 8).
@@ -1923,7 +1965,8 @@ async function crawlWebsite(targetUrl) {
     legalCandidateSources,
     emailSourceMap,
     emails: rankEmails(Array.from(allDiscoveredEmails), targetUrl, emailSourceMap),
-    phones: Array.from(allDiscoveredPhones),
+    phones: Array.from(combinedOrderedPhones),
+    dedicatedContactText: dedicatedContactHtml ? stripHtml(dedicatedContactHtml).slice(0, 6000) : "",
     primaryContactUrl: primaryContactUrl || (contactLinks.find(u => /\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)\b/i.test(u)) || ""),
     primaryAboutUrl: primaryAboutUrl || (contactLinks.find(u => /\b(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|profile)\b/i.test(u)) || ""),
     companySocials,
@@ -2019,7 +2062,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   const isEnglish = latinLetters >= 4 && latinLetters >= nonLatinLetters;
 
   // Location Context & Priority hierarchy:
-  // Operational Headquarters (Tier 1) / Contact Page Operational Address (Tier 1.2) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Registered Office (Tier 8) > Branch (Tier 8.5) > Distributor/Dealer (Tier 9)
+  // Contact Us Page HQ (Tier 0.5) > Contact Us Page Operational (Tier 0.8) > Homepage/Other HQ (Tier 1.0) > Operational/Homepage (Tier 2.0) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Registered Office (Tier 8) > Branch (Tier 8.5) > Distributor/Dealer (Tier 9)
   const isRegisteredOffice = /\b(?:registered\s*office|registered\s*in\b|company\s*registration\b|domicilio\s*social|registered\s*agent|legal\s*address|statutory\s*office)\b/i.test(rawText + " " + contextText);
   const hasHqKeyword = !isRegisteredOffice && (
     /\b(?:headquarters|head\s*office|corporate\s*office|main\s*office|principal\s*office|hq|main\s*factory|main\s*plant|main\s*facility|sede\s*central|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(rawText + " " + contextText) ||
@@ -2027,7 +2070,8 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     isHq || source === "headquarters"
   );
 
-  const isOperationalContact = (source === "contact" || /\b(?:contact|showroom|factory|plant|workshop|store|visiting|our\s+location|address)\b/i.test(pageUrl + " " + contextText));
+  const isDedicatedContactSource = (source === "contact" || /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|kontakt|contacto|contactenos|contatti|contactez|contato|hubungi|kontak|impressum)/i.test(pageUrl || "")) && source !== "homepage";
+  const isOperationalContact = isDedicatedContactSource || /\b(?:showroom|factory|plant|workshop|store|visiting|our\s+location)\b/i.test(contextText);
 
   // Only demote explicit secondary/branch offices (NEVER treat manufacturing plants, factories, warehouses, or units as branches!)
   const hasBranchKeyword = /\b(?:branch(?:\s*office)?|regional\s*office|overseas\s*office|sales\s*office|subsidiary|sucursal|delegaci[oó]n|filiale|filial)\b/i.test(rawText + " " + contextText) ||
@@ -2038,13 +2082,21 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   let basePriority = 7;
   let locType = locationType || "general";
 
-  if (hasHqKeyword) {
+  if (isDedicatedContactSource && hasHqKeyword) {
+    basePriority = 0.5;
+    locType = "headquarters";
+    isHq = true;
+  } else if (isDedicatedContactSource) {
+    basePriority = 0.8;
+    locType = "contact";
+    isHq = false;
+  } else if (hasHqKeyword) {
     basePriority = 1.0;
     locType = "headquarters";
     isHq = true;
-  } else if (source === "contact" || isOperationalContact) {
-    basePriority = 1.2;
-    locType = "operational_contact";
+  } else if (source === "homepage" || isOperationalContact) {
+    basePriority = 2.0;
+    locType = source === "homepage" ? "homepage" : "operational_contact";
     isHq = false;
   } else if (source === "profile") {
     basePriority = 3;
@@ -2193,20 +2245,20 @@ function discoverContactLinks(html, baseUrl) {
     if (!raw || /^(javascript:|mailto:|tel:|#)/i.test(raw)) continue;
 
     let score = 0;
-    if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us|kontakt|contacto|contactenos|contáctenos|contatti|contattaci|contactez-nous|nous-contacter|contato|fale-conosco|hubungi|hubungi-kami|kontak)\b/i.test(rawLower)) score += 10;
-    if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile|quienes-somos|sobre-nosotros|nosotros|empresa|nuestra-empresa|chi-siamo|azienda|uber-uns|ueber-uns|unternehmen|wir-ueber-uns|a-propos|qui-sommes-nous|sobre-nos|quem-somos|tentang-kami|profil-perusahaan)\b/i.test(rawLower)) score += 8;
-    if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|impressum|imprint|mentions-legales|aviso-legal|note-legali|datenschutz|politica-de-privacidad|confidentialite|warranty|warranties|guarantee|returns)\b/i.test(rawLower)) score += 7;
-    if (/\b(support|customer-support|service|customer-service|help|help-desk|faq)\b/i.test(rawLower)) score += 8;
-    if (/\b(sales|inquiry|enquiry|inquiries|enquiries|quote|request-quote|request-a-quote|order|orders)\b/i.test(rawLower)) score += 8;
+    if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us|kontakt|contacto|contactenos|contáctenos|contatti|contattaci|contactez-nous|nous-contacter|contato|fale-conosco|hubungi|hubungi-kami|kontak|kontak-kami|impressum|imprint)\b/i.test(rawLower)) score += 100;
+    if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile|quienes-somos|sobre-nosotros|nosotros|empresa|nuestra-empresa|chi-siamo|azienda|uber-uns|ueber-uns|unternehmen|wir-ueber-uns|a-propos|qui-sommes-nous|sobre-nos|quem-somos|tentang-kami|profil-perusahaan)\b/i.test(rawLower)) score += 25;
+    if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|mentions-legales|aviso-legal|note-legali|datenschutz|politica-de-privacidad|confidentialite|warranty|warranties|guarantee|returns)\b/i.test(rawLower)) score += 7;
+    if (/\b(support|customer-support|service|customer-service|help|help-desk|faq)\b/i.test(rawLower)) score += 12;
+    if (/\b(sales|inquiry|enquiry|inquiries|enquiries|quote|request-quote|request-a-quote|order|orders)\b/i.test(rawLower)) score += 12;
     if (/\b(shop|store|online-store|cart|basket)\b/i.test(rawLower)) score += 8;
     if (/\b(team|our-team|staff|management|people|leadership)\b/i.test(rawLower)) score += 6;
-    if (/\b(locations|branches|branch|offices|stores)\b/i.test(rawLower)) score += 6;
-    if (/\b(dealers|distributors|stockists|resellers|partners)\b/i.test(rawLower) || /\b(dealers|distributors|stockists|resellers|partners)\b/i.test(innerText)) score -= 10;
+    if (/\b(locations|branches|branch|offices|stores)\b/i.test(rawLower)) score += 8;
+    if (/\b(dealers|distributors|stockists|resellers|partners)\b/i.test(rawLower) || /\b(dealers|distributors|stockists|resellers|partners)\b/i.test(innerText)) score -= 50;
     if (/\b(careers|career|jobs|job|employment|work-with-us|join-our-team)\b/i.test(rawLower)) score += 9;
     if (/\b(careers|career|jobs|employment|work\s*with\s*us|join\s*our\s*team)\b/i.test(innerText)) score += 9;
     if (/\b(feedback|complaints|directory)\b/i.test(rawLower)) score += 5;
-    if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us|kontakt|contacto|contáctenos|contatti|contattaci|contactez[-\s]*nous|nous\s*contacter|contato|fale\s*conosco|hubungi\s*kami)\b/i.test(innerText)) score += 12;
-    if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile|quienes\s*somos|quiénes\s*somos|sobre\s*nosotros|nuestra\s*empresa|chi\s*siamo|la\s*azienda|über\s*uns|ueber\s*uns|das\s*unternehmen|à\s*propos|qui\s*sommes[-\s]*nous|quem\s*somos|sobre\s*nós|tentang\s*kami)\b/i.test(innerText)) score += 10;
+    if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us|kontakt|contacto|contáctenos|contatti|contattaci|contactez[-\s]*nous|nous\s*contacter|contato|fale\s*conosco|hubungi\s*kami|kontak\s*kami|kontak)\b/i.test(innerText)) score += 120;
+    if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile|quienes\s*somos|quiénes\s*somos|sobre\s*nosotros|nuestra\s*empresa|chi\s*siamo|la\s*azienda|über\s*uns|ueber\s*uns|das\s*unternehmen|à\s*propos|qui\s*sommes[-\s]*nous|quem\s*somos|sobre\s*nós|tentang\s*kami)\b/i.test(innerText)) score += 20;
     if (/\b(shop|store|online\s*store|cart|basket|buy\s*online)\b/i.test(innerText)) score += 9;
     if (/\b(terms|terms\s*and\s*conditions|terms\s*of\s*(?:service|use)|privacy\s*policy|legal\s*notice|company\s*info|imprint|impressum|mentions\s*légales|aviso\s*legal|note\s*legali|datenschutz|warranty|warranties|guarantee)\b/i.test(innerText)) score += 8;
     if (/\b(customer\s*support|customer\s*service|technical\s*support|help\s*center|support)\b/i.test(innerText)) score += 10;
@@ -3440,12 +3492,12 @@ function rankEmails(emails, targetDomain, emailSourceMap = {}) {
     if (hostClean === domainClean) {
       score += 30;
     }
-    // Page location priority
+    // Page location priority (Contact Us page strictly FIRST priority)
     const src = (emailSourceMap && emailSourceMap[lower]) || "";
-    if (/\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us)\b/i.test(src)) {
-      score += 60; // Highest priority: directly on Contact page
+    if (/\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|kontakt|contacto|contactez|contato|hubungi|kontak|impressum)\b/i.test(src)) {
+      score += 120; // Strict #1 priority: directly on Contact Us page
     } else if (src === targetDomain || (domainClean && src.includes(domainClean) && !/\/(?:warranty|terms|privacy|policy|faq)/i.test(src))) {
-      score += 40; // On Home page or general landing page
+      score += 40; // Secondary: Home page or other pages
     } else if (/facebook\.com|linkedin\.com/i.test(src)) {
       score += 20; // Official company social media
     }
@@ -4643,11 +4695,16 @@ Product Items / Units Detected: ${crawlData.detectedProductCount}
 Product Images Detected: ${crawlData.detectedImageCount}
 Product Descriptions Detected: ${crawlData.detectedDescCount}
 
-${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2), null, 2)}\n\n` : ""}${crawlData.renderedText ? `VISUAL DOM TEXT:\n${crawlData.renderedText.slice(0, 2500)}\n\n` : ""}PHYSICAL ADDRESS EVIDENCE FOUND ON WEBSITE:
+${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2), null, 2)}\n\n` : ""}${crawlData.renderedText ? `VISUAL DOM TEXT:\n${crawlData.renderedText.slice(0, 2500)}\n\n` : ""}PRIORITY RULE FOR EXTRACTION: Check the DEDICATED CONTACT US PAGE FIRST for address, emails, phone numbers, and country before checking Footer, About, or Homepage content.
+
+PHYSICAL ADDRESS EVIDENCE FOUND ON WEBSITE:
 ${formattedAddressEvidence}
 
-CONTACT / ABOUT PAGE CONTENT:
-${(crawlData.contactPageText || crawlData.profilePageText || "").slice(0, 3000)}
+DEDICATED CONTACT US PAGE CONTENT (FIRST PRIORITY):
+${(crawlData.dedicatedContactText || crawlData.contactPageText || "").slice(0, 3500)}
+
+ABOUT / PROFILE & OTHER PAGES CONTENT:
+${(crawlData.profilePageText || crawlData.contactPageText || "").slice(0, 2500)}
 
 FOOTER CONTENT:
 ${(crawlData.footerText || "").slice(0, 1000)}
@@ -5549,6 +5606,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = expandAddressAndStateAbbreviations(addr, country);
       if (bestRaw) {
         addr = restoreStateIfOmitted(addr, bestRaw, country);
+        addr = expandAddressAndStateAbbreviations(addr, country);
         addr = restoreStreetNumberIfOmitted(addr, bestRaw, crawlData);
         addr = restoreTaiwanVillageIfOmitted(addr, bestRaw, crawlData);
         addr = stripBlindlyAddedNumber(addr, bestRaw, bestRaw);
@@ -8821,6 +8879,9 @@ function normalizeTaiwanDivisions(addr) {
 
 function expandAddressAndStateAbbreviations(addr, country = "") {
   if (!addr) return "";
+  const cLower = (country || "").toLowerCase();
+  const hasIndoHint = cLower.includes('indonesia') ||
+    /\b(?:jalan|jl\.?|jln\.?|gang|gg\.?|komp\.?|kompl\.?|perum\.?|kav\.?|kel\.?|kec\.?|kab\.?|desa|ds\.?|dusun|dsn\.?|kawasan|jepara|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|serang|cirebon|kudus|klaten|sukoharjo|jawa|java|sumatra|sumatera|kalimantan|sulawesi|banten|bali|jateng|jabar|jatim)\b/i.test(addr);
   let a = addr;
   a = normalizeTaiwanDivisions(a);
 
@@ -8856,7 +8917,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s]|\d+\s+)\bSt\.?\s+([A-Z][a-z']+(?:\s+[A-Z][a-z']+)?\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Pl)\b)/g, "$1Saint $2");
   // Context-aware Dr. before a person's name (e.g. "Dr. Martin Luther King Boulevard", "Jl. Dr. Sutomo") -> Doctor / Doktor, NOT Drive!
   a = a.replace(/(^|[,\s]|\b(?:jl|jln|jalan)\.?\s+)\bDr\.?\s+(?=[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Rd|St|Ave|Dr|Ln|Blvd)\b|[,\s]|$))/g, (m, p1) => {
-    const isIndo = /\b(?:jl|jln|jalan)\b/i.test(p1) || /\b(?:indonesia|jepara|jakarta|surabaya|bandung|semarang|medan)\b/i.test(a) || (country || "").toLowerCase().includes("indonesia");
+    const isIndo = /\b(?:jl|jln|jalan)\b/i.test(p1) || /\b(?:indonesia|jepara|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|jawa|java|jateng|jabar|jatim)\b/i.test(a) || (country || "").toLowerCase().includes("indonesia");
     return `${p1}${isIndo ? "Doktor" : "Doctor"} `;
   });
 
@@ -8920,7 +8981,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bTwp\b\.?/gi, "Township");
   a = a.replace(/\bDist\b\.?/gi, "District");
   a = a.replace(/\bCty\b\.?/gi, "County");
-  a = a.replace(/\bProv\b\.?/gi, "Province");
+  if (!hasIndoHint) {
+    a = a.replace(/\bProv\b\.?/gi, "Province");
+  }
   a = a.replace(/\bMun\b\.?/gi, "Municipality");
   a = a.replace(/(^|[,\s])nr\b\.?\s*(?=\d)/gi, "$1Nummer ");
   a = a.replace(/\bNr\b\.?/gi, "Near");
@@ -8980,8 +9043,10 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bkg\b\.?/gi, "Kampung");
   a = a.replace(/\bmt\.?\s+(?=[A-Z])/gi, "Mount ");
   a = a.replace(/\bft\.?\s+(?=[A-Z])/gi, "Fort ");
-  a = a.replace(/\bpt\.?\s+(?=(?:Melbourne|Adelaide|Kembla|Hedland|Macquarie|Augusta|Lincoln|Pirie|Elizabeth|Klang|Dickson|Harcourt|Louis|Arthur|Said|Moresby)\b)/gi, "Port ");
-  a = a.replace(/\bpt\.?\s+(?=[A-Z])/gi, "Point ");
+  if (!hasIndoHint) {
+    a = a.replace(/\bpt\.?\s+(?=(?:Melbourne|Adelaide|Kembla|Hedland|Macquarie|Augusta|Lincoln|Pirie|Elizabeth|Klang|Dickson|Harcourt|Louis|Arthur|Said|Moresby)\b)/gi, "Port ");
+    a = a.replace(/\bpt\.?\s+(?=[A-Z])/gi, "Point ");
+  }
 
   // 4. Directionals at end of street name (e.g. "Main Street E" -> "Main Street East")
   a = a.replace(/(\b(?:Street|Road|Avenue|Drive|Lane|Boulevard|Way|Place|Court|Highway|Close|Crescent|Square|Terrace|Parkway|Circle))\s+\bE\.?(?=[,\s]|$)/gi, "$1 East");
@@ -9004,11 +9069,11 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bapt\b\.?/gi, "Apartment");
   a = a.replace(/\bdept\b\.?/gi, "Department");
   a = a.replace(/\brm\b\.?/gi, "Room");
-  a = a.replace(/\bblk\b\.?/gi, "Block");
+  if (!hasIndoHint) {
+    a = a.replace(/\bblk\b\.?/gi, "Block");
+  }
   a = a.replace(/\bpob\b\.?/gi, "Post Office Box");
   a = a.replace(/\bpo\s*box\b\.?/gi, "Post Office Box");
-
-  const cLower = (country || "").toLowerCase();
 
   // 6. Expand State & Province abbreviations (Global)
   // Australia
@@ -9168,7 +9233,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // 8. Singapore & Malaysia Abbreviations
   // ==========================================
   // Thoroughfares & Blocks
-  a = a.replace(/\bblk\b\.?\s*(?=\d|[A-Za-z])/gi, 'Block ');
+  if (!hasIndoHint) {
+    a = a.replace(/\bblk\b\.?\s*(?=\d|[A-Za-z])/gi, 'Block ');
+  }
   a = a.replace(/\bjln\b\.?/gi, 'Jalan');
   a = a.replace(/\blrg\b\.?/gi, 'Lorong');
   a = a.replace(/\blor\b\.?\s*(?=\d|[A-Za-z])/gi, 'Lorong ');
@@ -9300,33 +9367,71 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // ==========================================
   // 10. Indonesia Abbreviations & Honorific Street Prefixes
   // ==========================================
-  a = a.replace(/(^|[,\s])jl\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Jalan ');
-  a = a.replace(/(^|[,\s])jln\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Jalan ');
-  // Honorific street titles (e.g. "Jl. RA. Kardinah" / "Jalan R. A. Kartini" -> "Jalan Raden Ajeng Kardinah")
-  if (cLower.includes('indonesia') || /\b(?:jalan|jl\.?|jln\.?|jepara|jakarta|surabaya|bandung|semarang|central\s*java|west\s*java|east\s*java|jawa)\b/i.test(a)) {
-    a = a.replace(/(\bJalan\s+|,\s*)\bR\.?\s*A\.?\s+(?=[A-Z])/gi, '$1Raden Ajeng ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bK\.?\s*H\.?\s+(?=[A-Z])/gi, '$1Kiai Haji ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bH\.?\s*R\.?\s+(?=[A-Z])/gi, '$1Haji Rangkayo ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bLetjen\.?\s+(?=[A-Z])/gi, '$1Letnan Jenderal ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bMayjen\.?\s+(?=[A-Z])/gi, '$1Mayor Jenderal ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bBrigjen\.?\s+(?=[A-Z])/gi, '$1Brigadir Jenderal ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bJend\.?\s+(?=[A-Z])/gi, '$1Jenderal ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bProf\.?\s+(?=[A-Z])/gi, '$1Professor ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bIr\.?\s+(?=[A-Z])/gi, '$1Insinyur ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bDrs\.?\s+(?=[A-Z])/gi, '$1Doktorandus ');
+  const hasIndoSignal = cLower.includes('indonesia') ||
+    /\b(?:jalan|jl\.?|jln\.?|gang|gg\.?|komp\.?|kompl\.?|perum\.?|kav\.?|kel\.?|kec\.?|kab\.?|prov\.?|prop\.?|desa|ds\.?|dusun|dsn\.?|kawasan|jepara|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|serang|cirebon|kudus|klaten|sukoharjo|jawa|java|sumatra|sumatera|kalimantan|sulawesi|banten|bali|jateng|jabar|jatim)\b/i.test(a);
+
+  a = a.replace(/(^|[,\s])jln?\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Jalan ');
+  // Honorific street titles (e.g. "Jl. RA. Kardinah", "Jl.RA. Kardinah", "Jalan R. A. Kartini" -> "Jalan Raden Ajeng Kardinah")
+  if (hasIndoSignal) {
+    a = a.replace(/(\bJalan\s+|,\s*)\bR\.?\s*A(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Raden Ajeng ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bK\.?\s*H(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Kiai Haji ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bH\.?\s*R(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Haji Rangkayo ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bM\.?\s*H(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Mohammad Husni ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bM\.?\s*T(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Mas Tirtodarmo ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bD\.?\s*I\.?\s+(?=Panjaitan\b)/gi, '$1Donald Isaac ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bA\.?\s+(?=Yani\b)/gi, '$1Ahmad ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bS\.?\s+(?=Parman\b)/gi, '$1Siswondo ');
+    a = a.replace(/(\bJalan\s+)\bHj(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Hajjah ');
+    a = a.replace(/(\bJalan\s+)\bH\.(?=\s*[A-Z][a-z]+)/g, '$1Haji');
+    a = a.replace(/(\bJalan\s+|,\s*)\bLet\.?\s*Jen(?:d)?\.?\s*(?=[A-Za-z])/gi, '$1Letnan Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bMay\.?\s*Jen(?:d)?\.?\s*(?=[A-Za-z])/gi, '$1Mayor Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bBrig\.?\s*Jen(?:d)?\.?\s*(?=[A-Za-z])/gi, '$1Brigadir Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bJend\.?\s*(?=[A-Za-z])/gi, '$1Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bKol\.?\s*(?=[A-Za-z])/gi, '$1Kolonel ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bKapt\.?\s*(?=[A-Za-z])/gi, '$1Kapten ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bProf\.?\s*(?=[A-Za-z])/gi, '$1Professor ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bIr\.?\s*(?=[A-Za-z])/gi, '$1Insinyur ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bDrs\.?\s*(?=[A-Za-z])/gi, '$1Doktorandus ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bDr\.?\s*(?=[A-Z][a-z])/g, '$1Doktor ');
+    a = a.replace(/(^|[,\s])perum\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Perumahan ');
+    a = a.replace(/(^|[,\s])ds\b\.?\s*(?=[A-Za-z])/gi, '$1Desa ');
+    a = a.replace(/(^|[,\s])dsn\b\.?\s*(?=[A-Za-z])/gi, '$1Dusun ');
+    a = a.replace(/(^|[,\s])kpg?\b\.?\s*(?=[A-Za-z])/gi, '$1Kampung ');
+    a = a.replace(/(^|[,\s])gdg?\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Gedung ');
+    a = a.replace(/(^|[,\s])lt\.?\s*(\d+)/gi, '$1Lantai $2');
+    a = a.replace(/(^|[,\s])blk\.?\s*(?=[A-Za-z0-9])/gi, '$1Blok ');
+    a = a.replace(/(^|[,\s])km\.?\s*(\d+)/gi, '$1Kilometer $2');
+    a = a.replace(/,\s*\bjabar\b\.?/gi, ', Jawa Barat');
+    a = a.replace(/,\s*\bjateng\b\.?/gi, ', Jawa Tengah');
+    a = a.replace(/,\s*\bjatim\b\.?/gi, ', Jawa Timur');
+    a = a.replace(/,\s*\bsumut\b\.?/gi, ', Sumatera Utara');
+    a = a.replace(/,\s*\bsumbar\b\.?/gi, ', Sumatera Barat');
+    a = a.replace(/,\s*\bsumsel\b\.?/gi, ', Sumatera Selatan');
+    a = a.replace(/,\s*\bsulsel\b\.?/gi, ', Sulawesi Selatan');
+    a = a.replace(/,\s*\bsulut\b\.?/gi, ', Sulawesi Utara');
+    a = a.replace(/,\s*\bsulteng\b\.?/gi, ', Sulawesi Tengah');
+    a = a.replace(/,\s*\bsultra\b\.?/gi, ', Sulawesi Tenggara');
+    a = a.replace(/,\s*\bkaltim\b\.?/gi, ', Kalimantan Timur');
+    a = a.replace(/,\s*\bkalbar\b\.?/gi, ', Kalimantan Barat');
+    a = a.replace(/,\s*\bkalsel\b\.?/gi, ', Kalimantan Selatan');
+    a = a.replace(/,\s*\bkalteng\b\.?/gi, ', Kalimantan Tengah');
+    a = a.replace(/,\s*\bkalut\b\.?/gi, ', Kalimantan Utara');
+    a = a.replace(/,\s*\bkepri\b\.?/gi, ', Kepulauan Riau');
+    a = a.replace(/,\s*\bbabel\b\.?/gi, ', Bangka Belitung');
+    a = a.replace(/,\s*\bd\.?i\.?y\.?\b/gi, ', DI Yogyakarta');
   }
-  a = a.replace(/(^|[,\s])gg\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Gang ');
-  a = a.replace(/(^|[,\s])komp\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Komplek ');
-  a = a.replace(/(^|[,\s])kompl\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Komplek ');
-  a = a.replace(/(^|[,\s])kav\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Kavling ');
-  a = a.replace(/(^|[,\s])kel\b\.?\s+(?=[A-Za-z])/gi, '$1Kelurahan ');
-  a = a.replace(/(^|[,\s])kec\b\.?\s+(?=[A-Za-z])/gi, '$1Kecamatan ');
-  a = a.replace(/(^|[,\s])kab\b\.?\s+(?=[A-Za-z])/gi, '$1Kabupaten ');
-  a = a.replace(/(^|[,\s])prov\b\.?\s+(?=[A-Za-z])/gi, '$1Provinsi ');
-  a = a.replace(/(^|[,\s])prop\b\.?\s+(?=[A-Za-z])/gi, '$1Provinsi ');
-  a = a.replace(/\bkws\.?\s*ind(?:ustri)?\.?/gi, 'Kawasan Industri');
+  a = a.replace(/(^|[,\s])gg\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Gang ');
+  a = a.replace(/(^|[,\s])komp\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Komplek ');
+  a = a.replace(/(^|[,\s])kompl\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Komplek ');
+  a = a.replace(/(^|[,\s])kav\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Kavling ');
+  a = a.replace(/(^|[,\s])kel\b\.?\s*(?=[A-Za-z])/gi, '$1Kelurahan ');
+  a = a.replace(/(^|[,\s])kec\b\.?\s*(?=[A-Za-z])/gi, '$1Kecamatan ');
+  a = a.replace(/(^|[,\s])kab\b\.?\s*(?=[A-Za-z])/gi, '$1Kabupaten ');
+  a = a.replace(/(^|[,\s])prov\b\.?\s*(?=[A-Za-z])/gi, '$1Provinsi ');
+  a = a.replace(/(^|[,\s])prop\b\.?\s*(?=[A-Za-z])/gi, '$1Provinsi ');
+  a = a.replace(/\bk(?:ws|aw)\.?\s*ind(?:ustri)?\.?/gi, 'Kawasan Industri');
   a = a.replace(/\brt\.?\s*(\d+)\s*\/?\s*rw\.?\s*(\d+)/gi, 'RT $1 RW $2');
-  a = a.replace(/(^|[,\s])dki\s+jakarta\b/gi, '$1DKI Jakarta');
+  a = a.replace(/(^|[,\s])d\.?k\.?i\.?\s+jakarta\b/gi, '$1DKI Jakarta');
   a = a.replace(/(^|[,\s])d\.?i\.?\s+yogyakarta\b/gi, '$1DI Yogyakarta');
 
   // ==========================================
@@ -9531,7 +9636,7 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(/(?<!,\s*)\b(Subang Jaya|Petaling Jaya|Shah Alam|Klang|Kuala Lumpur|Puchong|Cheras|George Town|Johor Bahru|Ipoh|Kota Kinabalu|Kuching|Seremban|Batu Pahat|Pasir Gudang|Iskandar Puteri)\b/gi, ", $1");
 
   // 4b. Indonesian recognized city hubs
-  a = a.replace(/(?<!,\s*)\b(Jakarta|DKI Jakarta|Surabaya|Bandung|Medan|Semarang|Makassar|Palembang|Tangerang|Bekasi|Depok|Bogor|Batam|Pekanbaru|Bandar Lampung|Malang|Padang|Denpasar|Samarinda|Banjarmasin|Balikpapan|Cikarang|Karawang|Sidoarjo|Gresik|Jepara|Yogyakarta|Solo|Surakarta|Pasuruan|Mojokerto|Serang|Cilegon|Pontianak|Manado)\b/gi, ", $1");
+  a = a.replace(/(?<!,\s*)\b(Jakarta|DKI Jakarta|Surabaya|Bandung|Medan|Semarang|Makassar|Palembang|Tangerang|Bekasi|Depok|Bogor|Batam|Pekanbaru|Bandar Lampung|Malang|Padang|Denpasar|Samarinda|Banjarmasin|Balikpapan|Cikarang|Karawang|Sidoarjo|Gresik|Jepara|Yogyakarta|Solo|Surakarta|Pasuruan|Mojokerto|Serang|Cilegon|Pontianak|Manado|Kudus|Pati|Demak|Purwakarta|Subang|Sukabumi|Tasikmalaya|Cimahi|Salatiga|Magelang|Kediri|Madiun|Jambi|Bengkulu)\b/gi, ", $1");
 
   // 4c. New Zealand recognized cities
   a = a.replace(/(?<!,\s*)\b(Auckland|Christchurch|Hamilton|Tauranga|Dunedin|Lower Hutt|Upper Hutt|Palmerston North|Napier|Porirua|New Plymouth|Rotorua|Whangarei|Invercargill|Nelson|Whanganui|Hastings|Gisborne|Blenheim|Timaru|Taupo|Queenstown|Cambridge)\b/gi, ", $1");

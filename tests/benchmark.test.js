@@ -573,6 +573,72 @@ runTest('Global 135-country QC corrections, State/City detection, and calling co
   assert.strictEqual(ctx.cleanPhoneNumber("+55 11 98765 4321", "Brazil"), "11987654321");
 });
 
+// Test 23: Indonesia address expansion & Contact Us #1 priority ranking
+runTest('Indonesia address expansion & Contact Us #1 priority ranking', () => {
+  // 1. Indonesia address abbreviations (with/without spaces, honorifics, provinces, and PT guard)
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Jl.RA. Kardinah Ring Road Senenan Jepara Central Java", "Indonesia"),
+    "Jalan Raden Ajeng Kardinah Ring Road Senenan Jepara Central Java"
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Perum. Graha Indah Blk. A2 No. 5, Kec. Cikarang Selatan, Kab. Bekasi, Jabar", "Indonesia"),
+    "Perumahan Graha Indah Blok A2 Number 5, Kecamatan Cikarang Selatan, Kabupaten Bekasi, Jawa Barat"
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Jl. K.H. Mas Mansyur Kav. 10, Lt. 3, Kel. Karet, Tanah Abang, DKI Jakarta", "Indonesia"),
+    "Jalan Kiai Haji Mas Mansyur Kavling 10, Lantai 3, Kelurahan Karet, Tanah Abang, DKI Jakarta"
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Jl. H.R. Rasuna Said, Kec. Setiabudi, Jakarta", "Indonesia"),
+    "Jalan Haji Rangkayo Rasuna Said, Kecamatan Setiabudi, Jakarta"
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Ds. Kecapi, Kec. Tahunan, Kab. Jepara, Jateng", "Indonesia"),
+    "Desa Kecapi, Kecamatan Tahunan, Kabupaten Jepara, Jawa Tengah"
+  );
+  const ptResult = ctx.expandAddressAndStateAbbreviations("PT Jaya Abadi, Jl. Dr. Sutomo 12, Surabaya", "Indonesia");
+  assert(!ptResult.includes("Point"), `Indonesian PT must not expand to Point (got: ${ptResult})`);
+  assert(ptResult.includes("Jalan Doktor Sutomo"), `Indonesian Dr. must expand to Doktor (got: ${ptResult})`);
+
+  // 2. Contact Us links strictly prioritized ahead of About / Products / Careers
+  const sampleHtml = `
+    <nav>
+      <a href="/about-us/">About Us</a>
+      <a href="/products/">Products</a>
+      <a href="/careers/">Careers</a>
+      <a href="/hubungi-kami/">Hubungi Kami</a>
+      <a href="/contact-us/">Contact Us</a>
+    </nav>
+  `;
+  const links = ctx.discoverContactLinks(sampleHtml, "https://example.co.id/");
+  assert(links.length >= 2, "Expected discovered contact/about links");
+  assert(
+    links[0].includes("/contact-us") || links[0].includes("/hubungi-kami"),
+    `Contact link must be ranked #1 (got: ${links.join(", ")})`
+  );
+
+  // 3. Dedicated Contact Us address candidate outranks Homepage & Footer
+  const candidates = [];
+  ctx.addAddressCandidate(candidates, "Jalan Sudirman 10, Jakarta", "footer", false, "general", "https://example.co.id/", "");
+  ctx.addAddressCandidate(candidates, "Jalan Thamrin 20, Jakarta", "homepage", true, "hq", "https://example.co.id/", "");
+  ctx.addAddressCandidate(candidates, "Jl. Ahmad Yani 99, Semarang, Jawa Tengah", "contact", true, "hq", "https://example.co.id/contact-us/", "");
+  candidates.sort((a, b) => a.priority - b.priority);
+  assert.strictEqual(candidates[0].source, "contact", "Dedicated contact address candidate must have highest priority (lowest number)");
+  assert(candidates[0].priority < 1, `Contact HQ candidate priority should be < 1 (got: ${candidates[0].priority})`);
+
+  // 4. Contact Us page email ranks strictly above Homepage & About emails
+  const ranked = ctx.rankEmails(
+    ["hello@example.co.id", "info@example.co.id", "sales@example.co.id"],
+    "example.co.id",
+    {
+      "hello@example.co.id": "https://example.co.id/about-us",
+      "info@example.co.id": "https://example.co.id/",
+      "sales@example.co.id": "https://example.co.id/contact-us"
+    }
+  );
+  assert.strictEqual(ranked[0], "sales@example.co.id", `Contact Us email must rank #1 (got: ${ranked.join(", ")})`);
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');
