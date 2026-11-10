@@ -1093,6 +1093,30 @@ runTest('Modular MV3 split loads all content scripts cleanly with valid AIExt bi
   }
 });
 
+// 29. Rule 4 Company Name formatting (brackets, copyright symbols, U.S. dots, internal commas/ampersands)
+runTest('Rule 4 company name formatting preserves U.S. dots, symbols, commas, and strips brackets', () => {
+  const formatCompanyName = (compName, country = "") => {
+    let n = ctx.decodeHtmlEntities((compName || "").trim());
+    n = n.replace(/['’`]\s*s\b/gi, "'s");
+    n = ctx.cleanCompanyPrefixesAndSuffixes(n);
+    n = ctx.expandCompanyAbbreviations(n, country);
+    n = ctx.cleanCompanyPrefixesAndSuffixes(n);
+    n = n.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
+    n = n.replace(/[\(\)\[\]\{\}]/g, " ");
+    n = ctx.stripBoundarySpecialChars(n);
+    n = ctx.toTitleCase(n);
+    return n;
+  };
+
+  assert.strictEqual(formatCompanyName("U.S. Tsubaki Industrial, LLC", "United States Of America"), "U.S. Tsubaki Industrial, Limited Liability Company");
+  assert.strictEqual(formatCompanyName("Carrier (USA) (Ohio) Inc", "United States Of America"), "Carrier USA Ohio Incorporated");
+  assert.strictEqual(formatCompanyName("- # Acme Tools, Inc. -", "United States Of America"), "Acme Tools, Incorporated");
+  assert.strictEqual(formatCompanyName("© 2024 Peter Forg Manufacturing Co.", "United States Of America"), "Peter Forg Manufacturing Company");
+  assert.strictEqual(formatCompanyName("Delta [India] Pvt. Ltd.", "India"), "Delta India Private Limited");
+  assert.strictEqual(formatCompanyName("Johnson, Smith & Associates, LLC", "United States Of America"), "Johnson, Smith & Associates, Limited Liability Company");
+  assert.strictEqual(formatCompanyName("High Precision, Inc. //", "United States Of America"), "High Precision, Incorporated");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');
