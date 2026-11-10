@@ -1,13 +1,15 @@
 const assert = require('assert');
 const fs = require('fs');
+const path = require('path');
 const vm = require('vm');
 
 console.log('========================================================');
 console.log('     AI DATA ENTRY ASSISTANT - REGRESSION TEST SUITE    ');
 console.log('========================================================\n');
 
-// Load background.js in VM
-const bgCode = fs.readFileSync('background.js', 'utf8');
+// Load background.js and its modular importScripts dependencies in VM
+const rootDir = path.resolve(__dirname, '..');
+const bgCode = fs.readFileSync(path.join(rootDir, 'background.js'), 'utf8');
 const ctx = vm.createContext({
   URL,
   chrome: {
@@ -16,7 +18,16 @@ const ctx = vm.createContext({
   },
   console: { log: () => {}, warn: () => {}, error: () => {} }
 });
-vm.runInContext(bgCode, ctx);
+ctx.importScripts = (...files) => {
+  for (const file of files) {
+    const targetPath = path.resolve(rootDir, file);
+    if (!fs.existsSync(targetPath)) {
+      throw new Error(`importScripts file not found: ${file}`);
+    }
+    vm.runInContext(fs.readFileSync(targetPath, 'utf8'), ctx, { filename: file });
+  }
+};
+vm.runInContext(bgCode, ctx, { filename: 'background.js' });
 
 let passed = 0;
 let failed = 0;
@@ -1007,6 +1018,79 @@ runTest('Strip unwanted prose clauses & field labels from company names and supp
     productImages: "3"
   }, mechatronicCrawl, {});
   assert.strictEqual(aiCleanShort.companyName, "Mechatronic Engineering Spółka Z Ograniczoną Odpowiedzialnością");
+});
+
+// 28. Modular Split Integrity: manifest.json content_scripts load cleanly & resolve all AIExt references
+runTest('Modular MV3 split loads all content scripts cleanly with valid AIExt bindings', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(rootDir, 'manifest.json'), 'utf8'));
+  const files = manifest.content_scripts[0].js;
+  assert.ok(files.length >= 9, `Expected modular content_scripts list, got ${files.length}`);
+
+  const noopEl = {
+    style: { setProperty: () => {} },
+    classList: { add: () => {}, remove: () => {} },
+    addEventListener: () => {},
+    setAttribute: () => {},
+    appendChild: () => {},
+    querySelectorAll: () => [],
+    querySelector: () => null,
+    closest: () => null,
+    innerHTML: '',
+    textContent: '',
+    value: ''
+  };
+  const mockWindow = { location: { href: 'https://example.com/dataextraction' }, addEventListener: () => {} };
+  const cCtx = vm.createContext({
+    console: { log: () => {}, warn: () => {}, error: () => {} },
+    window: mockWindow,
+    document: {
+      readyState: 'complete',
+      body: noopEl,
+      head: noopEl,
+      title: 'Test Portal',
+      createElement: () => ({ ...noopEl }),
+      getElementById: () => null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      addEventListener: () => {}
+    },
+    chrome: {
+      runtime: { id: 'test-ext', onMessage: { addListener: () => {} }, sendMessage: (_, cb) => cb && cb({ success: true }) },
+      storage: {
+        sync: { get: (_, cb) => cb && cb({}), set: () => {} },
+        local: { get: (_, cb) => cb && cb({}), set: () => {}, remove: () => {} },
+        onChanged: { addListener: () => {} }
+      }
+    },
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    setInterval: () => 1,
+    clearInterval: () => {},
+    Event: function () {},
+    URL,
+    MutationObserver: function () { return { observe: () => {} }; }
+  });
+  cCtx.globalThis = cCtx;
+  mockWindow.chrome = cCtx.chrome;
+
+  for (const rel of files) {
+    const abs = path.join(rootDir, rel);
+    assert.ok(fs.existsSync(abs), `Missing manifest content script: ${rel}`);
+    vm.runInContext(fs.readFileSync(abs, 'utf8'), cCtx, { filename: rel });
+  }
+
+  const ext = cCtx.__AI_EXTENSION__;
+  assert.ok(ext && ext.state, 'AIExt namespace and shared state must exist');
+  assert.strictEqual(cCtx.normalizeCountryName('USA'), 'United States Of America');
+  assert.strictEqual(cCtx.stripTrailingContactWordsFromEmail('info@acme.comphone'), 'info@acme.com');
+  assert.strictEqual(ext.isDataEntryPage(), true);
+
+  for (const rel of files.filter(x => x.startsWith('src/content') || x === 'content.js')) {
+    const src = fs.readFileSync(path.join(rootDir, rel), 'utf8');
+    for (const m of src.matchAll(/AIExt\.([a-zA-Z0-9_]+)/g)) {
+      assert.ok(m[1] in ext, `Undefined AIExt.${m[1]} referenced in ${rel}`);
+    }
+  }
 });
 
 console.log('\n========================================================');

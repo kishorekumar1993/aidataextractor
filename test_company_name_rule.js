@@ -1,44 +1,25 @@
 // Test suite for Rule 4: Company Name formatting
 const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
 
-// Extract the functions from background.js
-const bgCode = fs.readFileSync("./background.js", "utf8");
-
-// Mock environment
-global.toTitleCase = function (str) {
-  if (!str) return "";
-  const upperAcronyms = new Set([
-    "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
-    "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "SDN", "BHD", "LTD", "PLC", "LLC", "INC", "CORP"
-  ]);
-  let s = str.replace(/['’`]\s*s\b/gi, "'s");
-  return s.replace(/[\p{L}\p{N}]+/gu, function (word, offset, fullStr) {
-    if (offset > 0 && fullStr[offset - 1] === "'" && word.toLowerCase() === "s") {
-      return "s";
+const ctx = vm.createContext({ URL, console });
+ctx.importScripts = (...files) => {
+  for (const file of files) {
+    const full = path.resolve(__dirname, file);
+    if (fs.existsSync(full)) {
+      vm.runInContext(fs.readFileSync(full, "utf8"), ctx, { filename: file });
     }
-    const upper = word.toUpperCase();
-    if (upperAcronyms.has(upper)) return upper;
-    if (/^GmbH$/i.test(word)) return "GmbH";
-    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-  });
+  }
 };
+ctx.importScripts("src/shared/text-utils.js", "src/background/company-normalizer.js");
 
-global.decodeHtmlEntities = function (str) {
-  if (!str) return "";
-  return str.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
-};
-
-// Evaluate cleanCompanyPrefixesAndSuffixes and expandCompanyAbbreviations
-const cleanCompanyPrefixesAndSuffixesMatch = bgCode.match(/function cleanCompanyPrefixesAndSuffixes\(rawName\) \{[\s\S]*?\n\}/);
-const expandCompanyAbbreviationsMatch = bgCode.match(/function expandCompanyAbbreviations\(name, country = ""\) \{[\s\S]*?\n\}/);
-
-if (!cleanCompanyPrefixesAndSuffixesMatch || !expandCompanyAbbreviationsMatch) {
-  console.error("Failed to extract functions from background.js");
-  process.exit(1);
-}
-
-eval(cleanCompanyPrefixesAndSuffixesMatch[0]);
-eval(expandCompanyAbbreviationsMatch[0]);
+const {
+  toTitleCase,
+  decodeHtmlEntities,
+  cleanCompanyPrefixesAndSuffixes,
+  expandCompanyAbbreviations
+} = ctx;
 
 function formatCompanyName(compName, country = "") {
   compName = decodeHtmlEntities((compName || "").trim());

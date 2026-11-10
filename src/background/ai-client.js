@@ -1,0 +1,691 @@
+// Gemini API extraction & key validation, domain matching, and heuristic fallback extraction.
+
+async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, crawlStartTime = 0) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+  const formattedAddressEvidence = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
+    ? crawlData.addressCandidates.map((c, idx) => {
+      const typeLabel = c.isHeadquarters ? "HEADQUARTERS / HEAD OFFICE" : (c.locationType ? c.locationType.toUpperCase() : "LOCATION");
+      const langLabel = c.isEnglish ? "English" : "Local Language";
+      const romanized = !c.isEnglish && /[\u4e00-\u9fa5]/.test(c.raw) ? ` -> Romanized English: ${romanizeChineseAddress(c.raw)}` : "";
+      return `${idx + 1}. [${typeLabel} (${langLabel}, Source: ${c.source})]: ${c.raw}${romanized}`;
+    }).join("\n")
+    : ((crawlData.detectedAddresses || []).join("\n") || "(No physical address candidates extracted from static HTML)");
+
+  const prompt = `You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
+
+1. WEBSITE STATUS QC RULES:
+- Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site".
+- Rules 11 & 16 (Online Store / Shopping Cart / Buy Now / Checkout):
+  * If company IS A MANUFACTURER (produces/fabricates products in own factory, OEM/ODM) -> Mark "Working" and "Manufacturer", extract all 14 fields.
+  * If company is NOT A MANUFACTURER (Retailer, Reseller, Trader, E-commerce Store, Distributor) -> Mark "Not Working" and leave all other 13 fields empty "".
+- Rule 12 (Non-English): No English translation option -> mark "Non English" (all other fields empty "").
+- Rule 14 (Flash): Designed in Flash format where text is uncopyable -> mark "Flash" (all other fields empty "").
+- Rule 13 (Redirect Site): Redirected to a completely DIFFERENT domain (companyA.com -> companyB.com) -> mark "Redirect Site", evaluate details from destination site. Same-domain redirects (http to https, www vs non-www, language path /en/) are NOT Redirect Sites -> mark "Working".
+- If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "".
+
+2. BUSINESS TYPE:
+- Options: "Manufacturer" | "Distributor" | "Trader" | "Wholesaler" | "Retailer" | "Service Provider" | "Other".
+- If company manufactures, fabricates, molds, or engineers products -> "Manufacturer".
+
+3. COMPANY PROFILE:
+- Options: "Available" | "Not Available".
+- Mark "Available" if site has dedicated About Us, Company Profile, history, mission, or factory overview. Otherwise "Not Available".
+
+4. COMPANY NAME (CRITICAL QC RULE):
+- Extract the official legal registered company name in COMPLETE FULL FORM.
+- EXPAND ALL CORPORATE & INDUSTRY ABBREVIATIONS:
+  * Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company.
+  * Pty Ltd -> Proprietary Limited, Pte Ltd / Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad.
+  * PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata.
+  * Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises.
+- Remove brackets ()/[] keeping inner text (e.g. "Company (Malaysia) Sdn Bhd" -> "Company Malaysia Sendirian Berhad"). If country name is inside company name, keep it as is.
+- NEVER expand special characters or symbols into words (do NOT convert "&" to "And", "+" to "Plus", "@" to "At", "/" to "Slash"/"Or", "%" to "Percent", "#" to "Number"; keep internal symbols as-is such as "CJ Tool & Mouldings Limited", "H&R Manufacturing", "Design+Build").
+- Format in Title Case where EVERY word starts with a capital letter (keep brand acronyms like PEM, BMW in UPPERCASE).
+- Strictly REMOVE ANY special characters from the beginning or end of the company name (no leading or trailing ".", ",", "-", "!", "*", "&", "+", "/", "#", "@", "®", "™", "©", quotes, brackets, or symbols).
+- Preserve comma before corporate suffix if standard or present on website (e.g. "ECU Testing, Limited", "Mocap, Limited Liability Company").
+
+5. COUNTRY NAME (CRITICAL QC RULE - SUPPORT ALL 135+ COUNTRIES GLOBALLY WITH FULL NAME EXPANSION):
+- ALWAYS output the full expanded original English country name (NEVER return an abbreviation like USA/UK/UAE/KSA/PNG/NZ/HK, a city, state, continent, email, or local-language name).
+- MANDATORY QC FULL EXPANSION & STANDARDIZATION:
+  * USA / U.S.A. / US / United States -> "United States Of America"
+  * UK / Great Britain / Britain -> "United Kingdom" (or constituent country ONLY if explicitly stated when UK omitted)
+  * UAE / U.A.E. -> "United Arab Emirates" | KSA -> "Saudi Arabia" | PNG -> "Papua New Guinea" | DR -> "Dominican Republic" | HK -> "Hong Kong" | NZ -> "New Zealand" | ZA / RSA -> "South Africa"
+  * Czechia / CZ -> "Czech Republic" | Brunei -> "Brunei Darussalam" | St. Lucia -> "Saint Lucia" | T&T -> "Trinidad and Tobago"
+  * Deutschland -> "Germany" | España -> "Spain" | Italia -> "Italy" | Nederland -> "Netherlands" | Österreich -> "Austria" | Schweiz -> "Switzerland" | Hrvatska -> "Croatia"
+  * Türkiye / Turkiye / Turkey -> "Türkiye" | Republic of Korea / ROK -> "South Korea" | DPRK -> "North Korea" | Republic of China / ROC -> "Taiwan" | Peoples Republic of China / PRC -> "China" | Kingdom of Bahrain -> "Bahrain" | Sultanate of Oman -> "Oman"
+- Use standard full English names for ALL countries globally (Afghanistan, Albania, Algeria, Andorra, Angola, Argentina, Armenia, Australia, Austria, Azerbaijan, Bahamas, Bahrain, Bangladesh, Barbados, Belarus, Belgium, Belize, Bhutan, Bolivia, Botswana, Brazil, Brunei Darussalam, Bulgaria, Cambodia, Canada, Cayman Islands, China, Colombia, Costa Rica, Croatia, Cyprus, Czech Republic, Denmark, Dominican Republic, Egypt, Estonia, Ethiopia, Fiji, Finland, France, Germany, Ghana, Greece, Greenland, Guatemala, Guyana, Hong Kong, Hungary, Iceland, India, Indonesia, Iran, Iraq, Ireland, Israel, Italy, Jamaica, Japan, Jordan, Kazakhstan, Kenya, Kuwait, Latvia, Lebanon, Liechtenstein, Lithuania, Luxembourg, Madagascar, Malaysia, Maldives, Malta, Mauritius, Mexico, Moldova, Mongolia, Morocco, Mozambique, Myanmar, Namibia, Nepal, Netherlands, New Zealand, Nicaragua, Nigeria, North Korea, North Macedonia, Norway, Oman, Pakistan, Panama, Papua New Guinea, Paraguay, Peru, Philippines, Poland, Portugal, Qatar, Romania, Russia, Rwanda, Saint Lucia, Samoa, Saudi Arabia, Serbia, Seychelles, Sierra Leone, Singapore, Slovakia, Slovenia, South Africa, South Korea, Spain, Sri Lanka, Sudan, Suriname, Sweden, Switzerland, Syria, Taiwan, Tanzania, Thailand, Trinidad and Tobago, Tunisia, Türkiye, Uganda, Ukraine, United Arab Emirates, United Kingdom, United States Of America, Uruguay, Uzbekistan, Vanuatu, Vietnam, Zambia, Zimbabwe).
+- If omitted on website, infer country from social media or address city/state/postcode globally.
+
+6. COMPANY ADDRESS (CRITICAL QC MANDATE):
+- FULL PHYSICAL HEADQUARTERS ADDRESS: Include premise/building/suite, street number, street name, suburb/town, city, and state/county.
+- STRICT NO EXTRA WORDS RULE: Retain authentic address words from the website. Never invent words not present (e.g. do not add "City" or "Number" if not written).
+- STRICT PRESERVATION: NEVER drop leading street/building numbers (e.g. "12110 Best Place" -> keep 12110; "40 Sarah Street" -> keep 40).
+- EXPAND ALL ABBREVIATIONS: St -> Street (but St. before saint name -> Saint), Rd -> Road, Ave -> Avenue, Dr -> Drive (but Dr. before person name -> Doctor/Doktor), Blvd -> Boulevard, Ste -> Suite, Bldg -> Building, Flr/Fl -> Floor, No. -> Number, Ln -> Lane, Aly -> Alley, Sec -> Section, Ind. Est. -> Industrial Estate, Jl. -> Jalan, RA. -> Raden Ajeng, VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland, Northants -> Northamptonshire, etc. Remove brackets ()/[].
+- STRIP ONLY: Postal codes (ZIP codes), Country name, and Telephone/Fax numbers.
+- COMMA SEPARATION:
+  * Put commas between structural components: [Premise], [Street], [Suburb/Town/City], [State/County].
+  * ALWAYS put a comma before State/Province (e.g. "Oakleigh South, Victoria", "Cincinnati, Ohio", "Kettering, Northamptonshire").
+  * NEVER put commas inside a street name ("Pump Lane" not "Pump, Lane"), inside an industrial park name ("Argent Trade Park" not "Argent, Trade Park"), or between street number and street name ("604 Progress Drive" not "604, Progress Drive").
+  * Address MUST NOT end with a comma or period.
+
+7. STATE & CITY QC RULES (ALL COUNTRIES WORLDWIDE - EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
+- State: Mark "Available" ONLY IF a State, Province, County, Territory, Prefecture, Canton, Oblast, Voivodeship, Governorate, Emirate, Region, or National Capital City word is LITERALLY WRITTEN inside companyAddress across any country! Do NOT guess or infer a state from external geography if no state word appears in companyAddress! (Example: "28 Rue Zuber, Rixheim" has NO state/region written -> State MUST be "Not Available"; "Number 228, Baoshun Road, East District, Chiayi City" has NO state written -> State MUST be "Not Available"; National Capital like Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires -> both State & City are "Available").
+- City:
+  * CRITICAL: A SUBURB IS NOT A CITY! Suburbs/industrial zones alone without a recognized city/town (e.g. Campbellfield, Rowville, Oakleigh South, Sandton, Penrose) -> mark "city": "Not Available"!
+  * Mark "Available" ONLY if an official recognized City, Town, Township, District, Municipality, Commune, or Borough across ANY country worldwide is written in companyAddress (e.g. Melbourne, Sydney, London, Chicago, Austin, Park Hills, Heanor, Rixheim, Jepara, Zurich, Zagreb, Doha, Karachi, Bogota, Nairobi, Bucharest).
+  * GEOGRAPHIC NORMALIZATION: Recognized UK town localities (e.g. "Heanor Gate" -> Heanor, Derbyshire) qualify as City: "Available".
+
+8. EMAIL ID & SECONDARY EMAIL ID:
+- Primary Email: Official general contact or sales inbox (e.g. sales@, info@, contact@, enquiry@).
+- Secondary Email: Distinct secondary corporate email (e.g. support@, jobs@, service@).
+- Must NOT be identical. Reject privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix). Empty string "" if none found.
+
+9. PHONE NUMBER (CRITICAL QC RULE):
+- Complete telephone number with ONLY the international calling code (+1, +33, +44, +61, +62, +886) and optional trunk "(0)" removed. Keep ALL remaining national/area digits intact (Example: "+33 (0) 3 89 44 13 88" -> strip +33 and (0) -> "389441388", NEVER drop the area digit '3'; "+6282136903270" -> strip +62 -> "82136903270").
+- Digits only (no spaces, hyphens, brackets, or dots).
+- Strip leading zeroes. MUST NEVER start with zero.
+- STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). If only toll-free is available, return empty string "".
+- Valid numbers must be between 8 and 12 digits.
+
+10. PRODUCT, IMAGE & DESCRIPTION COUNTS:
+- Values: "0" | "1" | "2" | "3" (3 or more).
+- STRICT MANDATE: Count physical product images on the website ("productImages"). Whatever value "productImages" has, set "numberOfProducts" and "numberOfProductDescriptions" to that EXACT SAME value!
+
+WEBSITE DATA FOR THIS CRAWL:
+Target URL: ${crawlData.originalUrl}
+Page Title: ${crawlData.title}
+Detected Website Brand / Logo: ${crawlData.logoText || crawlData.ogSiteName || "(None)"}
+Detected Official Legal Corporate Names: ${crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0 ? crawlData.legalCompanyCandidates.slice(0, 8).join(", ") : "(None)"}
+Discovered Emails: ${(crawlData.emails || []).join(", ") || "(None)"}
+Detected Contact Phones: ${(crawlData.phones || []).join(", ") || "(None)"}
+Product Items / Units Detected: ${crawlData.detectedProductCount}
+Product Images Detected: ${crawlData.detectedImageCount}
+Product Descriptions Detected: ${crawlData.detectedDescCount}
+
+${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2), null, 2)}\n\n` : ""}${crawlData.renderedText ? `VISUAL DOM TEXT:\n${crawlData.renderedText.slice(0, 2500)}\n\n` : ""}PRIORITY RULE FOR EXTRACTION: Check the DEDICATED CONTACT US PAGE FIRST for address, emails, phone numbers, and country before checking Footer, About, or Homepage content.
+
+PHYSICAL ADDRESS EVIDENCE FOUND ON WEBSITE:
+${formattedAddressEvidence}
+
+DEDICATED CONTACT US PAGE CONTENT (FIRST PRIORITY):
+${(crawlData.dedicatedContactText || crawlData.contactPageText || "").slice(0, 3500)}
+
+ABOUT / PROFILE & OTHER PAGES CONTENT:
+${(crawlData.profilePageText || crawlData.contactPageText || "").slice(0, 2500)}
+
+FOOTER CONTENT:
+${(crawlData.footerText || "").slice(0, 1000)}
+
+PAGE BODY CONTENT:
+${(crawlData.bodyText || "").slice(0, 2500)}
+`;
+
+  const selectedModel = modelName || DEFAULT_MODEL;
+  const accuracyFallbackChain = [
+    selectedModel,
+    ...GEMINI_MODELS
+  ];
+  // Limit to at most 2 candidate models: primary selected model + 1 best fallback
+  const candidateModels = Array.from(new Set(accuracyFallbackChain)).filter(Boolean).slice(0, 2);
+
+  let lastError = null;
+  let parsed = null;
+
+  for (const modelToTry of candidateModels) {
+    // If overall elapsed time since crawl start is already high (>22s), break immediately to avoid safety timeout
+    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) {
+      console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting AI calls to return promptly.`);
+      break;
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    try {
+      const abortCtrl = new AbortController();
+      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 9000 : 5000;
+      const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
+      let response;
+      try {
+        const reqHeaders = {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey
+        };
+        response = await fetch(url, {
+          method: "POST",
+          headers: reqHeaders,
+          signal: abortCtrl.signal,
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.1,
+              responseMimeType: "application/json",
+              responseSchema: GEMINI_RESPONSE_SCHEMA
+            }
+          })
+        });
+      } finally {
+        clearTimeout(abortTimer);
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        if (response.status === 401) {
+          console.warn(`[AI Assistant] Gemini API key invalid / unauthenticated (401).`);
+          lastError = new Error(`Gemini authorization error 401: ${errText}`);
+          break; // Stop immediately for invalid API key
+        }
+
+        // If 400 Bad Request, model might not support responseSchema; retry once without responseSchema
+        if (response.status === 400) {
+          try {
+            const reqHeaders = {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey
+            };
+            const fallbackRes = await fetch(url, {
+              method: "POST",
+              headers: reqHeaders,
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt + "\nReturn strictly a valid JSON object matching the requested schema." }] }],
+                generationConfig: {
+                  temperature: 0.1,
+                  responseMimeType: "application/json"
+                }
+              })
+            });
+            if (fallbackRes.ok) {
+              const resJson = await fallbackRes.json();
+              const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (rawText) {
+                const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+                parsed = JSON.parse(cleaned);
+                if (parsed) {
+                  console.log(`[AI Assistant] Successfully extracted data with model ${modelToTry} (standard JSON fallback)!`);
+                  break;
+                }
+              }
+            }
+          } catch (e) { }
+        }
+
+        console.warn(`[AI Assistant] Model ${modelToTry} failed (${response.status}): ${errText}. Falling back to next model in accuracy chain.`);
+        lastError = new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
+        continue;
+      }
+
+      const resJson = await response.json();
+      const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) throw new Error(`Empty response from Gemini model ${modelToTry}`);
+
+      const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+      parsed = JSON.parse(cleaned);
+      if (parsed) {
+        console.log(`[AI Assistant] Successfully extracted data with Gemini model: ${modelToTry}`);
+        if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
+          parsed.secondaryEmailId = "";
+        }
+        break;
+      }
+    } catch (err) {
+      console.warn(`[AI Assistant] Model ${modelToTry} attempt failed:`, err.message, ". Falling back to next candidate.");
+      lastError = err;
+    }
+  }
+
+  if (!parsed) {
+    throw lastError || new Error("All Gemini models failed to return structured data");
+  }
+
+  // Ensure secondaryEmailId doesn't retain "Not Available" placeholder text
+  if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
+    parsed.secondaryEmailId = "";
+  }
+  // QC Rule: Primary email and secondary email MUST NOT be the same!
+  if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
+    parsed.secondaryEmailId = "";
+  }
+
+  // Safely fallback to crawled emails/phones only if missing from Gemini
+  const crawlEmails = (crawlData && Array.isArray(crawlData.emails) ? crawlData.emails : []).map(e => String(e).trim().toLowerCase());
+  if ((!parsed.emailId || !parsed.emailId.trim()) && crawlEmails.length > 0) {
+    parsed.emailId = crawlEmails.find(e => isValidCorporateEmail(e)) || crawlEmails[0] || "";
+  }
+  if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) && crawlEmails.length > 1) {
+    const second = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
+    parsed.secondaryEmailId = second || "";
+  }
+  if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
+    parsed.secondaryEmailId = "";
+  }
+  if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
+    parsed.phoneNumber = crawlData.phones[0];
+  }
+  const ownCrawlProdCount = computeOwnCrawlProductCount(crawlData);
+  if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {
+    parsed.numberOfProducts = ownCrawlProdCount;
+    parsed.productImages = ownCrawlProdCount;
+    parsed.numberOfProductDescriptions = ownCrawlProdCount;
+  } else {
+    parsed.numberOfProducts = "";
+    parsed.productImages = "";
+    parsed.numberOfProductDescriptions = "";
+  }
+  parsed._isFromAi = true;
+
+  return parsed;
+}
+
+function extractRootDomain(urlOrHost) {
+  if (!urlOrHost || typeof urlOrHost !== "string") return "";
+  let host = urlOrHost.trim().toLowerCase();
+  try {
+    if (host.includes("://")) {
+      host = new URL(host).hostname;
+    } else if (host.includes("/")) {
+      host = host.split("/")[0];
+    }
+  } catch (e) { }
+  host = host.replace(/:\d+$/, "");
+  host = host.replace(/^www\d?\./i, "");
+  const parts = host.split(".").filter(Boolean);
+  if (parts.length <= 2) return parts.join(".");
+  const lastTwo = parts.slice(-2).join(".");
+  if (/^(?:co|com|org|net|gov|edu|ac|asn|idv|gen|nic|ltd|me|tm)\.[a-z]{2}$/i.test(lastTwo)) {
+    return parts.slice(-3).join(".");
+  }
+  return parts.slice(-2).join(".");
+}
+
+function extractDomainStem(urlOrHost) {
+  if (!urlOrHost || typeof urlOrHost !== "string") return "";
+  let host = urlOrHost.trim().toLowerCase();
+  host = host.replace(/^https?:\/\//i, "");
+  try {
+    if (host.includes("://")) {
+      host = new URL("http://" + host).hostname;
+    } else if (host.includes("/")) {
+      host = host.split("/")[0];
+    }
+  } catch (e) { }
+  host = host.replace(/^www\d?\./i, "");
+  host = host.replace(/\.(?:co\.[a-z]{2}|com\.[a-z]{2}|org\.[a-z]{2}|net\.[a-z]{2}|gov\.[a-z]{2}|edu\.[a-z]{2}|[a-z]{2,})$/i, "");
+  host = host.replace(/\.[a-z]{2,}$/i, "");
+  return host.replace(/[^a-z0-9]/g, "");
+}
+
+function cleanDomainStem(url) {
+  return extractDomainStem(url);
+}
+
+function isRedirectDomain(origUrl, finalUrl) {
+  if (!origUrl || !finalUrl) return false;
+  try {
+    const origRoot = extractRootDomain(origUrl);
+    const finalRoot = extractRootDomain(finalUrl);
+    if (!origRoot || !finalRoot) return false;
+    return origRoot !== finalRoot;
+  } catch (e) {
+    return false;
+  }
+}
+
+
+function isSeoSloganOrTagline(name) {
+  if (!name || typeof name !== "string") return false;
+  const n = name.trim();
+  if (typeof hasCompleteLegalSuffix === "function" && hasCompleteLegalSuffix(n)) return false;
+  if (/\b(?:pty\s*ltd|limited|inc|incorporated|llc|gmbh|sdn\s*bhd)\b/i.test(n)) return false;
+  if (/^(?:expert|best|leading|professional|premier|top|specialist|quality|affordable|cheap|reliable|trusted)\b/i.test(n)) {
+    return true;
+  }
+  if (/\b(?:in\s+(?:canberra|sydney|melbourne|brisbane|perth|adelaide|hobart|darwin|gold\s*coast|newcastle|london|new\s*york|chicago|los\s*angeles|taiwan|australia|singapore|malaysia))\b/i.test(n)) {
+    return true;
+  }
+  if (/^(?:manufacturer|supplier|wholesaler|distributor|maker|installer|builder|contractor)\s+of\b/i.test(n)) {
+    return true;
+  }
+  return false;
+}
+
+function scoreTitleSegment(segment, domainStem, logoText, ogSiteName) {
+  const segLower = segment.toLowerCase().trim();
+  let score = 0;
+  if (/^(?:expert|best|leading|professional|premier|top|specialist|quality|affordable|cheap|reliable|trusted)\b/i.test(segLower)) {
+    score -= 50;
+  }
+  if (/\b(?:in\s+(?:canberra|sydney|melbourne|brisbane|perth|adelaide|london|new\s*york|chicago|taiwan|australia))\b/i.test(segLower)) {
+    score -= 40;
+  }
+  if (/^(?:manufacturer|supplier|wholesaler|distributor|installer|maker|builder|contractor)\s+of\b/i.test(segLower)) {
+    score -= 40;
+  }
+  const segCondensed = segLower.replace(/[^a-z0-9]/g, "");
+  if (domainStem && domainStem.length >= 3) {
+    if (segCondensed === domainStem) score += 100;
+    else if (segCondensed.startsWith(domainStem) || domainStem.startsWith(segCondensed)) score += 70;
+    else if (segCondensed.includes(domainStem) || domainStem.includes(segCondensed)) score += 50;
+  }
+  if (logoText && segLower.includes(logoText.toLowerCase())) score += 80;
+  if (ogSiteName && segLower.includes(ogSiteName.toLowerCase())) score += 80;
+  if (/\b(?:ltd|limited|inc|incorporated|llc|corp|corporation|pty|proprietary|pvt|pte|sdn|bhd|gmbh)\b/i.test(segLower)) {
+    score += 60;
+  }
+  return score;
+}
+
+function extractBestBrandFromTitle(title, domain, logoText = "", ogSiteName = "") {
+  if (!title) return "";
+  const parts = title.split(/[-–—|:•]/).map(p => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return parts[0] || "";
+  const domainStem = cleanDomainStem(domain);
+  let bestPart = parts[0];
+  let bestScore = -999;
+  for (let part of parts) {
+    const cleanedPart = part.replace(/^(?:welcome\s+to\s+|welcome\s*[-–—|:•]\s*)/i, "").trim();
+    if (/^(?:home(\s+page)?|welcome|about(\s+us)?|contact(\s+us)?|index|official\s*website)$/i.test(cleanedPart)) continue;
+    const candidate = cleanedPart || part;
+    const s = scoreTitleSegment(candidate, domainStem, logoText, ogSiteName);
+    if (s > bestScore) {
+      bestScore = s;
+      bestPart = candidate;
+    }
+  }
+  return bestPart;
+}
+
+/**
+ * Infers business type from website text and structural signals.
+ * Never defaults blindly to Manufacturer.
+ */
+function inferBusinessTypeFromEvidence(corpus, html = "") {
+  if (!corpus && !html) return "";
+  const text = (corpus + " " + html).toLowerCase();
+
+  const scores = {
+    "Manufacturer": 0,
+    "Supplier": 0,
+    "Distributer": 0,
+    "Wholesaler": 0,
+    "Exporter": 0,
+    "Trader": 0,
+    "Industrial Services": 0
+  };
+
+  // 1. Manufacturer signals
+  if (/\b(?:we\s+manufacture|our\s+factory|our\s+plant|production\s+facility|manufacturing\s+facility|oem\s*\/\s*odm|oem|odm|fabricated\s+in|custom\s+fabrication|die\s+casting|injection\s+molding|cnc\s+machining|assembly\s+line)\b/i.test(text)) scores["Manufacturer"] += 15;
+  const mMatches = text.match(/\b(?:manufacturer|manufacturing|manufacture|fabricator|fabrication|producers?)\b/g);
+  if (mMatches) scores["Manufacturer"] += mMatches.length * 3;
+
+  // 2. Industrial Services signals
+  if (/\b(?:industrial\s+services?|machining\s+services?|engineering\s+services?|surface\s+treatment|heat\s+treatment|calibration\s+services?|maintenance\s+and\s+repair|fabrication\s+services?|contract\s+manufacturing)\b/i.test(text)) scores["Industrial Services"] += 15;
+
+  // 3. Supplier signals
+  if (/\b(?:leading\s+supplier|we\s+supply|product\s+supplier|stockist\s+and\s+supplier|supplying\s+quality|lumber\s*(?:yard|company|dealer)?|building\s*materials|construction\s*supplies|timber\s*merchant|hardware\s*supplies)\b/i.test(text)) scores["Supplier"] += 12;
+  const sMatches = text.match(/\b(?:supplier|suppliers|supplying|stockist|stockists|dealers?|lumberyard|lumber)\b/g);
+  if (sMatches) scores["Supplier"] += sMatches.length * 3;
+
+  // 4. Distributer signals
+  if (/\b(?:authorized\s+distributor|authorised\s+distributor|master\s+distributor|official\s+distributor|distribution\s+network)\b/i.test(text)) scores["Distributer"] += 15;
+  const dMatches = text.match(/\b(?:distributor|distributer|distributors|distributers|distribution)\b/g);
+  if (dMatches) scores["Distributer"] += dMatches.length * 3;
+
+  // 5. Wholesaler signals
+  if (/\b(?:trade\s+only|wholesale\s+prices?|bulk\s+orders?|wholesale\s+supply|wholesalers?)\b/i.test(text)) scores["Wholesaler"] += 12;
+  const wMatches = text.match(/\b(?:wholesaler|wholesalers|wholesale)\b/g);
+  if (wMatches) scores["Wholesaler"] += wMatches.length * 3;
+
+  // 6. Exporter signals
+  if (/\b(?:export\s+to|worldwide\s+exporter|exporting\s+to|global\s+export)\b/i.test(text)) scores["Exporter"] += 12;
+  const eMatches = text.match(/\b(?:exporter|exporters|exporting)\b/g);
+  if (eMatches) scores["Exporter"] += eMatches.length * 3;
+
+  // 7. Trader signals
+  if (/\b(?:general\s+trading|import\s+and\s+export|import\s*\/\s*export|trading\s+co(?:mpany)?)\b/i.test(text)) scores["Trader"] += 12;
+  const tMatches = text.match(/\b(?:trader|traders|trading)\b/g);
+  if (tMatches) scores["Trader"] += tMatches.length * 3;
+
+  let bestType = "";
+  let maxScore = 0;
+  for (const [type, score] of Object.entries(scores)) {
+    if (score > maxScore) {
+      maxScore = score;
+      bestType = type;
+    }
+  }
+
+  if (maxScore === 0) {
+    if (/\b(?:factory|plant|works)\b/i.test(text)) return "Manufacturer";
+    return "";
+  }
+
+  return bestType;
+}
+
+/**
+ * Deterministic fallback extraction.
+ */
+function heuristicExtraction(crawlData, restrictedCheck) {
+  const text = crawlData.combinedText;
+
+  let companyName = "";
+  if (crawlData.copyrightText && (hasCompleteLegalSuffix(crawlData.copyrightText) || /\b(ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|co\.?)\b/i.test(crawlData.copyrightText))) {
+    companyName = crawlData.copyrightText;
+  }
+  if (!companyName && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0) {
+    const domainStem = cleanDomainStem(crawlData.originalUrl || crawlData.finalUrl);
+    for (const cand of crawlData.legalCompanyCandidates) {
+      if (hasCompleteLegalSuffix(cand)) {
+        const cStem = cleanDomainStem(cand.replace(/\b(?:pty|ltd|limited|proprietary|inc|llc|corp|co)\b/gi, ""));
+        if (cStem && (cStem === domainStem || cStem.includes(domainStem) || domainStem.includes(cStem))) {
+          companyName = cand;
+          break;
+        }
+      }
+    }
+  }
+  if (!companyName && crawlData.logoText && !isSeoSloganOrTagline(crawlData.logoText)) {
+    companyName = crawlData.logoText;
+  }
+  if (!companyName && crawlData.title) {
+    companyName = extractBestBrandFromTitle(crawlData.title, crawlData.originalUrl || crawlData.finalUrl, crawlData.logoText, crawlData.ogSiteName);
+  }
+  if (!companyName) {
+    companyName = "";
+  }
+
+  const topCandidate = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
+    ? crawlData.addressCandidates[0]
+    : null;
+  let address = topCandidate
+    ? (typeof topCandidate === "object" ? topCandidate.raw : topCandidate)
+    : extractLikelyAddress(crawlData.contactPageText || crawlData.footerText || text);
+
+  let country = detectCountryFromAddress(address);
+  if (/^(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)$/i.test((country || "").trim())) {
+    country = "United Kingdom";
+  }
+
+  if (address) {
+    address = address.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
+    address = address.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
+    address = expandAddressAndStateAbbreviations(address, country);
+  }
+  const emailId = crawlData.emails.length > 0 ? stripTrailingContactWordsFromEmail(crawlData.emails[0]) : "";
+  let targetDomain = "";
+  try {
+    targetDomain = new URL(crawlData.originalUrl || crawlData.url).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch (e) { }
+  const primHost = emailId ? (emailId.split("@")[1] || "").toLowerCase() : "";
+  const secCandidate = crawlData.emails.map(e => stripTrailingContactWordsFromEmail(e)).find(e => {
+    if (!e || e === emailId || !isValidCorporateEmail(e) || isUnwantedEmail(e)) return false;
+    const h = (e.split("@")[1] || "").toLowerCase();
+    if (!h) return false;
+    if (primHost && (h === primHost || h.endsWith("." + primHost) || primHost.endsWith("." + h))) return true;
+    if (targetDomain && (h === targetDomain || h.endsWith("." + targetDomain))) return true;
+    return false;
+  });
+  const secondaryEmailId = (secCandidate && secCandidate !== emailId) ? secCandidate : "";
+  const phoneNumber = crawlData.phones.length > 0 ? crawlData.phones[0] : "";
+
+  // Own-crawl product count (never uses Gemini; all 3 product fields stay identical)
+  const ownProdCount = computeOwnCrawlProductCount(crawlData);
+  const prodCount = ownProdCount;
+  const imgCount = ownProdCount;
+  const descCount = ownProdCount;
+
+  const hasState = address && hasStateInAddress(address, country);
+  const hasCity = address && hasCityInAddress(address, country);
+
+  const inferredBusiness = restrictedCheck.isRestricted
+    ? "Restricted Site"
+    : inferBusinessTypeFromEvidence(text, crawlData.mainHtml || "");
+
+  const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
+  let websiteStatus = (shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working");
+
+  // Rule 1: If website has 0 products and no address or no verifiable contact information, mark Not Working!
+  const hasContactEvidence = !!(address || emailId || phoneNumber);
+  const isZeroProdUnverifiable = (!address && prodCount === "0") || (!hasContactEvidence && prodCount === "0");
+  if (isZeroProdUnverifiable) {
+    websiteStatus = "Not Working";
+  }
+
+  // CRITICAL RULE: "Notworking means all empty"
+  if (websiteStatus === "Not Working") {
+    const isZeroProdReason = isZeroProdUnverifiable;
+    const reasonMsg = isZeroProdReason
+      ? "Website has 0 products and no verifiable catalog or physical address (Rule 1)."
+      : (crawlData.fetchError || "Website has no verifiable business products, physical address, or services.");
+
+    return {
+      websiteStatus: "Not Working",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      errorCategory: isZeroProdReason ? "No Business Products / 0 Products" : (crawlData.fetchError ? "Unreachable / Timeout" : "No Business Content"),
+      errorKeyword: isZeroProdReason ? "0 Products / No Catalog" : (crawlData.fetchError ? "Connection Failed" : "No Verifiable Content"),
+      errorSourceUrl: crawlData.finalUrl || crawlData.originalUrl || "",
+      errorSnippet: reasonMsg,
+      notWorkingReason: reasonMsg,
+      isRestricted: restrictedCheck.isRestricted,
+      restrictedReason: restrictedCheck.matchedKeyword,
+      isShopCartSite: !!(shopCartCheck && shopCartCheck.detected),
+      shopCartReason: (shopCartCheck && shopCartCheck.reason) || ""
+    };
+  }
+
+  return {
+    websiteStatus: websiteStatus,
+    businessType: inferredBusiness,
+    companyProfile: crawlData.hasCompanyProfile ? "Available" : "Not Available",
+    companyName: companyName,
+    countryName: normalizeCountryName(country),
+    companyAddress: address,
+    state: hasState ? "Available" : "Not Available",
+    city: hasCity ? "Available" : "Not Available",
+    emailId: emailId,
+    secondaryEmailId: secondaryEmailId,
+    phoneNumber: phoneNumber,
+    numberOfProducts: prodCount,
+    productImages: imgCount,
+    numberOfProductDescriptions: descCount,
+    isRestricted: restrictedCheck.isRestricted,
+    restrictedReason: restrictedCheck.matchedKeyword,
+    isShopCartSite: !!(shopCartCheck && shopCartCheck.detected),
+    shopCartReason: (shopCartCheck && shopCartCheck.reason) || ""
+  };
+}
+
+/**
+ * Identifies whether a company sells, supplies, fabricates, fits, or distributes physical products / manufactured goods
+ * (e.g. windows, doors, conservatories, glass, building materials, construction products, hardware, tools, packaging, metals, plastics, machinery).
+ * These are valid "Supplier" or "Manufacturer" companies and MUST be treated as Working sites, never as disallowed consumer service providers.
+ */
+function checkPhysicalProductSupplier(crawlData, result) {
+  if (!crawlData) return false;
+  const combined = (
+    (crawlData.mainHtml || "") + " " +
+    (crawlData.bodyText || "") + " " +
+    (crawlData.profilePageText || "") + " " +
+    (crawlData.contactHtml || "") + " " +
+    (crawlData.title || "")
+  ).toLowerCase();
+
+  // Physical goods / tangible products markers
+  const productMarkers = /\b(?:windows|doors|conservatories|orangeries|glazing|double\s*glazing|roof\s*lanterns|shutters|blinds|fencing|gates|railings|cladding|timber|lumber|wood|plywood|decking|mouldings?|trim|siding|roofing|insulation|drywall|upvc|aluminium|glass|tiles|flooring|cabinets|countertops|machinery|equipment|tools|hardware|valves|pumps|pipes|fittings|fasteners|bearings|cables|wiring|packaging|plastics|textiles|steel|sheet\s*metal|fabrication|building\s*materials|construction\s*supplies|industrial\s*supplies)\b/i;
+
+  // Supplier / manufacturer / distributor operational markers
+  const supplierMarkers = /\b(?:supplier|suppliers|supplying|supply\s+and\s+(?:fit|install)|fabricator|fabricators|distributor|distributer|distributors|wholesaler|wholesalers|manufacturers?|stockists?|our\s+products|product\s+range|brochure|products\s+we\s+supply|dealers?|yard|lumberyard|building\s*materials|materials\s*we|we\s*carry|inventory|stocking|browse\s*around)\b/i;
+
+  // Pure non-goods consumer services exclusions (restaurants, salons, legal, accounting, marketing, real estate, hotels)
+  const isPureConsumerService = /\b(?:restaurant|cafe|coffee\s*shop|bistro|barber|hair\s*salon|nail\s*salon|spa|massage|tattoo|dentist|veterinary|legal\s*advice|law\s*firm|solicitors?|accountants?|bookkeeping|marketing\s*agency|seo\s*agency|real\s*estate\s*agency|estate\s*agents?|property\s*rental|hotel|motel)\b/i.test(combined);
+
+  if (productMarkers.test(combined) && supplierMarkers.test(combined) && !isPureConsumerService) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Determines the source URL where the official company name was discovered.
+ * Prioritizes legal candidates / exact legal suffix matches on Home, About Us, and Contact pages
+ * over repeating headers/footers or low-quality terms/privacy/policy/faq pages.
+ */
+
+async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
+  const selected = modelName || DEFAULT_MODEL;
+  const modelsToTry = Array.from(new Set([
+    selected,
+    ...GEMINI_MODELS
+  ])).filter(Boolean).slice(0, 2);
+
+  let lastError = null;
+
+  for (const model of modelsToTry) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const reqHeaders = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey
+      };
+      const abortCtrl = new AbortController();
+      const abortTimer = setTimeout(() => abortCtrl.abort(), 4000);
+      let res;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: reqHeaders,
+          signal: abortCtrl.signal,
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: "Hello! Reply with 'OK'" }] }]
+          })
+        });
+      } finally {
+        clearTimeout(abortTimer);
+      }
+      if (res.ok) {
+        return { success: true, message: `Connected successfully with Gemini (${model})!`, activeModel: model };
+      }
+      const err = await res.text();
+      lastError = `API HTTP ${res.status}: ${err}`;
+      if (res.status === 401) {
+        break; // Key invalid, no other model will succeed
+      }
+    } catch (e) {
+      lastError = e.message;
+    }
+  }
+
+  return { success: false, error: lastError || "Failed to connect with any Gemini model" };
+}
+
