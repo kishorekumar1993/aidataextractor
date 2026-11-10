@@ -4444,7 +4444,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     countryName: {
       type: "STRING",
-      description: "Standardized official English country name (e.g. United States, United Kingdom, Germany, Spain, Italy, Netherlands, Austria, Switzerland, Croatia, Türkiye, United Arab Emirates, South Korea, Taiwan, China, Bahrain, Oman, Czech Republic, Brunei Darussalam, France, Australia, Canada, India, Indonesia, Japan, Malaysia, Singapore, New Zealand, South Africa, Mexico, Brazil, Poland, etc.). MANDATORY STANDARDIZATION: USA -> United States, UK -> United Kingdom, UAE -> United Arab Emirates, Deutschland -> Germany, España -> Spain, Italia -> Italy, Nederland -> Netherlands, Österreich -> Austria, Schweiz -> Switzerland, Hrvatska -> Croatia, Turkey/Turkiye -> Türkiye, Republic of Korea -> South Korea, Republic of China -> Taiwan, Peoples Republic of China -> China, Kingdom of Bahrain -> Bahrain, Sultanate of Oman -> Oman, Czechia -> Czech Republic, Brunei -> Brunei Darussalam. Never return a city, state, continent, or blank if working; infer from social media or address locality if omitted. Empty string \"\" if websiteStatus is not Working."
+      description: "Standardized full expanded English country name (e.g. United States Of America, United Kingdom, Germany, Spain, Italy, Netherlands, Austria, Switzerland, Croatia, Türkiye, United Arab Emirates, South Korea, Taiwan, China, Bahrain, Oman, Czech Republic, Brunei Darussalam, Papua New Guinea, Dominican Republic, Trinidad and Tobago, Saint Lucia, France, Australia, Canada, India, Indonesia, Japan, Malaysia, Singapore, New Zealand, South Africa, Mexico, Brazil, Poland, etc.). MANDATORY FULL EXPANSION: USA/US/United States -> United States Of America, UK/GB -> United Kingdom, UAE -> United Arab Emirates, KSA -> Saudi Arabia, PNG -> Papua New Guinea, DR -> Dominican Republic, HK -> Hong Kong, NZ -> New Zealand, Deutschland -> Germany, España -> Spain, Italia -> Italy, Nederland -> Netherlands, Österreich -> Austria, Schweiz -> Switzerland, Hrvatska -> Croatia, Turkey/Turkiye -> Türkiye, Republic of Korea -> South Korea, Republic of China -> Taiwan, Peoples Republic of China -> China, Kingdom of Bahrain -> Bahrain, Sultanate of Oman -> Oman, Czechia -> Czech Republic, Brunei -> Brunei Darussalam, St. Lucia -> Saint Lucia. Never return a city, state, continent, abbreviation, or blank if working; infer from social media or address locality if omitted. Empty string \"\" if websiteStatus is not Working."
     },
     companyAddress: {
       type: "STRING",
@@ -4553,15 +4553,16 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
 - Format in Title Case where EVERY word starts with a capital letter (keep brand acronyms like PEM, BMW in UPPERCASE). Remove special characters at start/end.
 - Preserve comma before corporate suffix if standard or present on website (e.g. "ECU Testing, Limited", "Mocap, Limited Liability Company").
 
-5. COUNTRY NAME (CRITICAL QC RULE - SUPPORT ALL 135+ COUNTRIES GLOBALLY):
-- Output the standardized official English country name (NEVER return a city, state, continent, email, or local-language country name).
-- MANDATORY QC STANDARDIZATION:
-  * USA / U.S.A. / United States of America -> "United States"
-  * UK / Great Britain / England -> "United Kingdom" (or constituent country ONLY if explicitly required when UK omitted)
-  * UAE -> "United Arab Emirates" | Czechia -> "Czech Republic" | Brunei -> "Brunei Darussalam"
+5. COUNTRY NAME (CRITICAL QC RULE - SUPPORT ALL 135+ COUNTRIES GLOBALLY WITH FULL NAME EXPANSION):
+- ALWAYS output the full expanded original English country name (NEVER return an abbreviation like USA/UK/UAE/KSA/PNG/NZ/HK, a city, state, continent, email, or local-language name).
+- MANDATORY QC FULL EXPANSION & STANDARDIZATION:
+  * USA / U.S.A. / US / United States -> "United States Of America"
+  * UK / Great Britain / Britain -> "United Kingdom" (or constituent country ONLY if explicitly stated when UK omitted)
+  * UAE / U.A.E. -> "United Arab Emirates" | KSA -> "Saudi Arabia" | PNG -> "Papua New Guinea" | DR -> "Dominican Republic" | HK -> "Hong Kong" | NZ -> "New Zealand" | ZA / RSA -> "South Africa"
+  * Czechia / CZ -> "Czech Republic" | Brunei -> "Brunei Darussalam" | St. Lucia -> "Saint Lucia" | T&T -> "Trinidad and Tobago"
   * Deutschland -> "Germany" | España -> "Spain" | Italia -> "Italy" | Nederland -> "Netherlands" | Österreich -> "Austria" | Schweiz -> "Switzerland" | Hrvatska -> "Croatia"
-  * Türkiye / Turkiye / Turkey -> "Türkiye" | Republic of Korea -> "South Korea" | Republic of China -> "Taiwan" | Peoples Republic of China -> "China" | Kingdom of Bahrain -> "Bahrain" | Sultanate of Oman -> "Oman"
-- Use standard English names for ALL countries globally (Afghanistan, Albania, Algeria, Andorra, Angola, Argentina, Armenia, Australia, Austria, Azerbaijan, Bahamas, Bahrain, Bangladesh, Barbados, Belarus, Belgium, Belize, Bhutan, Bolivia, Botswana, Brazil, Brunei Darussalam, Bulgaria, Cambodia, Canada, Cayman Islands, China, Colombia, Costa Rica, Croatia, Cyprus, Czech Republic, Denmark, Dominican Republic, Egypt, Estonia, Ethiopia, Fiji, Finland, France, Germany, Ghana, Greece, Greenland, Guatemala, Guyana, Hong Kong, Hungary, Iceland, India, Indonesia, Iran, Iraq, Ireland, Israel, Italy, Jamaica, Japan, Jordan, Kazakhstan, Kenya, Kuwait, Latvia, Lebanon, Liechtenstein, Lithuania, Luxembourg, Madagascar, Malaysia, Maldives, Malta, Mauritius, Mexico, Moldova, Mongolia, Morocco, Mozambique, Myanmar, Namibia, Nepal, Netherlands, New Zealand, Nicaragua, Nigeria, North Korea, North Macedonia, Norway, Oman, Pakistan, Panama, Papua New Guinea, Paraguay, Peru, Philippines, Poland, Portugal, Qatar, Romania, Russia, Rwanda, Saint Lucia, Samoa, Saudi Arabia, Serbia, Seychelles, Sierra Leone, Singapore, Slovakia, Slovenia, South Africa, South Korea, Spain, Sri Lanka, Sudan, Suriname, Sweden, Switzerland, Syria, Taiwan, Tanzania, Thailand, Trinidad and Tobago, Tunisia, Türkiye, Uganda, Ukraine, United Arab Emirates, United Kingdom, United States, Uruguay, Uzbekistan, Vanuatu, Vietnam, Zambia, Zimbabwe).
+  * Türkiye / Turkiye / Turkey -> "Türkiye" | Republic of Korea / ROK -> "South Korea" | DPRK -> "North Korea" | Republic of China / ROC -> "Taiwan" | Peoples Republic of China / PRC -> "China" | Kingdom of Bahrain -> "Bahrain" | Sultanate of Oman -> "Oman"
+- Use standard full English names for ALL countries globally (Afghanistan, Albania, Algeria, Andorra, Angola, Argentina, Armenia, Australia, Austria, Azerbaijan, Bahamas, Bahrain, Bangladesh, Barbados, Belarus, Belgium, Belize, Bhutan, Bolivia, Botswana, Brazil, Brunei Darussalam, Bulgaria, Cambodia, Canada, Cayman Islands, China, Colombia, Costa Rica, Croatia, Cyprus, Czech Republic, Denmark, Dominican Republic, Egypt, Estonia, Ethiopia, Fiji, Finland, France, Germany, Ghana, Greece, Greenland, Guatemala, Guyana, Hong Kong, Hungary, Iceland, India, Indonesia, Iran, Iraq, Ireland, Israel, Italy, Jamaica, Japan, Jordan, Kazakhstan, Kenya, Kuwait, Latvia, Lebanon, Liechtenstein, Lithuania, Luxembourg, Madagascar, Malaysia, Maldives, Malta, Mauritius, Mexico, Moldova, Mongolia, Morocco, Mozambique, Myanmar, Namibia, Nepal, Netherlands, New Zealand, Nicaragua, Nigeria, North Korea, North Macedonia, Norway, Oman, Pakistan, Panama, Papua New Guinea, Paraguay, Peru, Philippines, Poland, Portugal, Qatar, Romania, Russia, Rwanda, Saint Lucia, Samoa, Saudi Arabia, Serbia, Seychelles, Sierra Leone, Singapore, Slovakia, Slovenia, South Africa, South Korea, Spain, Sri Lanka, Sudan, Suriname, Sweden, Switzerland, Syria, Taiwan, Tanzania, Thailand, Trinidad and Tobago, Tunisia, Türkiye, Uganda, Ukraine, United Arab Emirates, United Kingdom, United States Of America, Uruguay, Uzbekistan, Vanuatu, Vietnam, Zambia, Zimbabwe).
 - If omitted on website, infer country from social media or address city/state/postcode globally.
 
 6. COMPANY ADDRESS (CRITICAL QC MANDATE):
@@ -10274,9 +10275,9 @@ function decodeHtmlEntities(str) {
 }
 
 /**
- * Standardizes country names globally per official QC dataset (135 valid countries).
- * E.g., "Czechia" -> "Czech Republic", "Turkey/Turkiye" -> "Türkiye", "USA" -> "United States",
- * "Deutschland" -> "Germany", "Hrvatska" -> "Croatia", "Brunei" -> "Brunei Darussalam"
+ * Standardizes country names globally with full expanded official names (135 valid countries).
+ * E.g., "USA"/"United States" -> "United States Of America", "Czechia" -> "Czech Republic",
+ * "Turkey/Turkiye" -> "Türkiye", "Deutschland" -> "Germany", "Hrvatska" -> "Croatia", "Brunei" -> "Brunei Darussalam"
  */
 function normalizeCountryName(country) {
   if (!country || typeof country !== "string") return "";
@@ -10287,18 +10288,18 @@ function normalizeCountryName(country) {
   const unaccented = lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
   // 1. Czech Republic (#32 in QC Valid List)
-  if (/\b(?:czech\s*republic|ceska\s*republika|cesko|czechia)\b/i.test(unaccented) || /^czech(?:ia)?$/i.test(unaccented)) {
+  if (/\b(?:czech\s*republic|ceska\s*republika|cesko|czechia)\b/i.test(unaccented) || /^(?:cz|cze|czech(?:ia)?)$/i.test(unaccented)) {
     return "Czech Republic";
   }
 
   // 2. Turkey / Turkiye -> Türkiye (#124 in QC Valid List & Table)
-  if (/\b(?:turkey|turkiye|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented)) {
+  if (/\b(?:turkey|turkiye|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented) || /^(?:tr|tur)$/i.test(unaccented)) {
     return "Türkiye";
   }
 
-  // 3. United States (#129 in QC Valid List & Table: USA -> United States)
+  // 3. USA / United States -> United States Of America (#129 full expansion)
   if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?|the\s*united\s*states)$/i.test(unaccented) || /\bunited\s*states(?:\s*of\s*america)?\b/i.test(unaccented)) {
-    return "United States";
+    return "United States Of America";
   }
 
   // 4. People's Republic of China -> China vs Republic of China -> Taiwan
@@ -10588,34 +10589,97 @@ function normalizeCountryName(country) {
   }
 
   // 59. Trinidad and Tobago (preserve exact lowercase "and" per valid country table)
-  if (/\b(?:trinidad\s*and\s*tobago)\b/i.test(unaccented) || /^(?:tt|tto)$/i.test(unaccented)) {
+  if (/\b(?:trinidad\s*(?:and|&)\s*tobago)\b/i.test(unaccented) || /^(?:tt|tto|t&t|t\s*&\s*t)$/i.test(unaccented)) {
     return "Trinidad and Tobago";
   }
 
-  // 60. Full map of all remaining countries from 135-country valid list
+  // 60. Full map of all remaining countries & abbreviations from 135-country valid list
   const exactCountryMap = {
-    "afghanistan": "Afghanistan", "albania": "Albania", "algeria": "Algeria", "andorra": "Andorra",
-    "angola": "Angola", "argentina": "Argentina", "armenia": "Armenia", "azerbaijan": "Azerbaijan",
-    "bahamas": "Bahamas", "bangladesh": "Bangladesh", "barbados": "Barbados", "belarus": "Belarus",
-    "belize": "Belize", "bhutan": "Bhutan", "botswana": "Botswana", "bulgaria": "Bulgaria",
-    "cambodia": "Cambodia", "cayman islands": "Cayman Islands", "colombia": "Colombia",
-    "costa rica": "Costa Rica", "cyprus": "Cyprus", "dominican republic": "Dominican Republic",
-    "egypt": "Egypt", "estonia": "Estonia", "ethiopia": "Ethiopia", "fiji": "Fiji",
-    "ghana": "Ghana", "greenland": "Greenland", "guatemala": "Guatemala", "guyana": "Guyana",
-    "hungary": "Hungary", "magyarorszag": "Hungary", "iceland": "Iceland", "iraq": "Iraq",
-    "israel": "Israel", "jamaica": "Jamaica", "jordan": "Jordan", "kazakhstan": "Kazakhstan",
-    "kenya": "Kenya", "kuwait": "Kuwait", "latvia": "Latvia", "lebanon": "Lebanon",
-    "liechtenstein": "Liechtenstein", "lithuania": "Lithuania", "luxembourg": "Luxembourg",
-    "madagascar": "Madagascar", "maldives": "Maldives", "malta": "Malta", "mauritius": "Mauritius",
-    "mongolia": "Mongolia", "morocco": "Morocco", "maroc": "Morocco", "mozambique": "Mozambique",
-    "namibia": "Namibia", "nepal": "Nepal", "nicaragua": "Nicaragua", "nigeria": "Nigeria",
-    "norway": "Norway", "pakistan": "Pakistan", "panama": "Panama", "papua new guinea": "Papua New Guinea",
-    "paraguay": "Paraguay", "peru": "Peru", "qatar": "Qatar", "romania": "Romania",
-    "rwanda": "Rwanda", "saint lucia": "Saint Lucia", "samoa": "Samoa", "serbia": "Serbia",
-    "seychelles": "Seychelles", "sierra leone": "Sierra Leone", "slovakia": "Slovakia",
-    "slovenia": "Slovenia", "sri lanka": "Sri Lanka", "sudan": "Sudan", "suriname": "Suriname",
-    "tunisia": "Tunisia", "uganda": "Uganda", "ukraine": "Ukraine", "uruguay": "Uruguay",
-    "uzbekistan": "Uzbekistan", "vanuatu": "Vanuatu", "zambia": "Zambia", "zimbabwe": "Zimbabwe"
+    "afghanistan": "Afghanistan", "af": "Afghanistan", "afg": "Afghanistan",
+    "albania": "Albania", "shqiperia": "Albania", "al": "Albania", "alb": "Albania",
+    "algeria": "Algeria", "algerie": "Algeria", "dz": "Algeria", "dza": "Algeria",
+    "andorra": "Andorra", "ad": "Andorra", "and": "Andorra",
+    "angola": "Angola", "ao": "Angola", "ago": "Angola",
+    "argentina": "Argentina", "ar": "Argentina", "arg": "Argentina",
+    "armenia": "Armenia", "am": "Armenia", "arm": "Armenia",
+    "azerbaijan": "Azerbaijan", "az": "Azerbaijan", "aze": "Azerbaijan",
+    "bahamas": "Bahamas", "the bahamas": "Bahamas", "bs": "Bahamas", "bhs": "Bahamas",
+    "bangladesh": "Bangladesh", "bd": "Bangladesh", "bgd": "Bangladesh",
+    "barbados": "Barbados", "bb": "Barbados", "brb": "Barbados",
+    "belarus": "Belarus", "by": "Belarus", "blr": "Belarus",
+    "belize": "Belize", "bz": "Belize", "blz": "Belize",
+    "bhutan": "Bhutan", "bt": "Bhutan", "btn": "Bhutan",
+    "botswana": "Botswana", "bw": "Botswana", "bwa": "Botswana",
+    "bulgaria": "Bulgaria", "bg": "Bulgaria", "bgr": "Bulgaria",
+    "cambodia": "Cambodia", "kh": "Cambodia", "khm": "Cambodia",
+    "cayman islands": "Cayman Islands", "ky": "Cayman Islands", "cym": "Cayman Islands",
+    "colombia": "Colombia", "co": "Colombia", "col": "Colombia",
+    "costa rica": "Costa Rica", "cr": "Costa Rica", "cri": "Costa Rica",
+    "cyprus": "Cyprus", "cy": "Cyprus", "cyp": "Cyprus",
+    "dominican republic": "Dominican Republic", "dom rep": "Dominican Republic", "dr": "Dominican Republic", "do": "Dominican Republic", "dom": "Dominican Republic",
+    "egypt": "Egypt", "eg": "Egypt", "egy": "Egypt",
+    "estonia": "Estonia", "eesti": "Estonia", "ee": "Estonia", "est": "Estonia",
+    "ethiopia": "Ethiopia", "et": "Ethiopia", "eth": "Ethiopia",
+    "fiji": "Fiji", "fj": "Fiji", "fji": "Fiji",
+    "ghana": "Ghana", "gh": "Ghana", "gha": "Ghana",
+    "greenland": "Greenland", "kalaallit nunaat": "Greenland", "gl": "Greenland", "grl": "Greenland",
+    "guatemala": "Guatemala", "gt": "Guatemala", "gtm": "Guatemala",
+    "guyana": "Guyana", "gy": "Guyana", "guy": "Guyana",
+    "hungary": "Hungary", "magyarorszag": "Hungary", "hu": "Hungary", "hun": "Hungary",
+    "iceland": "Iceland", "island": "Iceland", "is": "Iceland", "isl": "Iceland",
+    "iraq": "Iraq", "iq": "Iraq", "irq": "Iraq",
+    "israel": "Israel", "il": "Israel", "isr": "Israel",
+    "jamaica": "Jamaica", "jm": "Jamaica", "jam": "Jamaica",
+    "jordan": "Jordan", "jo": "Jordan", "jor": "Jordan",
+    "kazakhstan": "Kazakhstan", "kz": "Kazakhstan", "kaz": "Kazakhstan",
+    "kenya": "Kenya", "ke": "Kenya", "ken": "Kenya",
+    "kuwait": "Kuwait", "kw": "Kuwait", "kwt": "Kuwait",
+    "latvia": "Latvia", "latvija": "Latvia", "lv": "Latvia", "lva": "Latvia",
+    "lebanon": "Lebanon", "liban": "Lebanon", "lb": "Lebanon", "lbn": "Lebanon",
+    "liechtenstein": "Liechtenstein", "li": "Liechtenstein", "lie": "Liechtenstein",
+    "lithuania": "Lithuania", "lietuva": "Lithuania", "lt": "Lithuania", "ltu": "Lithuania",
+    "luxembourg": "Luxembourg", "luxemburg": "Luxembourg", "lu": "Luxembourg", "lux": "Luxembourg",
+    "madagascar": "Madagascar", "mg": "Madagascar", "mdg": "Madagascar",
+    "maldives": "Maldives", "mv": "Maldives", "mdv": "Maldives",
+    "malta": "Malta", "mt": "Malta", "mlt": "Malta",
+    "mauritius": "Mauritius", "mu": "Mauritius", "mus": "Mauritius",
+    "mongolia": "Mongolia", "mn": "Mongolia", "mng": "Mongolia",
+    "morocco": "Morocco", "maroc": "Morocco", "ma": "Morocco", "mar": "Morocco",
+    "mozambique": "Mozambique", "mocambique": "Mozambique", "mz": "Mozambique", "moz": "Mozambique",
+    "namibia": "Namibia", "na": "Namibia", "nam": "Namibia",
+    "nepal": "Nepal", "np": "Nepal", "npl": "Nepal",
+    "nicaragua": "Nicaragua", "ni": "Nicaragua", "nic": "Nicaragua",
+    "nigeria": "Nigeria", "ng": "Nigeria", "nga": "Nigeria",
+    "norway": "Norway", "no": "Norway", "nor": "Norway",
+    "pakistan": "Pakistan", "pk": "Pakistan", "pak": "Pakistan",
+    "panama": "Panama", "pa": "Panama", "pan": "Panama",
+    "papua new guinea": "Papua New Guinea", "png": "Papua New Guinea", "pg": "Papua New Guinea",
+    "paraguay": "Paraguay", "py": "Paraguay", "pry": "Paraguay",
+    "peru": "Peru", "pe": "Peru", "per": "Peru",
+    "qatar": "Qatar", "qa": "Qatar", "qat": "Qatar",
+    "romania": "Romania", "ro": "Romania", "rou": "Romania",
+    "rwanda": "Rwanda", "rw": "Rwanda", "rwa": "Rwanda",
+    "saint lucia": "Saint Lucia", "st lucia": "Saint Lucia", "st. lucia": "Saint Lucia", "lc": "Saint Lucia", "lca": "Saint Lucia",
+    "samoa": "Samoa", "ws": "Samoa", "wsm": "Samoa",
+    "serbia": "Serbia", "srbija": "Serbia", "rs": "Serbia", "srb": "Serbia",
+    "seychelles": "Seychelles", "sc": "Seychelles", "syc": "Seychelles",
+    "sierra leone": "Sierra Leone", "sl": "Sierra Leone", "sle": "Sierra Leone",
+    "slovakia": "Slovakia", "slovensko": "Slovakia", "slovak republic": "Slovakia", "sk": "Slovakia", "svk": "Slovakia",
+    "slovenia": "Slovenia", "slovenija": "Slovenia", "si": "Slovenia", "svn": "Slovenia",
+    "sri lanka": "Sri Lanka", "lk": "Sri Lanka", "lka": "Sri Lanka",
+    "sudan": "Sudan", "sd": "Sudan", "sdn": "Sudan",
+    "suriname": "Suriname", "sr": "Suriname", "sur": "Suriname",
+    "tunisia": "Tunisia", "tunisie": "Tunisia", "tn": "Tunisia", "tun": "Tunisia",
+    "uganda": "Uganda", "ug": "Uganda", "uga": "Uganda",
+    "ukraine": "Ukraine", "ukraina": "Ukraine", "ua": "Ukraine", "ukr": "Ukraine",
+    "uruguay": "Uruguay", "uy": "Uruguay", "ury": "Uruguay",
+    "uzbekistan": "Uzbekistan", "uz": "Uzbekistan", "uzb": "Uzbekistan",
+    "vanuatu": "Vanuatu", "vu": "Vanuatu", "vut": "Vanuatu",
+    "zambia": "Zambia", "zm": "Zambia", "zmb": "Zambia",
+    "zimbabwe": "Zimbabwe", "zw": "Zimbabwe", "zwe": "Zimbabwe",
+    "brunei": "Brunei Darussalam", "bn": "Brunei Darussalam", "brn": "Brunei Darussalam",
+    "u.a.e.": "United Arab Emirates", "united arab emirates": "United Arab Emirates",
+    "united states": "United States Of America", "united states of america": "United States Of America"
   };
   const cleanLookup = unaccented.replace(/^(?:republic|kingdom|sultanate|state|federation|commonwealth)\s+of\s+/i, "").trim();
   if (exactCountryMap[unaccented]) return exactCountryMap[unaccented];
@@ -10650,7 +10714,7 @@ function detectCountryFromAddress(address) {
     // Otherwise, if website address literally says United Kingdom / UK, return "United Kingdom"!
     return "United Kingdom";
   }
-  if (/\b(united\s*states(?:\s*of\s*america)?|usa|u\.s\.a\.?|u\.s\.?)\b/i.test(lower)) return "United States";
+  if (/\b(united\s*states(?:\s*of\s*america)?|usa|u\.s\.a\.?|u\.s\.?)\b/i.test(lower)) return "United States Of America";
   if (/\b(australia)\b/i.test(lower)) return "Australia";
   if (/\b(canada)\b/i.test(lower)) return "Canada";
   if (/\b(germany|deutschland)\b/i.test(lower)) return "Germany";
@@ -10743,9 +10807,9 @@ function detectCountryFromAddress(address) {
   }
 
   const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
-  if (new RegExp(`(?:^|[,\\s])(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return "United States";
-  if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})\\s*$`, "i").test(lower)) return "United States";
-  if (/\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s*hampshire|new\s*jersey|new\s*mexico|new\s*york|north\s*carolina|north\s*dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s*island|south\s*carolina|south\s*dakota|tennessee|texas|utah|vermont|virginia|washington|west\s*virginia|wisconsin|wyoming|district\s*of\s*columbia)\b/i.test(lower)) return "United States";
+  if (new RegExp(`(?:^|[,\\s])(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return "United States Of America";
+  if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})\\s*$`, "i").test(lower)) return "United States Of America";
+  if (/\b(alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s*hampshire|new\s*jersey|new\s*mexico|new\s*york|north\s*carolina|north\s*dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s*island|south\s*carolina|south\s*dakota|tennessee|texas|utah|vermont|virginia|washington|west\s*virginia|wisconsin|wyoming|district\s*of\s*columbia)\b/i.test(lower)) return "United States Of America";
   if (/\b(?:new\s*south\s*wales|victoria|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|sydney|melbourne|brisbane|perth|adelaide|canberra|hobart|darwin|gold\s*coast|newcastle|wollongong|geelong|cairns|townsville)\b/i.test(lower) ||
     /\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(lower) ||
     /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower)) return "Australia";
@@ -10829,7 +10893,7 @@ function detectCountryFromAddress(address) {
   if (/\b(edinburgh)\b/i.test(lower)) return "Scotland";
   if (/\b(cardiff)\b/i.test(lower)) return "Wales";
   if (/\b(belfast)\b/i.test(lower)) return "Northern Ireland";
-  if (/\b(washington\s*d\.?c\.?)\b/i.test(lower)) return "United States";
+  if (/\b(washington\s*d\.?c\.?)\b/i.test(lower)) return "United States Of America";
   if (/\b(ottawa)\b/i.test(lower)) return "Canada";
   if (/\b(canberra)\b/i.test(lower)) return "Australia";
   if (/\b(berlin)\b/i.test(lower)) return "Germany";

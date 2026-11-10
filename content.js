@@ -1358,9 +1358,9 @@
   }
 
   /**
-   * Standardizes country names globally per official QC mandate.
-   * E.g., "Czechia" -> "Czech Republic", "Turkey/Turkiye" -> "Türkiye", "USA" -> "United States",
-   * "Deutschland" -> "Germany", "España" -> "Spain", "Hrvatska" -> "Croatia"
+   * Standardizes country names globally with full expanded official names.
+   * E.g., "USA"/"United States" -> "United States Of America", "Czechia" -> "Czech Republic",
+   * "Turkey/Turkiye" -> "Türkiye", "Deutschland" -> "Germany", "España" -> "Spain", "Hrvatska" -> "Croatia"
    */
   function normalizeCountryName(country) {
     if (!country || typeof country !== "string") return "";
@@ -1371,18 +1371,18 @@
     const unaccented = lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
     // 1. Czechia -> Czech Republic (#32 in QC Valid List)
-    if (/\b(?:czech\s*republic|ceska\s*republika|cesko|czechia)\b/i.test(unaccented) || /^czech(?:ia)?$/i.test(unaccented)) {
+    if (/\b(?:czech\s*republic|ceska\s*republika|cesko|czechia)\b/i.test(unaccented) || /^(?:cz|cze|czech(?:ia)?)$/i.test(unaccented)) {
       return "Czech Republic";
     }
 
     // 2. Turkey / Turkiye -> Türkiye (#124 in QC Valid List & Table)
-    if (/\b(?:turkey|turkiye|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented)) {
+    if (/\b(?:turkey|turkiye|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented) || /^(?:tr|tur)$/i.test(unaccented)) {
       return "Türkiye";
     }
 
-    // 3. USA -> United States (#129 in QC Valid List & Table)
-    if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?|the\s*united\s*states)$/i.test(unaccented) || /\bunited\s*states\s*of\s*america\b/i.test(unaccented)) {
-      return "United States";
+    // 3. USA / United States -> United States Of America (#129 full expansion)
+    if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?|the\s*united\s*states)$/i.test(unaccented) || /\bunited\s*states(?:\s*of\s*america)?\b/i.test(unaccented)) {
+      return "United States Of America";
     }
 
     // 4. People's Republic of China -> China vs Republic of China -> Taiwan
@@ -1670,7 +1670,7 @@
     if (/\b(?:hong\s*kong|hongkong)\b/i.test(unaccented) || /^(?:hk|hkg)$/i.test(unaccented)) {
       return "Hong Kong";
     }
-    if (/\b(?:trinidad\s*(?:and|&)\s*tobago)\b/i.test(unaccented)) {
+    if (/\b(?:trinidad\s*(?:and|&)\s*tobago)\b/i.test(unaccented) || /^(?:tt|tto|t&t|t\s*&\s*t)$/i.test(unaccented)) {
       return "Trinidad and Tobago";
     }
 
@@ -1679,48 +1679,112 @@
       .replace(/^(?:the\s+)?(?:kingdom|sultanate|principality|grand\s+duchy|commonwealth|state|federation|republic|islamic\s+republic|people['’]?s\s+republic|democratic\s+republic)\s+of\s+/i, "")
       .trim();
 
-    // 57. Canonical map across all 135 QC valid countries
+    // 57. Canonical map across all 135 QC valid countries & abbreviations
     const exactCountryMap = {
-      "afghanistan": "Afghanistan", "albania": "Albania", "algeria": "Algeria", "andorra": "Andorra",
-      "angola": "Angola", "argentina": "Argentina", "armenia": "Armenia", "australia": "Australia",
-      "austria": "Austria", "azerbaijan": "Azerbaijan", "bahamas": "Bahamas", "bahrain": "Bahrain",
-      "bangladesh": "Bangladesh", "barbados": "Barbados", "belarus": "Belarus", "belgium": "Belgium",
-      "belize": "Belize", "bhutan": "Bhutan", "bolivia": "Bolivia", "botswana": "Botswana",
-      "brazil": "Brazil", "brunei": "Brunei Darussalam", "brunei darussalam": "Brunei Darussalam",
-      "bulgaria": "Bulgaria", "cambodia": "Cambodia", "canada": "Canada",
-      "cayman islands": "Cayman Islands", "china": "China", "colombia": "Colombia",
-      "costa rica": "Costa Rica", "croatia": "Croatia", "cyprus": "Cyprus",
+      "afghanistan": "Afghanistan", "af": "Afghanistan", "afg": "Afghanistan",
+      "albania": "Albania", "shqiperia": "Albania", "al": "Albania", "alb": "Albania",
+      "algeria": "Algeria", "algerie": "Algeria", "dz": "Algeria", "dza": "Algeria",
+      "andorra": "Andorra", "ad": "Andorra", "and": "Andorra",
+      "angola": "Angola", "ao": "Angola", "ago": "Angola",
+      "argentina": "Argentina", "ar": "Argentina", "arg": "Argentina",
+      "armenia": "Armenia", "am": "Armenia", "arm": "Armenia",
+      "australia": "Australia",
+      "austria": "Austria",
+      "azerbaijan": "Azerbaijan", "az": "Azerbaijan", "aze": "Azerbaijan",
+      "bahamas": "Bahamas", "the bahamas": "Bahamas", "bs": "Bahamas", "bhs": "Bahamas",
+      "bahrain": "Bahrain",
+      "bangladesh": "Bangladesh", "bd": "Bangladesh", "bgd": "Bangladesh",
+      "barbados": "Barbados", "bb": "Barbados", "brb": "Barbados",
+      "belarus": "Belarus", "by": "Belarus", "blr": "Belarus",
+      "belgium": "Belgium",
+      "belize": "Belize", "bz": "Belize", "blz": "Belize",
+      "bhutan": "Bhutan", "bt": "Bhutan", "btn": "Bhutan",
+      "bolivia": "Bolivia", "bo": "Bolivia", "bol": "Bolivia",
+      "botswana": "Botswana", "bw": "Botswana", "bwa": "Botswana",
+      "brazil": "Brazil",
+      "brunei": "Brunei Darussalam", "brunei darussalam": "Brunei Darussalam", "bn": "Brunei Darussalam", "brn": "Brunei Darussalam",
+      "bulgaria": "Bulgaria", "bg": "Bulgaria", "bgr": "Bulgaria",
+      "cambodia": "Cambodia", "kh": "Cambodia", "khm": "Cambodia",
+      "canada": "Canada",
+      "cayman islands": "Cayman Islands", "ky": "Cayman Islands", "cym": "Cayman Islands",
+      "china": "China", "colombia": "Colombia", "co": "Colombia", "col": "Colombia",
+      "costa rica": "Costa Rica", "cr": "Costa Rica", "cri": "Costa Rica",
+      "croatia": "Croatia", "cyprus": "Cyprus", "cy": "Cyprus", "cyp": "Cyprus",
       "czech republic": "Czech Republic", "czechia": "Czech Republic", "denmark": "Denmark",
-      "dominican republic": "Dominican Republic", "egypt": "Egypt", "estonia": "Estonia",
-      "ethiopia": "Ethiopia", "fiji": "Fiji", "finland": "Finland", "france": "France",
-      "germany": "Germany", "ghana": "Ghana", "greece": "Greece", "greenland": "Greenland",
-      "guatemala": "Guatemala", "guyana": "Guyana", "hong kong": "Hong Kong", "hungary": "Hungary",
-      "iceland": "Iceland", "india": "India", "indonesia": "Indonesia", "iran": "Iran",
-      "iraq": "Iraq", "ireland": "Ireland", "israel": "Israel", "italy": "Italy",
-      "jamaica": "Jamaica", "japan": "Japan", "jordan": "Jordan", "kazakhstan": "Kazakhstan",
-      "kenya": "Kenya", "kuwait": "Kuwait", "latvia": "Latvia", "lebanon": "Lebanon",
-      "liechtenstein": "Liechtenstein", "lithuania": "Lithuania", "luxembourg": "Luxembourg",
-      "madagascar": "Madagascar", "malaysia": "Malaysia", "maldives": "Maldives", "malta": "Malta",
-      "mauritius": "Mauritius", "mexico": "Mexico", "moldova": "Moldova", "mongolia": "Mongolia",
-      "morocco": "Morocco", "mozambique": "Mozambique", "myanmar": "Myanmar", "namibia": "Namibia",
-      "nepal": "Nepal", "netherlands": "Netherlands", "new zealand": "New Zealand",
-      "nicaragua": "Nicaragua", "nigeria": "Nigeria", "north korea": "North Korea",
-      "north macedonia": "North Macedonia", "norway": "Norway", "oman": "Oman",
-      "pakistan": "Pakistan", "panama": "Panama", "papua new guinea": "Papua New Guinea",
-      "paraguay": "Paraguay", "peru": "Peru", "philippines": "Philippines", "poland": "Poland",
-      "portugal": "Portugal", "qatar": "Qatar", "romania": "Romania", "russia": "Russia",
-      "rwanda": "Rwanda", "saint lucia": "Saint Lucia", "st lucia": "Saint Lucia", "samoa": "Samoa",
-      "saudi arabia": "Saudi Arabia", "serbia": "Serbia", "seychelles": "Seychelles",
-      "sierra leone": "Sierra Leone", "singapore": "Singapore", "slovakia": "Slovakia",
-      "slovenia": "Slovenia", "south africa": "South Africa", "south korea": "South Korea",
-      "spain": "Spain", "sri lanka": "Sri Lanka", "sudan": "Sudan", "suriname": "Suriname",
+      "dominican republic": "Dominican Republic", "dom rep": "Dominican Republic", "dr": "Dominican Republic", "do": "Dominican Republic", "dom": "Dominican Republic",
+      "egypt": "Egypt", "eg": "Egypt", "egy": "Egypt",
+      "estonia": "Estonia", "eesti": "Estonia", "ee": "Estonia", "est": "Estonia",
+      "ethiopia": "Ethiopia", "et": "Ethiopia", "eth": "Ethiopia",
+      "fiji": "Fiji", "fj": "Fiji", "fji": "Fiji",
+      "finland": "Finland", "france": "France",
+      "germany": "Germany", "ghana": "Ghana", "gh": "Ghana", "gha": "Ghana",
+      "greece": "Greece", "greenland": "Greenland", "kalaallit nunaat": "Greenland", "gl": "Greenland", "grl": "Greenland",
+      "guatemala": "Guatemala", "gt": "Guatemala", "gtm": "Guatemala",
+      "guyana": "Guyana", "gy": "Guyana", "guy": "Guyana",
+      "hong kong": "Hong Kong", "hungary": "Hungary", "magyarorszag": "Hungary", "hu": "Hungary", "hun": "Hungary",
+      "iceland": "Iceland", "island": "Iceland", "is": "Iceland", "isl": "Iceland",
+      "india": "India", "indonesia": "Indonesia", "iran": "Iran",
+      "iraq": "Iraq", "iq": "Iraq", "irq": "Iraq",
+      "ireland": "Ireland", "israel": "Israel", "il": "Israel", "isr": "Israel", "italy": "Italy",
+      "jamaica": "Jamaica", "jm": "Jamaica", "jam": "Jamaica", "japan": "Japan",
+      "jordan": "Jordan", "jo": "Jordan", "jor": "Jordan",
+      "kazakhstan": "Kazakhstan", "kz": "Kazakhstan", "kaz": "Kazakhstan",
+      "kenya": "Kenya", "ke": "Kenya", "ken": "Kenya",
+      "kuwait": "Kuwait", "kw": "Kuwait", "kwt": "Kuwait",
+      "latvia": "Latvia", "latvija": "Latvia", "lv": "Latvia", "lva": "Latvia",
+      "lebanon": "Lebanon", "liban": "Lebanon", "lb": "Lebanon", "lbn": "Lebanon",
+      "liechtenstein": "Liechtenstein", "li": "Liechtenstein", "lie": "Liechtenstein",
+      "lithuania": "Lithuania", "lietuva": "Lithuania", "lt": "Lithuania", "ltu": "Lithuania",
+      "luxembourg": "Luxembourg", "luxemburg": "Luxembourg", "lu": "Luxembourg", "lux": "Luxembourg",
+      "madagascar": "Madagascar", "mg": "Madagascar", "mdg": "Madagascar",
+      "malaysia": "Malaysia", "maldives": "Maldives", "mv": "Maldives", "mdv": "Maldives",
+      "malta": "Malta", "mt": "Malta", "mlt": "Malta",
+      "mauritius": "Mauritius", "mu": "Mauritius", "mus": "Mauritius",
+      "mexico": "Mexico", "moldova": "Moldova", "md": "Moldova", "mda": "Moldova",
+      "mongolia": "Mongolia", "mn": "Mongolia", "mng": "Mongolia",
+      "morocco": "Morocco", "maroc": "Morocco", "ma": "Morocco", "mar": "Morocco",
+      "mozambique": "Mozambique", "mocambique": "Mozambique", "mz": "Mozambique", "moz": "Mozambique",
+      "myanmar": "Myanmar", "namibia": "Namibia", "na": "Namibia", "nam": "Namibia",
+      "nepal": "Nepal", "np": "Nepal", "npl": "Nepal",
+      "netherlands": "Netherlands", "new zealand": "New Zealand",
+      "nicaragua": "Nicaragua", "ni": "Nicaragua", "nic": "Nicaragua",
+      "nigeria": "Nigeria", "ng": "Nigeria", "nga": "Nigeria",
+      "north korea": "North Korea", "north macedonia": "North Macedonia", "norway": "Norway", "oman": "Oman",
+      "pakistan": "Pakistan", "pk": "Pakistan", "pak": "Pakistan",
+      "panama": "Panama", "pa": "Panama", "pan": "Panama",
+      "papua new guinea": "Papua New Guinea", "png": "Papua New Guinea", "pg": "Papua New Guinea",
+      "paraguay": "Paraguay", "py": "Paraguay", "pry": "Paraguay",
+      "peru": "Peru", "pe": "Peru", "per": "Peru",
+      "philippines": "Philippines", "poland": "Poland", "portugal": "Portugal",
+      "qatar": "Qatar", "qa": "Qatar", "qat": "Qatar",
+      "romania": "Romania", "ro": "Romania", "rou": "Romania", "russia": "Russia",
+      "rwanda": "Rwanda", "rw": "Rwanda", "rwa": "Rwanda",
+      "saint lucia": "Saint Lucia", "st lucia": "Saint Lucia", "st. lucia": "Saint Lucia", "lc": "Saint Lucia", "lca": "Saint Lucia",
+      "samoa": "Samoa", "ws": "Samoa", "wsm": "Samoa",
+      "saudi arabia": "Saudi Arabia", "serbia": "Serbia", "srbija": "Serbia", "rs": "Serbia", "srb": "Serbia",
+      "seychelles": "Seychelles", "sc": "Seychelles", "syc": "Seychelles",
+      "sierra leone": "Sierra Leone", "sl": "Sierra Leone", "sle": "Sierra Leone",
+      "singapore": "Singapore", "slovakia": "Slovakia", "slovensko": "Slovakia", "slovak republic": "Slovakia", "sk": "Slovakia", "svk": "Slovakia",
+      "slovenia": "Slovenia", "slovenija": "Slovenia", "si": "Slovenia", "svn": "Slovenia",
+      "south africa": "South Africa", "south korea": "South Korea", "spain": "Spain",
+      "sri lanka": "Sri Lanka", "lk": "Sri Lanka", "lka": "Sri Lanka",
+      "sudan": "Sudan", "sd": "Sudan", "sdn": "Sudan",
+      "suriname": "Suriname", "sr": "Suriname", "sur": "Suriname",
       "sweden": "Sweden", "switzerland": "Switzerland", "syria": "Syria", "taiwan": "Taiwan",
       "tanzania": "Tanzania", "thailand": "Thailand", "trinidad and tobago": "Trinidad and Tobago",
-      "tunisia": "Tunisia", "turkiye": "Türkiye", "turkey": "Türkiye", "uganda": "Uganda",
-      "ukraine": "Ukraine", "united arab emirates": "United Arab Emirates",
-      "united kingdom": "United Kingdom", "united states": "United States", "uruguay": "Uruguay",
-      "uzbekistan": "Uzbekistan", "vanuatu": "Vanuatu", "vietnam": "Vietnam",
-      "zambia": "Zambia", "zimbabwe": "Zimbabwe"
+      "tunisia": "Tunisia", "tunisie": "Tunisia", "tn": "Tunisia", "tun": "Tunisia",
+      "turkiye": "Türkiye", "turkey": "Türkiye",
+      "uganda": "Uganda", "ug": "Uganda", "uga": "Uganda",
+      "ukraine": "Ukraine", "ukraina": "Ukraine", "ua": "Ukraine", "ukr": "Ukraine",
+      "u.a.e.": "United Arab Emirates", "united arab emirates": "United Arab Emirates",
+      "united kingdom": "United Kingdom",
+      "united states": "United States Of America", "united states of america": "United States Of America",
+      "uruguay": "Uruguay", "uy": "Uruguay", "ury": "Uruguay",
+      "uzbekistan": "Uzbekistan", "uz": "Uzbekistan", "uzb": "Uzbekistan",
+      "vanuatu": "Vanuatu", "vu": "Vanuatu", "vut": "Vanuatu",
+      "vietnam": "Vietnam",
+      "zambia": "Zambia", "zm": "Zambia", "zmb": "Zambia",
+      "zimbabwe": "Zimbabwe", "zw": "Zimbabwe", "zwe": "Zimbabwe"
     };
     if (exactCountryMap[unaccented]) return exactCountryMap[unaccented];
     if (exactCountryMap[strippedOfficial]) return exactCountryMap[strippedOfficial];
