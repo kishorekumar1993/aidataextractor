@@ -1193,6 +1193,74 @@ runTest('Global address expansions (PL, FR, NL, BR, MX, TR, AT, CH, IN) & trunca
   );
 });
 
+// 32. Named highways (GAR Highway, MLK, FM), global routes/zones in BOTH code & Gemini prompt
+runTest('Named highways (GAR Highway, MLK, FM) and global country abbreviations expand in code & prompt', () => {
+  assert.strictEqual(
+    ctx.toTitleCase(ctx.expandAddressAndStateAbbreviations('1658 GAR Highway, Swansea, Massachusetts', 'United States Of America')),
+    '1658 Grand Army Of The Republic Highway, Swansea, Massachusetts'
+  );
+  assert.strictEqual(
+    ctx.toTitleCase(ctx.expandAddressAndStateAbbreviations('1658 G.A.R. Hwy, Swansea, MA', 'United States Of America')),
+    '1658 Grand Army Of The Republic Highway, Swansea, Massachusetts'
+  );
+  assert.strictEqual(
+    ctx.toTitleCase(ctx.expandAddressAndStateAbbreviations('500 MLK Jr Blvd, Austin, TX', 'United States Of America')),
+    '500 Martin Luther King Junior Boulevard, Austin, Texas'
+  );
+  assert.strictEqual(
+    ctx.toTitleCase(ctx.expandAddressAndStateAbbreviations('200 FM 1960 Rd, Houston, TX', 'United States Of America')),
+    '200 Farm To Market Road 1960, Houston, Texas'
+  );
+  assert.strictEqual(
+    ctx.toTitleCase(ctx.expandAddressAndStateAbbreviations('100 Co. Rd. 42, Columbus, OH', 'United States Of America')),
+    '100 County Road 42, Columbus, Ohio'
+  );
+  assert.strictEqual(
+    ctx.toTitleCase(ctx.expandAddressAndStateAbbreviations('12 MG Road, Bangalore, KA', '')),
+    '12 Mahatma Gandhi Road, Bangalore, Karnataka'
+  );
+  assert.strictEqual(
+    ctx.toTitleCase(ctx.expandAddressAndStateAbbreviations('Unit 5, JAFZA, DXB', 'United Arab Emirates')),
+    'Unit 5, Jebel Ali Free Zone, Dubai'
+  );
+  assert.strictEqual(
+    ctx.toTitleCase(ctx.expandAddressAndStateAbbreviations('Plot 10, N.T., Kln', 'Hong Kong')),
+    'Plot 10, New Territories, Kowloon'
+  );
+  assert.strictEqual(
+    ctx.toTitleCase(ctx.expandAddressAndStateAbbreviations('Unit 4, Trdg. Est., Co. Durham', 'United Kingdom')),
+    'Unit 4, Trading Estate, County Durham'
+  );
+
+  // Full AI QC pipeline scenario for 1658 GAR Highway, Swansea, Massachusetts
+  const garAi = ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: 'Working',
+    businessType: 'Manufacturer',
+    companyProfile: 'Available',
+    companyName: 'Swansea Industrial Co Ltd',
+    countryName: 'USA',
+    companyAddress: '1658 GAR Highway, Swansea, Massachusetts',
+    state: 'Available',
+    city: 'Available',
+    emailId: 'sales@swanseaindustrial.com',
+    phoneNumber: '5085550199',
+    productImages: '3'
+  }, { originalUrl: 'https://swanseaindustrial.com', addressCandidates: [{ raw: '1658 GAR Highway, Swansea, MA 02777', source: 'contact' }] }, {});
+  assert.strictEqual(garAi.countryName, 'United States Of America');
+  assert.strictEqual(garAi.companyAddress, '1658 Grand Army Of The Republic Highway, Swansea, Massachusetts');
+  assert.strictEqual(garAi.state, 'Available');
+  assert.strictEqual(garAi.city, 'Available');
+
+  // Verify analyzeWithGemini prompt instructs global & highway expansions too
+  const aiClientSrc = fs.readFileSync(path.join(rootDir, 'src/background/ai-client.js'), 'utf8');
+  assert.ok(aiClientSrc.includes('Grand Army Of The Republic Highway'), 'Prompt must instruct GAR Highway expansion');
+  assert.ok(aiClientSrc.includes('Martin Luther King Junior Boulevard'), 'Prompt must instruct MLK Jr Blvd expansion');
+  assert.ok(aiClientSrc.includes('Farm To Market Road'), 'Prompt must instruct FM route expansion');
+  assert.ok(aiClientSrc.includes('Zone Industrielle'), 'Prompt must instruct French Z.I. expansion');
+  assert.ok(aiClientSrc.includes('Niederösterreich'), 'Prompt must instruct Austrian/global state expansion');
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');

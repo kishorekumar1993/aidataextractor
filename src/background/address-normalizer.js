@@ -529,6 +529,26 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   const isDachAddr = /\b(?:germany|deutschland|austria|[oö]sterreich|oesterreich|switzerland|schweiz|suisse|svizzera)\b/i.test(cLower) || /\b(?:strasse|straße|platz|gewerbegebiet|industriegebiet|berlin|munich|m[uü]nchen|hamburg|frankfurt|stuttgart|vienna|wien|graz|linz|zurich|z[uü]rich|basel|bern)\b/i.test(a);
   const isFrenchAddr = /\b(?:france|belgique)\b/i.test(cLower) || /\b(?:rue|cedex|z\.?i\.?|z\.?a\.?c?\.?|impasse|all[eé]e|chemin|boite\s*postale|paris|lyon|marseille|toulouse|nice|nantes|strasbourg|bordeaux|lille)\b/i.test(a);
 
+  // 5a. Global Named Highway / Memorial Boulevard / Route Acronyms & Suffixes
+  a = a.replace(/\bg\.?\s*a\.?\s*r\.?\s+(?=(?:highway|hwy\.?|road|rd\.?)\b)/gi, "Grand Army Of The Republic ");
+  a = a.replace(/\bm\.?\s*l\.?\s*k\.?(?:\s+jr\.?)?\s+(?=(?:boulevard|blvd\.?|street|st\.?|avenue|ave\.?|drive|dr\.?|parkway|pkwy\.?|way|highway|hwy\.?)\b)/gi, (m) => {
+    return /jr/i.test(m) ? "Martin Luther King Junior " : "Martin Luther King ";
+  });
+  a = a.replace(/\bj\.?\s*f\.?\s*k\.?\s+(?=(?:boulevard|blvd\.?|expressway|exp(?:ress)?wy\.?|expy\.?|highway|hwy\.?|parkway|pkwy\.?|drive|dr\.?|way)\b)/gi, "John F Kennedy ");
+  a = a.replace(/\bf\.?\s*d\.?\s*r\.?\s+(?=(?:drive|dr\.?|expressway|exp(?:ress)?wy\.?|expy\.?)\b)/gi, "Franklin D Roosevelt ");
+  a = a.replace(/\bp\.?\s*c\.?\s*h\.?\b(?=[,\s]|$)/gi, "Pacific Coast Highway");
+  a = a.replace(/(^|[,\s])(?:co\.?|cty\.?)\s*rd\.?\s*(?=\d|[A-Za-z])/gi, "$1County Road ");
+  a = a.replace(/(^|[,\s])(?:st\.?|state)\s*rte\.?\s*(?=\d|[A-Za-z])/gi, "$1State Route ");
+  a = a.replace(/(^|[,\s])(?:u\.?\s*s\.?|us)\s*rte\.?\s*(?=\d)/gi, "$1US Route ");
+  a = a.replace(/(^|[,\s])(?:u\.?\s*s\.?|us)\s*(?:hwy|hgwy)\.?\s*(?=\d)/gi, "$1US Highway ");
+  a = a.replace(/(^|[,\s])state\s*(?:hwy|hgwy)\.?\s*(?=\d)/gi, "$1State Highway ");
+  a = a.replace(/(^|[,\s])f\.?\s*m\.?\s*(\d{1,5})(?:\s+(?:rd|road))?\b/gi, "$1Farm To Market Road $2");
+  a = a.replace(/(^|[,\s])r\.?\s*m\.?\s*(\d{1,5})(?:\s+(?:rd|road))?\b/gi, (m, p1, num, offset, str) => {
+    // Only expand RM -> Ranch To Market Road when not clearly Room (avoid "Suite 4, Rm 201")
+    return /\b(?:texas|tx|austin|san\s*antonio|round\s*rock|dripping\s*springs)\b/i.test(a) ? `${p1}Ranch To Market Road ${num}` : m;
+  });
+  a = a.replace(/(^|[,\s])r\.?\s*r\.?\s*(?=\d+\s*(?:,|box\b|$))/gi, "$1Rural Route ");
+
   // 5. Street types expansion (Global) - language-aware before generic English fallbacks
   a = a.replace(/\b(?:pkwy|pky|pwy)\b\.?/gi, "Parkway");
   a = a.replace(/\bmwy\b\.?/gi, "Motorway");
@@ -536,12 +556,43 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bbvd\b\.?/gi, "Boulevard");
   a = a.replace(/\bboul\b\.?/gi, "Boulevard");
   a = a.replace(/\b(?:cresc|cres)\b\.?/gi, "Crescent");
-  a = a.replace(/\btpke\b\.?/gi, "Turnpike");
+  a = a.replace(/\b(?:tpke|trnpk)\b\.?/gi, "Turnpike");
+  a = a.replace(/\bpke\b\.?/gi, "Pike");
   a = a.replace(/\bcswy\b\.?/gi, "Causeway");
   a = a.replace(/\bgdns\b\.?/gi, "Gardens");
+  a = a.replace(/\bgdn\b\.?/gi, "Garden");
   a = a.replace(/\bfwy\b\.?/gi, "Freeway");
-  a = a.replace(/\bhwy\b\.?/gi, "Highway");
-  a = a.replace(/\bexp(?:ress)?wy\b\.?/gi, "Expressway");
+  a = a.replace(/\b(?:hwy|hgwy)\b\.?/gi, "Highway");
+  a = a.replace(/\b(?:exp(?:ress)?wy|expy)\b\.?/gi, "Expressway");
+  a = a.replace(/\bgtwy\b\.?/gi, "Gateway");
+  a = a.replace(/\bhts\b\.?/gi, "Heights");
+  a = a.replace(/\bvlg\b\.?/gi, "Village");
+  a = a.replace(/\bvly\b\.?/gi, "Valley");
+  a = a.replace(/\bmdws\b\.?/gi, "Meadows");
+  a = a.replace(/\bmdw\b\.?/gi, "Meadow");
+  a = a.replace(/\bmnr\b\.?/gi, "Manor");
+  a = a.replace(/\bgrv\b\.?/gi, "Grove");
+  a = a.replace(/\bhbr\b\.?/gi, "Harbor");
+  a = a.replace(/\bcmns\b\.?/gi, "Commons");
+  a = a.replace(/\bxrds\b\.?/gi, "Crossroads");
+  a = a.replace(/\bspgs\b\.?/gi, "Springs");
+  a = a.replace(/\bspg\b\.?/gi, "Spring");
+  a = a.replace(/\bshrs\b\.?/gi, "Shores");
+  a = a.replace(/\bshr\b\.?/gi, "Shore");
+  a = a.replace(/\blndg\b\.?/gi, "Landing");
+  a = a.replace(/\bholw\b\.?/gi, "Hollow");
+  a = a.replace(/\bbrg\b\.?/gi, "Bridge");
+  a = a.replace(/\bsta\b\.?/gi, "Station");
+  a = a.replace(/\bbch\b\.?/gi, "Beach");
+  a = a.replace(/\bcrk\b\.?/gi, "Creek");
+  a = a.replace(/\brdg\b\.?/gi, "Ridge");
+  a = a.replace(/\bnatl\b\.?/gi, "National");
+  a = a.replace(/\btrdg\.?\s*est\b\.?/gi, "Trading Estate");
+  a = a.replace(/\bsez\b/gi, "Special Economic Zone");
+  a = a.replace(/\bftz\b/gi, "Free Trade Zone");
+  a = a.replace(/\bepz\b/gi, "Export Processing Zone");
+  a = a.replace(/\bgpo\s*box\b/gi, "General Post Office Box");
+  a = a.replace(/\blpo\b/gi, "Licensed Post Office");
   a = a.replace(/\bcir\b\.?/gi, "Circle");
   a = a.replace(/\bave\b\.?/gi, (isSpanishOrLatam || isPortugueseOrBrazil) ? "Avenida" : "Avenue");
   a = a.replace(/\bav\b\.?/gi, (isSpanishOrLatam || isPortugueseOrBrazil) ? "Avenida" : "Avenue");
@@ -1025,22 +1076,27 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])d\.?i\.?\s+yogyakarta\b/gi, '$1DI Yogyakarta');
 
   // ==========================================
-  // 11. United Kingdom County Abbreviations
+  // 11. United Kingdom & Ireland County Abbreviations
   // ==========================================
-  if (cLower.includes('united kingdom') || cLower.includes('england') || cLower.includes('scotland') || cLower.includes('wales') || /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(a) || /\b(?:beds|berks|bucks|cambs|derbys|glos|hants|herts|lancs|leics|lincs|middx|northants|notts|oxon|staffs|warks|wilts|worcs|yorks|w\.?\s*mids|s\.?\s*yorks|w\.?\s*yorks|n\.?\s*yorks)\b/i.test(a)) {
+  if (cLower.includes('united kingdom') || cLower.includes('england') || cLower.includes('scotland') || cLower.includes('wales') || cLower.includes('ireland') || /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(a) || /\b(?:beds|berks|bucks|cambs|derbys|glos|hants|herts|lancs|leics|lincs|middx|northants|notts|oxon|staffs|warks|wilts|worcs|yorks|shrops|warwicks|herefs|gloucs|northumb|w\.?\s*mids|s\.?\s*yorks|w\.?\s*yorks|n\.?\s*yorks|co\.?\s+(?:durham|antrim|armagh|down|fermanagh|londonderry|tyrone|cork|dublin|galway|kerry|kildare|clare|mayo|meath|wexford|wicklow|limerick|tipperary|donegal))\b/i.test(a)) {
     const ukCounties = [
       ["beds", "Bedfordshire"], ["berks", "Berkshire"], ["bucks", "Buckinghamshire"],
       ["cambs", "Cambridgeshire"], ["ches", "Cheshire"], ["derbys", "Derbyshire"],
-      ["glos", "Gloucestershire"], ["hants", "Hampshire"], ["herts", "Hertfordshire"],
+      ["glos", "Gloucestershire"], ["gloucs", "Gloucestershire"],
+      ["hants", "Hampshire"], ["herts", "Hertfordshire"], ["herefs", "Herefordshire"],
       ["lancs", "Lancashire"], ["leics", "Leicestershire"], ["lincs", "Lincolnshire"],
-      ["middx", "Middlesex"], ["northants", "Northamptonshire"], ["notts", "Nottinghamshire"],
-      ["oxon", "Oxfordshire"], ["salop", "Shropshire"], ["staffs", "Staffordshire"],
-      ["warks", "Warwickshire"], ["wilts", "Wiltshire"], ["worcs", "Worcestershire"],
+      ["middx", "Middlesex"], ["northants", "Northamptonshire"], ["northumb", "Northumberland"],
+      ["notts", "Nottinghamshire"], ["oxon", "Oxfordshire"], ["salop", "Shropshire"],
+      ["shrops", "Shropshire"], ["staffs", "Staffordshire"], ["warks", "Warwickshire"],
+      ["warwicks", "Warwickshire"], ["wilts", "Wiltshire"], ["worcs", "Worcestershire"],
       ["yorks", "Yorkshire"]
     ];
     for (const [abbr, full] of ukCounties) {
       a = a.replace(new RegExp(`\\b${abbr}\\b\\.?`, "gi"), full);
     }
+    a = a.replace(/\bco\.?\s+(durham|antrim|armagh|down|fermanagh|londonderry|tyrone|cork|dublin|galway|kerry|kildare|clare|mayo|meath|wexford|wicklow|limerick|tipperary|donegal)\b/gi, (_, county) => `County ${county.charAt(0).toUpperCase() + county.slice(1).toLowerCase()}`);
+    a = a.replace(/\bgt\.?\s+(manchester|london|yarmouth)\b/gi, (_, place) => `Great ${place.charAt(0).toUpperCase() + place.slice(1).toLowerCase()}`);
+    a = a.replace(/\bn\.?\s*ireland\b/gi, "Northern Ireland");
     a = a.replace(/\b(?:w\.?\s*mids|west\s*mids)\b\.?/gi, "West Midlands");
     a = a.replace(/\b(?:s\.?\s*yorks)\b\.?/gi, "South Yorkshire");
     a = a.replace(/\b(?:w\.?\s*yorks)\b\.?/gi, "West Yorkshire");
@@ -1077,11 +1133,16 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/,\s*\b(?:mp)\b\.?/gi, ", Mpumalanga");
     a = a.replace(/,\s*\b(?:lp)\b\.?/gi, ", Limpopo");
   }
-  if (cLower.includes('india')) {
-    a = a.replace(/\bmidc\b\.?/gi, "Maharashtra Industrial Development Corporation");
-    a = a.replace(/\bgidc\b\.?/gi, "Gujarat Industrial Development Corporation");
-    a = a.replace(/\bsidco\b\.?/gi, "Small Industries Development Corporation");
-    a = a.replace(/\briico\b\.?/gi, "Rajasthan State Industrial Development and Investment Corporation");
+  const isIndiaAddr = cLower.includes('india') || /\b(?:bangalore|bengaluru|mumbai|pune|chennai|hyderabad|delhi|kolkata|ahmedabad|surat|jaipur|noida|gurgaon|gurugram|faridabad|coimbatore|vadodara|rajkot|ludhiana|indore|nagpur|midc|gidc|sidco|riico|maharashtra|karnataka|tamil\s*nadu|gujarat|telangana|uttar\s*pradesh|haryana|punjab|rajasthan)\b/i.test(a);
+  if (isIndiaAddr) {
+    a = a.replace(/\bm\.?\s*g\.?\s+(?=road\b)/gi, "Mahatma Gandhi ");
+    a = a.replace(/\bg\.?\s*t\.?\s+(?=road\b)/gi, "Grand Trunk ");
+    a = a.replace(/\bs\.?\s*v\.?\s+(?=road\b)/gi, "Swami Vivekananda ");
+    a = a.replace(/\bj\.?\s*l\.?\s*n\.?\s+(?=marg\b)/gi, "Jawaharlal Nehru ");
+    a = a.replace(/\bm\.?i\.?d\.?c\b\.?/gi, "Maharashtra Industrial Development Corporation");
+    a = a.replace(/\bg\.?i\.?d\.?c\b\.?/gi, "Gujarat Industrial Development Corporation");
+    a = a.replace(/\bs\.?i\.?d\.?c\.?o\b\.?/gi, "Small Industries Development Corporation");
+    a = a.replace(/\br\.?i\.?i\.?c\.?o\b\.?/gi, "Rajasthan State Industrial Development and Investment Corporation");
     a = a.replace(/\b(?:sy|s)\.?\s*no\.?\s*(?=\d)/gi, "Survey Number ");
     a = a.replace(/\bsr\.?\s*no\.?\s*(?=\d)/gi, "Serial Number ");
     a = a.replace(/(^|[,\s])opp\.?\s+(?=[A-Za-z0-9])/gi, "$1Opposite ");
@@ -1248,11 +1309,43 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // ==========================================
   // 19. United Arab Emirates & Middle East Abbreviations
   // ==========================================
-  if (cLower.includes('united arab emirates') || cLower.includes('saudi arabia') || cLower.includes('qatar') || cLower.includes('bahrain') || cLower.includes('oman') || cLower.includes('kuwait') || /\b(?:dubai|abu\s*dhabi|sharjah|jebel\s*ali|riyadh|jeddah|dammam)\b/i.test(a)) {
+  if (cLower.includes('united arab emirates') || cLower.includes('saudi arabia') || cLower.includes('qatar') || cLower.includes('bahrain') || cLower.includes('oman') || cLower.includes('kuwait') || /\b(?:dubai|abu\s*dhabi|sharjah|jebel\s*ali|riyadh|jeddah|dammam|jafza)\b/i.test(a)) {
     a = a.replace(/\bind\.?\s*area\b/gi, "Industrial Area");
+    a = a.replace(/\bjafza\b/gi, "Jebel Ali Free Zone");
     a = a.replace(/,\s*\bdxb\b/gi, ", Dubai");
     a = a.replace(/,\s*\bauh\b/gi, ", Abu Dhabi");
     a = a.replace(/,\s*\bshj\b/gi, ", Sharjah");
+  }
+
+  // ==========================================
+  // 20. East Asia (Hong Kong, Japan, China), Nordics, Greece & CIS
+  // ==========================================
+  if (cLower.includes('hong kong') || /\b(?:kowloon|hong\s*kong|tsuen\s*wan|kwun\s*tong|sha\s*tin|tuen\s*mun|yuen\s*long|new\s*territories|kln|n\.t\.)\b/i.test(a)) {
+    a = a.replace(/(?:^|[,\s])\bn\.?\s*t\.?(?=[,\s]|$)/gi, (m) => (m.startsWith(",") ? ", " : " ") + "New Territories");
+    a = a.replace(/\bkln\b\.?/gi, "Kowloon");
+    a = a.replace(/\bfty\b\.?/gi, "Factory");
+    a = a.replace(/\bmsn\b\.?/gi, "Mansion");
+  }
+  if (cLower.includes('japan') || /\b(?:tokyo|osaka|nagoya|yokohama|kyoto|kobe|fukuoka|sapporo|pref\.|ku\b|chome\b)\b/i.test(a)) {
+    a = a.replace(/\bpref\b\.?/gi, "Prefecture");
+  }
+  if (cLower.includes('china') || cLower.includes('taiwan') || /\b(?:e\.?t\.?d\.?z\.?|e\.?d\.?z\.?|h\.?t\.?z\.?)\b/i.test(a)) {
+    a = a.replace(/\be\.?t\.?d\.?z\b\.?/gi, "Economic and Technological Development Zone");
+    a = a.replace(/\be\.?d\.?z\b\.?/gi, "Economic Development Zone");
+    a = a.replace(/\bh\.?t\.?z\b\.?/gi, "High-Tech Zone");
+  }
+  if (cLower.includes('sweden') || cLower.includes('norway') || cLower.includes('denmark') || cLower.includes('finland') || /\b(?:stockholm|g[oö]teborg|gothenburg|malm[oö]|oslo|copenhagen|k[oø]benhavn|helsinki|tampere)\b/i.test(a)) {
+    a = a.replace(/\bind\.?\s*omr(?:[aå]de)?\.?/gi, "Industriområde");
+  }
+  if (cLower.includes('greece') || /\b(?:athens|athina|thessaloniki|leof\.|od\.)\b/i.test(a)) {
+    a = a.replace(/(^|[,\s])od\.?\s+(?=[A-Za-z])/gi, "$1Odos ");
+    a = a.replace(/(^|[,\s])leof\.?\s+(?=[A-Za-z])/gi, "$1Leoforos ");
+  }
+  if (cLower.includes('russia') || cLower.includes('ukraine') || cLower.includes('belarus') || cLower.includes('kazakhstan') || cLower.includes('uzbekistan') || /\b(?:moscow|moskva|kyiv|kiev|minsk|astana|tashkent|pr-t|obl\.)\b/i.test(a)) {
+    a = a.replace(/(^|[,\s])ul\.?\s+(?=[A-Za-z0-9])/gi, cLower.includes('ukraine') ? "$1Vulytsya " : "$1Ulitsa ");
+    a = a.replace(/(^|[,\s])(?:pr-t|pr)\.?\s+(?=[A-Za-z])/gi, "$1Prospekt ");
+    a = a.replace(/(^|[,\s])per\.?\s+(?=[A-Za-z])/gi, "$1Pereulok ");
+    a = a.replace(/\bobl\b\.?/gi, "Oblast");
   }
 
   // Clean up any double spaces introduced
