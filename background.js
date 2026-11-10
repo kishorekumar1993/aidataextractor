@@ -4229,7 +4229,6 @@ const GEMINI_RESPONSE_SCHEMA = {
     businessType: {
       type: "STRING",
       enum: [
-        "",
         "Manufacturer",
         "Industrial Services",
         "Exporter",
@@ -4242,12 +4241,12 @@ const GEMINI_RESPONSE_SCHEMA = {
         "Restricted Site",
         "Other"
       ],
-      description: "Business scope classification. Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler are allowed working types. Must be empty string \"\" if websiteStatus is Not Working, Domain Expired, Non English, Flash, or Under Construction."
+      description: "Business scope classification. Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler are allowed working types."
     },
     companyProfile: {
       type: "STRING",
-      enum: ["", "Available", "Not Available"],
-      description: "Available if dedicated company overview/profile/history text exists; else Not Available. Must be empty string \"\" if websiteStatus is not Working."
+      enum: ["Available", "Not Available"],
+      description: "Available if dedicated company overview/profile/history text exists; else Not Available."
     },
     companyName: {
       type: "STRING",
@@ -4263,40 +4262,40 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     state: {
       type: "STRING",
-      enum: ["", "Available", "Not Available"],
-      description: "Available if state, province, county (e.g. Derbyshire, Leicestershire), territory, prefecture, or national capital is identifiable in address; else Not Available. Empty string \"\" if websiteStatus is not Working."
+      enum: ["Available", "Not Available"],
+      description: "Available if state, province, county (e.g. Derbyshire, Leicestershire), territory, prefecture, or national capital is identifiable in address; else Not Available."
     },
     city: {
       type: "STRING",
-      enum: ["", "Available", "Not Available"],
-      description: "Available if an official City, Town, Township, District, Municipality, or recognized town locality (e.g. Heanor Gate -> town of Heanor) is identifiable in the address; else Not Available. Note: Suburbs alone without a recognized city/town (e.g. Campbellfield, Rowville, Mascot, Sandton) are Not Available. Empty string \"\" if websiteStatus is not Working."
+      enum: ["Available", "Not Available"],
+      description: "Available if an official City, Town, Township, District, Municipality, or recognized town locality (e.g. Heanor Gate -> town of Heanor) is identifiable in the address; else Not Available. Note: Suburbs alone without a recognized city/town (e.g. Campbellfield, Rowville, Mascot, Sandton) are Not Available."
     },
     emailId: {
       type: "STRING",
-      description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook). Empty string \"\" if websiteStatus is not Working."
+      description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook)."
     },
     secondaryEmailId: {
       type: "STRING",
-      description: "Secondary distinct corporate email from anywhere on website or company social media (LinkedIn, Facebook). STRICTLY MUST NOT be the same as emailId. If only one email exists or websiteStatus is not Working, return empty string \"\"."
+      description: "Secondary distinct corporate email from anywhere on website or company social media (LinkedIn, Facebook). STRICTLY MUST NOT be the same as emailId."
     },
     phoneNumber: {
       type: "STRING",
-      description: "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero. Digits only. Empty string \"\" if websiteStatus is not Working."
+      description: "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero. Digits only."
     },
     numberOfProducts: {
       type: "STRING",
-      enum: ["", "0", "1", "2", "3"],
-      description: "Number of physical product items/catalog offerings identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website product evidence. Empty string \"\" if websiteStatus is not Working."
+      enum: ["0", "1", "2", "3"],
+      description: "Number of physical product items/catalog offerings identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website product evidence."
     },
     productImages: {
       type: "STRING",
-      enum: ["", "0", "1", "2", "3"],
-      description: "Number of physical product images/photos identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website photo evidence. Empty string \"\" if websiteStatus is not Working."
+      enum: ["0", "1", "2", "3"],
+      description: "Number of physical product images/photos identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website photo evidence."
     },
     numberOfProductDescriptions: {
       type: "STRING",
-      enum: ["", "0", "1", "2", "3"],
-      description: "Number of physical product descriptions/specifications identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website description evidence. Empty string \"\" if websiteStatus is not Working."
+      enum: ["0", "1", "2", "3"],
+      description: "Number of physical product descriptions/specifications identified: '0', '1', '2', or '3' (for 3 or more). Independent measurement based strictly on website description evidence."
     }
   },
   required: [
@@ -4332,708 +4331,94 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
     }).join("\n")
     : ((crawlData.detectedAddresses || []).join("\n") || "(No physical address candidates extracted from static HTML)");
 
-  const prompt = `
-You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
+  const prompt = `You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
 
-WEBSITE STATUS QC RULES (Rule 1):
-- Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash".
-- Rule 11 & 16: Websites with online product selling options (e.g. "Add to Cart", "Payment Gateway", "Buy Now", "Checkout"), EXCEPT FOR MANUFACTURERS:
-  * If the company IS A MANUFACTURER (they produce, fabricate, or manufacture their own products in a factory/plant, OEM/ODM):
-    -> You MUST mark "websiteStatus": "Working" and "businessType": "Manufacturer"!
-    -> Extract and pre-fill all 14 fields (companyName, countryName, address, state, city, products, images, descriptions)!
-  * If the company is NOT A MANUFACTURER (e.g. Retailer, Online Store, E-commerce reseller, Trader, Dropshipper):
-    -> You MUST mark "websiteStatus": "Not Working" and leave all other fields empty ""!
-- Rule 12: Websites in a non-English language without an English translation option -> mark "websiteStatus": "Non English" (all other fields empty "").
-- Rule 14: Websites designed in Flash format where text is not copyable -> mark "websiteStatus": "Flash" (all other fields empty "").
-- Rule 13: URL redirecting websites – only if the website redirected to a completely DIFFERENT domain (e.g. companyA.com -> companyB.com), mark "websiteStatus": "Redirect Site". If it is on the SAME domain (http to https, www vs non-www, language path /en/, subpage or subfolder), it is NOT a Redirect Site! Mark "websiteStatus": "Working". Evaluate the company dynamically at the final redirected URL.
-- Rule 9: Websites hosted on free platforms (WordPress, Wix, Weebly, Blogspot, etc.) -> mark "websiteStatus": "Not Working" (all other fields empty "").
-- Rule 10: Subdomain websites not hosted at root level (e.g. multimedia/entertainment streaming platforms like music or video streaming) -> mark "websiteStatus": "Not Working" (all other fields empty "").
-- Rule 8: Personal websites, personal blogs, personal portfolios -> mark "websiteStatus": "Not Working" (all other fields empty "").
-- Rule 4: Service provider websites (e.g. restaurants, salons, retailers, etc.), EXCEPT for industrial service providers -> mark "websiteStatus": "Not Working" (all other fields empty "").
-- CRITICAL NOT WORKING QC RULE ("Notworking means all empty"):
-  If "websiteStatus" is NOT "Working" ("Not Working", "Domain Expired", "Non English", "Flash", "Under Construction"):
-  ALL OTHER FIELDS MUST BE EMPTY STRINGS ""!
-  Do NOT extract companyName, countryName, address, state, city, emails, phones, products, businessType, or profile. Leave every other field as empty string "".
-- If the domain is expired / parked, mark "Domain Expired".
-- If the website failed to load or has no content, mark "Not Working".
+1. WEBSITE STATUS QC RULES:
+- Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site".
+- Rules 11 & 16 (Online Store / Shopping Cart / Buy Now / Checkout):
+  * If company IS A MANUFACTURER (produces/fabricates products in own factory, OEM/ODM) -> Mark "Working" and "Manufacturer", extract all 14 fields.
+  * If company is NOT A MANUFACTURER (Retailer, Reseller, Trader, E-commerce Store, Distributor) -> Mark "Not Working" and leave all other 13 fields empty "".
+- Rule 12 (Non-English): No English translation option -> mark "Non English" (all other fields empty "").
+- Rule 14 (Flash): Designed in Flash format where text is uncopyable -> mark "Flash" (all other fields empty "").
+- Rule 13 (Redirect Site): Redirected to a completely DIFFERENT domain (companyA.com -> companyB.com) -> mark "Redirect Site", evaluate details from destination site. Same-domain redirects (http to https, www vs non-www, language path /en/) are NOT Redirect Sites -> mark "Working".
+- If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "".
 
-BUSINESS TYPE & WORK SCOPE QC RULES (Rule 2):
-- CRITICAL WORK SCOPE INSTRUCTION ("Manufacture to Wholesale only we work, remaining status we do notworking"):
-  * ALLOWED BUSINESS TYPES WE WORK ON:
-    1. "Manufacturer"
-    2. "Industrial Services"
-    3. "Exporter"
-    4. "Trader"
-    5. "Distributer" (note: spelled "Distributer")
-    6. "Supplier"
-    7. "Wholesaler"
-  * CRITICAL PHYSICAL GOODS SUPPLIER RULE:
-    - If a company sells, supplies, fabricates, fits, or distributes physical products / manufactured goods (such as windows, doors, conservatories, glass, building materials, construction products, hardware, tools, packaging, metals, plastics, machinery, equipment, components, industrial supplies):
-      -> THEY ARE A "Supplier", "Manufacturer", "Distributer", or "Trader" (options 1 to 7)!
-      -> YOU MUST MARK "websiteStatus": "Working" AND EXTRACT ALL 14 FIELDS!
-      -> EVEN IF they provide installation, fitting, surveys, or quotes for their goods (e.g. "supply and fit windows/doors", "request a quote", "book a survey"), they are a PHYSICAL PRODUCT SUPPLIER, NEVER a disallowed service provider!
-  * DISALLOWED / NON-WORKING BUSINESS TYPES:
-    8. "Service Provider": STRICTLY AND ONLY for pure non-goods consumer services with NO physical goods supplied:
-       - Restaurants, bars, cafes, food dining, catering
-       - Hair salons, beauty clinics, barbers, nail spas, massage, wellness
-       - Legal services, law firms, solicitors, lawyers
-       - Accounting, bookkeeping, tax services
-       - Marketing agencies, SEO, IT/web design consulting
-       - Pure software / SaaS without hardware
-       - Travel agencies, tour operators, flight booking, hotels
-       - Real estate agencies, property rentals, property management
-       - Cleaning, pest control, personal trainers, tutoring
-    9. "Online Shopping" (unless company is a Manufacturer)
-    10. "Restricted Site"
-    11. "Other"
-  * STRICT QC RULE:
-    If the website's business type is pure "Service Provider" (non-goods consumer service), "Online Shopping" (non-manufacturer), "Restricted Site", "Other", or ANY business outside the Manufacturer to Wholesaler range:
-    - YOU MUST SET "websiteStatus": "Not Working"!
-    - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": "businessType": "", "companyProfile": "", "companyName": "", "countryName": "", "companyAddress": "", "state": "", "city": "", "emailId": "", "secondaryEmailId": "", "phoneNumber": "", "numberOfProducts": "", "productImages": "", "numberOfProductDescriptions": ""!
-- CRITICAL 3-TIER VERIFICATION RULE FOR "Online Shopping" (E-Commerce vs B2B Manufacturer / Wholesaler Catalog):
-  A website qualifies as "Online Shopping" (E-Commerce) IF AND ONLY IF it meets the Mandatory Core Rule AND at least one Secondary Signal:
-  1. Rule 1: The Transaction Test (Mandatory Core Rule):
-     - The website must allow the user to complete a monetary exchange for a good entirely on-site without manual back-and-forth communication.
-     - Must have: A functional cart/basket, a defined unit price (e.g. $29.99, €45.00), AND an online checkout gateway (credit/debit card, UPI, net banking, PayPal, Stripe, /checkout).
-     - MANDATORY B2B EXCLUSION: If the button/link says "Request a Quote", "Contact Us for Pricing", "Contact Sales", "Enquire Now", "Inquiry Basket", or "Find a Dealer", it FAILS this rule and is a B2B Catalog / Showcase site, NOT e-commerce!
-       -> You MUST classify such B2B catalog sites as "Manufacturer" or "Wholesaler" with "websiteStatus": "Working" and extract all 14 fields!
-  2. Rule 2: The Fulfillment & Policy Test (Secondary Operational Signal):
-     - Shipping & Returns Policy: Explicit delivery timelines, courier options, shipping charges, and a return/cancellation policy.
-     - Order Tracking: Mechanism for order confirmation emails, invoices, and dispatch/tracking updates.
-     - Exclusion: If the transaction is a recurring contract or consultation booked via a calendar ("Book an Appointment"), it is a Service / Booking site ("Service Provider"), NOT retail e-commerce.
-  3. Rule 3: Technical & Data Markers (Verification):
-     - Structured Schema Markup: Presence of Product and Offer schema defining price, priceCurrency, and availability.
-     - E-Commerce Endpoints: Standard checkout routes (/cart, /checkout, /basket) or e-commerce platform footprints (Shopify, WooCommerce, Magento).
+2. BUSINESS TYPE:
+- Options: "Manufacturer" | "Distributor" | "Trader" | "Wholesaler" | "Retailer" | "Service Provider" | "Other".
+- If company manufactures, fabricates, molds, or engineers products -> "Manufacturer".
 
-  QUICK CLASSIFICATION CHEAT SHEET:
-  - Cart + Checkout + Price + Direct Shipping (by a Manufacturer) -> "Manufacturer" (websiteStatus: "Working", extract full company data!)
-  - Cart + Checkout + Price + Direct Shipping (by a Retailer/Reseller) -> "Online Shopping" (websiteStatus: "Not Working", all other fields empty "")
-  - Products + Specs + "Contact Sales" / "Enquire" / "Request a Quote" / "Find a Dealer" -> "Manufacturer" or "Wholesaler" (websiteStatus: "Working", extract full company data!)
-  - Prices + "Book an Appointment" / Calendar picker -> "Service Provider" (websiteStatus: "Not Working")
-  - Articles + Affiliate links redirecting to Amazon/other stores -> "Other" (websiteStatus: "Not Working")
-  - Tier pricing ($X/month) + "Sign Up" / "Start Free Trial" -> "Service Provider" (websiteStatus: "Not Working")
-- CRITICAL PROHIBITED / RESTRICTED WEBSITES QC RULE (Note 2):
-  Instruction Note 2 Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
-  If words or images related to ANY of these categories appear ANYWHERE on the site:
-  1. Porn / Adult Content / Erotica / Onlyfans
-  2. Weapons / Firearms / Ammunition / Knives (combat, hunting, tactical, daggers, swords)
-      * EXCEPTION: Industrial machinery parts like "air knife systems" (drying blower nozzles) or "slitter/machine knives" are NOT weapons!
-  3. Defence / Military / Armaments / Artillery / Defense contractors
-  4. Aircraft / Airplanes / Commercial Aviation / Airlines / Helicopters / Fighter jets
-      * EXCEPTION: Industrial manufacturing processes like "Waterjet cutting", "Inkjet printing", or "Jet pumps" are NOT aircraft!
-  5. Aerospace / Aerospace engineering / Aerospace parts
-  6. Marine / Maritime / Naval / Marine Vessels (actual maritime naval industry)
-      * EXCEPTION: "Marine grade" material descriptors (e.g. marine grade stainless steel, marine plywood) are NOT marine vessel operations!
-  7. Ships / Boats / Shipyard / Shipbuilding / Yachts (actual maritime boat/ship building & shipyards)
-      * CRITICAL EXCEPTION FOR "SHIP":
-        - Words ending in "-ship" such as "Partnership", "Membership", "Dealership", "Craftsmanship", "Workmanship", "Ownership", "Leadership", "Relationship" are NOT ships!
-        - Freight, delivery, order, or parcel shipping (e.g. "We ship worldwide", "Shipping Policy", "Free shipping", "Fast shipping", "Shipping cost", "Shipment") is NOT the Ship category!
-        - ONLY classify as Ships/Boats if the company builds, manufactures, or repairs actual watercraft, boats, yachts, or operates a shipyard!
-  8. Chemical / Petrochemicals / Agrochemicals / Pesticides / Solvents / Hazardous chemicals (actual chemical manufacturing/synthesis)
-      * EXCEPTION: Material specifications like "chemical resistance", "chemically resistant", or "chemical compatibility" describing plastics, steel, or coatings are NOT chemical producers!
-  9. Medicine / Medical / Pharmaceuticals / Prescription drugs / Hospitals / Clinics / Healthcare / Doctors / Dental / Surgery
-  10. Food / Foods / Beverages / Food manufacturing / Restaurants / Cafes / Bakeries / Catering / Groceries / Meat / Dairy / Snack
-  11. Alcohol / Breweries / Wineries / Distilleries / Liquor / Wine / Beer / Spirits
-      * EXCEPTION: "Isopropyl alcohol" used as an electronic cleaning solvent is NOT an alcoholic beverage/brewery!
-  12. Animals / Pets / Dogs / Cats / Livestock / Cattle / Poultry / Animal feed / Veterinary
-      * CRITICAL EXCEPTION FOR "CAT":
-        - "Cat" or "Cat." as an abbreviation for "Category" (e.g. "Cat: Valves", "Product Cat", "Cat. No.", "Item Cat") or "Cat 5 / Cat 6" (network cabling) or "CAT" (Caterpillar machinery/equipment) is NOT an animal!
-        - STRICTLY DO NOT mark a site as Animals or Not Working when "Cat" is used as Category, Catalogue, Cable, or Machinery!
-        - Only classify as Animals when it refers to actual living animals, pets, pet care, or livestock.
-  13. Gambling / Casinos / Betting / Poker / Lotteries
-  14. Tobacco / Cigarettes / Cigars / Vaping / E-cigarettes / Nicotine
-  15. Cannabis / Marijuana / THC / CBD / Narcotics / Illicit drugs
-  16. Counterfeits / Replica goods / Fake ID / Hacking / Loan sharks
-  THEN:
-  - YOU MUST MARK "websiteStatus": "Not Working"!
-  - ALL OTHER FIELDS MUST BE EMPTY STRINGS "": "businessType": "", "companyProfile": "", "companyName": "", "countryName": "", "companyAddress": "", "state": "", "city": "", "emailId": "", "secondaryEmailId": "", "phoneNumber": "", "numberOfProducts": "", "productImages": "", "numberOfProductDescriptions": ""!
+3. COMPANY PROFILE:
+- Options: "Available" | "Not Available".
+- Mark "Available" if site has dedicated About Us, Company Profile, history, mission, or factory overview. Otherwise "Not Available".
 
-CRITICAL GLOBAL LANGUAGE & CAPITALIZATION REQUIREMENT (ALL WORDS IN COMPANY NAME, COMPANY ADDRESS, COUNTRY MUST START WITH CAPITAL LETTER):
-- MANDATORY CAPITALIZATION QC RULE ("In Company Name, Company Address, Country All the words start with Capital letter"):
-  EVERY SINGLE WORD in "companyName", "companyAddress", and "countryName" MUST start with a Capital letter (Title Case).
-  * In "companyName": Capitalize every single word! E.g. "Inter Outstanding Electronics Incorporated", "H&R Manufacturing", "Web Rack Industrial Company Limited", "PEM Fountain Company", "Danzer UK Limited".
-  * CRITICAL QC RULE - ACRONYMS IN COMPANY NAME:
-    - Acronyms and all-caps brand names (e.g. PEM, BMW, AKS, HR, CRP, SMC) MUST remain in full UPPERCASE (e.g. "PEM Fountain Company", NOT "Pem Fountain Company" or "Pem Fountain"!).
-  * CRITICAL QC RULE - DO NOT EXPAND SYMBOLS:
-    - DO NOT expand symbols like "&" into "And"! Keep symbols as they are (e.g. "H&R Manufacturing", NOT "H And R Manufacturing"!).
-    - DO NOT add "Company" to the company name if "Company" or "Co." was not part of the official name (e.g. "H&R Manufacturing" must remain "H&R Manufacturing", NEVER add "Company"!).
-    - Expand "Co." / "Co" to "Company" when present in official name, trade listing, or social media handle (e.g. "PEM Fountain Co." / "pemfountainco" -> "PEM Fountain Company").
-  * In "companyAddress": Capitalize every single word! E.g. "18, Lane 247, Fusing 3rd Road, Keishan, Taoyuan", "15 Telford Way, Kettering, Northamptonshire", "Number 53-5, Pocheng Road, Yuanshan Township, Yilan County", "46 Market Hill, Maldon, Essex", "123 Main Street, Suite 400", "City Of Industry, California".
-  * In "countryName": Capitalize every single word! E.g. "United States Of America" (with capital 'Of'), "United Kingdom", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye".
-  * STRICT PROHIBITION: Do NOT leave small words, prepositions, or conjunctions in lowercase! Words like "Of", "And", "In", "At", "By", "For", "With", "On", "The", "De", "Du" MUST be capitalized with their first letter uppercase (e.g. "United States Of America", "City Of Industry", "Bank Of China").
-  * Special characters MUST NOT start and MUST NOT end "companyName" or "companyAddress".
-- MANDATORY COUNTRY NAME QC RULE (CRITICAL QUALITY CONTROL REQUIREMENT):
-  * "You must write the country name in full form Title Case (e.g. 'United Kingdom', 'United States Of America', 'Canada', 'Taiwan', 'Germany', 'Australia').
-    1. CRITICAL UK RULE: If the website or contact address explicitly writes 'United Kingdom' or 'UK' (e.g. 'Delves Road, Heanor Gate, Derbyshire, DE75 7SJ, United Kingdom'), you MUST return 'United Kingdom'! NEVER return 'England', 'Scotland', or 'Wales' when the website specifically says 'United Kingdom' or 'UK'!
-    2. Only return 'England' if 'England' is actually written on the website, or if BOTH 'England' and 'United Kingdom' are written on the website ('If England and United Kingdom both are mentioned, you must take England as the country name').
-    3. If the country name is NOT AVAILABLE anywhere on the website, search Google using the city and state name, and determine the country based on locality (e.g. England, Wales, Scotland, Northern Ireland)."
-  * Every single word in countryName MUST start with a Capital letter (Title Case).
-- MANDATORY PHONE NUMBER QC RULE:
-  * "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
-- MANDATORY EMAIL QC RULE:
-  * "Primary email and secondary emails should NOT be the same. Emails can be found in any place on the website or company social media like LinkedIn and Facebook. If a secondary email is available, double-check and ALWAYS take it. If only one email exists across the entire website and social channels, secondaryEmailId MUST be empty string \"\"."
-- CRITICAL QC RULE - NO EXTRA WORDS ("the items what available that only should come no extra word"):
-  * NEVER invent, inject, or hallucinate words, administrative divisions, or labels that do NOT exist in the website's original contact address!
-  * 1. DO NOT ADD "Number" IF ABSENT:
-    - ONLY expand to "Number" if the original address explicitly contains "No.", "No", "NO.", "Nos.", "Nº", or "#" (e.g. "No. 56-106, Zhangma St." -> "Number 56-106, Zhangma Street", "NO. 12" -> "Number 12").
-    - If the original address does NOT contain "No" or "No." (e.g. it is just "18, Lane 247...", "18 Kuang Fu North Road", "40 Sarah Street", "12 Stephen Road", "46 Market Hill", "15 Telford Way"), DO NOT put "Number"! Output "18, Lane 247...", "18 Kuang Fu North Road", "40 Sarah Street", "15 Telford Way" (NEVER put "Number" if "No" was not in the original text!).
-  * 2. DO NOT ADD "City" IF ABSENT:
-    - If the word "City" is NOT written in the contact address (e.g. "Keishan, Taoyuan", "München", "Hayes, Middlesex", "Kettering, Northamptonshire"), DO NOT ADD "City"! Output "Keishan, Taoyuan", "München", "Hayes, Middlesex", "Kettering, Northamptonshire". NEVER append "City" when not present in source (e.g. NEVER make it "Taoyuan City" when the source only says "Taoyuan")!
-  * 3. DO NOT ADD "District", "Township", OR "County" IF ABSENT:
-    - If "District", "Township", or "County" is NOT written in the contact address, DO NOT ADD THEM!
-    - If the contact page says "Keishan", output "Keishan" - DO NOT replace or substitute it with "Guishan District"!
-  * 4. ONLY EXPAND ABBREVIATIONS THAT ARE ACTUALLY WRITTEN:
-    - Only expand abbreviations present on the page (e.g. Rd -> Road, St -> Street, Ln -> Lane, Ste -> Suite, Fl -> Floor, 5/F. -> 5th Floor).
-- STRICT HEADQUARTERS & DOMESTIC DOMICILE MANDATE:
-  * You MUST ALWAYS select the company's OPERATIONAL HEADQUARTERS, MAIN SHOWROOM, FACTORY, or CONTACT PAGE PHYSICAL ADDRESS located in its domestic home country!
-  * NEVER pick an overseas subsidiary, branch, or distributor address (e.g. choosing a USA / California sales office when the company is headquartered in China, Taiwan, UK, Australia, Canada, Malaysia, India, South Africa, etc.)!
-  * If Candidate #1 is the Headquarters in local script (e.g. Chinese, Japanese, Taiwanese), translate or romanize THAT headquarters address into English—DO NOT pick an overseas branch address just because it is written in English!
-  * Candidate #1 is the highest-ranked location. If candidate #1 is marked HEADQUARTERS or OPERATIONAL / CONTACT PAGE ADDRESS, select that operating address.
-- ALWAYS target and extract English language text for Company Name and Company Address.
-- NEVER return Chinese, Japanese, Korean, Arabic, Thai, Cyrillic, or other non-Latin characters for "companyName" or "companyAddress" when English or Romanized/Latin text is available. Translate or transliterate local script addresses to English Title Case.
-- Always output the English physical address with street abbreviations expanded (e.g. "NO.56-106, Zhangma St., Xiushui Township, Changhua County" -> "Number 56-106, Zhangma Street, Xiushui Township, Changhua County", BUT "18 Kuang Fu North Road" -> "18 Kuang Fu North Road" WITHOUT adding "Number").
-- If the website title or logo contains both English and Chinese/local script (e.g. "FURCO Taiwan 宙辰"), take the English corporate name (e.g. "Furco Industrial Company Limited" or "Furco Taiwan Limited"). Do NOT include non-Latin characters in companyName.
-- If the website is a Single Page Application (isDynamicSpa: ${crawlData.isDynamicSpa ? "YES" : "No"}) and no address candidate was found in static HTML, inspect the site metadata, title, and body text. If no physical address exists anywhere on the site, return "Not Available" (NEVER invent or hallucinate addresses!).
+4. COMPANY NAME (CRITICAL QC RULE):
+- Extract the official legal registered company name including corporate suffix (Limited, Ltd, LLC, Inc, Corporation, GmbH, Pty Ltd, Sdn Bhd).
+- Do NOT truncate names containing "&" or "and" (e.g. "CJ Tool & Mouldings Limited", NEVER omit words before &).
+- Format in Title Case where EVERY word starts with a capital letter.
+- Separate corporate suffix with a comma if standard (e.g. "ECU Testing, Limited" or "Mocap, Limited Liability Company").
 
-ADDRESS EXTRACTION PRIORITY (CRITICAL QC REQUIREMENT):
-1. First Priority: Extract the operational Headquarters, main showroom, factory, workshop, or physical trading address from the Contact Us page, Showroom page, or Get In Touch page.
-2. Second Priority: Extract from the dedicated Company Profile / About Us page.
-3. Third Priority: If not on Contact/About page, extract from the general page body or Footer.
-4. STRICT PROHIBITION ON LEGAL REGISTERED OFFICES:
-   - STRICTLY DO NOT EXTRACT corporate legal registration addresses, accounting offices, registered agent offices, or addresses labelled "Registered Office", "Registered in England", "Company Registration No.", or "Domicilio Social" if a physical showroom, factory, workshop, or Contact page address exists!
-   - Legal registered offices (e.g. "Lonsdale House, High Street, Lutterworth" or an accounting firm address) are legal disclaimers, NOT the physical operating location where products are made or sold.
-   - ALWAYS choose the showroom / factory / contact page location (e.g. "The Springboard Centre, Mantle Lane, Coalville, Leicestershire").
-5. STRICTLY STRIP REGISTRATION CLAUSES FROM ADDRESS:
-   - NEVER output legal disclaimers like "Registered in England : 11743582., Registered Office :" in companyAddress.
-   - companyAddress MUST only contain clean physical address components: Premise/Building, Street, Locality/Town/City, and State.
-4. Address Formatting (Rule 6) - COMPLETE PHYSICAL ADDRESS PRESERVATION (GLOBAL MANDATE FOR ALL COUNTRIES WORLDWIDE):
-   - MANDATORY GLOBAL COMPLETE FULL ADDRESS QC RULE ("Address full address must be taken"):
-     * You MUST extract the COMPLETE, FULL physical headquarters/main address for ALL countries worldwide. NEVER return an incomplete, partial, or truncated address!
-     * If the website displays the address across multiple lines, paragraphs, or sibling blocks (e.g. Suite/Floor on line 1, Street on line 2, City/Suburbs/State on line 3), YOU MUST COMBINE THEM INTO ONE SINGLE COMPLETE ADDRESS!
-     * NEVER cut off or omit any part of the address. Retain every single structural address component:
-       1. Premise / Building Name / Suite / Unit / Floor / Level / Block / Lot / Plot / Factory / Workshop / Survey Number / Gate Number / Shed / Bay / Office Park.
-       2. Industrial Estate / Business Park / Trading Estate / Science Park / Free Zone / Special Economic Zone / Technology Park / Hi-Tech Zone / Polígono Industrial / Zona Industriale / Gewerbegebiet / Kawasan Industri / Taman Perindustrian.
-       3. Street number and Street / Road / Avenue / Boulevard / Way / Drive / Lane / Highway / Route / Strasse / Rue / Via / Calle / Jalan / Chome.
-       4. Suburb / Locality / Ward / Neighborhood / Village / Town / Township / Sub-district / District / Municipality / Borough / Taluk / Tehsil / Mukim / Amphoe / Barangay / Sector.
-       5. City / Metropolitan Area.
-       6. State / Province / Territory / County / Shire / Canton / Prefecture / Bundesland / Region / Division / Department / Voivodeship / Oblast / Emirate / Governorate.
-     * EXAMPLES OF COMPLETE FULL ADDRESSES:
-       - "Suite 260, 2021 Guadalupe Street, Austin, Texas" (MUST retain Suite 260, 2021 Guadalupe Street, Austin, and Texas!)
-       - "15 Telford Way, Kettering, Northamptonshire" (MUST retain 15 Telford Way, Kettering, and Northamptonshire!)
-       - "5th Floor, Office Park, Number 535, Qingshuiqiao Road, Hi-Tech Zone, Ningbo" (MUST retain 5th Floor, Office Park, Number 535, Qingshuiqiao Road, Hi-Tech Zone, and Ningbo!)
-       - "40 Sarah Street, Campbellfield, Victoria" (MUST retain 40 Sarah Street, Campbellfield, and Victoria!)
-       - "Unit 5, 12 Baxter Road, Mascot, New South Wales" (MUST retain Unit 5, 12 Baxter Road, Mascot, and New South Wales!)
-       - "15 Sandton Drive, Sandton, Gauteng" (MUST retain 15 Sandton Drive, Sandton, and Gauteng!)
-     * NEVER return only a bare street name when premise, locality, suburb, city, or state is available on the website!
-     * NEVER omit the Suite/Unit/Floor/Building/Office Park at the beginning, and NEVER omit the Suburb/Town/City/State at the end!
-   - CRITICAL CONTINENTAL EUROPE & INTERNATIONAL POSTAL CODE RULE:
-     * In Continental Europe (Germany, Austria, Switzerland, France, Italy, Spain, Netherlands, Belgium, Poland, Czechia, Sweden, Norway, Denmark, etc.), postal codes are placed BEFORE the city name (e.g. "80333 München", "75008 Paris", "28013 Madrid", "602 00 Brno", "00-838 Warszawa").
-     * When stripping postal codes, REMOVE ONLY the postal code digits/code!
-     * NEVER truncate, cut off, or discard the City, Municipality, District, or State that follows the postal code!
-     * Example: "Musterstraße 12, 80333 München, Bayern" -> "Musterstrasse 12, München, Bayern" (München and Bayern MUST be kept!).
-     * Example: "Rue de la Paix 10, 75002 Paris, Île-de-France" -> "Rue De La Paix 10, Paris, Île-De-France" (Paris and Île-de-France MUST be kept!).
-     * Example: "Calle Mayor 4, 28013 Madrid" -> "Calle Mayor 4, Madrid" (Madrid MUST be kept!).
-     * Example: "Křenová 75, 602 00 Brno, Jihomoravský Kraj" -> "Křenová 75, Brno, Jihomoravský Kraj" (Brno and Jihomoravský Kraj MUST be kept!).
-     * Example: "Number 20-2, Xinxing Street, Shulin District, New Taipei City" -> KEEP ALL components!
-   - STRICT INITIAL STREET NUMBER & PREMISE PRESERVATION:
-     * NEVER drop or strip the leading building / street / premise number or identifier (e.g. "12110 Best Place" -> MUST KEEP "12110", "40 Sarah Street" -> MUST KEEP "40", "18 Kuang Fu North Road" -> MUST KEEP "18"). A standalone number at the beginning of an address followed by a street name is the STREET NUMBER, NOT a postal code! You MUST retain the initial building/street number!
-     * NEVER drop or strip "Lot" or "Plot" identifiers (e.g. "Lot 45, Jalan Kemajuan" -> MUST KEEP "Lot 45", "Plot 12, Phase II" -> MUST KEEP "Plot 12"). "Lot" and "Plot" are primary premise addresses in industrial zones and estates globally!
-     * NEVER drop or strip Unit, Suite, Building, Floor, or Block details (e.g. "Unit 4", "Suite 200", "Building 5", "Level 3", "Block B").
-   - COMMA SEPARATION QC RULE (STRICT - NEVER INSERT COMMAS BLINDLY BETWEEN WORDS):
-     * Ensure commas separate MAJOR structural address components ONLY:
-       1. Premise / Unit / Suite / Lot / Plot from Street or Estate/Park name (e.g. "Unit 2, Argent Trade Park, Pump Lane", "Suite 200, 12110 Best Place", "Lot 45, Jalan Kemajuan").
-       2. Street Name from Suburb / Town / City (e.g. "Pump Lane, Hayes", "12110 Best Place, Cincinnati", "40 Sarah Street, Campbellfield").
-       3. Suburb / Town / City from State / County / Province / Territory (e.g. "Hayes, Middlesex", "Cincinnati, Ohio", "Campbellfield, Victoria", "Subang Jaya, Selangor").
-     * CRITICAL NEGATIVE RULE (DO NOT PUT COMMAS BLINDLY):
-       - NEVER insert commas BETWEEN words of a multi-word Industrial / Business / Trade Park, Trading Estate, or Zone name! (e.g. "Argent Trade Park" is ONE park name, NEVER "Argent, Trade, Park" or "Argent, Trade Park"! "Westwood Business Park", "Cambridge Science Park", "Prologis Park").
-       - NEVER insert commas BETWEEN words of a multi-word Street Name or Highway! (e.g. "Pump Lane" NEVER "Pump, Lane", "Great Western Highway" NEVER "Great, Western, Highway", "Old Country Road" NEVER "Old, Country, Road").
-       - NEVER insert commas BETWEEN building/street numbers and street names! (e.g. "604 Progress Drive" NEVER "604, Progress Drive", "12110 Best Place" NEVER "12110, Best Place").
-       - NEVER insert commas BETWEEN words of a multi-word City or County! (e.g. "West Sussex" NEVER "West, Sussex", "Kuala Lumpur" NEVER "Kuala, Lumpur", "New York" NEVER "New, York", "New Taipei City" NEVER "New, Taipei City").
-   - ADDRESS ENDING CRITICAL QC RULE: Address ending MUST NOT have a comma (,) or point/period (.). It should be empty of trailing punctuation (e.g. "40 Sarah Street, Campbellfield, Victoria", NEVER end with "." or ",").
-   - REMOVE ONLY:
-     * Postal codes / ZIP codes (e.g. "OH 45241" -> strip 45241, "VIC 3061" -> strip 3061, "602 00 Brno" -> strip 602 00). DO NOT strip the initial street number!
-     * Country name (e.g. Australia, South Africa, United States, Taiwan, R.O.C., Turkiye, Czechia).
-     * Company name.
-   - MANDATORY FULL FORM EXPANSION RULES (EXPAND ALL ABBREVIATIONS TO FULL WORDS GLOBALLY):
-     * Floors & Levels:
-       - Expand all floor abbreviations into full ordinal names! E.g. "5/F." or "5/F" or "5F." or "5F" or "Fl. 5" or "Flr 5" or "Floor 5" or "5th Fl" -> "5th Floor".
-       - "1/F" or "1F" -> "1st Floor", "2/F" or "2F" -> "2nd Floor", "3/F" or "3F" -> "3rd Floor", "4/F" or "4F" -> "4th Floor", "6/F" -> "6th Floor", "10/F" -> "10th Floor", etc.
-       - "G/F" or "GF" -> "Ground Floor".
-       - "B/F" or "BF" -> "Basement Floor", "B1" -> "Basement 1", "B2" -> "Basement 2".
-       - "Lvl." or "Lvl" -> "Level".
-       - Standalone "Flr." or "Flr" or "Fl." or "Fl" -> "Floor".
-     * Premises & Numbers:
-       - "No." or "No" or "NO." or "Nos." or "Nº" or "N." or "Núm." -> "Number" (e.g. "No. 535" -> "Number 535", "No. 20-2" -> "Number 20-2", "No. 53-5" -> "Number 53-5").
-       - "Sec." or "Sec" -> "Section" (e.g. "Sec. 2" -> "Section 2").
-       - "Ln." or "Ln" -> "Lane" (e.g. "Ln. 270" -> "Lane 270").
-       - "Aly." or "Aly" -> "Alley" (e.g. "Aly. 15" -> "Alley 15").
-       - "Lot No." -> "Lot Number", "Plot No." -> "Plot Number".
-     * Units / Buildings / Departments:
-       - "Ste." or "Ste" -> "Suite" (e.g. "Ste. 200" -> "Suite 200", "Ste 260" -> "Suite 260").
-       - "Bldg." or "Bldg" -> "Building" (e.g. "Bldg. 4" -> "Building 4").
-       - "Rm." or "Rm" -> "Room" (e.g. "Rm. 302" -> "Room 302").
-       - "Apt." or "Apt" -> "Apartment" (e.g. "Apt. 5B" -> "Apartment 5B").
-       - "Dept." or "Dept" -> "Department".
-       - "Blk." or "Blk" -> "Block" (e.g. "Blk 12" -> "Block 12").
-       - "POB" or "P.O. Box" or "PO Box" -> "Post Office Box".
-     * Compass / Directional prefixes & suffixes: E. / E -> East (e.g. "301 E. Marquardt Drive" -> "301 East Marquardt Drive"), W. / W -> West, N. / N -> North, S. / S -> South, NE / N.E. -> Northeast, NW / N.W. -> Northwest, SE / S.E. -> Southeast, SW / S.W. -> Southwest.
-     * Street types: St -> Street, Rd -> Road, Ave -> Avenue, Cnr -> Corner, Dr -> Drive, Blvd -> Boulevard, Ln -> Lane, Ct -> Court, Pl -> Place, Hwy -> Highway, Cres -> Crescent, Pde -> Parade, Tce/Ter -> Terrace, Cl -> Close, Sq -> Square, Pkwy -> Parkway, Cir -> Circle, Gr/Gv -> Grove, Mews -> Mews, Way -> Way, Wlk -> Walk, Gdns -> Gardens, Esp -> Esplanade, Crst -> Crest, Prom -> Promenade, Rte -> Route, Tpke -> Turnpike, Ctr -> Centre, Aly -> Alley, Arc -> Arcade, Bnd -> Bend, Brg -> Bridge, Byp -> Bypass, Cswy -> Causeway, Cmn -> Common, Xing -> Crossing, Ext -> Extension, Fwy -> Freeway, Grn -> Green, Holw -> Hollow, Jct -> Junction, Knl -> Knoll, Lndg -> Landing, Mdw/Mdws -> Meadow/Meadows, Ml/Mls -> Mill/Mills, Mt -> Mount, Oval -> Oval, Pass -> Pass, Path -> Path, Pike -> Pike, Plz -> Plaza, Pt -> Point, Rdg -> Ridge, Rnch -> Ranch, Row -> Row, Run -> Run, Shr -> Shore, Spg/Spgs -> Spring/Springs, Sta -> Station, Strm -> Stream, Sumit/Smt -> Summit, Trce -> Trace, Trl -> Trail, Tunl -> Tunnel, Via -> Via, Vis -> Vista, Whf -> Wharf, No. -> Number, Nr -> Near.
-     * Units / Buildings / Floors: Ste -> Suite, Apt -> Apartment, Bldg -> Building, Flr -> Floor, Dept -> Department, Rm -> Room, POB / PO Box -> Post Office Box.
-     * Spain (España) Abbreviations:
-       - Street Prefixes: C/ -> Calle (e.g. C/ Alcalá 42 -> Calle Alcalá 42), C. -> Calle, Av. / Avda. / Avd. -> Avenida, P.º / Pº / Pso. -> Paseo, Pl. / Pza. / Plza. -> Plaza, Rbla. -> Rambla, Ctra. -> Carretera, Cam. / Cno. -> Camino, Trav. -> Travesia, Pje. -> Pasaje, Rda. -> Ronda, Urb. -> Urbanizacion, Edif. -> Edificio.
-       - Industrial Zones: Pol. Ind. / Pol.Ind. / P.I. -> Poligono Industrial.
-       - Building Details: Nº / N.º / Núm. / Num. / N. -> Numero, S/N -> Sin Numero, Km. -> Kilometro, Pta. -> Puerta, Plta. -> Planta, Apdo. -> Apartado de Correos.
-     * Italy (Italia) Abbreviations:
-       - Street Prefixes: V.le / Vle -> Viale, C.so / Cso -> Corso, P.zza / Pzza / P.za / Pza -> Piazza, P.le / Ple -> Piazzale, L.go / Lgo -> Largo, Str. -> Strada, S.P. -> Strada Provinciale, S.S. -> Strada Statale, S.R. -> Strada Regionale, V.colo / Vclo -> Vicolo, Circonv. -> Circonvallazione.
-       - Compass: Est -> East, Ovest -> West, Nord -> North, Sud -> South.
-       - Zones / Localities: Zona Ind. / Z.I. -> Zona Industriale, Zona Art. / Z.A. -> Zona Artigianale, Loc. -> Località, Fraz. -> Frazione, C.da / Cda -> Contrada, B.go / Bgo -> Borgo.
-       - Building Details: N. / Civ. / N.ro -> Numero, Pal. -> Palazzina, Sc. -> Scala, Int. -> Interno, P. / P.to -> Piano.
-     * Singapore Abbreviations:
-       - Thoroughfares & Areas: Jln -> Jalan, Lrg / Lor -> Lorong, Bt -> Bukit, Kg -> Kampung, Tg -> Tanjong, Ind / Indl -> Industrial (e.g. Tuas Ind Estate -> Tuas Industrial Estate, Defu Ind Park -> Defu Industrial Park), Est -> Estate, Pk -> Park, Blk -> Block (e.g. Blk 3014 -> Block 3014), Techpark / Tech Park -> Technology Park.
-     * Malaysia Abbreviations:
-       - Thoroughfares & Areas: Jln -> Jalan, Lrg -> Lorong, Lbh -> Lebuh, Lbr -> Lebuhraya, Sg. -> Sungai, Bkt. -> Bukit, Bt. -> Batu (or Bukit), Kg -> Kampung, Tg -> Tanjung, Tmn -> Taman, Bdr -> Bandar, Psn -> Persiaran, Mdn -> Medan, Kws -> Kawasan, Kws. Perind. / Perind. -> Kawasan Perindustrian, Zon Perind. -> Zon Perindustrian, Sek. -> Seksyen, Pst -> Pusat, Bgn -> Bangunan, Tkt -> Tingkat, Peti Surat -> Post Office Box.
-       - Planning / Municipal Zoning Sectors: KU (e.g. 1/KU9, KU9) -> Klang Utara (e.g. 1/Klang Utara 9), KS (e.g. KS1) -> Klang Selatan, PJU -> Petaling Jaya Utara, PJS -> Petaling Jaya Selatan, USJ -> UEP Subang Jaya, PJ -> Petaling Jaya, JB -> Johor Bahru.
-       - State abbreviations: KL -> Kuala Lumpur, Sgr / Sel. -> Selangor, Jhr / Joh. -> Johor, Pnk / Pg / Pen. -> Penang, Prk / Pk. -> Perak, Kdh / Ked. -> Kedah, Phg / Pah. -> Pahang, N.S. -> Negeri Sembilan, Mlk / Mel. -> Melaka, Trg / Ter. -> Terengganu, Kel. -> Kelantan, Swk / Sar. -> Sarawak, Sbh / Sab. -> Sabah, Per. -> Perlis, WP -> Wilayah Persekutuan.
-     * Germany (Deutschland) Abbreviations:
-       - Suffix -str. / -str -> -strasse (e.g. Industriestr. -> Industriestrasse, Bahnhofstr. -> Bahnhofstrasse, Hauptstr. -> Hauptstrasse, Siemensstr. -> Siemensstrasse), Standalone Str. / Str -> Strasse (e.g. Berliner Str. -> Berliner Strasse).
-       - Suffix -pl. / -pl -> -platz (e.g. Marktpl. -> Marktplatz), Standalone Pl. / Pl -> Platz.
-       - Commercial / Industrial: Gewerbegebiet / Gew. / Gewerbepark -> Gewerbegebiet / Gewerbepark, Industriegebiet / Ind. / Industriepark -> Industriegebiet / Industriepark.
-       - Buildings & Floors: Nr. / Nr -> Nummer, Hs. -> Haus, Geb. -> Gebäude, Aufg. -> Aufgang, Whg. -> Wohnung, OG / O.G. -> Obergeschoss (e.g. 1. OG -> 1. Obergeschoss), EG / E.G. -> Erdgeschoss, UG / U.G. -> Untergeschoss, Stck. / Stock -> Stockwerk, Postfach / PF -> Postfach.
-       - Locations: a. M. -> am Main (e.g. Frankfurt a. M. -> Frankfurt am Main), a. d. -> an der.
-       - Bundesländer abbreviations: BW -> Baden-Württemberg, BY -> Bayern, BE -> Berlin, BB -> Brandenburg, HB -> Bremen, HH -> Hamburg, HE -> Hessen, MV -> Mecklenburg-Vorpommern, NI -> Niedersachsen, NW / NRW -> Nordrhein-Westfalen, RP -> Rheinland-Pfalz, SL -> Saarland, SN -> Sachsen, ST -> Sachsen-Anhalt, SH -> Schleswig-Holstein, TH -> Thüringen.
-     * Indonesia Abbreviations:
-       - Thoroughfares & Areas: Jl. / Jln. -> Jalan, Gg. -> Gang, Komp. / Kompl. -> Komplek, Kel. -> Kelurahan, Kec. -> Kecamatan, Kab. -> Kabupaten, Prov. / Prop. -> Provinsi, Kav. -> Kavling, Blok -> Blok, Kws. Industri -> Kawasan Industri.
-       - Building Details: No. -> Number, Rt. / Rw. -> RT / RW.
-       - Regions: DKI Jakarta, DI Yogyakarta.
-     * State & Province abbreviations GLOBALLY:
-       - Australia: VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland, WA -> Western Australia, SA -> South Australia, TAS -> Tasmania, ACT -> Australian Capital Territory, NT -> Northern Territory.
-       - United States: Expand all 2-letter state codes to full state names (e.g. CA -> California, TX -> Texas, NY -> New York, FL -> Florida, IL -> Illinois, PA -> Pennsylvania, OH -> Ohio, GA -> Georgia, NC -> North Carolina, MI -> Michigan, NJ -> New Jersey, VA -> Virginia, WA -> Washington, MA -> Massachusetts, WI -> Wisconsin, MO -> Missouri, MN -> Minnesota, CT -> Connecticut, etc.). Strip 5-digit ZIP codes (e.g. "60060", "78731-1234") and country name ("USA", "United States"). Format cleanly as "[Street Address], [City], [Full State Name]".
-       - Canada: ON -> Ontario, QC -> Quebec, BC -> British Columbia, AB -> Alberta, MB -> Manitoba, SK -> Saskatchewan, etc.
-   - Capitalize first letter of every word (Title Case) and format with clean punctuation.
+5. COUNTRY NAME (CRITICAL QC RULE):
+- Format full official name in Title Case (e.g. "United States Of America", "United Kingdom", "Australia", "Taiwan", "Germany").
+- Priority: If website explicitly wrote "United Kingdom" or "UK" in address/contact block, MUST output "United Kingdom"! Only output constituent country ("England", "Scotland", "Wales", "Northern Ireland") if UK is not written and address is verified in that region.
 
-STATE & CITY RULES (CRITICAL QC - BASED STRICTLY ON EXTRACTED ADDRESS ONLY):
-Important: State and City MUST be evaluated STRICTLY based on the extracted address.
+6. COMPANY ADDRESS (CRITICAL QC MANDATE):
+- FULL PHYSICAL HEADQUARTERS ADDRESS: Include premise/building/suite, street number, street name, suburb/town, city, and state/county.
+- STRICT NO EXTRA WORDS RULE: Retain authentic address words from the website. Never invent words not present (e.g. do not add "City" or "Number" if not written).
+- STRICT PRESERVATION: NEVER drop leading street/building numbers (e.g. "12110 Best Place" -> keep 12110; "40 Sarah Street" -> keep 40).
+- EXPAND ALL ABBREVIATIONS: St -> Street, Rd -> Road, Ave -> Avenue, Dr -> Drive, Blvd -> Boulevard, Ste -> Suite, Bldg -> Building, Flr/Fl -> Floor, No. -> Number, Ln -> Lane, Aly -> Alley, Sec -> Section, VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland, etc.
+- STRIP ONLY: Postal codes (ZIP codes), Country name, and Telephone/Fax numbers.
+- COMMA SEPARATION:
+  * Put commas between structural components: [Premise], [Street], [Suburb/Town/City], [State/County].
+  * ALWAYS put a comma before State/Province (e.g. "Oakleigh South, Victoria", "Cincinnati, Ohio", "Kettering, Northamptonshire").
+  * NEVER put commas inside a street name ("Pump Lane" not "Pump, Lane"), inside an industrial park name ("Argent Trade Park" not "Argent, Trade Park"), or between street number and street name ("604 Progress Drive" not "604, Progress Drive").
+  * Address MUST NOT end with a comma or period.
 
-1. State:
-   - Mark "Available" if ANY of the following administrative divisions is written in the extracted address:
-     * State, Province, County (or Co.), Prefecture, Hsien (Taiwan County), Bundesland / Land (Germany), Regione / Provincia (Italy), Provinsi / Propinsi (Indonesia), Negeri / Wilayah (Malaysia), Changwat (Thailand), Sheng / Xian / Zhou (China), Territory, Emirate, Canton, Region, Regional Council, Oblast, Voivodeship, Department, Governorate
-     * Named examples across priority countries: Victoria, New South Wales, Queensland, Texas, California, Ontario, Quebec, Gauteng, Maharashtra, Karnataka, Tamil Nadu, Selangor, Penang, Johor, Guangdong, Jiangsu, Gyeonggi, Abu Dhabi, Dubai, Île-de-France, Bavaria, Yorkshire, Lancashire, Dublin, Cork, Kildare, Galway, Lombardia, Brescia, München, etc.
-   - ALSO Mark "Available" if a country's official capital city is in the address (e.g. Taipei City = capital of Taiwan, London = capital of England, Washington D.C. = capital of USA, Berlin = Germany, Rome = Italy, Madrid = Spain, Ankara = Turkiye, Dublin = Ireland, Bangkok = Thailand, Jakarta = Indonesia, Beijing = China, Kuala Lumpur = Malaysia).
-   - Spain State Rule: Any of the 50 provinces (e.g. Madrid, Barcelona, Valencia, Sevilla, Zaragoza, Málaga, Murcia, Alicante, Córdoba, Valladolid, A Coruña, Asturias, Vizcaya, Guipúzcoa, Las Palmas, Santa Cruz de Tenerife, etc.) or 17 Autonomous Communities (e.g. Andalucía, Cataluña, Galicia, País Vasco, Castilla y León, Castilla-La Mancha, etc.) in address → State: Available.
-   - Turkey (Türkiye) State Rule: Any of Turkey's provinces (İl, e.g. Istanbul, Ankara, Izmir, Bursa, Antalya, Adana, Konya, Gaziantep, Kocaeli, Mersin, Diyarbakir, Kayseri, Eskisehir, Samsun, Denizli, Sakarya, Mugla, etc.) or explicit "İl" / "İli" / "Province" in address → State: Available. If Ankara (capital) is in address, both State and City are Available.
-   - United States – State Validation Rule:
-     * Any US state (full name e.g. Illinois, Texas, California, Pennsylvania, Wisconsin, Massachusetts, Missouri, Minnesota, Connecticut, Florida, etc., or 2-letter postal abbreviation e.g. IL, TX, CA, PA, WI, MA, MO, MN, CT, FL) in address → State: Available.
-     * Washington D.C. (capital) in address → State: Available.
-   - If the address only contains a street, suburb, locality, or industrial area — mark "Not Available".
-   - Taiwan – State Validation Rule:
-     * Taipei City (capital) in address → State: Available
-     * New Taipei City in address → State: NOT Available (New Taipei City is NOT the capital)
-     * Taichung City, Tainan City, Kaohsiung City, Taoyuan City, Keelung City, Hsinchu City, Chiayi City in address → State: NOT Available (these are cities, NOT states or capital)
-     * Districts (e.g. Nantun District, Banqiao District, Xitun District) in address → State: NOT Available (districts are city subdivisions, NOT states)
-     * Explicit County / Hsien (e.g. Changhua County, Miaoli County) or Capital (Taipei City) in address → State: Available
-     * Otherwise → State: NOT Available
-   - New Zealand – State Validation Rule:
-     * Wellington (capital) in address → State: Available (If country's capital is in address, both City and State are Available)
-     * True New Zealand Regions (e.g. Canterbury, Waikato, Bay of Plenty, Otago, Hawke's Bay, Taranaki, Manawatu, Southland, Northland, Marlborough, Tasman, West Coast) or explicit "Region" / "Regional Council" / "Province" / "County" (e.g. "Auckland Region", "Canterbury Province") in address → State: Available
-     * Bare "Auckland" in address → State: NOT Available (Auckland is the City, NOT a state)
-     * Bare cities / towns (e.g. Christchurch, Hamilton, Tauranga, Dunedin, Nelson, Napier, Palmerston North) in address → State: NOT Available
-     * Suburbs alone (e.g. Penrose, Albany, Rosedale, East Tamaki, Mount Wellington, Riccarton) → State: NOT Available
-     * Otherwise → State: NOT Available
-   - Do not guess or infer. Only evaluate what is explicitly written in the address.
+7. STATE & CITY QC RULES (EVALUATED FROM EXTRACTED ADDRESS ONLY):
+- State: Mark "Available" if State, Province, County, Prefecture, or Country Capital is present in the address. Otherwise "Not Available".
+- City:
+  * CRITICAL: A SUBURB IS NOT A CITY! Suburbs in Australia (e.g. Campbellfield, Rowville, Oakleigh South), South Africa (e.g. Sandton), New Zealand (e.g. Penrose), or UK are NOT cities -> mark "city": "Not Available"!
+  * Mark "Available" ONLY if an official recognized City, Town, Township, District, or Municipality is in the address (e.g. Melbourne, Sydney, London, Chicago, Austin, Park Hills, Heanor).
+  * GEOGRAPHIC NORMALIZATION: Recognized UK town localities (e.g. "Heanor Gate" -> Heanor, Derbyshire) qualify as City: "Available".
 
-2. CITY VALIDATION RULES – STRICT QC RULE:
-   - CRITICAL SUBURB QC RULE ("Subhurb is consider as city if subhurb was coming means its should mark not available its not city"):
-     * A SUBURB IS NOT A CITY!
-     * If an address contains ONLY a suburb or suburban locality (such as suburban localities in Australia, South Africa, New Zealand, UK, Canada, etc.) and does NOT contain an official recognized City, Town, Township, District, or Municipality:
-       -> YOU MUST MARK "city": "Not Available"!
-     * Suburbs are suburban residential or industrial areas within a metropolitan region—they are NOT cities!
-     * Examples:
-       - Australia: "40 Sarah Street, Campbellfield, Victoria" -> Campbellfield is a SUBURB, NOT a city. Mark "city": "Not Available"!
-       - Australia: "83 Henderson Road, Rowville, Victoria" -> Rowville is a SUBURB, NOT a city. Mark "city": "Not Available"!
-       - Australia: "12 Kewdale Road, Welshpool, Western Australia" -> Welshpool is a SUBURB, NOT a city. Mark "city": "Not Available"!
-       - Australia: "Unit 5, 12 Baxter Road, Mascot, New South Wales" -> Mascot is a SUBURB, NOT a city. Mark "city": "Not Available"!
-       - South Africa: "15 Sandton Drive, Sandton, Gauteng" -> Sandton is a SUBURB of Johannesburg. Mark "city": "Not Available"!
-       - New Zealand: "120 Penrose Road, Penrose 1061" -> Penrose is a SUBURB of Auckland. Mark "city": "Not Available"!
-     * ONLY mark "city": "Available" if an actual official recognized City (e.g. Sydney, Melbourne, Brisbane, Perth, Adelaide, Auckland, London, Chicago, etc.) or an explicit Town, Township, District, or Municipality is named in the address!
-   The city field MUST be marked "Available" if ANY of the following is true:
-   a) The official website's address explicitly identifies a qualifying City (e.g. "Cixi City", "Kansas City", "City of London"), Town (e.g. "Longshan Town"), Township (e.g. "Xiushui Township"), District (e.g. "Banqiao District"), Municipality / Metropolitan Municipality (e.g. "Ekurhuleni Municipality"), Borough, Shire, or Village.
-   b) The address contains local administrative city designations across priority countries:
-      - Germany: Stadt, Gemeinde, Marktgemeinde, Markt, Bezirk, Ortsteil
-      - Italy: Comune, Municipio, Città, Distretto
-      - Spain: Municipio, Ayuntamiento, Localidad, Población, Villa, Ciudad, Distrito, Término Municipal, Concejo
-      - Indonesia: Kota, Kabupaten, Kecamatan
-      - Thailand: Thesaban, Amphoe, Amphur, Khet, Mueang, Muang
-      - Malaysia: Bandar, Daerah, Mukim, Pekan, Majlis Perbandaran
-      - India: Taluk, Taluka, Tehsil, Tahsil, Mandal, Nagar Palika, Nagar Nigam
-      - Turkey: İlçe, İlcesi, Belediye, Belediyesi, Şehir, Sehir, Mahalle, Mahallesi
-   c) The address contains a recognized city / town / municipal name (e.g. Chicago, Melbourne, Boston, San Francisco, Cape Town, Manchester, Johor Bahru, Shenzhen).
-   d) UNITED KINGDOM: Recognized UK cities, towns, and London boroughs evaluate as "Available".
-      - GEOGRAPHIC NORMALIZATION AUTHORIZATION (CRITICAL QC RULE):
-        * You are EXPLICITLY AUTHORIZED to perform standard geographic normalization on the extracted address.
-        * When an address specifies a recognized town locality or industrial zone (e.g. "Heanor Gate" -> recognized town of Heanor, Derbyshire, UK), recognize the underlying town/municipality and mark "city": "Available".
-        * In the UK: Any recognized town, city, royal borough, or industrial zone of a town (e.g. Heanor Gate, Heanor, Kettering, Coalville, Maldon, Hayes, Slough) qualifies as City: "Available".
-        * In the UK: Any ceremonial or traditional county (e.g. Derbyshire, Leicestershire, Essex, Northamptonshire, Middlesex, Yorkshire, Lancashire) in the address qualifies as State: "Available".
-   e) NEW ZEALAND: Recognized NZ cities & towns (e.g. Auckland, Wellington, Christchurch, Hamilton, Tauranga, Dunedin, Lower Hutt, Upper Hutt, Palmerston North, Napier, Porirua, New Plymouth, Rotorua, Whangarei, Invercargill, Nelson, Whanganui, Hastings, Gisborne, Blenheim, Timaru, Taupo, Pukekohe, Cambridge, Queenstown) evaluate as "Available".
-   f) UNITED STATES: Standard US addresses follow the format "[Street Address], [City], [State] [ZIP]". The locality preceding the State and ZIP is the official City/Town/Municipality (e.g. Mundelein, Austin, Houston, Kutztown, Merced, North Hollywood, Oshkosh, Somerville, Allenton, Westford, Washington, Chicago, Hamden, Blomkest, Palmetto, Saegertown, Wheeling, Watertown, etc.) and MUST evaluate as "Available".
-   STRICTLY MARK "Not Available" FOR:
-   - Suburb / locality / neighborhood only (e.g. Campbellfield, Rowville, Welshpool, Mascot, Sandton, Rosebank, Penrose, Albany) with no city/town/district.
-   - New Zealand: Suburbs alone (e.g. Penrose, Albany, Rosedale, East Tamaki, Mount Wellington, Riccarton, Hornby) without a recognized city/town.
-   - Australia: Suburbs alone (e.g. Campbellfield, Rowville, Welshpool, Mascot, Rydalmere, Braeside, Dandenong) without a recognized city/town.
-   - Industrial Area / Business Park only, with no city/town/district.
-   - Street names containing the word "City" (e.g. "City Road", "City Street", "City Avenue") do NOT qualify as a city.
-   - New Taipei City: Must remain "Not Available" unless a qualifying administrative area (e.g. Banqiao District) is separately identified in the address.
+8. EMAIL ID & SECONDARY EMAIL ID:
+- Primary Email: Official general contact or sales inbox (e.g. sales@, info@, contact@, enquiry@).
+- Secondary Email: Distinct secondary corporate email (e.g. support@, jobs@, service@).
+- Must NOT be identical. Reject privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix). Empty string "" if none found.
 
-PRODUCT, IMAGE & DESCRIPTION QC RULES (ACCURATELY BASED ON SITE):
-Count the distinct items, product images, and descriptions actually present on this specific website:
-- "numberOfProducts", "productImages", and "numberOfProductDescriptions" are THREE INDEPENDENT MEASUREMENTS:
-  * "numberOfProducts": Number of distinct physical product items / catalog offerings found on the website ('0', '1', '2', or '3' for 3 or more).
-  * "productImages": Number of physical product images/photos displayed on the website ('0', '1', '2', or '3' for 3 or more).
-  * "numberOfProductDescriptions": Number of distinct product descriptions, technical specifications, or feature summaries found on the website ('0', '1', '2', or '3' for 3 or more).
-- Evaluate each field INDEPENDENTLY based on actual evidence found on the website. DO NOT force them to be identical if the measurements differ (e.g. a site may have 0 products, 3 images, and 0 descriptions, or 3 products, 2 images, and 1 description).
-- If websiteStatus is Not Working (or Domain Expired, Non English, Flash, Under Construction), all three fields must be empty string "".
+9. PHONE NUMBER (CRITICAL QC RULE):
+- Complete telephone number with international calling code STRIPPED (+1, +44, +61, +886 removed).
+- Digits only (no spaces, hyphens, brackets, or dots).
+- Strip leading zeroes. MUST NEVER start with zero.
+- STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). If only toll-free is available, return empty string "".
+- Valid numbers must be between 8 and 12 digits.
 
-COMPANY PROFILE QC RULES (Rule 3):
-- This is a drop-down option ("Available" | "Not Available").
-- If a real operating business is identified AND the site has a Company Profile / About Us / Our Company / Who We Are page, section, PDF, or narrative, mark "Available".
-- Mark "Available" if:
-  * Dedicated Company Profile, Corporate Profile, About Us, Our Story, or Who We Are page/section exists.
-  * Company background, history, founding year, mission/vision, factory intro, or corporate table is present.
-  * Downloadable Company Profile PDF exists.
-- Mark "Not Available" if:
-  * The site has NO Company Profile or About Us section/page AND no company background narrative.
-  * The site is an e-commerce shop or product catalog with only products, pricing, and a shopping cart, with NO company background.
-  * The site only has a basic Contact page or address in the footer without any company profile, history, or story.
-  * The site only has a generic 1-line promotional slogan without any company history or profile.
-  * The site is under construction, a domain parking page, or non-functional.
-
-COMPANY NAME RULES (Rule 4):
-1. COMPLETE COMPANY NAME IN FULL FORM (CRITICAL QC RULE):
-   - You must take the COMPLETE registered company name in FULL FORM, Title Case.
-   - OFFICIAL ENGLISH NAME VS PINYIN TRANSLITERATION (CRITICAL QC MANDATE):
-     * When the website provides an OFFICIAL ENGLISH NAME in its header, logo, page title, or matching the domain (e.g. "Web Rack Industrial Co., Ltd." on "web-rack.com.tw"), YOU MUST USE THAT EXACT OFFICIAL ENGLISH NAME: "Web Rack Industrial Company, Limited"!
-     * NEVER translate, phonetically romanize, or Pinyin Chinese characters into English (e.g. NEVER translate "網瑞" to "Wang Ruey" when the website brand/logo is "Web Rack"!).
-     * Look at the DOMAIN NAME (e.g. "web-rack.com.tw" -> stem is "Web Rack"): The official English company name MUST match the website domain!
-     * If multiple group entities or associated companies appear in the header/footer (e.g. "Web Rack Industrial Co., Ltd." / "Web Loop Technology Corp." / "Alpmetal Industrial Co., Ltd."), ALWAYS choose the PRIMARY entity that MATCHES THE WEBSITE DOMAIN (e.g. for "web-rack.com.tw", choose "Web Rack Industrial Company, Limited", NEVER an auxiliary or unmatching entity!).
-   - NEVER drop, truncate, or omit corporate/legal entity designations (e.g. [Pty]Ltd, (Pty) Ltd, Pty Ltd, Sdn Bhd, Pte Ltd, Pvt Ltd, Ltd, Inc, LLC, LLP, Corp, Co).
-   - Look at the HEADER, LOGO, FOOTER, COPYRIGHT LINE, and TITLE for the full official registered corporate name.
-   - Restore legal entity designations (e.g. [Pty]Ltd -> Proprietary Limited, Sdn Bhd -> Sendirian Berhad, Inc -> Incorporated) ONLY when supported by official website text evidence (footer, copyright, Contact page, or Company Profile).
-2. REMOVE BRACKETS FROM THE COMPANY NAME:
-   - Remove square brackets [ ] and parentheses ( ) from the company name while KEEPING their internal words:
-     * "[Pty]Ltd" or "(Pty) Ltd" -> "Proprietary Limited"
-     * "(Pte) Ltd" or "[Pte] Ltd" -> "Private Limited"
-     * "(Pvt) Ltd" or "[Pvt] Ltd" -> "Private Limited"
-     * "(M)" -> "M" (e.g. "Nikorex Display Products (M) Sdn Bhd" -> "Nikorex Display Products M Sendirian Berhad")
-     * "(Australia)" or "(USA)" or "(Taiwan)" -> "Australia" / "USA" / "Taiwan" (brackets removed, country name preserved)
-     * "Carrier (USA) Corporation" -> "Carrier USA Corporation"
-     * "Furco (Taiwan) Company Limited" -> "Furco Taiwan Company Limited"
-3. RETAIN COUNTRY NAMES IN COMPANY NAME:
-   - If a country name is mentioned in the company name, take it as it is (DO NOT remove country names from the company name).
-   - Example: "FP Chassis Australia (Pty) Ltd" -> "FP Chassis Australia Proprietary Limited"
-   - Example: "Meramec USA Inc" -> "Meramec USA Incorporated"
-   - Example: "Stoneland USA" -> "Stoneland USA"
-   - Example: "Palram Americas" -> "Palram Americas"
-4. DO NOT EXPAND SYMBOLS (KEEP SYMBOLS AS THEY ARE - e.g. "&") & DO NOT INVENT "COMPANY":
-   - CRITICAL MANDATORY QC RULE ("dont expand the symbols it should be as it is H&R Manufacturing"):
-     * When a company name uses symbols such as "&" (ampersand), DO NOT expand "&" into "And"!
-     * Keep the symbol exactly as it appears on the website:
-       - "H&R Manufacturing" -> "H&R Manufacturing" (STRICTLY NEVER "H And R Manufacturing" or "H And R Manufacturing Company"!)
-       - "B&M Industrial" -> "B&M Industrial"
-       - "Johnson & Johnson" -> "Johnson & Johnson"
-       - "AT&T" -> "AT&T"
-       - "P&G" -> "P&G"
-       - "Black & Decker" -> "Black & Decker"
-     * DO NOT invent, hallucinate, or append "Company" to the company name if "Company" or "Co." does not appear in the official name (e.g. if the website says "H&R Manufacturing", return "H&R Manufacturing", NEVER "H&R Manufacturing Company"!).
-     * BUT when "Co." or "Co" appears in the corporate name, trade listing, or social media handles (e.g. "PEM Fountain Co." or "@pemfountainco"), expand "Co." to full form "Company": "PEM Fountain Company"!
-   - CRITICAL MANDATORY QC RULE - BRAND ACRONYMS:
-     * Retain acronyms and abbreviated brand trademarks in UPPERCASE (e.g. "PEM", "BMW", "AKS", "HR", "CRP", "FP"):
-       - "PEM Fountain Company" (STRICTLY "PEM", NEVER "Pem Fountain" or "Pem Fountain Company"!)
-       - "AKS Lining Systems Proprietary Limited" (STRICTLY "AKS", NEVER "Aks"!)
-5. EXPANDING "CO., LTD" VS "CO. LTD" AND CORPORATE COMMAS (CRITICAL QC RULE):
-   - RESPECT THE PRESENCE OR ABSENCE OF COMMAS EXACTLY AS IN THE OFFICIAL SOURCE:
-     * If WITH comma: "Co., Ltd" or "Co.,Ltd" -> MUST expand to "Company, Limited" (keep the comma!).
-     * If WITHOUT comma: "Co. Ltd" or "Co Ltd" -> MUST expand to "Company Limited" (DO NOT add a comma!).
-     * Example: "KAULIN MFG. CO., LTD" -> "Kaulin Manufacturing Company, Limited" (comma kept).
-     * Example: "ABC Inter Co. Ltd" -> "ABC Inter Company Limited" (no comma).
-     * Example: "Pte., Ltd" -> "Private, Limited" vs "Pte. Ltd" -> "Private Limited".
-     * Example: "Pty., Ltd" -> "Proprietary, Limited" vs "Pty. Ltd" -> "Proprietary Limited".
-     * Example: "Pvt., Ltd" -> "Private, Limited" vs "Pvt. Ltd" -> "Private Limited".
-   - When expanding ", Inc" or ", Inc." to full form, KEEP THE COMMA if present in original:
-     * "TP Orthodontics, Inc" -> "TP Orthodontics, Incorporated"
-     * "Transformer Manufacturers, Inc" -> "Transformer Manufacturers, Incorporated"
-     * "Meramec USA Inc" -> "Meramec USA Incorporated" (no comma in original -> no comma in output).
-   - Example: "U.S. Tsubaki Industrial, LLC" -> MUST KEEP the dots in "U.S." and the comma before "LLC"!
-5. SPECIAL CHARACTERS MUST NOT START AND MUST NOT END (STRICT QC RULE):
-   - Special characters MUST NOT start and MUST NOT end the company name!
-   - The company name must strictly START with a letter or digit (never start with quotes, copyright ©, #, •, -, _, /, |, *, ~, (, [, @, &, punctuation, or symbols).
-   - The company name must strictly END with a letter or digit (never end with trailing commas, periods/dots, semicolons, colons, dashes, slashes, or quotes).
-   - Example: "# Carrier Inc." -> "Carrier Incorporated" (no leading #, no trailing dot).
-   - Example: "© 2024 Acme Co., Ltd." -> "Acme Company, Limited" (no leading ©, no trailing dot).
-   - Example: "- Furco Co. Ltd -" -> "Furco Company Limited" (no leading or trailing dashes).
-6. EXPAND LEGAL ABBREVIATIONS GLOBALLY TO FULL WORDS:
-   - Indonesia:
-     * PT, PT., P.T. -> Perseroan Terbatas (prefix before name: e.g. "PT Astra International Tbk" -> "Perseroan Terbatas Astra International Terbuka")
-     * CV, CV., C.V. -> Commanditaire Vennootschap
-     * UD, UD., U.D. -> Usaha Dagang
-     * PD, PD., P.D. -> Perusahaan Daerah
-     * Tbk, Tbk. -> Terbuka
-   - Malaysia:
-     * Sdn Bhd, Sdn. Bhd. -> Sendirian Berhad
-     * Bhd, Bhd. -> Berhad
-     * PLT -> Perkongsian Liabiliti Terhad
-     * NEVER output "Proprietary Limited" for Malaysian companies!
-   - Germany / Austria / Switzerland (DACH):
-     * GmbH, G.m.b.H. -> Gesellschaft mit beschränkter Haftung
-     * GmbH & Co. KG, GmbH + Co. KG -> Gesellschaft mit beschränkter Haftung and Compagnie Kommanditgesellschaft
-     * AG, A.G. -> Aktiengesellschaft
-     * KG -> Kommanditgesellschaft
-     * OHG -> Offene Handelsgesellschaft
-     * UG (haftungsbeschränkt) -> Unternehmergesellschaft haftungsbeschränkt
-     * GbR -> Gesellschaft bürgerlichen Rechts
-     * e.K. -> eingetragener Kaufmann
-   - Spain & Latin America:
-     * S.L., SL -> Sociedad Limitada
-     * S.A., SA -> Sociedad Anónima
-     * S.L.U., SLU -> Sociedad Limitada Unipersonal
-     * S.A.U., SAU -> Sociedad Anónima Unipersonal
-     * S.Coop. -> Sociedad Cooperativa
-   - Italy:
-     * S.r.l., SRL -> Società a Responsabilità Limitata
-     * S.r.l.s., SRLS -> Società a Responsabilità Limitata Semplificata
-     * S.p.A., SPA -> Società per Azioni
-     * S.a.s. -> Società in Accomandita Semplice
-     * S.n.c. -> Società in Nome Collettivo
-   - France & Belgium:
-     * SARL, S.A.R.L. -> Société à Responsabilité Limitée
-     * SAS, S.A.S. -> Société par Actions Simplifiée
-     * SASU, S.A.S.U. -> Société par Actions Simplifiée Unipersonnelle
-   - Netherlands & Belgium:
-     * B.V., BV -> Besloten Vennootschap
-     * N.V., NV -> Naamloze Vennootschap
-   - Poland:
-     * Sp. z o.o. -> Spółka z ograniczoną odpowiedzialnością
-   - Nordics:
-     * AB -> Aktiebolag
-     * AS -> Aksjeselskap
-     * Oy -> Osakeyhtiö
-   - Australia & South Africa:
-     * [Pty]Ltd, (Pty) Ltd, Pty Ltd, Pty. Ltd. -> Proprietary Limited
-     * Pty, Pty. -> Proprietary
-   - Singapore / India / United Kingdom:
-     * Pte Ltd, Pte. Ltd., (Pte) Ltd -> Private Limited
-     * Pvt Ltd, Pvt. Ltd., (Pvt) Ltd -> Private Limited
-     * Plc, PLC -> Public Limited Company
-   - United States / Canada / Global:
-     * Ltd, Ltd. -> Limited
-     * Inc, Inc. -> Incorporated
-     * LLC, L.L.C. -> Limited Liability Company
-     * LLP, L.L.P. -> Limited Liability Partnership
-     * LP, L.P. -> Limited Partnership
-     * PLLC, P.L.L.C. -> Professional Limited Liability Company
-     * Co, Co. -> Company
-     * Corp, Corp. -> Corporation
-     * Co., Ltd., Co. Ltd. -> Company, Limited (always include comma before Limited!)
-     * Mfg., Mfg -> Manufacturing
-     * Mfr., Mfrs. -> Manufacturer, Manufacturers
-     * Ind., Inds., Indust. -> Industries / Industrial
-     * Intl., Intl, Int'l -> International
-     * Natl., Natl, Nat'l -> National
-     * Tech., Technol., Tech -> Technology / Technologies
-     * Engg., Eng., Engr. -> Engineering
-     * Dev., Devel. -> Development
-     * Sys., Syst. -> Systems
-     * Prod., Prods. -> Products
-     * Equip., Eqpt. -> Equipment
-     * Svcs., Svc., Serv. -> Services
-     * Soln., Solns. -> Solutions
-     * Assoc., Assocs. -> Associates
-     * Grp., Grp -> Group
-     * Chem., Chems. -> Chemicals / Chemical
-     * Elec., Elect. -> Electronics / Electrical
-     * Auto., Auto -> Automotive / Automation
-     * Dist., Distrib. -> Distribution / Distributors
-     * Fab., Fab -> Fabrication
-     * Mach., Mach -> Machinery
-     * Pkg., Pack. -> Packaging
-     * Mgmt., Mgt. -> Management
-     * Comm., Comms. -> Communications
-     * Lab., Labs. -> Laboratories
-     * Mat., Matl. -> Materials
-     * Appl., App. -> Applied
-     * Adv., Adv -> Advanced
-     * Gen., Gen -> General
-     * Std., Std -> Standard
-     * Env., Envr. -> Environmental
-     * Trans., Transp. -> Transportation / Transport
-     * Log., Logist. -> Logistics
-     * Const., Constr. -> Construction
-     * Pharm., Pharm -> Pharmaceuticals
-     * Agri., Agric. -> Agricultural
-     * Telecom. -> Telecommunications
-     * JSC, PJSC, OJSC -> Joint Stock Company, Public Joint Stock Company, Open Joint Stock Company
-     * Ltda., Ltda -> Limitada
-     * S.A. de C.V. -> Sociedad Anónima de Capital Variable
-     * S. de R.L. de C.V. -> Sociedad de Responsabilidad Limitada de Capital Variable
-     * SE -> Societas Europaea
-     * s.r.o. -> společnost s ručením omezeným
-     * d.o.o. -> društvo s ograničenom odgovornošću
-     * Kft. -> Korlátolt Felelősségű Társaság
-5. EXTRACT TRUE BRAND & COMPLETE LEGAL NAME (NEVER MARKETING SLOGANS OR INCOMPLETE DESCRIPTORS):
-   - You MUST analyze ALL website pages (About Us, Company Profile, Terms & Conditions, Privacy Policy, Legal / Impressum, and official registration numbers like ABN/ACN).
-   - If an official registered corporate name with prefix, suffix, and category exists anywhere on the site (e.g. "Custom Flatpack Proprietary Limited" / "Custom Flatpack Pty Ltd"), you MUST output that FULL official registered name! NEVER output an incomplete brand or marketing name like "Custom Flat Packs".
-   - When the page title or header contains both a service description/slogan and a business name (e.g. "Expert Cabinet Maker in Canberra | Custom Flat Packs"), identify the business brand ("Custom Flatpack") and find its full registered legal corporate entity ("Custom Flatpack Proprietary Limited").
-   - Reject phrases like "Expert ... in [City]", "Best ... in [City]", "Leading Manufacturer of ...", "Professional ... Services" when they are marketing taglines.
-6. STRICTLY REMOVE NAVIGATION, CTA, AND PAGE-CONTEXT PREFIXES:
-   - NEVER prefix the company name with navigation or call-to-action words like "Contact ", "Contact Us ", "About ", "Welcome to ", "Home - ", "Visit ", "Get In Touch With ", "Connect With ", "Policy ", "Submit ", "Scroll to Top ", "Privacy Notice of ", "Copyright ", etc.
-   - Example: If a page heading says "Contact Danzer UK Limited", the official company name is "Danzer UK Limited" (NEVER "Contact Danzer UK Limited").
-   - Strip marketing taglines or product category descriptors attached after the legal suffix (e.g. "Danzer UK Limited - Timber Merchants Suppliers of Hardwoods" -> "Danzer UK Limited").
-7. MANDATORY CAPITALIZATION & SPECIAL CHARACTER RULES FOR COMPANY NAME:
-   - EVERY SINGLE WORD in companyName MUST start with a Capital letter (Title Case). E.g. "Inter Outstanding Electronics Incorporated", "Wang Ruey Industrial Company Limited".
-   - Special characters MUST NOT start and MUST NOT end the company name.
-
-COUNTRY NAME VALIDATION RULES (CRITICAL QC REQUIREMENT):
-1. MANDATORY COUNTRY NAME QC RULE:
-   - "You must write the country name in full form. If the country name is not available on the site, check on social media. If still not available, search on Google using the city and state name. We consider the locality for the country name.
-   Example: United Kingdom (England, Wales, Scotland, Northern Ireland). If “England” and “United Kingdom” both are mentioned, you must take England as the country name."
-2. FULL FORM COUNTRY NAME (CRITICAL MANDATORY QC RULE):
-   - You MUST write the country name in full form (e.g. "United States Of America", "United Kingdom", "South Africa", "United Arab Emirates", "Saudi Arabia", "New Zealand").
-3. FALLBACK HIERARCHY FOR COUNTRY IDENTIFICATION (CRITICAL QC RULE):
-   - If the country name is not available on the site, check on company social media (LinkedIn, Facebook, Twitter/X, Instagram, YouTube).
-   - If still not available, search on Google using the city and state name. WE CONSIDER THE LOCALITY FOR THE COUNTRY NAME.
-   - Extract directly from the physical address, city, state, or locality evidence.
-4. UNITED KINGDOM & CONSTITUENT COUNTRIES MANDATE (CRITICAL QC RULE):
-   - Example: United Kingdom (England, Wales, Scotland, Northern Ireland). If "England" and "United Kingdom" both are mentioned, you must take England as the country name.
-   - The constituent countries of the United Kingdom are:
-     * "England"
-     * "Wales"
-     * "Scotland"
-     * "Northern Ireland"
-   - STRICT QC MANDATE:
-     * If "England" and "United Kingdom" both are mentioned, YOU MUST TAKE England as the country name!
-     * If "Scotland" and "United Kingdom" both are mentioned, YOU MUST TAKE Scotland as the country name!
-     * If "Wales" and "United Kingdom" both are mentioned, YOU MUST TAKE Wales as the country name!
-     * If "Northern Ireland" and "United Kingdom" both are mentioned, YOU MUST TAKE Northern Ireland as the country name!
-     * When the locality, city, or county belongs to a constituent country (e.g. London, Birmingham, Manchester, Leeds, Kettering, Northamptonshire, Essex, Yorkshire, Kent, Lancashire -> England; Cardiff, Swansea, Newport -> Wales; Edinburgh, Glasgow, Aberdeen, Dundee -> Scotland; Belfast, Derry -> Northern Ireland), you MUST return that constituent country ('England', 'Wales', 'Scotland', 'Northern Ireland') instead of generic 'United Kingdom'!
-     * Only return generic "United Kingdom" if NO specific constituent country (England, Wales, Scotland, Northern Ireland) or constituent locality is identifiable.
-4. MANDATORY CAPITALIZATION: EVERY SINGLE WORD in countryName MUST start with a Capital letter (e.g. "United States Of America" with capital 'Of', "United Kingdom", "England", "Scotland", "Wales", "Northern Ireland", "South Korea", "New Zealand", "Saudi Arabia", "Czechia", "Turkiye").
-5. STANDARDIZED OFFICIAL COUNTRY NAMES (GLOBAL MANDATE - APPLIES GLOBALLY TO ALL COUNTRIES):
-   - For Czech Republic / Czech / Česká republika / Česko, you MUST return "Czechia" (NEVER return "Czech Republic").
-   - For Turkey / Türkiye / Republic of Turkey / Republic of Turkiye, you MUST return "Turkiye" (spelled "Turkiye").
-   - For the United States / USA / US / U.S.A., you MUST return the full official name "United States Of America" (NEVER return just "United States" or "USA").
-   - For the United Kingdom, remember: If England, Wales, Scotland, or Northern Ireland is mentioned or identifiable from locality, return "England", "Wales", "Scotland", or "Northern Ireland" (if "England" and "United Kingdom" both are mentioned, take "England"). If no constituent country is identified, return "United Kingdom".
-   - For Taiwan / Taiwan, R.O.C. / Republic of China, you MUST return "Taiwan".
-   - For South Korea / Korea / Republic of Korea / ROK, you MUST return "South Korea".
-   - For Swaziland, you MUST return "Eswatini".
-   - For North Macedonia / Macedonia / FYROM, you MUST return "North Macedonia".
-   - For Myanmar / Burma, you MUST return "Myanmar".
-   - For Netherlands / Holland, you MUST return "Netherlands".
-   - For Ivory Coast / Côte d'Ivoire, you MUST return "Cote D'Ivoire".
-   - For East Timor / Timor-Leste, you MUST return "Timor-Leste".
-   - For Cape Verde / Cabo Verde, you MUST return "Cabo Verde".
-   - For Vietnam / Viet Nam, you MUST return "Vietnam".
-   - For Brunei / Brunei Darussalam, you MUST return "Brunei".
-   - For Syria / Syrian Arab Republic, you MUST return "Syria".
-   - For Laos / Lao People's Democratic Republic, you MUST return "Laos".
-   - For Russia / Russian Federation, you MUST return "Russia".
-   - For Iran / Islamic Republic of Iran, you MUST return "Iran".
-   - For Moldova / Republic of Moldova, you MUST return "Moldova".
-   - For Tanzania / United Republic of Tanzania, you MUST return "Tanzania".
-   - For Bolivia / Plurinational State of Bolivia, you MUST return "Bolivia".
-   - For Venezuela / Bolivarian Republic of Venezuela, you MUST return "Venezuela".
-
-EMAIL & SECONDARY EMAIL RULES (ANALYZE COMPLETE WEBSITE & SOCIAL CHANNELS):
-1. Primary and Secondary Emails MUST NEVER BE THE SAME:
-   * CRITICAL QC RULE: "Primary email and secondary emails should NOT be the same. Emails can be found in any place on the website or company social media like LinkedIn and Facebook. If only one email exists, secondaryEmailId MUST be empty string \"\"."
-   * emailId and secondaryEmailId STRICTLY CANNOT be identical. Under NO circumstances should secondaryEmailId duplicate emailId.
-   * If only ONE corporate email is found across the website and social media, set emailId to that email, and set secondaryEmailId to "" (empty string).
-2. Comprehensive Email Search Scope (Any Place in Website or Social Media):
-   * Look for emails in ANY PLACE on the website:
-     - Header, Navigation bar, and Homepage body
-     - Contact Us, Get In Touch, and Inquiry pages
-     - About Us, Company Profile, Leadership, and Team pages
-     - Careers, Jobs, and HR pages
-     - Support, Customer Service, Helpdesk, and Warranty pages
-     - Branches, Global Offices, Factories, and Regional Contact sections
-     - Footer, Copyright block, Legal, Terms of Service, and Privacy Policy
-     - Downloadable catalogs, Brochures, Product Spec Sheets, and PDFs
-   * Look for emails in Company Official Social Media:
-     - Company official LinkedIn page
-     - Company official Facebook page
-3. Primary Email (emailId):
-   * Extract the main corporate, general business, or headquarters contact email (e.g. info@..., contact@..., enquiries@..., sales@..., or main corporate domain email).
-   * Check official website pages first. If NO email is found on the website pages, check official company LinkedIn or Facebook profiles.
-   * Never leave emailId blank if a valid corporate email exists anywhere in the crawled content or social profiles.
-4. Secondary Email (secondaryEmailId) - CRITICAL QC RULE (DOUBLE CHECK & ALWAYS TAKE IF AVAILABLE):
-   * DOUBLE CHECK FOR SECONDARY EMAIL: "If a secondary email is available, double-check and ALWAYS take it. Primary and secondary emails should NOT be the same."
-   * Review the "All Corporate Emails Discovered on Website" list provided below:
-     - If this list contains 2 or more distinct corporate emails, secondaryEmailId MUST be populated with the second distinct corporate email (different department or person, e.g. sales@..., support@..., service@..., export@..., accounts@..., hr@..., admin@..., careers@..., office@..., or a branch/personnel email).
-     - DO NOT leave secondaryEmailId blank if an alternate corporate email is available on the website or official LinkedIn/Facebook!
-   * secondaryEmailId MUST be different and distinct from emailId.
-   * If and ONLY if the website and social media contain just ONE single email address across all pages and evidence, return "" (empty string). NEVER duplicate the primary email or invent a fake one.
-5. Strict Email Anti-Artifact & Anti-Hallucination Rules:
-   * NEVER extract scraping, legal, or privacy policy artifacts like "collected@www...", "posted@...", "sent@...", "accessed@...", or any email containing "www." in the domain.
-   * NEVER invent, hallucinate, or guess email addresses. Only extract genuine corporate emails explicitly present in the website or official company LinkedIn/Facebook pages.
-
-PHONE NUMBER RULES (CRITICAL QC REQUIREMENT):
-- MANDATORY QC RULE:
-  "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero."
-- REMOVE COUNTRY CODE:
-  * Extract the complete phone number, but STRIP the international country calling code:
-    - USA / Canada (+1 / 1): Remove country code 1 (e.g. +1 573-682-5521 -> 5736825521)
-    - Taiwan (+886 / 886): Remove country code 886 (e.g. +886-2-2668-9796 -> 226689796; +886-3-9233966 -> 39233966)
-    - UK (+44 / 44): Remove country code 44 (e.g. +44 20 7946 0991 -> 2079460991)
-    - Australia (+61 / 61): Remove country code 61 (e.g. +61 3 9357 6115 -> 393576115)
-    - South Africa (+27 / 27): Remove country code 27 (e.g. +27 11 397 2959 -> 113972959)
-    - Malaysia (+60 / 60): Remove country code 60 (e.g. +60 12-940 2782 -> 129402782)
-    - Singapore (+65 / 65): Remove country code 65 (e.g. +65 6123 4567 -> 61234567)
-    - India (+91 / 91): Remove country code 91
-    - China (+86 / 86): Remove country code 86
-    - Germany (+49 / 49): Remove country code 49
-    - France (+33 / 33): Remove country code 33
-    - Italy (+39 / 39): Remove country code 39
-    - Spain (+34 / 34): Remove country code 34
-    - Japan (+81 / 81): Remove country code 81
-    - South Korea (+82 / 82): Remove country code 82
-    - New Zealand (+64 / 64): Remove country code 64
-    - Indonesia (+62 / 62): Remove country code 62
-    - Czechia (+420 / 420): Remove country code 420
-    - Turkiye (+90 / 90): Remove country code 90
-- REMOVE SPECIAL CHARACTERS AND SPACES:
-  * Digits only (no spaces, hyphens, brackets, parentheses, plus signs, dots, or extension text).
-- STRICTLY DO NOT TAKE TOLL-FREE NUMBERS:
-  * Toll-free numbers are NOT allowed!
-  * If only a toll-free number is available on the website, return "" (leave empty string).
-  * Never extract numbers starting with 800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800, 0808, 0500, or any toll-free prefix.
-- STRICTLY DO NOT TAKE NUMBERS STARTING WITH ZERO:
-  * Strip all leading zeros. The final output MUST NEVER start with zero (0).
-  * Example: 02-26689796 -> 226689796; 012-940 2782 -> 129402782; 020 7946 0991 -> 2079460991.
-  * If a number cannot be formatted without starting with 0, return "" (do not take it).
+10. PRODUCT, IMAGE & DESCRIPTION COUNTS:
+- Three INDEPENDENT measurements: "numberOfProducts", "productImages", "numberOfProductDescriptions".
+- Values: "0" | "1" | "2" | "3" (3 or more).
+- Evaluate independently from actual site evidence. Do not force them to be identical.
 
 WEBSITE DATA FOR THIS CRAWL:
 Target URL: ${crawlData.originalUrl}
 Page Title: ${crawlData.title}
 Detected Website Brand / Logo: ${crawlData.logoText || crawlData.ogSiteName || "(None)"}
-Detected Official Legal Corporate Names (Across All Crawled Pages): ${crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0 ? crawlData.legalCompanyCandidates.slice(0, 8).join(", ") : "(None)"}
-Company Profile Evidence Detected: ${crawlData.hasCompanyProfile ? "Yes (Dedicated Profile / About page, heading, or PDF detected)" : "No"}
-All Corporate Emails Discovered on Website: ${(crawlData.emails || []).join(", ") || "(None)"}
+Detected Official Legal Corporate Names: ${crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0 ? crawlData.legalCompanyCandidates.slice(0, 8).join(", ") : "(None)"}
+Discovered Emails: ${(crawlData.emails || []).join(", ") || "(None)"}
 Detected Contact Phones: ${(crawlData.phones || []).join(", ") || "(None)"}
 Product Items / Units Detected: ${crawlData.detectedProductCount}
 Product Images Detected: ${crawlData.detectedImageCount}
 Product Descriptions Detected: ${crawlData.detectedDescCount}
 
-${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD STRUCTURED BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2), null, 2)}\n\n` : ""}${crawlData.renderedText ? `TRUE RENDERED VISUAL TEXT (LIVE BROWSER DOM):\n${crawlData.renderedText.slice(0, 2000)}\n\n` : ""}DEDICATED COMPANY PROFILE / ABOUT US CONTENT:
-${(crawlData.profilePageText || "").slice(0, 1500) || "(No dedicated company profile page text found)"}
-
-PHYSICAL ADDRESS CANDIDATES FOUND ON WEBSITE (PRIMARY EVIDENCE IN PRIORITY ORDER):
+${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2), null, 2)}\n\n` : ""}${crawlData.renderedText ? `VISUAL DOM TEXT:\n${crawlData.renderedText.slice(0, 2500)}\n\n` : ""}PHYSICAL ADDRESS EVIDENCE FOUND ON WEBSITE:
 ${formattedAddressEvidence}
 
-CONTACT PAGE / PROFILE CONTENT:
-${(crawlData.contactPageText || "").slice(0, 2000) || "(No separate contact page text found)"}
+CONTACT / ABOUT PAGE CONTENT:
+${(crawlData.contactPageText || crawlData.profilePageText || "").slice(0, 3000)}
 
 FOOTER CONTENT:
-${(crawlData.footerText || "").slice(0, 1000) || "(No separate footer text found)"}
+${(crawlData.footerText || "").slice(0, 1000)}
 
-PAGE BODY TEXT:
-${(crawlData.bodyText || "").slice(0, 1500)}
+PAGE BODY CONTENT:
+${(crawlData.bodyText || "").slice(0, 2500)}
 `;
 
   const selectedModel = modelName || DEFAULT_MODEL;
