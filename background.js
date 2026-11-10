@@ -1362,7 +1362,7 @@ async function crawlWebsite(targetUrl) {
   try {
     if (!mainRes) {
       mainRes = await fetchDecodedHtml(targetUrl, {
-        timeoutMs: 4500,
+        timeoutMs: 8000,
         headers: {
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -1396,7 +1396,7 @@ async function crawlWebsite(targetUrl) {
       if (targetFallbacks.length > 0) {
         const fallbackResults = await Promise.allSettled(
           targetFallbacks.map(altUrl => fetchDecodedHtml(altUrl, {
-            timeoutMs: 3000,
+            timeoutMs: 5000,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -1413,18 +1413,22 @@ async function crawlWebsite(targetUrl) {
       }
     }
 
-    // Silent background browser tab fallback ONLY when raw HTTP fetch hit a JS SPA shell (<500 chars)
-    // or a Cloudflare / anti-bot 401/403/503 challenge (skip genuinely dead DNS/404 domains).
+    // Silent background browser tab fallback when raw HTTP fetch hit a JS SPA shell (<500 chars),
+    // a Cloudflare / anti-bot 401/403/503 challenge, or a background fetch timeout/network quirk (excluding 404/DNS errors).
     const rawVisibleLen = (mainRes && mainRes.html) ? stripHtml(mainRes.html).length : 0;
     const looksLikeSpaShell = mainRes && mainRes.ok && rawVisibleLen < 500 &&
       (/<div[^>]+id=["'](?:app|root|__next|__nuxt|main-content)["'][^>]*>\s*<\/div>/i.test(mainRes.html) || /<script\b/i.test(mainRes.html));
-    const looksBlocked = isMainFailed && mainRes && (mainRes.status === 403 || mainRes.status === 401 || mainRes.status === 503 || isAntiBotChallenge(mainRes.html, mainRes.status));
-    if (looksLikeSpaShell || looksBlocked) {
-      const tabRes = await fetchViaSilentBackgroundTab((mainRes && mainRes.url) || targetUrl, 5000);
+    const looksBlockedOrFetchFailed = isMainFailed && mainRes && (
+      mainRes.status === 403 || mainRes.status === 401 || mainRes.status === 503 ||
+      isAntiBotChallenge(mainRes.html, mainRes.status) ||
+      (mainRes.status === 0 && !/ERR_NAME_NOT_RESOLVED/i.test(mainRes.error || ""))
+    );
+    if (looksLikeSpaShell || looksBlockedOrFetchFailed) {
+      const tabRes = await fetchViaSilentBackgroundTab((mainRes && mainRes.url) || targetUrl, 6500);
       if (tabRes && tabRes.ok && stripHtml(tabRes.html).length > rawVisibleLen) {
         mainRes = tabRes;
         isMainFailed = false;
-        console.log(`[AI Assistant] Rescued ${looksBlocked ? "protected" : "SPA"} page via silent background tab (${stripHtml(tabRes.html).length} chars)`);
+        console.log(`[AI Assistant] Rescued ${looksBlockedOrFetchFailed ? "protected/slow" : "SPA"} page via silent background tab (${stripHtml(tabRes.html).length} chars)`);
       }
     }
 
@@ -2030,7 +2034,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     /\b(?:lot|plot|unit|suite|ste|bldg|building|floor|level|rm|room|shed|warehouse|kav|kavling|apt|apartment|po\s*box)\s+[A-Za-z0-9\-\/]+/i.test(cleaned) ||
     /\b(?:centre|center|house|hall|mill|works|court|lodge|grange|tower|park|estate|chambers|wharf|barn|farm)\b/i.test(cleaned);
 
-  const hasThoroughfare = /\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|row|walk|mews|passage|grove|view|hill|rise|vale|gate|approach|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|jln|jalan|taman|lorong|lebuh|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|apt\b|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned);
+  const hasThoroughfare = /\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|row|walk|mews|passage|grove|view|hill|rise|vale|gate|approach|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|jl|jln|jalan|gang|gg|taman|lorong|lebuh|komp|komplek|perum|perumahan|dukuh|dk|desa|ds|dusun|dsn|kecamatan|kec|kabupaten|kab|rt\.?\s*\d+|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|apt\b|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned);
 
   const hasLocalityOrPostcode = /\b\d{4,6}\b/.test(cleaned) ||
     /\b[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}\b/i.test(cleaned) ||
@@ -2578,8 +2582,8 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     }
   }
 
-  // 5. Explicit label prefixes Add: / Address: / Addr: / Location: / Dirección: / 地址: (Fast execution)
-  const labelAddrRegex = /(?:^|[^a-zA-Z0-9])(?:postal\s*address|address|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]?\s*(?:\s*<[^>]+>)*\s*([\s\S]{10,400}?)(?=<h[1-6]\b|<form\b|<footer\b|\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|fax)\b\s*[:：]|$)/gi;
+  // 5. Explicit label prefixes Add: / Address: / Addr: / Where You Can Find Us / Find Us / Location: / Alamat: / Dirección: / 地址:
+  const labelAddrRegex = /(?:^|[^a-zA-Z0-9])(?:where\s+(?:you\s+can\s+)?find\s+us|find\s+us|our\s+(?:office|address|location|factory|workshop)|postal\s*address|address|alamat|kantor|lokasi|pabrik|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]?\s*(?:\s*<[^>]+>)*\s*([\s\S]{10,400}?)(?=<h[1-6]\b|<form\b|<footer\b|\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|fax)\b\s*[:：]|$)/gi;
   let lm;
   while ((lm = labelAddrRegex.exec(processedHtml)) !== null) {
     const beforeText = processedHtml.slice(Math.max(0, lm.index - 500), lm.index);
@@ -3022,6 +3026,7 @@ function isUnwantedEmail(email) {
 
   // Placeholder / dummy emails
   if (/^(?:user|email|name|test|sample|placeholder|yourname|youremail|username|example|domain|contact|admin|info)@(?:example|domain|test|sample|email|placeholder|yoursite|mysite|mycompany|yourcompany|company|website|sitename)\./i.test(em)) return true;
+  if (/^(?:test\d*|tes\d*|dummy\d*|sample\d*|placeholder|yourname|youremail|example\d*)@(?:gmail|yahoo|hotmail|outlook)\./i.test(em)) return true;
 
   // Hex hashes / DSN keys / tokens (e.g. Sentry tracking DSN 605a7baede844d278b89dc95ae0a9123@...)
   if (/^[a-f0-9]{16,64}$/i.test(user)) return true;
@@ -3426,10 +3431,10 @@ function parseHtmlDetails(html, baseUrl) {
   // Extract & Rank Emails across the complete website HTML
   const rankedEmails = extractEmailsFromHtml(html, hostDomain);
 
-  // Extract Phone Numbers strictly from telephone contexts (including tel: and WhatsApp)
+  // Extract Phone Numbers strictly from telephone contexts (including tel:, icon labels, and WhatsApp)
   const phoneLinks = [...html.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
   const waLinks = [...html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\?[^"']*phone=)(\+?\d{8,15})/gi)].map(m => "+" + m[1].replace(/^\+/, ""));
-  const contextPhoneRegex = /(?:tel|telephone|phone|call|mobile|cell|whatsapp|contact|总机|總機|电话|電話|手机|手機|座机|座機)[\s:：]*(?:<[^>]+>\s*)*([+]?[\d\s().-]{7,20})/gi;
+  const contextPhoneRegex = /(?:(?:tel|telephone|phone|call|mobile|cell|whatsapp|contact|总机|總機|电话|電話|手机|手機|座机|座機)[\s:：]*|(?:bxs:phone-call|fa-phone|fa-mobile)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().-]{7,20})/gi;
   let pMatch;
   const contextPhones = [];
   while ((pMatch = contextPhoneRegex.exec(cleanHtml)) !== null) {
@@ -8923,11 +8928,17 @@ function normalizeTaiwanDivisions(addr) {
   return a;
 }
 
+function hasIndonesiaAddressSignal(text, country = "") {
+  const cLower = (country || "").toLowerCase();
+  if (cLower.includes("indonesia")) return true;
+  if (!text) return false;
+  return /\b(?:jalan|jl\.?|jln\.?|gang|gg\.?|komp\.?|kompl\.?|perum\.?|kav\.?|kel\.?|kec\.?|kab\.?|desa|ds\.?|dusun|dsn\.?|dukuh|dk\.?|dkh\.?|lingkungan|lingk\.?|lk\.?|kodya|rukun\s+tetangga|rukun\s+warga|rt\.?\s*\d+\s*\/?\s*rw\.?\s*\d+|kawasan|mm2100|cibitung|jepara|pakis\s+aji|tahunan|mayong|pecangaan|welahan|bangsri|mlonggo|kalinyamatan|nalumsari|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|serang|cirebon|kudus|klaten|sukoharjo|pati|demak|pekalongan|tegal|magelang|salatiga|purwokerto|cilacap|jawa|central\s+java|west\s+java|east\s+java|north\s+sumatra|west\s+sumatra|south\s+sumatra|south\s+sulawesi|east\s+kalimantan|sumatra|sumatera|kalimantan|sulawesi|banten|bali|jateng|jabar|jatim|sumut|sumbar|sumsel|sulsel|sulut|sulteng|sultra|kaltim|kalbar|kalsel|kalteng|kalut|kepri|ntb|ntt|dki|diy)\b/i.test(text);
+}
+
 function expandAddressAndStateAbbreviations(addr, country = "") {
   if (!addr) return "";
   const cLower = (country || "").toLowerCase();
-  const hasIndoHint = cLower.includes('indonesia') ||
-    /\b(?:jalan|jl\.?|jln\.?|gang|gg\.?|komp\.?|kompl\.?|perum\.?|kav\.?|kel\.?|kec\.?|kab\.?|desa|ds\.?|dusun|dsn\.?|kawasan|jepara|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|serang|cirebon|kudus|klaten|sukoharjo|jawa|java|sumatra|sumatera|kalimantan|sulawesi|banten|bali|jateng|jabar|jatim)\b/i.test(addr);
+  const hasIndoHint = hasIndonesiaAddressSignal(addr, country);
   let a = addr;
   a = normalizeTaiwanDivisions(a);
 
@@ -9413,17 +9424,19 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // ==========================================
   // 10. Indonesia Abbreviations & Honorific Street Prefixes
   // ==========================================
-  const hasIndoSignal = cLower.includes('indonesia') ||
-    /\b(?:jalan|jl\.?|jln\.?|gang|gg\.?|komp\.?|kompl\.?|perum\.?|kav\.?|kel\.?|kec\.?|kab\.?|prov\.?|prop\.?|desa|ds\.?|dusun|dsn\.?|kawasan|jepara|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|serang|cirebon|kudus|klaten|sukoharjo|jawa|java|sumatra|sumatera|kalimantan|sulawesi|banten|bali|jateng|jabar|jatim)\b/i.test(a);
+  const hasIndoSignal = hasIndoHint || hasIndonesiaAddressSignal(a, country);
 
   a = a.replace(/(^|[,\s])jln?\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Jalan ');
   // Honorific street titles (e.g. "Jl. RA. Kardinah", "Jl.RA. Kardinah", "Jalan R. A. Kartini" -> "Jalan Raden Ajeng Kardinah")
   if (hasIndoSignal) {
     a = a.replace(/(\bJalan\s+|,\s*)\bR\.?\s*A(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Raden Ajeng ');
     a = a.replace(/(\bJalan\s+|,\s*)\bK\.?\s*H(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Kiai Haji ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bH\.?\s*O\.?\s*S(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Haji Oemar Said ');
     a = a.replace(/(\bJalan\s+|,\s*)\bH\.?\s*R(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Haji Rangkayo ');
     a = a.replace(/(\bJalan\s+|,\s*)\bM\.?\s*H(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Mohammad Husni ');
     a = a.replace(/(\bJalan\s+|,\s*)\bM\.?\s*T(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Mas Tirtodarmo ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bW\.?\s*R(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Wage Rudolf ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bT\.?\s*B(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Tahi Bonar ');
     a = a.replace(/(\bJalan\s+|,\s*)\bD\.?\s*I\.?\s+(?=Panjaitan\b)/gi, '$1Donald Isaac ');
     a = a.replace(/(\bJalan\s+|,\s*)\bA\.?\s+(?=Yani\b)/gi, '$1Ahmad ');
     a = a.replace(/(\bJalan\s+|,\s*)\bS\.?\s+(?=Parman\b)/gi, '$1Siswondo ');
@@ -9440,31 +9453,33 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/(\bJalan\s+|,\s*)\bDrs\.?\s*(?=[A-Za-z])/gi, '$1Doktorandus ');
     a = a.replace(/(\bJalan\s+|,\s*)\bDr\.?\s*(?=[A-Z][a-z])/g, '$1Doktor ');
     a = a.replace(/(^|[,\s])perum\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Perumahan ');
+    a = a.replace(/(^|[,\s])dkh?\b\.?\s*(?=[A-Za-z])/gi, '$1Dukuh ');
     a = a.replace(/(^|[,\s])ds\b\.?\s*(?=[A-Za-z])/gi, '$1Desa ');
     a = a.replace(/(^|[,\s])dsn\b\.?\s*(?=[A-Za-z])/gi, '$1Dusun ');
+    a = a.replace(/(^|[,\s])(?:lingk|lk)\b\.?\s*(?=[A-Za-z])/gi, '$1Lingkungan ');
+    a = a.replace(/(^|[,\s])kodya\b\.?\s*(?=[A-Za-z])/gi, '$1Kotamadya ');
     a = a.replace(/(^|[,\s])kpg?\b\.?\s*(?=[A-Za-z])/gi, '$1Kampung ');
     a = a.replace(/(^|[,\s])gdg?\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Gedung ');
     a = a.replace(/(^|[,\s])lt\.?\s*(\d+)/gi, '$1Lantai $2');
     a = a.replace(/(^|[,\s])blk\.?\s*(?=[A-Za-z0-9])/gi, '$1Blok ');
     a = a.replace(/(^|[,\s])km\.?\s*(\d+)/gi, '$1Kilometer $2');
-    a = a.replace(/,\s*\bjabar\b\.?/gi, ', Jawa Barat');
-    a = a.replace(/,\s*\bjateng\b\.?/gi, ', Jawa Tengah');
-    a = a.replace(/,\s*\bjatim\b\.?/gi, ', Jawa Timur');
-    a = a.replace(/,\s*\bsumut\b\.?/gi, ', Sumatera Utara');
-    a = a.replace(/,\s*\bsumbar\b\.?/gi, ', Sumatera Barat');
-    a = a.replace(/,\s*\bsumsel\b\.?/gi, ', Sumatera Selatan');
-    a = a.replace(/,\s*\bsulsel\b\.?/gi, ', Sulawesi Selatan');
-    a = a.replace(/,\s*\bsulut\b\.?/gi, ', Sulawesi Utara');
-    a = a.replace(/,\s*\bsulteng\b\.?/gi, ', Sulawesi Tengah');
-    a = a.replace(/,\s*\bsultra\b\.?/gi, ', Sulawesi Tenggara');
-    a = a.replace(/,\s*\bkaltim\b\.?/gi, ', Kalimantan Timur');
-    a = a.replace(/,\s*\bkalbar\b\.?/gi, ', Kalimantan Barat');
-    a = a.replace(/,\s*\bkalsel\b\.?/gi, ', Kalimantan Selatan');
-    a = a.replace(/,\s*\bkalteng\b\.?/gi, ', Kalimantan Tengah');
-    a = a.replace(/,\s*\bkalut\b\.?/gi, ', Kalimantan Utara');
-    a = a.replace(/,\s*\bkepri\b\.?/gi, ', Kepulauan Riau');
+    const indoProvMap = [
+      ["jabar", "Jawa Barat"], ["jateng", "Jawa Tengah"], ["jatim", "Jawa Timur"],
+      ["sumut", "Sumatera Utara"], ["sumbar", "Sumatera Barat"], ["sumsel", "Sumatera Selatan"],
+      ["sulsel", "Sulawesi Selatan"], ["sulut", "Sulawesi Utara"], ["sulteng", "Sulawesi Tengah"],
+      ["sultra", "Sulawesi Tenggara"], ["sulbar", "Sulawesi Barat"],
+      ["kaltim", "Kalimantan Timur"], ["kalbar", "Kalimantan Barat"], ["kalsel", "Kalimantan Selatan"],
+      ["kalteng", "Kalimantan Tengah"], ["kalut", "Kalimantan Utara"], ["kaltara", "Kalimantan Utara"],
+      ["kepri", "Kepulauan Riau"], ["malut", "Maluku Utara"],
+      ["ntb", "Nusa Tenggara Barat"], ["ntt", "Nusa Tenggara Timur"]
+    ];
+    for (const [abbr, full] of indoProvMap) {
+      a = a.replace(new RegExp(`(^|[,\\s])\\b${abbr}\\b\\.?(?=[,\\s\\d]|$)`, "gi"), `$1${full}`);
+    }
     a = a.replace(/,\s*\bbabel\b\.?/gi, ', Bangka Belitung');
     a = a.replace(/,\s*\bd\.?i\.?y\.?\b/gi, ', DI Yogyakarta');
+    a = a.replace(/(^|[,\s\/])\brt\.?\s*(\d+)/gi, '$1Rukun Tetangga $2');
+    a = a.replace(/(^|[,\s\/])\brw\.?\s*(\d+)/gi, '$1Rukun Warga $2');
   }
   a = a.replace(/(^|[,\s])gg\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Gang ');
   a = a.replace(/(^|[,\s])komp\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Komplek ');
@@ -9476,7 +9491,8 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])prov\b\.?\s*(?=[A-Za-z])/gi, '$1Provinsi ');
   a = a.replace(/(^|[,\s])prop\b\.?\s*(?=[A-Za-z])/gi, '$1Provinsi ');
   a = a.replace(/\bk(?:ws|aw)\.?\s*ind(?:ustri)?\.?/gi, 'Kawasan Industri');
-  a = a.replace(/\brt\.?\s*(\d+)\s*\/?\s*rw\.?\s*(\d+)/gi, 'RT $1 RW $2');
+  a = a.replace(/\brt\.?\s*(\d+)\s*(?:[\/,\-]|\s)*rw\.?\s*(\d+)/gi, 'Rukun Tetangga $1 Rukun Warga $2');
+  a = a.replace(/\brukun\s+tetangga\s+(\d+)\s*\/\s*rukun\s+warga\s+(\d+)/gi, 'Rukun Tetangga $1 Rukun Warga $2');
   a = a.replace(/(^|[,\s])d\.?k\.?i\.?\s+jakarta\b/gi, '$1DKI Jakarta');
   a = a.replace(/(^|[,\s])d\.?i\.?\s+yogyakarta\b/gi, '$1DI Yogyakarta');
 
@@ -9568,6 +9584,16 @@ function isStandaloneStateOrCounty(word) {
   return /^(?:Victoria|Queensland|Tasmania|Australian\s*Capital\s*Territory|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|Ohio|Oklahoma|Oregon|Pennsylvania|Tennessee|Texas|Utah|Vermont|Virginia|Washington|Wisconsin|Wyoming|District\s*of\s*Columbia|Ontario|Quebec|Alberta|Manitoba|Saskatchewan|Nova\s*Scotia|New\s*Brunswick|Newfoundland|Prince\s*Edward\s*Island|Canterbury|Waikato|Bay\s*of\s*Plenty|Otago|Taranaki|Southland|Northland|Marlborough|Tasman|Manawatu|Essex|Kent|Surrey|Lancashire|Yorkshire|Cheshire|Hampshire|Berkshire|Hertfordshire|Middlesex|Gloucestershire|Warwickshire|Devon|Dorset|Somerset|Oxfordshire|Cambridgeshire|Buckinghamshire|Staffordshire|Derbyshire|Nottinghamshire|Lincolnshire|Northamptonshire|Norfolk|Suffolk|Wiltshire|Worcestershire|Cornwall|Cumbria|Northumberland|Maharashtra|Karnataka|Tamil\s*Nadu|Gujarat|Uttar\s*Pradesh|Telangana|Andhra\s*Pradesh|Punjab|Haryana|Rajasthan|Madhya\s*Pradesh|Bihar|Kerala|Odisha|Jharkhand|Assam|Delhi|Selangor|Johor|Penang|Perak|Kedah|Pahang|Negeri\s*Sembilan|Melaka|Terengganu|Kelantan|Sarawak|Sabah|Perlis|Gauteng|Limpopo|Mpumalanga|Free\s*State|Dublin|Cork|Galway|Kildare|Meath|Limerick|Kerry|Wicklow|Clare|Tipperary|Wexford|Donegal|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Malaga|Málaga|Murcia|Bilbao|Alicante|Cordoba|Córdoba|Valladolid|Bavaria|Bayern|Hessen|Lombardia|Lazio|Veneto|Piemonte|Toscana|Campania|Sicilia|Puglia|Liguria)$/i.test(word.trim());
 }
 
+function normalizeAddressCommas(str) {
+  if (!str) return "";
+  let s = str.replace(/\b(\d{1,4}),(\d{1,2})\b/g, "$1__DEC_COMMA__$2");
+  s = s.replace(/\s+,/g, ",");
+  s = s.replace(/,\s*,+/g, ", ");
+  s = s.replace(/,\s*/g, ", ");
+  s = s.replace(/__DEC_COMMA__/g, ",");
+  return s.replace(/\b(Kilometer|Km\.?)\s+(\d{1,4}),\s+(\d{1,2})\b/gi, "$1 $2,$3");
+}
+
 function repairBlindlySeparatedCommas(addr) {
   if (!addr) return "";
   let a = addr;
@@ -9612,10 +9638,8 @@ function repairBlindlySeparatedCommas(addr) {
   // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
   a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
 
-  // Clean double commas and spaces
-  a = a.replace(/\s+,/g, ",");
-  a = a.replace(/,\s*,+/g, ", ");
-  a = a.replace(/,\s*/g, ", ");
+  // Clean double commas and spaces (preserve decimal commas like "Kilometer 5,5")
+  a = normalizeAddressCommas(a);
   a = a.replace(/\s+/g, " ").trim();
   a = normalizeTaiwanDivisions(a);
 
@@ -9681,8 +9705,8 @@ function ensureCommaBeforeState(addr) {
   // 4. Malaysian / Singapore recognized city hubs
   a = a.replace(/(?<!,\s*)\b(Subang Jaya|Petaling Jaya|Shah Alam|Klang|Kuala Lumpur|Puchong|Cheras|George Town|Johor Bahru|Ipoh|Kota Kinabalu|Kuching|Seremban|Batu Pahat|Pasir Gudang|Iskandar Puteri)\b/gi, ", $1");
 
-  // 4b. Indonesian recognized city hubs
-  a = a.replace(/(?<!,\s*)\b(Jakarta|DKI Jakarta|Surabaya|Bandung|Medan|Semarang|Makassar|Palembang|Tangerang|Bekasi|Depok|Bogor|Batam|Pekanbaru|Bandar Lampung|Malang|Padang|Denpasar|Samarinda|Banjarmasin|Balikpapan|Cikarang|Karawang|Sidoarjo|Gresik|Jepara|Yogyakarta|Solo|Surakarta|Pasuruan|Mojokerto|Serang|Cilegon|Pontianak|Manado|Kudus|Pati|Demak|Purwakarta|Subang|Sukabumi|Tasikmalaya|Cimahi|Salatiga|Magelang|Kediri|Madiun|Jambi|Bengkulu)\b/gi, ", $1");
+  // 4b. Indonesian recognized city hubs (NEVER split after Kabupaten / Kota / Provinsi / Kecamatan / etc.)
+  a = a.replace(/(?<!,\s*)(?<!\b(?:Kabupaten|Kota|Kotamadya|Provinsi|Kecamatan|Kelurahan|Desa|Dusun|Dukuh|Kampung|Lingkungan|Jalan|Gang|Komplek|Perumahan)\s+)\b(Jakarta|DKI Jakarta|Surabaya|Bandung|Medan|Semarang|Makassar|Palembang|Tangerang|Bekasi|Depok|Bogor|Batam|Pekanbaru|Bandar Lampung|Malang|Padang|Denpasar|Samarinda|Banjarmasin|Balikpapan|Cikarang|Karawang|Sidoarjo|Gresik|Jepara|Yogyakarta|Solo|Surakarta|Pasuruan|Mojokerto|Serang|Cilegon|Pontianak|Manado|Kudus|Pati|Demak|Purwakarta|Subang|Sukabumi|Tasikmalaya|Cimahi|Salatiga|Magelang|Kediri|Madiun|Jambi|Bengkulu|Pekalongan|Tegal|Purwokerto|Cilacap|Klaten|Sukoharjo|Boyolali)\b/gi, ", $1");
 
   // 4c. New Zealand recognized cities
   a = a.replace(/(?<!,\s*)\b(Auckland|Christchurch|Hamilton|Tauranga|Dunedin|Lower Hutt|Upper Hutt|Palmerston North|Napier|Porirua|New Plymouth|Rotorua|Whangarei|Invercargill|Nelson|Whanganui|Hastings|Gisborne|Blenheim|Timaru|Taupo|Queenstown|Cambridge)\b/gi, ", $1");
@@ -9764,14 +9788,12 @@ function ensureCommaBeforeState(addr) {
   ];
 
   for (const st of states) {
-    const regex = new RegExp(`([a-zA-Z0-9\\)])\\s+\\b(${st})\\b(?!\\s+(?:City|Street|Road|Avenue|Drive|Lane|Boulevard|Way|Place|Court|Highway|Close|Crescent|Square|Terrace|Park|Estate|Industrial|Unit|Suite|Building|Floor|Bldg|St|Rd|Ave|Dr|Ln|Blvd|Hwy|Ct|Pl)\\b)`, "gi");
+    const regex = new RegExp(`([a-zA-Z0-9\\)])\\s+(?<!\\b(?:Provinsi|Province|Daerah\\s+Istimewa|Daerah\\s+Khusus\\s+Ibukota|Kabupaten|Kota)\\s+)\\b(${st})\\b(?!\\s+(?:City|Street|Road|Avenue|Drive|Lane|Boulevard|Way|Place|Court|Highway|Close|Crescent|Square|Terrace|Park|Estate|Industrial|Unit|Suite|Building|Floor|Bldg|St|Rd|Ave|Dr|Ln|Blvd|Hwy|Ct|Pl)\\b)`, "gi");
     a = a.replace(regex, "$1, $2");
   }
 
-  // 7. Clean up spaces and duplicate commas
-  a = a.replace(/\s+,/g, ",");
-  a = a.replace(/,\s*,+/g, ", ");
-  a = a.replace(/,\s*/g, ", ");
+  // 7. Clean up spaces and duplicate commas (preserve decimal commas like "Kilometer 5,5")
+  a = normalizeAddressCommas(a);
   a = a.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
   a = a.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
   a = a.replace(/\s+/g, " ");
@@ -10442,9 +10464,11 @@ function toTitleCase(str) {
     const upper = word.toUpperCase();
     if (upperAcronyms.has(upper)) return upper;
     if (/^GmbH$/i.test(word)) return "GmbH";
-    // Preserve 2-4 letter all-caps acronyms when the surrounding string has mixed lowercase characters
-    if (word.length >= 2 && word.length <= 4 && word === upper && /[a-z]/.test(fullStr) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO|UPON|OVER|UNDER|AFTER|ABOUT)$/i.test(word)) {
-      return upper;
+    // Preserve 2-4 letter all-caps acronyms AND alphanumeric industrial/zone codes (e.g. MM2100)
+    if (word === upper && /[a-z]/.test(fullStr) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO|UPON|OVER|UNDER|AFTER|ABOUT)$/i.test(word)) {
+      if ((word.length >= 2 && word.length <= 4) || (/[A-Z]{2,}/.test(word) && /\d/.test(word))) {
+        return upper;
+      }
     }
     return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
   });

@@ -741,6 +741,64 @@ runTest('Remove leading/trailing special characters & do not expand internal sym
   assert.strictEqual(aiPct.companyName, "100% Plastics Company");
 });
 
+// Test 25: Indonesian RT/RW, Dk., Prov., no-comma Jateng, ec-indonesia Jl./MM2100 & tes@gmail.com filter
+runTest('Indonesian RT/RW/Dk/province expansion, decimal KM comma, and ec-indonesia crawl extraction', () => {
+  const buildMock = (addr) => ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "Test Co Ltd",
+    countryName: "Indonesia",
+    companyAddress: addr,
+    state: "Available",
+    city: "Available",
+    emailId: "info@test.co.id",
+    phoneNumber: "81234567890",
+    numberOfProducts: "3",
+    productImages: "3",
+    numberOfProductDescriptions: "3"
+  }, {
+    originalUrl: "https://test.co.id",
+    finalUrl: "https://test.co.id",
+    mainHtml: "<html><body>Manufacturing</body></html>",
+    addressCandidates: [{ raw: addr, source: "contact", priority: 0.5 }],
+    emails: ["info@test.co.id"],
+    phones: ["081234567890"],
+    detectedProductCount: 3,
+    detectedImageCount: 3,
+    detectedDescCount: 3
+  }, { isRestricted: false });
+
+  assert.strictEqual(
+    buildMock("Mambak RT 02 RW 03, Pakis Aji, Jepara, Central Java").companyAddress,
+    "Mambak Rukun Tetangga 02 Rukun Warga 03, Pakis Aji, Jepara, Central Java"
+  );
+  assert.strictEqual(
+    buildMock("Mambak RT.02/RW.03 Kec. Pakis Aji Kab. Jepara Jateng 59456").companyAddress,
+    "Mambak Rukun Tetangga 02 Rukun Warga 03 Kecamatan Pakis Aji Kabupaten Jepara, Jawa Tengah"
+  );
+  assert.strictEqual(
+    buildMock("Dk. Mambak RT 02 / RW 03, Ds. Mambak, Kec. Pakis Aji, Kab. Jepara, Prov. Jawa Tengah").companyAddress,
+    "Dukuh Mambak Rukun Tetangga 02 Rukun Warga 03, Desa Mambak, Kecamatan Pakis Aji, Kabupaten Jepara, Provinsi Jawa Tengah"
+  );
+  assert.strictEqual(
+    buildMock("Jl. Soekarno-Hatta KM. 5,5, Kel. Tlogosari, Kec. Pedurungan, Semarang, Jateng").companyAddress,
+    "Jalan Soekarno-Hatta Kilometer 5,5, Kelurahan Tlogosari, Kecamatan Pedurungan, Semarang, Jawa Tengah"
+  );
+  assert.strictEqual(
+    buildMock("MM2100 Industrial Town Jl. Sumba Kav. A3 Cibitung, Bekasi, 17520").companyAddress,
+    "MM2100 Industrial Town Jalan Sumba Kavling A3, Cibitung, Bekasi"
+  );
+
+  // Verify addAddressCandidate accepts Indonesian Jl. / RT RW addresses and footer phone/email filtering works
+  const cands = [];
+  ctx.addAddressCandidate(cands, "MM2100 Industrial Town Jl. Sumba Kav. A3 Cibitung, Bekasi, 17520", "footer", false, "general", "https://www.ec-indonesia.com/", "");
+  ctx.addAddressCandidate(cands, "Mambak RT 02 RW 03, Pakis Aji, Jepara, Central Java", "contact", false, "contact", "https://www.ec-indonesia.com/contact", "");
+  assert.strictEqual(cands.length, 2, "Indonesian Jl. and RT/RW addresses must both be accepted by addAddressCandidate");
+  assert.strictEqual(ctx.isUnwantedEmail("tes@gmail.com"), true, "Dummy test email tes@gmail.com must be rejected");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');
