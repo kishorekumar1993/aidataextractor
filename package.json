@@ -1,0 +1,15 @@
+{
+  "name": "aiextension",
+  "version": "2.0.0",
+  "description": "AI Data Entry Assistant Chrome Extension",
+  "scripts": {
+    "test": "node tests/benchmark.test.js"
+  },
+  "keywords": [
+    "chrome-extension",
+    "gemini-ai",
+    "data-entry"
+  ],
+  "author": "",
+  "license": "ISC"
+}

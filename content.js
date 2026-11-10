@@ -2148,7 +2148,7 @@
     // 4. Company Name (Rule: All words start with Capital letter, Special character should not start and should not end)
     try {
       if (elements.companyName && data.companyName) {
-        let formattedName = toTitleCase(cleanCompanyName(data.companyName) || String(data.companyName).trim());
+        let formattedName = String(data.companyName).trim();
         // Rule: Special character should not start and should not end
         formattedName = formattedName.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N}]+$/gu, "").trim();
         if (setInputValue(elements.companyName, formattedName)) {
@@ -2158,10 +2158,10 @@
       }
     } catch (e) { console.warn("Error setting companyName:", e); }
 
-    // 5. Country Name (Rule: All words start with Capital letter)
+    // 5. Country Name (Rule: Full official country name in Title Case)
     try {
       if (elements.countryName && data.countryName) {
-        let formattedCountry = toTitleCase(normalizeCountryName(String(data.countryName).trim()));
+        let formattedCountry = String(data.countryName).trim();
         const isSelect = elements.countryName.tagName && elements.countryName.tagName.toLowerCase() === "select";
         const success = isSelect ? setSelectValue(elements.countryName, formattedCountry) : setInputValue(elements.countryName, formattedCountry);
         if (success) {
@@ -2171,50 +2171,13 @@
       }
     } catch (e) { console.warn("Error setting countryName:", e); }
 
-    // 6. Company Address (Rule: All words start with Capital letter, Special character should not start and should not end)
+    // 6. Company Address (Trust background.js final QC-sanitized address directly)
     try {
       const addrVal = (data.companyAddress && data.companyAddress !== "Not Available")
-        ? data.companyAddress
-        : (data.selectedAddressCandidateRaw || "");
+        ? String(data.companyAddress).trim()
+        : "";
       if (elements.companyAddress && addrVal) {
-        let cleanAddress = String(addrVal).trim();
-        cleanAddress = expandAddressAndStateAbbreviations(cleanAddress, data.countryName);
-        if (!data._isFromAi) {
-          // Strip corporate registration disclaimers & statutory registered office disclaimers
-          cleanAddress = cleanAddress.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
-          cleanAddress = cleanAddress.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
-
-          // Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
-          cleanAddress = cleanAddress.replace(/(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+((?:pt\s*)?[A-Za-z0-9\-\/]+(?:\s*(?:&|and|,)\s*(?:pt\s*)?[A-Za-z0-9\-\/]+)*)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi, "$1$2 $3, ");
-          // Ensure comma after street types when followed by word
-          const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)";
-          const nonStreetLookahead = "(?!\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext|Road|Street|Avenue|Lane|Drive|Place|Close|Court|Terrace|Cres|Dr|Rd|St|Ave|Ln|Blvd|Hwy|Ct|Pl)\\b)";
-          const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)`, "g");
-          cleanAddress = cleanAddress.replace(streetSepRegex, "$1, $2");
-          cleanAddress = cleanAddress.replace(/\s+,/g, ",").replace(/,\s*,/g, ", ").replace(/,\s*/g, ", ");
-          // Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
-          // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
-          cleanAddress = cleanAddress.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)\b)/gi, "$1$2 $3");
-          // Repair accidental comma splitting two-syllable East Asian cities
-          cleanAddress = cleanAddress.replace(/\bChia,\s*Yi\s*City\b/gi, "Chiayi City");
-          cleanAddress = cleanAddress.replace(/\bChia[-\s,]*[Yy]i\s*City\b/gi, "Chiayi City");
-          cleanAddress = cleanAddress.replace(/\bHsin,\s*Chu\s*City\b/gi, "Hsinchu City");
-          cleanAddress = cleanAddress.replace(/\bHsin[-\s,]*[Cc]hu\s*City\b/gi, "Hsinchu City");
-          // Strip trailing postal codes (3 to 6 digits at the end of address string)
-          cleanAddress = cleanAddress.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "");
-          cleanAddress = cleanAddress.replace(/(\b(?:City|District|Township|County|Hsien|Village|Li|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
-          cleanAddress = toTitleCase(cleanAddress).replace(/[,;.\s\-_/\\|]+$/g, "").trim();
-        }
-        // Expand abbreviations to full form globally
-        cleanAddress = expandAddressAndStateAbbreviations(cleanAddress, data.countryName);
-        if (data.selectedAddressCandidateRaw) {
-          cleanAddress = stripExtraWordsFromAddress(cleanAddress, data.selectedAddressCandidateRaw);
-        }
-        // Rule: All words in companyAddress MUST start with a Capital letter (Title Case)
-        cleanAddress = toTitleCase(cleanAddress);
-        // Rule: Special character should not start and should not end
-        cleanAddress = cleanAddress.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
-        if (setInputValue(elements.companyAddress, cleanAddress)) {
+        if (setInputValue(elements.companyAddress, addrVal)) {
           highlightField(elements.companyAddress);
           filledCount++;
         }
@@ -2267,12 +2230,12 @@
       }
     } catch (e) { console.warn("Error setting secondaryEmailId:", e); }
 
-    // 11. Phone Number: Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero.
+    // 11. Phone Number (Digits only, country code and leading zeroes stripped)
     try {
       if (elements.phoneNumber && data.phoneNumber) {
-        let cleanPhone = cleanPhoneNumber(data.phoneNumber, data.countryName);
-        if (cleanPhone) {
-          if (setInputValue(elements.phoneNumber, cleanPhone)) {
+        let phoneVal = String(data.phoneNumber).trim();
+        if (phoneVal && phoneVal !== "Not Available") {
+          if (setInputValue(elements.phoneNumber, phoneVal)) {
             highlightField(elements.phoneNumber);
             filledCount++;
           }
@@ -2280,28 +2243,22 @@
       }
     } catch (e) { console.warn("Error setting phoneNumber:", e); }
 
-    // 12, 13, 14. Product Metrics Synchronization (Rules 12, 13, 14):
-    // "all should be large 3 means 3 only check and crawl properly all should be same only"
-    const parseNum = (v) => {
-      const s = String(v || "").toLowerCase().trim();
-      if (s === "three" || s === "3") return 3;
-      if (s === "two" || s === "2") return 2;
-      if (s === "one" || s === "1") return 1;
+    // 12, 13, 14. Independent Product Metrics (Evaluated independently per website evidence)
+    const parseCountStr = (v) => {
+      if (!v) return "0";
+      const s = String(v).trim().toLowerCase();
+      if (s === "three" || s === "3") return "3";
+      if (s === "two" || s === "2") return "2";
+      if (s === "one" || s === "1") return "1";
       const n = parseInt(s, 10);
-      return !isNaN(n) && n > 0 ? (n >= 3 ? 3 : n) : 0;
+      return (!isNaN(n) && n > 0) ? (n >= 3 ? "3" : String(n)) : "0";
     };
-
-    const maxP = Math.max(
-      parseNum(data.numberOfProducts),
-      parseNum(data.productImages),
-      parseNum(data.numberOfProductDescriptions)
-    );
-    const unifiedProductCount = String(maxP);
 
     // 12. Number of Products
     try {
       if (elements.numberOfProducts) {
-        if (setSelectValue(elements.numberOfProducts, unifiedProductCount)) {
+        const prodCount = parseCountStr(data.numberOfProducts);
+        if (setSelectValue(elements.numberOfProducts, prodCount)) {
           highlightField(elements.numberOfProducts);
           filledCount++;
         }
@@ -2311,7 +2268,8 @@
     // 13. Product Images
     try {
       if (elements.productImages) {
-        if (setSelectValue(elements.productImages, unifiedProductCount)) {
+        const imgCount = parseCountStr(data.productImages);
+        if (setSelectValue(elements.productImages, imgCount)) {
           highlightField(elements.productImages);
           filledCount++;
         }
@@ -2321,7 +2279,8 @@
     // 14. Number of Product Descriptions
     try {
       if (elements.numberOfProductDescriptions) {
-        if (setSelectValue(elements.numberOfProductDescriptions, unifiedProductCount)) {
+        const descCount = parseCountStr(data.numberOfProductDescriptions);
+        if (setSelectValue(elements.numberOfProductDescriptions, descCount)) {
           highlightField(elements.numberOfProductDescriptions);
           filledCount++;
         }
@@ -3428,10 +3387,10 @@
       { key: "BT Source Link", val: btLink, isLink: true },
       { key: "BT Context", val: btSnippet ? `"...${btSnippet.replace(/^(\.\.\.)+/, '').replace(/(\.\.\.)+$/, '')}..."` : "", isSnippet: true },
       { key: "Company Profile", val: isRestr ? "-" : data.companyProfile },
-      { key: "Company Name", val: isRestr ? "-" : toTitleCase(cleanCompanyName(data.companyName) || data.companyName) },
+      { key: "Company Name", val: isRestr ? "-" : (data.companyName || "-") },
       { key: "Name Source Link", val: nameLink, isLink: true },
-      { key: "Country", val: isRestr ? "-" : toTitleCase(normalizeCountryName(data.countryName)) },
-      { key: "Address", val: isRestr ? "-" : toTitleCase(stripExtraWordsFromAddress(expandAddressAndStateAbbreviations(data.companyAddress, data.countryName), data.selectedAddressCandidateRaw)) },
+      { key: "Country", val: isRestr ? "-" : (data.countryName || "-") },
+      { key: "Address", val: isRestr ? "-" : (data.companyAddress || "-") },
       { key: "Address Source Link", val: addrLink, isLink: true },
       { key: "State", val: isRestr ? "-" : data.state },
       { key: "City", val: isRestr ? "-" : data.city },
@@ -3439,7 +3398,7 @@
       { key: "Primary Email Link", val: primaryEmailLink, isLink: true },
       { key: "Secondary Email", val: isRestr ? "-" : ((data.secondaryEmailId && stripTrailingContactWordsFromEmail(data.secondaryEmailId).trim().toLowerCase() !== stripTrailingContactWordsFromEmail(data.emailId || "").trim().toLowerCase()) ? stripTrailingContactWordsFromEmail(data.secondaryEmailId) : "(None)") },
       { key: "Sec Email Link", val: (data.secondaryEmailId && stripTrailingContactWordsFromEmail(data.secondaryEmailId).trim().toLowerCase() !== stripTrailingContactWordsFromEmail(data.emailId || "").trim().toLowerCase()) ? secEmailLink : "", isLink: true },
-      { key: "Phone", val: isRestr ? "-" : cleanPhoneNumber(data.phoneNumber, data.countryName) },
+      { key: "Phone", val: isRestr ? "-" : (data.phoneNumber || "-") },
       { key: "No. Products", val: isRestr ? "-" : data.numberOfProducts },
       { key: "Product Images", val: isRestr ? "-" : data.productImages },
       { key: "Product Descs", val: isRestr ? "-" : data.numberOfProductDescriptions }
