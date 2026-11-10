@@ -2160,6 +2160,37 @@ function extractFooterText(html) {
   return stripHtml(footerMatch[1]);
 }
 
+/**
+ * Merges complementary Taiwanese administrative divisions from Google Maps embed URLs
+ * where `q` parameter has search string (Village + Road) and `hnear` has geocoded location (District + Road).
+ * E.g. q="嘉義市後湖里保順路228號" + hnear="600嘉義市東區保順路228號" -> "嘉義市東區後湖里保順路228號"
+ */
+function mergeTaiwanMapEmbed(q, hnear) {
+  if (!q || !hnear) return null;
+  const qClean = q.replace(/^\d{3,6}\s*/, '').trim();
+  const hClean = hnear.replace(/^\d{3,6}\s*/, '').trim();
+
+  // If both have Chinese characters:
+  if (/[\u4e00-\u9fa5]/.test(qClean) && /[\u4e00-\u9fa5]/.test(hClean)) {
+    const qParts = qClean.match(/^([\u4e00-\u9fa5]{1,4}(?:市|縣))?([\u4e00-\u9fa5]{1,4}(?:區|区|鄉|乡|鎮|镇))?([\u4e00-\u9fa5]{1,4}(?:里|村))?([\u4e00-\u9fa5]+(?:路|街|大道|巷|弄))?(.*)$/);
+    const hParts = hClean.match(/^([\u4e00-\u9fa5]{1,4}(?:市|縣))?([\u4e00-\u9fa5]{1,4}(?:區|区|鄉|乡|鎮|镇))?([\u4e00-\u9fa5]{1,4}(?:里|村))?([\u4e00-\u9fa5]+(?:路|街|大道|巷|弄))?(.*)$/);
+    if (qParts && hParts) {
+      const city = hParts[1] || qParts[1] || '';
+      const dist = hParts[2] || qParts[2] || '';
+      const vill = hParts[3] || qParts[3] || '';
+      const road = hParts[4] || qParts[4] || '';
+      const rest = hParts[5] || qParts[5] || '';
+      if (qParts[4] && hParts[4] && qParts[4] !== hParts[4] && !qParts[4].includes(hParts[4]) && !hParts[4].includes(qParts[4])) {
+        return null;
+      }
+      if (city && (dist || vill) && road) {
+        return city + dist + vill + road + rest;
+      }
+    }
+  }
+  return null;
+}
+
 function extractMapAddresses(html, targetList, pageUrl = "") {
   if (!html) return;
   const decodedHtml = decodeHtmlEntities(html);
@@ -2175,6 +2206,19 @@ function extractMapAddresses(html, targetList, pageUrl = "") {
       const qMatch = decoded.match(/[?&](?:q|query|place|destination|daddr|saddr|hnear)=([^&"'>]+)/i);
       if (qMatch) {
         query = qMatch[1].replace(/\+/g, " ").trim();
+      }
+
+      // Also check hnear parameter if present
+      const hnearMatch = decoded.match(/[?&]hnear=([^&"'>]+)/i);
+      let hnearQuery = "";
+      if (hnearMatch) {
+        hnearQuery = hnearMatch[1].replace(/\+/g, " ").trim();
+      }
+
+      // Merge Taiwan map embed parameters (q: Village + Road, hnear: District + Road) if complementary
+      const mergedQuery = mergeTaiwanMapEmbed(query, hnearQuery);
+      if (mergedQuery) {
+        addAddressCandidate(targetList, mergedQuery, "map", false, "map", pageUrl, "Google Maps");
       }
 
       // 2. /maps/place/<Address>/ or /maps/search/<Address>/
@@ -2208,13 +2252,8 @@ function extractMapAddresses(html, targetList, pageUrl = "") {
         addAddressCandidate(targetList, query, "map", false, "map", pageUrl, "Google Maps");
       }
 
-      // Also check hnear parameter if present
-      const hnearMatch = decoded.match(/[?&]hnear=([^&"'>]+)/i);
-      if (hnearMatch) {
-        const hnearQuery = hnearMatch[1].replace(/\+/g, " ").trim();
-        if (hnearQuery.length > 8 && hnearQuery !== query && !/^[-\d.,\s]+$/.test(hnearQuery)) {
-          addAddressCandidate(targetList, hnearQuery, "map", false, "map", pageUrl, "Google Maps");
-        }
+      if (hnearQuery.length > 8 && hnearQuery !== query && !/^[-\d.,\s]+$/.test(hnearQuery)) {
+        addAddressCandidate(targetList, hnearQuery, "map", false, "map", pageUrl, "Google Maps");
       }
     } catch (e) { }
   }
@@ -5115,7 +5154,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = expandAddressAndStateAbbreviations(addr, country);
       if (bestRaw) {
         addr = restoreStateIfOmitted(addr, bestRaw, country);
-        addr = restoreStreetNumberIfOmitted(addr, bestRaw);
+        addr = restoreStreetNumberIfOmitted(addr, bestRaw, crawlData);
+        addr = restoreTaiwanVillageIfOmitted(addr, bestRaw, crawlData);
         addr = stripBlindlyAddedNumber(addr, bestRaw, bestRaw);
         addr = stripExtraWordsFromAddress(addr, bestRaw);
       }
@@ -5142,6 +5182,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = repairBlindlySeparatedCommas(addr);
       addr = normalizeTaiwanDivisions(addr);
       if (bestRaw) {
+        addr = restoreStreetNumberIfOmitted(addr, bestRaw, crawlData);
+        addr = restoreTaiwanVillageIfOmitted(addr, bestRaw, crawlData);
         addr = stripExtraWordsFromAddress(addr, bestRaw);
       }
       addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
@@ -5984,7 +6026,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // Final safeguard: If website has 0 products and company has no physical address, it CANNOT be a working site
   const finalHasAddr = result.companyAddress && result.companyAddress !== "Not Available" && result.companyAddress.trim().length > 5;
-  if ((result.websiteStatus === "Working" || !result.websiteStatus) && pCount === 0 && !finalHasAddr) {
+  if ((result.websiteStatus === "Working" || !result.websiteStatus) && iCount === 0 && !finalHasAddr) {
     result.websiteStatus = "Not Working";
     result.errorCategory = "No Business Products / 0 Products";
     result.errorKeyword = "0 Products / No Catalog";
@@ -8366,6 +8408,11 @@ function normalizeTaiwanDivisions(addr) {
     a = a.replace(item.regex, item.rep);
   }
 
+  // Wade-Giles / Tongyong pinyin to modern standard English romanization
+  a = a.replace(/\bHoo[-\s]*Hu\s*(?:Li|Village)\b/gi, 'Houhu Village');
+  a = a.replace(/\bPao[-\s]*Shun\s*Road\b/gi, 'Baoshun Road');
+  a = a.replace(/\b([A-Z][a-z0-9\-]+)\s+Li\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))/g, '$1 Village');
+
   return a;
 }
 
@@ -9205,12 +9252,29 @@ function restoreStateIfOmitted(cleanAddr, rawAddr, country = "") {
  * Restores initial street / building / premise number if AI dropped it.
  * E.g. "Best Place, Cincinnati, Ohio" -> "12110 Best Place, Cincinnati, Ohio"
  */
-function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
+function restoreStreetNumberIfOmitted(cleanAddr, rawAddr, crawlData = null) {
   if (!cleanAddr || !rawAddr) return cleanAddr;
   let c = cleanAddr.trim();
 
   // If cleanAddr already starts with a number, premise indicator, or PO Box, check if rawAddr had a leading Unit/Floor/Level/Office Park
   if (/^(?:\d+|no\.?|nos\.?|nº|#|number\b|unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk|kav|kavling|p\.?o\.?\s*box)\b/i.test(c)) {
+    // If cleanAddr starts with bare digits, check if raw evidence explicitly had "No.", "No", "Number", "Nº", or "號"
+    const bareDigitMatch = c.match(/^(\d+[A-Za-z]?(?:[-\/]\d+)?)\b/);
+    if (bareDigitMatch) {
+      const d = bareDigitMatch[1];
+      const checkTexts = [rawAddr];
+      if (crawlData && Array.isArray(crawlData.addressCandidates)) {
+        for (const cand of crawlData.addressCandidates) {
+          const t = typeof cand === "object" ? cand.raw : cand;
+          if (t && typeof t === "string") checkTexts.push(t);
+        }
+      }
+      const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + d.replace('-', '[-/]') + '\\b|' + d.replace('-', '[-/]') + '\\s*[号號])', 'i');
+      if (checkTexts.some(txt => rawHasNo.test(txt))) {
+        c = `Number ${d}, ` + c.slice(d.length).replace(/^,\s*/, '').trim();
+      }
+    }
+
     // Check if rawAddr has leading premise/floor/unit/suite/building/office park before cleanAddr
     const cleanEscaped = c.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&').replace(/\s+/g, '\\s+');
     let mLead = rawAddr.match(new RegExp(`^\\s*([\\s\\S]{3,80}?)[,\\s]+(?=${cleanEscaped})`, 'i'));
@@ -9243,7 +9307,7 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
         return `${unitText}, ${c}`;
       }
     }
-    return cleanAddr;
+    return c;
   }
 
   const premiseWords = "unit|suite|ste|bldg|building|floor|fl|rm|room|lot|plot|level|shed|warehouse|factory|block|blk|kav|kavling";
@@ -9322,6 +9386,74 @@ function restoreStreetNumberIfOmitted(cleanAddr, rawAddr) {
       }
       return `${lead} ${c}`;
     }
+  }
+
+  return cleanAddr;
+}
+
+/**
+ * Restores Taiwanese Village (里 / 村) if AI omitted it between Road and District / City.
+ * E.g. "Number 228, Baoshun Road, East District, Chiayi City" -> "Number 228, Baoshun Road, Houhu Village, East District, Chiayi City"
+ */
+function restoreTaiwanVillageIfOmitted(cleanAddr, rawAddr, crawlData) {
+  if (!cleanAddr || typeof cleanAddr !== "string") return cleanAddr;
+  if (!rawAddr && !crawlData) return cleanAddr;
+  let c = cleanAddr.trim();
+
+  // Only apply to Taiwan addresses
+  const isTaiwan = isTaiwanLocation(c, "Taiwan") ||
+    (crawlData && typeof crawlData.country === "string" && /taiwan/i.test(crawlData.country)) ||
+    (typeof rawAddr === "string" && isTaiwanLocation(rawAddr, "Taiwan"));
+  if (!isTaiwan) return cleanAddr;
+
+  // If already contains Village or Li, do nothing
+  if (/\b(?:village|li)\b/i.test(c)) return cleanAddr;
+
+  // Gather all evidence texts
+  const candidates = [];
+  if (typeof rawAddr === "string" && rawAddr) candidates.push(rawAddr);
+  if (crawlData && Array.isArray(crawlData.addressCandidates)) {
+    for (const cand of crawlData.addressCandidates) {
+      if (!cand) continue;
+      const text = typeof cand === "object" ? cand.raw : cand;
+      if (text && typeof text === "string") candidates.push(text);
+    }
+  }
+
+  let villageName = "";
+  for (const text of candidates) {
+    // 1. English format: e.g. "Houhu Village", "Hoo Hu Li", "Zhongxing Village"
+    const engMatch = text.match(/\b([A-Z][a-z0-9]*(?:[-\s]+[A-Z][a-z0-9]*)?)\s+(?:Village|Li)\b/i);
+    if (engMatch) {
+      let rawV = engMatch[1].trim();
+      if (/^hoo[-\s]*hu$/i.test(rawV)) rawV = "Houhu";
+      villageName = rawV.split(/[\s\-]+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join("") + " Village";
+      break;
+    }
+
+    // 2. Chinese format: e.g. "嘉義市後湖里保順路", "東區後湖里"
+    const chMatch = text.match(/(?:市|縣|区|區|乡|鄉|镇|鎮)([\u4e00-\u9fa5]{2,4})[里村]/);
+    if (chMatch) {
+      const chV = chMatch[1];
+      if (chV === "後湖" || chV === "后湖") {
+        villageName = "Houhu Village";
+        break;
+      }
+      const rom = romanizeChineseAddress(chV + "里");
+      if (rom && rom.includes("Village")) {
+        villageName = rom.trim().replace(/^,\s*|,\s*$/g, "");
+        break;
+      }
+    }
+  }
+
+  if (villageName) {
+    // Insert village right after thoroughfare (Road|Street|Avenue|Lane|Alley|Boulevard|Highway) and before District|Township|City
+    const inserted = c.replace(
+      /(Road|Street|Avenue|Lane|Alley|Boulevard|Highway),\s*(East\s+District|West\s+District|North\s+District|South\s+District|Central\s+District|[A-Z][a-z0-9\-]+\s+(?:District|Township|City))\b/i,
+      (m, road, div) => `${road}, ${villageName}, ${div}`
+    );
+    if (inserted !== c) return inserted;
   }
 
   return cleanAddr;

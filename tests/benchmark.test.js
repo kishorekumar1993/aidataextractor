@@ -174,6 +174,43 @@ runTest('Non-working status strictly clears all other 13 fields', () => {
   assert.strictEqual(res.numberOfProductDescriptions, "", "numberOfProductDescriptions must be cleared");
 });
 
+// 11. Taiwan Administrative Hierarchy & Number Expansion
+runTest('Taiwan Google Maps embed merge & village restoration (Yi-Shyang test case)', () => {
+  // Test mergeTaiwanMapEmbed
+  const mergedChinese = ctx.mergeTaiwanMapEmbed("嘉義市後湖里保順路228號", "600嘉義市東區保順路228號");
+  assert.strictEqual(mergedChinese, "嘉義市東區後湖里保順路228號", "Merged Chinese must include East District and Houhu Village");
+
+  // Test romanizeChineseAddress
+  const romanized = ctx.romanizeChineseAddress(mergedChinese);
+  assert.strictEqual(romanized, "Number 228, Baoshun Road, Houhu Village, East District, Chiayi City", "Romanized must expand No. -> Number and order smallest to largest");
+
+  // Test applyStrictInstructions with buggy bare output
+  const buggyAiData = {
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "Yi Shyang Machinery Company, Limited",
+    countryName: "Taiwan",
+    companyAddress: "228 Baoshun Road, East District, Chiayi City",
+    productImages: "3"
+  };
+  const crawlData = {
+    country: "Taiwan",
+    addressCandidates: [
+      { raw: "No.228, Pao Shun Road, Hoo Hu Li, Chia Yi City, 60079, Taiwan, R.O.C.", source: "contact" },
+      { raw: "嘉義市東區後湖里保順路228號", source: "map" }
+    ]
+  };
+  const res = ctx.applyStrictInstructions(buggyAiData, crawlData, {});
+  assert.strictEqual(
+    res.companyAddress,
+    "Number 228, Baoshun Road, Houhu Village, East District, Chiayi City",
+    "Company address must restore Number prefix and Houhu Village"
+  );
+  assert.strictEqual(res.state, "Not Available", "Taiwan provincial city has State Not Available");
+  assert.strictEqual(res.city, "Available", "Chiayi City is Available");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');
