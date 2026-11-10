@@ -3154,16 +3154,17 @@ function parseHtmlDetails(html, baseUrl) {
   // Extract & Rank Emails across the complete website HTML
   const rankedEmails = extractEmailsFromHtml(html, hostDomain);
 
-  // Extract Phone Numbers strictly from telephone contexts
+  // Extract Phone Numbers strictly from telephone contexts (including tel: and WhatsApp)
   const phoneLinks = [...html.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
-  const contextPhoneRegex = /(?:tel|telephone|phone|call|mobile|cell|contact|总机|總機|电话|電話|手机|手機|座机|座機)[\s:：]*(?:<[^>]+>\s*)*([+]?[\d\s().-]{7,20})/gi;
+  const waLinks = [...html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\?[^"']*phone=)(\+?\d{8,15})/gi)].map(m => "+" + m[1].replace(/^\+/, ""));
+  const contextPhoneRegex = /(?:tel|telephone|phone|call|mobile|cell|whatsapp|contact|总机|總機|电话|電話|手机|手機|座机|座機)[\s:：]*(?:<[^>]+>\s*)*([+]?[\d\s().-]{7,20})/gi;
   let pMatch;
   const contextPhones = [];
   while ((pMatch = contextPhoneRegex.exec(cleanHtml)) !== null) {
     contextPhones.push(pMatch[1].trim());
   }
 
-  const candidatePhones = [...phoneLinks, ...contextPhones];
+  const candidatePhones = [...phoneLinks, ...contextPhones, ...waLinks];
   const uniquePhones = [];
   for (const rawP of candidatePhones) {
     const digitsOnly = rawP.replace(/\D/g, "");
@@ -8458,11 +8459,18 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // Preserve ampersand inside address (normalize spacing, do not replace with 'and')
   a = a.replace(/\s*&\s*/g, " & ");
 
-  // 1. "St" as "Saint" in city or place names (e.g. St Louis, Port St Lucie, St Petersburg, St Paul, St Marys)
-  a = a.replace(/\b(?:port\s+|mount\s+)?st\.?\s+(lucie|louis|paul|petersburg|cloud|albans|kilda|george|john|andrews|charles|joseph|moritz|leonards|marys|mary's|peters|helens|ives|clair)\b/gi, function (m, p) {
+  // 1. "St" as "Saint" in city, place, or street names (e.g. St Louis, Port St Lucie, St. James Road, St. Patrick Street)
+  a = a.replace(/\b(?:port\s+|mount\s+)?st\.?\s+(lucie|louis|paul|petersburg|cloud|albans|kilda|george|john|johns|john's|andrews|charles|joseph|moritz|leonards|marys|mary's|peters|helens|ives|clair|james|patrick|thomas|martin|francis|anne|anne's|catherine|michael|jude|stephen|christopher|anthony|lawrence|luke|mark|matthew|david|nicholas)\b/gi, function (m, p) {
     if (/^port/i.test(m)) return "Port Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
     if (/^mount/i.test(m)) return "Mount Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
     return "Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+  });
+  // Context-aware St. before any capitalized street word followed by another street suffix
+  a = a.replace(/(^|[,\s]|\d+\s+)\bSt\.?\s+([A-Z][a-z']+(?:\s+[A-Z][a-z']+)?\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Pl)\b)/g, "$1Saint $2");
+  // Context-aware Dr. before a person's name (e.g. "Dr. Martin Luther King Boulevard", "Jl. Dr. Sutomo") -> Doctor / Doktor, NOT Drive!
+  a = a.replace(/(^|[,\s]|\b(?:jl|jln|jalan)\.?\s+)\bDr\.?\s+(?=[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Rd|St|Ave|Dr|Ln|Blvd)\b|[,\s]|$))/g, (m, p1) => {
+    const isIndo = /\b(?:jl|jln|jalan)\b/i.test(p1) || /\b(?:indonesia|jepara|jakarta|surabaya|bandung|semarang|medan)\b/i.test(a) || (country || "").toLowerCase().includes("indonesia");
+    return `${p1}${isIndo ? "Doktor" : "Doctor"} `;
   });
 
   // 2. Compass directions prefixes
@@ -8558,15 +8566,25 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(?<!,\s*)\bct\b\.?(?!\s*\d{5})/gi, "Court");
   a = a.replace(/\bpl\b\.?/gi, "Place");
   a = a.replace(/\bsq\b\.?/gi, "Square");
-  a = a.replace(/\bst\b\.?/gi, "Street");
+  a = a.replace(/\bst\b\.?(?!\s+(?:[A-Z][a-z']+\s+)*(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Rd|Ave|Dr|Ln|Blvd)\b)/gi, "Street");
   a = a.replace(/\brd\b\.?/gi, "Road");
-  a = a.replace(/\bdr\b\.?/gi, "Drive");
+  a = a.replace(/\bdr\b\.?(?!\s+[A-Z][a-z']+\b)/gi, "Drive");
   a = a.replace(/\bln\b\.?/gi, "Lane");
+  a = a.replace(/\bextn?\b\.?/gi, "Extension");
+  a = a.replace(/\bjct\b\.?/gi, "Junction");
+  a = a.replace(/\btrl\b\.?/gi, "Trail");
+  a = a.replace(/\bxing\b\.?/gi, "Crossing");
+  a = a.replace(/\bbyp\b\.?/gi, "Bypass");
+  a = a.replace(/\bmfg\b\.?/gi, "Manufacturing");
+  a = a.replace(/\bwhse\b\.?/gi, "Warehouse");
   a = a.replace(/\bind\b\.?\s*est\b\.?/gi, "Industrial Estate");
-  a = a.replace(/\bind\b\.?\s+(?=(?:area|park|estate|zone|district|region)\b)/gi, "Industrial ");
+  a = a.replace(/\bind\b\.?\s+(?=(?:area|park|estate|zone|district|region|complex|center|centre|corridor|hub|facility)\b)/gi, "Industrial ");
   a = a.replace(/\bindl\b\.?/gi, "Industrial");
+  a = a.replace(/\bbus\.?\s+(?=(?:park|center|centre|district|hub|complex)\b)/gi, "Business ");
+  a = a.replace(/\btech\.?\s+(?=(?:park|center|centre|zone|hub|corridor)\b)/gi, "Technology ");
   a = a.replace(/\bpk\b\.?/gi, "Park");
   a = a.replace(/\best\b\.?\s+(?=(?:park|area|zone)\b)/gi, "Estate ");
+  a = a.replace(/\b(\w+\s+(?:Industrial|Business|Trade|Trading|Commercial)\s+)est\b\.?/gi, "$1Estate");
   a = a.replace(/\bjln\b\.?/gi, "Jalan");
   a = a.replace(/\blrg\b\.?/gi, "Lorong");
   a = a.replace(/(^|[\s,])bt\.?\s+caves\b/gi, '$1Batu Caves');
@@ -8575,6 +8593,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bkg\b\.?/gi, "Kampung");
   a = a.replace(/\bmt\.?\s+(?=[A-Z])/gi, "Mount ");
   a = a.replace(/\bft\.?\s+(?=[A-Z])/gi, "Fort ");
+  a = a.replace(/\bpt\.?\s+(?=(?:Melbourne|Adelaide|Kembla|Hedland|Macquarie|Augusta|Lincoln|Pirie|Elizabeth|Klang|Dickson|Harcourt|Louis|Arthur|Said|Moresby)\b)/gi, "Port ");
   a = a.replace(/\bpt\.?\s+(?=[A-Z])/gi, "Point ");
 
   // 4. Directionals at end of street name (e.g. "Main Street E" -> "Main Street East")
@@ -8892,10 +8911,23 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   }
 
   // ==========================================
-  // 10. Indonesia Abbreviations
+  // 10. Indonesia Abbreviations & Honorific Street Prefixes
   // ==========================================
   a = a.replace(/(^|[,\s])jl\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Jalan ');
   a = a.replace(/(^|[,\s])jln\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Jalan ');
+  // Honorific street titles (e.g. "Jl. RA. Kardinah" / "Jalan R. A. Kartini" -> "Jalan Raden Ajeng Kardinah")
+  if (cLower.includes('indonesia') || /\b(?:jalan|jl\.?|jln\.?|jepara|jakarta|surabaya|bandung|semarang|central\s*java|west\s*java|east\s*java|jawa)\b/i.test(a)) {
+    a = a.replace(/(\bJalan\s+|,\s*)\bR\.?\s*A\.?\s+(?=[A-Z])/gi, '$1Raden Ajeng ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bK\.?\s*H\.?\s+(?=[A-Z])/gi, '$1Kiai Haji ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bH\.?\s*R\.?\s+(?=[A-Z])/gi, '$1Haji Rangkayo ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bLetjen\.?\s+(?=[A-Z])/gi, '$1Letnan Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bMayjen\.?\s+(?=[A-Z])/gi, '$1Mayor Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bBrigjen\.?\s+(?=[A-Z])/gi, '$1Brigadir Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bJend\.?\s+(?=[A-Z])/gi, '$1Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bProf\.?\s+(?=[A-Z])/gi, '$1Professor ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bIr\.?\s+(?=[A-Z])/gi, '$1Insinyur ');
+    a = a.replace(/(\bJalan\s+|,\s*)\bDrs\.?\s+(?=[A-Z])/gi, '$1Doktorandus ');
+  }
   a = a.replace(/(^|[,\s])gg\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Gang ');
   a = a.replace(/(^|[,\s])komp\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Komplek ');
   a = a.replace(/(^|[,\s])kompl\b\.?\s+(?=[A-Za-z0-9])/gi, '$1Komplek ');
@@ -8909,6 +8941,75 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\brt\.?\s*(\d+)\s*\/?\s*rw\.?\s*(\d+)/gi, 'RT $1 RW $2');
   a = a.replace(/(^|[,\s])dki\s+jakarta\b/gi, '$1DKI Jakarta');
   a = a.replace(/(^|[,\s])d\.?i\.?\s+yogyakarta\b/gi, '$1DI Yogyakarta');
+
+  // ==========================================
+  // 11. United Kingdom County Abbreviations
+  // ==========================================
+  if (cLower.includes('united kingdom') || cLower.includes('england') || cLower.includes('scotland') || cLower.includes('wales') || /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(a) || /\b(?:beds|berks|bucks|cambs|derbys|glos|hants|herts|lancs|leics|lincs|middx|northants|notts|oxon|staffs|warks|wilts|worcs|yorks|w\.?\s*mids|s\.?\s*yorks|w\.?\s*yorks|n\.?\s*yorks)\b/i.test(a)) {
+    const ukCounties = [
+      ["beds", "Bedfordshire"], ["berks", "Berkshire"], ["bucks", "Buckinghamshire"],
+      ["cambs", "Cambridgeshire"], ["ches", "Cheshire"], ["derbys", "Derbyshire"],
+      ["glos", "Gloucestershire"], ["hants", "Hampshire"], ["herts", "Hertfordshire"],
+      ["lancs", "Lancashire"], ["leics", "Leicestershire"], ["lincs", "Lincolnshire"],
+      ["middx", "Middlesex"], ["northants", "Northamptonshire"], ["notts", "Nottinghamshire"],
+      ["oxon", "Oxfordshire"], ["salop", "Shropshire"], ["staffs", "Staffordshire"],
+      ["warks", "Warwickshire"], ["wilts", "Wiltshire"], ["worcs", "Worcestershire"],
+      ["yorks", "Yorkshire"]
+    ];
+    for (const [abbr, full] of ukCounties) {
+      a = a.replace(new RegExp(`\\b${abbr}\\b\\.?`, "gi"), full);
+    }
+    a = a.replace(/\b(?:w\.?\s*mids|west\s*mids)\b\.?/gi, "West Midlands");
+    a = a.replace(/\b(?:s\.?\s*yorks)\b\.?/gi, "South Yorkshire");
+    a = a.replace(/\b(?:w\.?\s*yorks)\b\.?/gi, "West Yorkshire");
+    a = a.replace(/\b(?:n\.?\s*yorks)\b\.?/gi, "North Yorkshire");
+    a = a.replace(/\b(?:e\.?\s*sussex)\b\.?/gi, "East Sussex");
+    a = a.replace(/\b(?:w\.?\s*sussex)\b\.?/gi, "West Sussex");
+  }
+
+  // ==========================================
+  // 12. France Abbreviations
+  // ==========================================
+  if (cLower.includes('france') || /\b(?:rue|avenue|boulevard|cedex|z\.?i\.?|z\.?a\.?c?\.?)\b/i.test(a)) {
+    a = a.replace(/\b(?:z\.?i\.?)\b/gi, "Zone Industrielle");
+    a = a.replace(/\b(?:z\.?a\.?c\.?)\b/gi, "Zone d'Amenagement Concerte");
+    a = a.replace(/\b(?:z\.?a\.?)\b/gi, "Zone Artisanale");
+    a = a.replace(/(^|[,\s])bd\.?\s+(?=[A-Za-z])/gi, "$1Boulevard ");
+    a = a.replace(/(^|[,\s])imp\.?\s+(?=[A-Za-z])/gi, "$1Impasse ");
+    a = a.replace(/(^|[,\s])all\.?\s+(?=[A-Za-z])/gi, "$1Allee ");
+    a = a.replace(/(^|[,\s])ch\.?\s+(?=[A-Za-z])/gi, "$1Chemin ");
+    a = a.replace(/\bb\.?p\.?\s*(?=\d)/gi, "Boite Postale ");
+  }
+
+  // ==========================================
+  // 13. South Africa & India State/Province Abbreviations
+  // ==========================================
+  if (cLower.includes('south africa')) {
+    a = a.replace(/,\s*\b(?:gp)\b\.?/gi, ", Gauteng");
+    a = a.replace(/,\s*\b(?:kzn)\b\.?/gi, ", KwaZulu-Natal");
+    a = a.replace(/,\s*\b(?:wc)\b\.?/gi, ", Western Cape");
+    a = a.replace(/,\s*\b(?:ec)\b\.?/gi, ", Eastern Cape");
+    a = a.replace(/,\s*\b(?:nc)\b\.?/gi, ", Northern Cape");
+    a = a.replace(/,\s*\b(?:fs)\b\.?/gi, ", Free State");
+    a = a.replace(/,\s*\b(?:nw)\b\.?/gi, ", North West");
+    a = a.replace(/,\s*\b(?:mp)\b\.?/gi, ", Mpumalanga");
+    a = a.replace(/,\s*\b(?:lp)\b\.?/gi, ", Limpopo");
+  }
+  if (cLower.includes('india')) {
+    a = a.replace(/,\s*\b(?:mh)\b\.?/gi, ", Maharashtra");
+    a = a.replace(/,\s*\b(?:ka)\b\.?/gi, ", Karnataka");
+    a = a.replace(/,\s*\b(?:tn)\b\.?/gi, ", Tamil Nadu");
+    a = a.replace(/,\s*\b(?:gj)\b\.?/gi, ", Gujarat");
+    a = a.replace(/,\s*\b(?:dl)\b\.?/gi, ", Delhi");
+    a = a.replace(/,\s*\b(?:up)\b\.?/gi, ", Uttar Pradesh");
+    a = a.replace(/,\s*\b(?:wb)\b\.?/gi, ", West Bengal");
+    a = a.replace(/,\s*\b(?:ts)\b\.?/gi, ", Telangana");
+    a = a.replace(/,\s*\b(?:ap)\b\.?/gi, ", Andhra Pradesh");
+    a = a.replace(/,\s*\b(?:hr)\b\.?/gi, ", Haryana");
+    a = a.replace(/,\s*\b(?:pb)\b\.?/gi, ", Punjab");
+    a = a.replace(/,\s*\b(?:rj)\b\.?/gi, ", Rajasthan");
+    a = a.replace(/,\s*\b(?:kl)\b\.?/gi, ", Kerala");
+  }
 
   // Clean up any double spaces introduced
   a = a.replace(/\s+/g, " ").trim();
@@ -9043,7 +9144,7 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(/(?<!,\s*)\b(Subang Jaya|Petaling Jaya|Shah Alam|Klang|Kuala Lumpur|Puchong|Cheras|George Town|Johor Bahru|Ipoh|Kota Kinabalu|Kuching|Seremban|Batu Pahat|Pasir Gudang|Iskandar Puteri)\b/gi, ", $1");
 
   // 4b. Indonesian recognized city hubs
-  a = a.replace(/(?<!,\s*)\b(Jakarta|DKI Jakarta|Surabaya|Bandung|Medan|Semarang|Makassar|Palembang|Tangerang|Bekasi|Depok|Bogor|Batam|Pekanbaru|Bandar Lampung|Malang|Padang|Denpasar|Samarinda|Banjarmasin|Balikpapan|Cikarang|Karawang|Sidoarjo|Gresik)\b/gi, ", $1");
+  a = a.replace(/(?<!,\s*)\b(Jakarta|DKI Jakarta|Surabaya|Bandung|Medan|Semarang|Makassar|Palembang|Tangerang|Bekasi|Depok|Bogor|Batam|Pekanbaru|Bandar Lampung|Malang|Padang|Denpasar|Samarinda|Banjarmasin|Balikpapan|Cikarang|Karawang|Sidoarjo|Gresik|Jepara|Yogyakarta|Solo|Surakarta|Pasuruan|Mojokerto|Serang|Cilegon|Pontianak|Manado)\b/gi, ", $1");
 
   // 4c. New Zealand recognized cities
   a = a.replace(/(?<!,\s*)\b(Auckland|Christchurch|Hamilton|Tauranga|Dunedin|Lower Hutt|Upper Hutt|Palmerston North|Napier|Porirua|New Plymouth|Rotorua|Whangarei|Invercargill|Nelson|Whanganui|Hastings|Gisborne|Blenheim|Timaru|Taupo|Queenstown|Cambridge)\b/gi, ", $1");
@@ -9108,6 +9209,7 @@ function ensureCommaBeforeState(addr) {
     // Malaysia States
     "Selangor", "Johor", "Penang", "Perak", "Kedah", "Pahang", "Negeri Sembilan", "Melaka", "Terengganu", "Kelantan", "Sarawak", "Sabah", "Perlis", "Kuala Lumpur", "Putrajaya",
     // Indonesia Provinces
+    "West Java", "Central Java", "East Java", "North Sumatra", "West Sumatra", "South Sumatra", "Special Region of Yogyakarta",
     "Jawa Barat", "Jawa Tengah", "Jawa Timur", "Banten", "DKI Jakarta", "DI Yogyakarta", "Bali", "Sumatera Utara", "Sumatera Barat", "Sumatera Selatan", "Riau", "Kepulauan Riau", "Lampung", "Jambi", "Bengkulu", "Bangka Belitung", "Kalimantan Timur", "Kalimantan Barat", "Kalimantan Selatan", "Kalimantan Tengah", "Kalimantan Utara", "Sulawesi Selatan", "Sulawesi Utara", "Sulawesi Tengah", "Sulawesi Tenggara", "Sulawesi Barat", "Nusa Tenggara Barat", "Nusa Tenggara Timur", "Papua", "Maluku", "Aceh",
     // South Africa
     "Gauteng", "Western Cape", "Eastern Cape", "KwaZulu-Natal", "Mpumalanga", "Free State", "Limpopo", "North West", "Northern Cape",
@@ -9645,7 +9747,12 @@ function cleanPhoneNumber(rawPhone, country) {
   }
 
   // Rule: STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (US 800/888/877/866/855/844/833, AU 1800/1300, UK 0800/0808/0500)
-  if (/^(?:800|888|877|866|855|844|833|1800|1300|900|901|902|0800|0808|0500)/.test(digits)) {
+  // Note: International mobile prefixes like Indonesia 0888 (Smartfren -> 888...) are NOT North American toll-free!
+  if (/^(?:1800|1300|0800|0808|0500)/.test(digits)) {
+    return "";
+  }
+  const isNorthAmerica = cLower.includes("united states") || cLower.includes("canada") || cLower.includes("usa") || cLower.includes("america");
+  if ((isNorthAmerica || !matchedCountryCc) && /^(?:800|888|877|866|855|844|833|900|901|902)/.test(digits)) {
     return "";
   }
 
@@ -9653,7 +9760,7 @@ function cleanPhoneNumber(rawPhone, country) {
   const len = digits.length;
   if (cLower.includes("south africa")) {
     if (len !== 9) return "";
-  } else if (cLower.includes("united states") || cLower.includes("canada") || cLower.includes("usa")) {
+  } else if (isNorthAmerica) {
     if (len !== 10) return "";
   } else if (cLower.includes("taiwan")) {
     if (len < 8 || len > 9) return "";
@@ -9668,7 +9775,7 @@ function cleanPhoneNumber(rawPhone, country) {
   } else if (cLower.includes("new zealand")) {
     if (len < 8 || len > 10) return "";
   } else if (cLower.includes("indonesia")) {
-    if (len < 8 || len > 11) return "";
+    if (len < 8 || len > 12) return "";
   } else if (cLower.includes("singapore")) {
     if (len !== 8) return "";
   } else if (cLower.includes("spain") || cLower.includes("espana")) {

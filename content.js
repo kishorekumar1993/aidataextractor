@@ -1781,7 +1781,11 @@
     }
 
     // Rule: STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (US 800/888/877/866/855/844/833, AU 1800/1300, UK 0800/0808/0500)
-    if (/^(?:800|888|877|866|855|844|833|1800|1300|900|901|902|0800|0808|0500)/.test(digits)) {
+    if (/^(?:1800|1300|0800|0808|0500)/.test(digits)) {
+      return "";
+    }
+    const isNorthAmerica = cLower.includes("united states") || cLower.includes("canada") || cLower.includes("usa") || cLower.includes("america");
+    if ((isNorthAmerica || !matchedCountryCc) && /^(?:800|888|877|866|855|844|833|900|901|902)/.test(digits)) {
       return "";
     }
 
@@ -1789,7 +1793,7 @@
     const len = digits.length;
     if (cLower.includes("south africa")) {
       if (len !== 9) return "";
-    } else if (cLower.includes("united states") || cLower.includes("canada") || cLower.includes("usa")) {
+    } else if (isNorthAmerica) {
       if (len !== 10) return "";
     } else if (cLower.includes("taiwan")) {
       if (len < 8 || len > 9) return "";
@@ -1804,7 +1808,7 @@
     } else if (cLower.includes("new zealand")) {
       if (len < 8 || len > 10) return "";
     } else if (cLower.includes("indonesia")) {
-      if (len < 8 || len > 11) return "";
+      if (len < 8 || len > 12) return "";
     } else if (cLower.includes("singapore")) {
       if (len !== 8) return "";
     } else if (cLower.includes("spain") || cLower.includes("espana")) {
@@ -1924,11 +1928,29 @@
     a = a.replace(/(?<!,\s*)\bct\b\.?(?!\s*\d{5})/gi, "Court");
     a = a.replace(/\bpl\b\.?/gi, "Place");
     a = a.replace(/\bsq\b\.?/gi, "Square");
-    a = a.replace(/\bst\b\.?/gi, "Street");
+    a = a.replace(/(^|[,\s]|\d+\s+)\bSt\.?\s+([A-Z][a-z']+(?:\s+[A-Z][a-z']+)?\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Pl)\b)/g, "$1Saint $2");
+    a = a.replace(/\bst\b\.?(?!\s+(?:[A-Z][a-z']+\s+)*(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Rd|Ave|Dr|Ln|Blvd)\b)/gi, "Street");
     a = a.replace(/\brd\b\.?/gi, "Road");
-    a = a.replace(/\bdr\b\.?/gi, "Drive");
+    a = a.replace(/(^|[,\s]|\b(?:jl|jln|jalan)\.?\s+)\bDr\.?\s+(?=[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Rd|St|Ave|Dr|Ln|Blvd)\b|[,\s]|$))/g, (m, p1) => {
+      const isIndo = /\b(?:jl|jln|jalan)\b/i.test(p1) || /\b(?:indonesia|jepara|jakarta|surabaya|bandung|semarang|medan)\b/i.test(a) || (country || "").toLowerCase().includes("indonesia");
+      return `${p1}${isIndo ? "Doktor" : "Doctor"} `;
+    });
+    a = a.replace(/\bdr\b\.?(?!\s+[A-Z][a-z']+\b)/gi, "Drive");
     a = a.replace(/\bln\b\.?/gi, "Lane");
+    a = a.replace(/\bextn?\b\.?/gi, "Extension");
+    a = a.replace(/\bjct\b\.?/gi, "Junction");
+    a = a.replace(/\btrl\b\.?/gi, "Trail");
+    a = a.replace(/\bxing\b\.?/gi, "Crossing");
+    a = a.replace(/\bbyp\b\.?/gi, "Bypass");
+    a = a.replace(/\bmfg\b\.?/gi, "Manufacturing");
+    a = a.replace(/\bwhse\b\.?/gi, "Warehouse");
+    a = a.replace(/(^|[,\s])jl\b\.?\s+(?=[A-Za-z0-9])/gi, "$1Jalan ");
     a = a.replace(/\bjln\b\.?/gi, "Jalan");
+    if ((country || "").toLowerCase().includes("indonesia") || /\b(?:jalan|jl\.?|jln\.?|jepara|jakarta|surabaya|bandung|semarang|central\s*java|west\s*java|east\s*java|jawa)\b/i.test(a)) {
+      a = a.replace(/(\bJalan\s+|,\s*)\bR\.?\s*A\.?\s+(?=[A-Z])/gi, "$1Raden Ajeng ");
+      a = a.replace(/(\bJalan\s+|,\s*)\bK\.?\s*H\.?\s+(?=[A-Z])/gi, "$1Kiai Haji ");
+      a = a.replace(/(\bJalan\s+|,\s*)\bJend\.?\s+(?=[A-Z])/gi, "$1Jenderal ");
+    }
     a = a.replace(/\blrg\b\.?/gi, "Lorong");
     a = a.replace(/\bbt\b\.?/gi, "Bukit");
     a = a.replace(/\bkg\b\.?/gi, "Kampung");

@@ -242,6 +242,50 @@ runTest('Malformed mailto prefix in href or email string is cleaned and deduplic
   assert.strictEqual(res.phoneNumber, "82136903270", "Indonesian phone 82136903270 must remain intact");
 });
 
+// 14. Global Mobile Numbers & Full Address Expansion (Indonesian Honorifics, St./Dr. Safety, UK Counties)
+runTest('Global mobile numbers (12-digit ID, Smartfren 0888, UK, AU) & address expansion', () => {
+  // Indonesian 12-digit mobile + Smartfren 0888 prefix
+  assert.strictEqual(ctx.cleanPhoneNumber("+62 812-3456-78901", "Indonesia"), "812345678901", "12-digit Indonesian mobile supported");
+  assert.strictEqual(ctx.cleanPhoneNumber("+62 888-1234-5678", "Indonesia"), "88812345678", "Indonesian 0888 mobile not rejected as US toll-free");
+  assert.strictEqual(ctx.cleanPhoneNumber("888-555-0199", "United States"), "", "US 888 toll-free still rejected");
+
+  // Indonesian Honorific & Street Expansion
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Jl. RA. Kardinah, Senenan, Jepara", "Indonesia"),
+    "Jalan Raden Ajeng Kardinah, Senenan, Jepara",
+    "Jl. and RA. must expand properly"
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Jalan R. A. Kardinah, Senenan, Jepara", "Indonesia"),
+    "Jalan Raden Ajeng Kardinah, Senenan, Jepara",
+    "R. A. must expand to Raden Ajeng"
+  );
+
+  // St. and Dr. context safety (never Drive Sutomo or Street James Road)
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Jl. Dr. Sutomo 12, Jakarta", "Indonesia"),
+    "Jalan Doktor Sutomo 12, Jakarta",
+    "Dr. before name in Indonesia must become Doktor, not Drive"
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("100 St. James Rd, London", "United Kingdom"),
+    "100 Saint James Road, London",
+    "St. before saint name must become Saint, not Street"
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("15 Oak Dr, Chicago, IL", "United States"),
+    "15 Oak Drive, Chicago, Illinois",
+    "Dr at street end becomes Drive and IL becomes Illinois"
+  );
+
+  // UK Counties Expansion
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Unit 4, Ind. Est., Kettering, Northants", "United Kingdom"),
+    "Unit 4, Industrial Estate, Kettering, Northamptonshire",
+    "Ind. Est. and Northants must expand cleanly"
+  );
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');
