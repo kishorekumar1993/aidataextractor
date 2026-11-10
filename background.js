@@ -1504,14 +1504,14 @@ async function crawlWebsite(targetUrl) {
       mainHtml.match(/<(?:div|section)[^>]+(?:class|id)=["'][^"']*footer[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|section)>/i);
     if (footerMatch) {
       footerText = stripHtml(footerMatch[1]);
-      extractHtmlAddresses(footerMatch[1], addressCandidates, "footer");
+      extractHtmlAddresses(footerMatch[1], addressCandidates, "footer", finalUrl);
     }
 
     // Extract from Homepage body
-    extractJsonLdAddresses(mainHtml, addressCandidates);
-    extractMapAddresses(mainHtml, addressCandidates);
-    extractMetaAddresses(mainHtml, addressCandidates);
-    extractHtmlAddresses(mainHtml, addressCandidates, "contact");
+    extractJsonLdAddresses(mainHtml, addressCandidates, finalUrl);
+    extractMapAddresses(mainHtml, addressCandidates, finalUrl);
+    extractMetaAddresses(mainHtml, addressCandidates, finalUrl);
+    extractHtmlAddresses(mainHtml, addressCandidates, "contact", finalUrl);
 
     // Extract official registered legal company candidates across homepage
     for (const cand of extractLegalCandidatesFromHtml(mainHtml)) {
@@ -1580,7 +1580,69 @@ async function crawlWebsite(targetUrl) {
         } catch (e) { }
       }
 
-      const candidateSubpages = topLinks.slice(0, 2);
+      const recordSubpageContent = (cUrl, cText, { includeAddresses = true, includeProfileText = true } = {}) => {
+        contactHtml += "\n" + cText;
+        const isProductPage = /(?:products?|catalog(?:ue)?|categories|category|items?|collection|services?|solutions?)/i.test(cUrl);
+        const pageText = stripHtml(cText);
+        crawledPages.push({ url: cUrl, html: cText, text: pageText, isProductPage });
+        const isDistributorPage = /(?:dealers?|distributors?|stockists?|resellers?|partners?)/i.test(cUrl);
+        const isProfilePage = !isDistributorPage && /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history|quienes[-_]?somos|sobre[-_]?nosotros|nosotros|empresa|nuestra[-_]?empresa|chi[-_]?siamo|azienda|u(?:e)?ber[-_]?uns|unternehmen|a[-_]?propos|qui[-_]?sommes[-_]?nous|quem[-_]?somos|sobre[-_]?nos|tentang[-_]?kami)/i.test(cUrl);
+        const isContactPage = !isDistributorPage && /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint)/i.test(cUrl);
+        const isLowQualitySubpage = /(?:terms|privacy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)/i.test(cUrl);
+        const pageSource = isDistributorPage ? "distributor" : (isProfilePage ? "profile" : (isContactPage ? "contact" : (isProductPage ? "product" : "other")));
+
+        if (isProfilePage && !primaryAboutUrl) primaryAboutUrl = cUrl;
+        if (isContactPage && !primaryContactUrl) primaryContactUrl = cUrl;
+
+        // If product page, check for products and count items
+        if (isProductPage) {
+          const subMatches = cText.match(/class=["'][^"']*(?:product-item|product-card|product-listing|catalog-item|store-item)[^"']*["']/gi) ||
+            cText.match(/<div[^>]*data-product[^>]*>/gi) || [];
+          if (subMatches.length > 0) {
+            detectedProductCount = Math.max(detectedProductCount, Math.min(subMatches.length, 3));
+          }
+        }
+
+        if (includeAddresses && !isLowQualitySubpage) {
+          extractEmbeddedScriptAddresses(cText, addressCandidates, cUrl);
+          extractMapAddresses(cText, addressCandidates, cUrl);
+          extractMetaAddresses(cText, addressCandidates, cUrl);
+          extractHtmlAddresses(cText, addressCandidates, pageSource, cUrl);
+        }
+
+        if (includeProfileText && (isProfilePage || /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(pageText.slice(0, 5000)))) {
+          profilePageText += "\n" + pageText;
+        }
+
+        // Extract legal corporate names across this page
+        for (const cand of extractLegalCandidatesFromHtml(cText)) {
+          allLegalCandidates.add(cand);
+          if (!legalCandidateSources[cand]) {
+            legalCandidateSources[cand] = cUrl;
+          } else if (!isLowQualitySubpage && /(?:terms|privacy|policy|disclaimer|faq|cart)/i.test(legalCandidateSources[cand])) {
+            legalCandidateSources[cand] = cUrl;
+          }
+        }
+
+        // Extract all corporate emails and phones across this page
+        for (const em of extractEmailsFromHtml(cText, finalUrl)) {
+          allDiscoveredEmails.add(em);
+          updateEmailSource(emailSourceMap, em, cUrl, finalUrl, targetUrl);
+        }
+        const pagePhoneLinks = [...cText.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
+        for (const p of pagePhoneLinks) allDiscoveredPhones.add(p);
+
+        // Extract copyright on this page if homepage lacked complete legal suffix
+        if (!isLowQualitySubpage) {
+          const pageCopyright = extractCopyrightCompanyName(cText);
+          if (pageCopyright && hasCompleteLegalSuffix(pageCopyright) && (!copyrightText || !hasCompleteLegalSuffix(copyrightText))) {
+            copyrightText = pageCopyright;
+            copyrightSourceUrl = cUrl;
+          }
+        }
+      };
+
+      const candidateSubpages = topLinks.slice(0, 3);
       if (candidateSubpages.length > 0) {
         // High-speed concurrent parallel fetching of candidate subpages (3.5s timeout for fast, non-blocking delivery)
         const subpageResults = await Promise.allSettled(
@@ -1602,71 +1664,18 @@ async function crawlWebsite(targetUrl) {
           const cRes = settled.value;
 
           if (cRes && cRes.ok && cRes.html) {
-            const cText = cRes.html;
-            contactHtml += "\n" + cText;
-            const isProductPage = /(?:products?|catalog(?:ue)?|categories|category|items?|collection|services?|solutions?)/i.test(cUrl);
-            crawledPages.push({ url: cUrl, html: cText, text: stripHtml(cText), isProductPage });
-            const isDistributorPage = /(?:dealers?|distributors?|stockists?|resellers?|partners?)/i.test(cUrl);
-            const isProfilePage = !isDistributorPage && /(?:company[-_]?profile|corporate[-_]?profile|profile\.htm|profile|about|about[-_]?us|who[-_]?we[-_]?are|our[-_]?company|our[-_]?story|our[-_]?history|quienes[-_]?somos|sobre[-_]?nosotros|nosotros|empresa|nuestra[-_]?empresa|chi[-_]?siamo|azienda|u(?:e)?ber[-_]?uns|unternehmen|a[-_]?propos|qui[-_]?sommes[-_]?nous|quem[-_]?somos|sobre[-_]?nos|tentang[-_]?kami)/i.test(cUrl);
-            const isContactPage = !isDistributorPage && /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak)/i.test(cUrl);
-            const isLowQualitySubpage = /(?:terms|privacy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)/i.test(cUrl);
-            const pageSource = isDistributorPage ? "distributor" : (isProfilePage ? "profile" : (isContactPage ? "contact" : (isProductPage ? "product" : "other")));
-
-            if (isProfilePage && !primaryAboutUrl) primaryAboutUrl = cUrl;
-            if (isContactPage && !primaryContactUrl) primaryContactUrl = cUrl;
-
-            // If product page, check for products and count items
-            if (isProductPage) {
-              const subMatches = cText.match(/class=["'][^"']*(?:product-item|product-card|product-listing|catalog-item|store-item)[^"']*["']/gi) ||
-                cText.match(/<div[^>]*data-product[^>]*>/gi) || [];
-              if (subMatches.length > 0) {
-                detectedProductCount = Math.max(detectedProductCount, Math.min(subMatches.length, 3));
-              }
-            }
-
-            extractEmbeddedScriptAddresses(cText, addressCandidates);
-            extractMapAddresses(cText, addressCandidates);
-            extractMetaAddresses(cText, addressCandidates);
-            extractHtmlAddresses(cText, addressCandidates, pageSource, cUrl);
-
-            if (isProfilePage || /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(stripHtml(cText).slice(0, 5000))) {
-              profilePageText += "\n" + stripHtml(cText);
-            }
-
-            // Extract legal corporate names across this page
-            for (const cand of extractLegalCandidatesFromHtml(cText)) {
-              allLegalCandidates.add(cand);
-              if (!legalCandidateSources[cand]) {
-                legalCandidateSources[cand] = cUrl;
-              } else if (!isLowQualitySubpage && /(?:terms|privacy|policy|disclaimer|faq|cart)/i.test(legalCandidateSources[cand])) {
-                legalCandidateSources[cand] = cUrl;
-              }
-            }
-
-            // Extract all corporate emails and phones across this page
-            for (const em of extractEmailsFromHtml(cText, finalUrl)) {
-              allDiscoveredEmails.add(em);
-              updateEmailSource(emailSourceMap, em, cUrl, finalUrl, targetUrl);
-            }
-            const pagePhoneLinks = [...cText.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
-            for (const p of pagePhoneLinks) allDiscoveredPhones.add(p);
-
-            // Extract copyright on this page if homepage lacked complete legal suffix
-            const pageCopyright = extractCopyrightCompanyName(cText);
-            if (pageCopyright && hasCompleteLegalSuffix(pageCopyright) && (!copyrightText || !hasCompleteLegalSuffix(copyrightText))) {
-              copyrightText = pageCopyright;
-              copyrightSourceUrl = cUrl;
-            }
+            recordSubpageContent(cRes.url || cUrl, cRes.html, { includeAddresses: true, includeProfileText: true });
           }
         }
       }
       // Double check for secondary email: if fewer than 2 corporate emails discovered so far,
-      // concurrently fetch all remaining contact, support, privacy, policy, terms, legal, and warranty subpages from contactLinks
+      // concurrently fetch remaining contact, support, privacy, policy, terms, legal, and warranty subpages from contactLinks
       if (allDiscoveredEmails.size < 2 && contactLinks && contactLinks.length > 0) {
         const remainingCandidates = contactLinks
           .filter(l => !fetchedUrls.has(l))
           .sort((a, b) => {
             const score = (u) => {
+              if (/(?:contact|kontakt|contacto|contatti|impressum)/i.test(u)) return 15;
               if (/(?:privacy|policy|legal|terms|support|warranty|service|inquir|quote)/i.test(u)) return 10;
               return 1;
             };
@@ -1693,14 +1702,7 @@ async function crawlWebsite(targetUrl) {
             const cUrl = remainingCandidates[i];
             const settled = extraResults[i];
             if (settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
-              const cText = settled.value.html;
-              contactHtml += "\n" + cText;
-              for (const em of extractEmailsFromHtml(cText, finalUrl)) {
-                allDiscoveredEmails.add(em);
-                updateEmailSource(emailSourceMap, em, cUrl, finalUrl, targetUrl);
-              }
-              const pagePhoneLinks = [...cText.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
-              for (const p of pagePhoneLinks) allDiscoveredPhones.add(p);
+              recordSubpageContent(settled.value.url || cUrl, settled.value.html, { includeAddresses: true, includeProfileText: false });
             }
           }
         }
@@ -2095,7 +2097,7 @@ function extractJsonLdBlocks(html) {
 /**
  * Extracts schema.org JSON-LD PostalAddress blocks with source provenance.
  */
-function extractJsonLdAddresses(html, targetList) {
+function extractJsonLdAddresses(html, targetList, pageUrl = "") {
   if (!html) return;
   const scriptRegex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match;
@@ -2108,7 +2110,7 @@ function extractJsonLdAddresses(html, targetList) {
           const a = item.address;
           const parts = [a.streetAddress, a.addressLocality, a.addressRegion, a.postalCode, a.addressCountry].filter(Boolean);
           if (parts.length >= 2) {
-            addAddressCandidate(targetList, parts.join(", "), "jsonld", false, "jsonld");
+            addAddressCandidate(targetList, parts.join(", "), "jsonld", false, "jsonld", pageUrl);
           }
         }
       };
@@ -2122,9 +2124,9 @@ function extractJsonLdAddresses(html, targetList) {
 /**
  * Extracts addresses embedded in JavaScript variables, hydration payloads, and SPA configs.
  */
-function extractEmbeddedScriptAddresses(html, targetList) {
+function extractEmbeddedScriptAddresses(html, targetList, pageUrl = "") {
   if (!html) return;
-  extractJsonLdAddresses(html, targetList);
+  extractJsonLdAddresses(html, targetList, pageUrl);
 
   const scriptRegex = /<script[^>]*>([\s\S]*?)<\/script>/gi;
   let sm;
@@ -2134,7 +2136,7 @@ function extractEmbeddedScriptAddresses(html, targetList) {
     if (/\b(?:streetAddress|office_address|company_address)\b/i.test(content)) {
       const m = content.match(/["'](?:streetAddress|office_address|company_address)["']\s*:\s*["']([^"']{8,180})["']/i);
       if (m && m[1]) {
-        addAddressCandidate(targetList, m[1], "jsonld", false, "contact");
+        addAddressCandidate(targetList, m[1], "jsonld", false, "contact", pageUrl);
       }
     }
   }
@@ -2374,13 +2376,13 @@ function extractMapAddresses(html, targetList, pageUrl = "") {
   }
 }
 
-function extractMetaAddresses(html, targetList) {
+function extractMetaAddresses(html, targetList, pageUrl = "") {
   if (!html) return;
   const metaRegex = /<meta[^>]+(?:name|property)=["'](?:og:street-address|geo\.placename|business:contact_data:street_address)["'][^>]+content=["']([^"']+)["']/gi;
   let m;
   while ((m = metaRegex.exec(html)) !== null) {
     if (m[1] && m[1].trim().length > 6) {
-      addAddressCandidate(targetList, m[1].trim(), "contact", false);
+      addAddressCandidate(targetList, m[1].trim(), "contact", false, "general", pageUrl);
     }
   }
 }
@@ -3147,56 +3149,106 @@ function extractEmailsFromHtml(html, hostDomain = "") {
 }
 
 /**
- * Updates email source tracking with page priority (Contact page > Home page > About page > Social media > Other subpages).
+ * Ranks page URLs by provenance quality for source link attribution:
+ * Contact page (5) > Home page (4) > About/Profile page (3) > Support/Service page (2) > Social (1) > Other (0) > Legal/Privacy/Cart (-1).
+ */
+function getSourcePagePriority(url, finalUrl = "", targetUrl = "") {
+  const norm = (u) => String(u || "").toLowerCase().trim().replace(/\/+$/, "");
+  const u = (url || "").toLowerCase();
+  if (!u) return -2;
+  if (/(?:^|[\/_.-])(?:terms|terms-and-conditions|privacy|privacy-policy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)(?:$|[\/_.-])/i.test(u)) return -1;
+  if (/(?:^|[\/_.-])(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint)(?:$|[\/_.-])/i.test(u)) return 5;
+  if ((finalUrl && norm(u) === norm(finalUrl)) || (targetUrl && norm(u) === norm(targetUrl))) return 4;
+  if (/(?:^|[\/_.-])(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|corporate[-_]?profile|our[-_]?company|our[-_]?story|profile|quienes[-_]?somos|sobre[-_]?nosotros|chi[-_]?siamo|u(?:e)?ber[-_]?uns|a[-_]?propos|qui[-_]?sommes[-_]?nous|quem[-_]?somos|tentang[-_]?kami)(?:$|[\/_.-])/i.test(u)) return 3;
+  if (/(?:^|[\/_.-])(?:support|warranty|customer[-_]?service|service|inquir(?:y|ies)|quote)(?:$|[\/_.-])/i.test(u)) return 2;
+  if (/facebook\.com|linkedin\.com/i.test(u)) return 1;
+  return 0;
+}
+
+/**
+ * Updates email source tracking with page priority (Contact page > Home page > About page > Support > Social media > Other subpages).
  * Prevents repeating footers on legal/faq/terms pages from overwriting genuine Contact page sources.
  */
 function updateEmailSource(emailSourceMap, email, pageUrl, finalUrl = "", targetUrl = "") {
   if (!email || !pageUrl || !emailSourceMap) return;
-  const em = email.toLowerCase().trim();
+  const em = stripTrailingContactWordsFromEmail(String(email).replace(/^mailto:/i, "").toLowerCase().trim());
+  if (!em) return;
   const currentSrc = emailSourceMap[em];
   if (!currentSrc) {
     emailSourceMap[em] = pageUrl;
     return;
   }
-  const getPagePriority = (url) => {
-    const u = (url || "").toLowerCase();
-    if (/\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out)\b/i.test(u)) return 4;
-    if (u === (finalUrl || "").toLowerCase() || u === (targetUrl || "").toLowerCase()) return 3;
-    if (/\b(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|profile)\b/i.test(u)) return 2;
-    if (/facebook\.com|linkedin\.com/i.test(u)) return 1;
-    if (/\b(?:terms|terms-and-conditions|privacy|privacy-policy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)\b/i.test(u)) return -1;
-    return 0;
-  };
-  if (getPagePriority(pageUrl) > getPagePriority(currentSrc)) {
+  if (getSourcePagePriority(pageUrl, finalUrl, targetUrl) > getSourcePagePriority(currentSrc, finalUrl, targetUrl)) {
     emailSourceMap[em] = pageUrl;
   }
 }
 
 /**
  * Resolves the most accurate and genuine page source URL for an email address.
- * Prioritizes Contact page, Home page, and allowed Social Media (Facebook/LinkedIn) over low-quality repeating footer pages (Terms, Privacy, FAQ, Cart).
+ * Prioritizes Contact page, Home page, About page, and allowed Social Media over repeating footer pages (Terms, Privacy, FAQ, Cart).
  */
 function resolveBestEmailSource(email, crawlData) {
   if (!email || !crawlData) return "";
-  const em = email.toLowerCase().trim();
-  const mappedSrc = (crawlData.emailSourceMap && crawlData.emailSourceMap[em]) || "";
-  // Always return the exact page where the email was genuinely discovered (Contact, Warranty, Home, About, or Social)
-  if (mappedSrc) {
-    return mappedSrc;
-  }
-  const contactUrl = crawlData.primaryContactUrl || "";
+  const em = stripTrailingContactWordsFromEmail(String(email).replace(/^mailto:/i, "").toLowerCase().trim());
+  if (!em) return "";
   const finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-  const aboutUrl = crawlData.primaryAboutUrl || "";
+  const origUrl = crawlData.originalUrl || "";
 
-  // If not explicitly mapped, check which crawled page actually contains this email
-  if (contactUrl && crawlData.contactHtml && crawlData.contactHtml.toLowerCase().includes(em)) {
-    return contactUrl;
+  let bestUrl = "";
+  let bestPrio = -99;
+
+  // 1. Check explicit emailSourceMap (exact and cleaned-key match)
+  if (crawlData.emailSourceMap) {
+    if (crawlData.emailSourceMap[em]) {
+      bestUrl = crawlData.emailSourceMap[em];
+      bestPrio = getSourcePagePriority(bestUrl, finalUrl, origUrl);
+    } else {
+      for (const [k, src] of Object.entries(crawlData.emailSourceMap)) {
+        const cleanK = stripTrailingContactWordsFromEmail(String(k).replace(/^mailto:/i, "").toLowerCase().trim());
+        if (cleanK === em && src) {
+          const prio = getSourcePagePriority(src, finalUrl, origUrl);
+          if (prio > bestPrio) {
+            bestPrio = prio;
+            bestUrl = src;
+          }
+        }
+      }
+    }
   }
+
+  // 2. Verify across individual crawledPages so emails only present on a specific subpage (or missing from map) get their exact URL
+  if (Array.isArray(crawlData.crawledPages) && crawlData.crawledPages.length > 0) {
+    for (const page of crawlData.crawledPages) {
+      if (!page || !page.url) continue;
+      const pageHtmlLower = (page.html || "").toLowerCase();
+      const pageTextLower = (page.text || "").toLowerCase();
+      let foundOnPage = pageHtmlLower.includes(em) || pageTextLower.includes(em);
+      if (!foundOnPage && page.html) {
+        const decodedPageEmails = extractEmailsFromHtml(page.html, finalUrl);
+        foundOnPage = decodedPageEmails.includes(em);
+      }
+      if (foundOnPage) {
+        const prio = getSourcePagePriority(page.url, finalUrl, origUrl);
+        if (!bestUrl || prio > bestPrio) {
+          bestPrio = prio;
+          bestUrl = page.url;
+        }
+      }
+    }
+  }
+
+  if (bestUrl) return bestUrl;
+
+  const contactUrl = crawlData.primaryContactUrl || "";
+  const aboutUrl = crawlData.primaryAboutUrl || "";
   if (finalUrl && crawlData.mainHtml && crawlData.mainHtml.toLowerCase().includes(em)) {
     return finalUrl;
   }
   if (aboutUrl && crawlData.profilePageText && crawlData.profilePageText.toLowerCase().includes(em)) {
     return aboutUrl;
+  }
+  if (contactUrl && crawlData.contactPageText && crawlData.contactPageText.toLowerCase().includes(em)) {
+    return contactUrl;
   }
   return contactUrl || finalUrl || "";
 }
@@ -3490,13 +3542,14 @@ function findExactEvidenceLink(html, keyword, regex, baseUrl) {
   if (!html) return baseUrl || "";
   const rawHtml = String(html);
   const kw = keyword ? String(keyword).trim().toLowerCase() : "";
+  const isAssetUrl = (u) => /\.(?:jpe?g|png|gif|webp|svg|ico|bmp|css|js|woff2?|ttf|eot|mp4|webm|pdf)(?:[?#]|$)/i.test(u || "");
 
-  // 1. Direct anchor tag search: <a href="...">...keyword...</a>
+  // 1. Direct anchor tag search: <a href="...">...keyword...</a> (only real page URLs, not image/asset files)
   const anchorRegex = /<a\s+[^>]*href=["']([^"'#\s]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let m;
   while ((m = anchorRegex.exec(rawHtml)) !== null) {
     const href = m[1].trim();
-    if (!href || /^(?:javascript:|mailto:|tel:|#)/i.test(href)) continue;
+    if (!href || /^(?:javascript:|mailto:|tel:|data:|#)/i.test(href)) continue;
     const tagHtml = m[0];
     const textContent = m[2].replace(/<[^>]+>/g, " ").toLowerCase();
     const hrefLower = href.toLowerCase();
@@ -3507,38 +3560,7 @@ function findExactEvidenceLink(html, keyword, regex, baseUrl) {
 
     if (textMatch || hrefMatch || regexMatch) {
       const absUrl = ensureAbsoluteUrl(href, baseUrl);
-      if (absUrl && absUrl !== baseUrl) return absUrl;
-    }
-  }
-
-  // 2. Proximity search: find <a href="..."> within 400 characters of the keyword occurrence
-  if (kw) {
-    const idx = rawHtml.toLowerCase().indexOf(kw);
-    if (idx !== -1) {
-      const start = Math.max(0, idx - 400);
-      const end = Math.min(rawHtml.length, idx + kw.length + 400);
-      const slice = rawHtml.slice(start, end);
-      const linkMatch = slice.match(/<a\s+[^>]*href=["']([^"'#\s]+)["']/i);
-      if (linkMatch && linkMatch[1]) {
-        const absUrl = ensureAbsoluteUrl(linkMatch[1].trim(), baseUrl);
-        if (absUrl && absUrl !== baseUrl) return absUrl;
-      }
-    }
-  }
-
-  // 3. Image tag search: <img src="..." alt="...keyword...">
-  if (kw) {
-    const imgRegex = /<img\s+[^>]*?(?:alt|title|src)=["'][^"']*?([^"']*?)["'][^>]*>/gi;
-    let imgM;
-    while ((imgM = imgRegex.exec(rawHtml)) !== null) {
-      const fullImg = imgM[0];
-      if (fullImg.toLowerCase().includes(kw)) {
-        const srcMatch = fullImg.match(/\bsrc=["']([^"']+)["']/i);
-        if (srcMatch && srcMatch[1]) {
-          const absUrl = ensureAbsoluteUrl(srcMatch[1].trim(), baseUrl);
-          if (absUrl) return absUrl;
-        }
-      }
+      if (absUrl && absUrl !== baseUrl && !isAssetUrl(absUrl)) return absUrl;
     }
   }
 
@@ -3724,17 +3746,17 @@ function findBusinessTypeEvidence(businessType, crawledPages = [], fallbackText 
     ]
   };
 
-  const list = patterns[businessType] || patterns["Supplier"] || [];
+  const typeKey = businessType === "Distributor" ? "Distributer" : businessType;
+  const list = patterns[typeKey] || patterns["Supplier"] || [];
   if (crawledPages && crawledPages.length > 0) {
     for (const regex of list) {
       for (const page of crawledPages) {
         const text = page.text || stripHtml(page.html || "");
         const match = text.match(regex);
         if (match) {
-          const exactLink = findExactEvidenceLink(page.html || "", match[0], regex, page.url);
           return {
             keyword: match[0],
-            sourceUrl: exactLink || page.url,
+            sourceUrl: page.url || "",
             snippet: extractContextSnippet(text, match[0])
           };
         }
@@ -3743,15 +3765,15 @@ function findBusinessTypeEvidence(businessType, crawledPages = [], fallbackText 
   }
 
   if (fallbackText) {
+    const plainFallback = /<[a-z][\s\S]*>/i.test(fallbackText) ? stripHtml(fallbackText) : fallbackText;
     for (const regex of list) {
-      const match = fallbackText.match(regex);
+      const match = plainFallback.match(regex);
       if (match) {
         const pageUrl = (crawledPages && crawledPages[0] && crawledPages[0].url) || "";
-        const exactLink = findExactEvidenceLink(fallbackText, match[0], regex, pageUrl);
         return {
           keyword: match[0],
-          sourceUrl: exactLink || pageUrl,
-          snippet: extractContextSnippet(fallbackText, match[0])
+          sourceUrl: pageUrl,
+          snippet: extractContextSnippet(plainFallback, match[0])
         };
       }
     }
@@ -5084,65 +5106,231 @@ function checkPhysicalProductSupplier(crawlData, result) {
 
 /**
  * Determines the source URL where the official company name was discovered.
- * Prioritizes Home page and About Us page over low-quality terms/privacy/policy/faq pages.
+ * Prioritizes legal candidates / exact legal suffix matches on Home, About Us, and Contact pages
+ * over repeating headers/footers or low-quality terms/privacy/policy/faq pages.
  */
 function determineCompanyNameSource(compName, crawlData) {
   if (!compName || !crawlData) return (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "";
-  const norm = normalizeNameForComparison(compName);
-  if (!norm) return crawlData.finalUrl || crawlData.originalUrl || "";
-
   const finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+  const origUrl = crawlData.originalUrl || "";
   const primaryAboutUrl = crawlData.primaryAboutUrl || "";
   const primaryContactUrl = crawlData.primaryContactUrl || "";
+  const compNameLower = compName.toLowerCase().trim();
+  const norm = normalizeNameForComparison(compName);
+  if (!norm) return finalUrl;
 
-  const isLowQualityPage = (url) => /\b(?:terms|terms-and-conditions|privacy|privacy-policy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)\b/i.test(url || "");
+  const isLowQualityPage = (url) => /(?:^|[\/_.-])(?:terms|terms-and-conditions|privacy|privacy-policy|policy|policies|disclaimer|faq|legal|cart|checkout|cookie|sitemap)(?:$|[\/_.-])/i.test(url || "");
 
-  // 1. If homepage HTML, title, logo, header, or copyright matches company name, homepage is the primary source
+  const candidatesWithUrls = [];
+  const pushCandidate = (url, scoreBonus) => {
+    if (!url) return;
+    candidatesWithUrls.push({
+      url,
+      score: scoreBonus + getSourcePagePriority(url, finalUrl, origUrl) - (isLowQualityPage(url) ? 50 : 0)
+    });
+  };
+
+  // 1. Check legalCandidateSources (verbatim & normalized legal corporate names extracted per page)
+  if (crawlData.legalCandidateSources) {
+    for (const [cand, srcUrl] of Object.entries(crawlData.legalCandidateSources)) {
+      if (!srcUrl) continue;
+      const candLower = cand.toLowerCase().trim();
+      const cNorm = normalizeNameForComparison(cand);
+      if (candLower === compNameLower) {
+        pushCandidate(srcUrl, 120);
+      } else if (cNorm && cNorm === norm) {
+        pushCandidate(srcUrl, 100);
+      } else if (cNorm && norm.length >= 4 && (cNorm.includes(norm) || norm.includes(cNorm))) {
+        pushCandidate(srcUrl, 70);
+      }
+    }
+  }
+
+  // 2. Check copyright source URL explicitly (do not attribute subpage copyright to homepage)
+  if (crawlData.copyrightText) {
+    const cpNorm = normalizeNameForComparison(crawlData.copyrightText);
+    if (cpNorm && (cpNorm === norm || cpNorm.includes(norm) || (cpNorm.length >= 4 && norm.includes(cpNorm)))) {
+      pushCandidate(crawlData.copyrightSourceUrl || finalUrl, 90);
+    }
+  }
+
+  // 3. Scan individual crawledPages (handles expanded names via normalizeNameForComparison on page title/text)
+  if (Array.isArray(crawlData.crawledPages) && crawlData.crawledPages.length > 0) {
+    for (const page of crawlData.crawledPages) {
+      if (!page || !page.url) continue;
+      const rawText = (page.text || stripHtml(page.html || "") || "");
+      const textLower = rawText.toLowerCase();
+      if (textLower.includes(compNameLower)) {
+        pushCandidate(page.url, 95);
+        continue;
+      }
+      if (norm.length >= 4) {
+        const pageNorm = rawText.toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (pageNorm.includes(norm)) {
+          pushCandidate(page.url, 60);
+        }
+      }
+    }
+  }
+
+  if (candidatesWithUrls.length > 0) {
+    candidatesWithUrls.sort((a, b) => b.score - a.score);
+    return candidatesWithUrls[0].url;
+  }
+
+  // 4. Fallback checks on aggregate homepage / profile text
   if (crawlData.mainHtml) {
-    const mainHtmlLower = crawlData.mainHtml.toLowerCase();
-    const compNameLower = compName.toLowerCase();
-    if (
-      (crawlData.copyrightText && normalizeNameForComparison(crawlData.copyrightText).includes(norm)) ||
-      mainHtmlLower.includes(compNameLower) ||
-      (norm.length > 5 && mainHtmlLower.includes(norm))
-    ) {
+    const mainNorm = crawlData.mainHtml.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (crawlData.mainHtml.toLowerCase().includes(compNameLower) || (norm.length >= 4 && mainNorm.includes(norm))) {
       return finalUrl;
     }
   }
-
-  // 2. If primaryAboutUrl exists and compName is mentioned on about page
-  if (primaryAboutUrl && crawlData.profilePageText && crawlData.profilePageText.toLowerCase().includes(compName.toLowerCase())) {
-    return primaryAboutUrl;
-  }
-
-  // 3. Check legalCandidateSources (excluding terms/privacy/cart pages)
-  if (crawlData.legalCandidateSources) {
-    for (const [cand, srcUrl] of Object.entries(crawlData.legalCandidateSources)) {
-      if (normalizeNameForComparison(cand) === norm && !isLowQualityPage(srcUrl)) {
-        return srcUrl;
-      }
-    }
-    for (const [cand, srcUrl] of Object.entries(crawlData.legalCandidateSources)) {
-      const cNorm = normalizeNameForComparison(cand);
-      if (cNorm && (cNorm.includes(norm) || norm.includes(cNorm)) && !isLowQualityPage(srcUrl)) {
-        return srcUrl;
-      }
+  if (primaryAboutUrl && crawlData.profilePageText) {
+    const profNorm = crawlData.profilePageText.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (crawlData.profilePageText.toLowerCase().includes(compNameLower) || (norm.length >= 4 && profNorm.includes(norm))) {
+      return primaryAboutUrl;
     }
   }
 
-  // 4. Prefer primaryAboutUrl if present
-  if (primaryAboutUrl) return primaryAboutUrl;
+  return primaryAboutUrl || primaryContactUrl || finalUrl;
+}
 
-  // 5. Prefer primaryContactUrl if present
-  if (primaryContactUrl) return primaryContactUrl;
+/**
+ * Matches an extracted/cleaned physical address string back to the highest-confidence candidate
+ * and resolves the exact page URL where that address was discovered.
+ */
+function resolveBestAddressCandidateAndSource(addrStr, crawlData, preferredCandidate = null) {
+  if (!crawlData) return { candidate: preferredCandidate, pageUrl: "" };
+  const finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+  const origUrl = crawlData.originalUrl || "";
+  const addr = String(addrStr || "").trim();
+  const isEmptyAddr = !addr || addr.toLowerCase() === "not available" || addr.length < 5;
 
-  // 6. Check copyrightText source
-  if (crawlData.copyrightText && normalizeNameForComparison(crawlData.copyrightText).includes(norm)) {
-    const cpUrl = crawlData.copyrightSourceUrl || finalUrl;
-    if (!isLowQualityPage(cpUrl)) return cpUrl;
+  const tokenize = (str) => {
+    const expanded = typeof expandAddressAndStateAbbreviations === "function"
+      ? expandAddressAndStateAbbreviations(String(str || ""), "")
+      : String(str || "");
+    return expanded
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, " ")
+      .split(/\s+/)
+      .filter(t => t.length >= 2 && !/^(?:no|number|road|street|avenue|lane|drive|suite|floor|city|district|township|county|village|unit|building|industrial|park|estate|the|and|of)$/i.test(t));
+  };
+
+  let matchedCand = preferredCandidate || null;
+  if (!isEmptyAddr && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates.length > 0) {
+    const addrTokens = tokenize(addr);
+    let bestCand = null;
+    let bestScore = -1;
+
+    for (const cand of crawlData.addressCandidates) {
+      if (!cand) continue;
+      const cRaw = typeof cand === "object" ? (cand.raw || "") : String(cand);
+      const cPageUrl = typeof cand === "object" ? (cand.pageUrl || "") : "";
+      if (!cRaw) continue;
+      const cNorm = cRaw.toLowerCase().replace(/[^a-z0-9]/g, " ");
+      const cExpandedNorm = (typeof expandAddressAndStateAbbreviations === "function"
+        ? expandAddressAndStateAbbreviations(cRaw, "")
+        : cRaw).toLowerCase().replace(/[^a-z0-9]/g, " ");
+
+      let matchCount = 0;
+      for (const t of addrTokens) {
+        if (cNorm.includes(t) || cExpandedNorm.includes(t)) matchCount++;
+      }
+      if (matchCount === 0) continue;
+
+      // Score by token overlap first, then valid pageUrl + Contact/HQ page priority
+      const pageBonus = cPageUrl ? (5 + getSourcePagePriority(cPageUrl, finalUrl, origUrl) * 0.5) : 0;
+      const hqBonus = (typeof cand === "object" && (cand.isHeadquarters || cand.source === "headquarters" || cand.source === "contact" || cand.source === "map")) ? 1 : 0;
+      const score = matchCount * 10 + pageBonus + hqBonus;
+
+      if (score > bestScore && matchCount >= Math.min(2, addrTokens.length)) {
+        bestScore = score;
+        bestCand = cand;
+      }
+    }
+    if (bestCand) {
+      matchedCand = bestCand;
+    }
   }
 
-  return finalUrl;
+  let resolvedUrl = (matchedCand && typeof matchedCand === "object" && matchedCand.pageUrl) ? matchedCand.pageUrl : "";
+
+  // If candidate didn't record a pageUrl (or none matched), inspect individual crawledPages for the address tokens
+  if (!resolvedUrl && !isEmptyAddr && Array.isArray(crawlData.crawledPages) && crawlData.crawledPages.length > 0) {
+    const tokens = tokenize(addr).slice(0, 6);
+    let bestPageUrl = "";
+    let bestPageScore = -1;
+    for (const page of crawlData.crawledPages) {
+      if (!page || !page.url) continue;
+      let haystack = ((page.text || "") + " " + (page.html || "")).toLowerCase();
+      try {
+        haystack += " " + decodeURIComponent(page.html || "").toLowerCase();
+      } catch (e) { }
+      let hits = 0;
+      for (const t of tokens) {
+        if (haystack.includes(t)) hits++;
+      }
+      if (hits >= Math.min(2, tokens.length)) {
+        const prio = getSourcePagePriority(page.url, finalUrl, origUrl);
+        const pageScore = hits * 10 + prio;
+        if (pageScore > bestPageScore) {
+          bestPageScore = pageScore;
+          bestPageUrl = page.url;
+        }
+      }
+    }
+    if (bestPageUrl) resolvedUrl = bestPageUrl;
+  }
+
+  if (!resolvedUrl && !isEmptyAddr) {
+    resolvedUrl = crawlData.primaryContactUrl || finalUrl || "";
+  }
+
+  return { candidate: matchedCand, pageUrl: isEmptyAddr ? "" : resolvedUrl };
+}
+
+/**
+ * Populates all UI/QC source URLs and evidence snippets consistently for both AI and fallback paths.
+ */
+function populateEvidenceAndSourceLinks(result, crawlData, selectedCandidate = null, rawSource = "") {
+  if (!result || !crawlData) return result;
+  const finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+  const origUrl = crawlData.originalUrl || "";
+
+  result._finalUrl = finalUrl;
+  result._originalUrl = origUrl;
+
+  if (result.websiteStatus === "Working" || result.websiteStatus === "Redirect Site") {
+    result.companyNameSource = result.companyName ? determineCompanyNameSource(result.companyName, crawlData) : "";
+    result.primaryEmailSource = result.emailId ? resolveBestEmailSource(result.emailId, crawlData) : "";
+    result.secondaryEmailSource = result.secondaryEmailId ? resolveBestEmailSource(result.secondaryEmailId, crawlData) : "";
+
+    const btEvidence = findBusinessTypeEvidence(
+      result.businessType,
+      crawlData.crawledPages,
+      (crawlData.bodyText || "") + " " + (crawlData.mainHtml || "")
+    );
+    result.businessTypeKeyword = btEvidence.keyword || "";
+    result.businessTypeSource = btEvidence.sourceUrl || crawlData.primaryAboutUrl || finalUrl || "";
+    result.businessTypeSnippet = btEvidence.snippet || "";
+
+    const addrResolution = resolveBestAddressCandidateAndSource(result.companyAddress, crawlData, selectedCandidate);
+    result.companyAddressSource = addrResolution.pageUrl || "";
+    if (!rawSource && addrResolution.candidate) {
+      rawSource = typeof addrResolution.candidate === "object" ? (addrResolution.candidate.raw || "") : String(addrResolution.candidate);
+    }
+    result.selectedAddressCandidateRaw = rawSource || "";
+  } else {
+    result.companyNameSource = "";
+    result.primaryEmailSource = "";
+    result.secondaryEmailSource = "";
+    result.businessTypeSource = "";
+    result.companyAddressSource = "";
+    result.errorSourceUrl = result.errorSourceUrl || result.restrictedSourceUrl || result.disallowedSourceUrl || result.shopCartSourceUrl || finalUrl || origUrl || "";
+  }
+
+  return result;
 }
 
 /**
@@ -5206,6 +5394,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.numberOfProducts = "";
       result.productImages = "";
       result.numberOfProductDescriptions = "";
+      populateEvidenceAndSourceLinks(result, crawlData, null, "");
       return result;
     }
 
@@ -5259,11 +5448,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
     // 3. Company Address: Strict QC sanitization - No Extra Words, expand abbreviations, remove postal codes & country
     let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
-    let bestRaw = "";
-    if (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates.length > 0) {
-      const hqCand = crawlData.addressCandidates.find(c => c && (c.isHeadquarters || c.source === "contact" || c.source === "headquarters"));
-      bestRaw = hqCand ? (typeof hqCand === "object" ? hqCand.raw : hqCand) : (typeof crawlData.addressCandidates[0] === "object" ? crawlData.addressCandidates[0].raw : crawlData.addressCandidates[0]);
+    const aiAddrMatch = resolveBestAddressCandidateAndSource(addr, crawlData);
+    let selectedAiCandidate = aiAddrMatch.candidate || null;
+    if (!selectedAiCandidate && crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates.length > 0) {
+      selectedAiCandidate = crawlData.addressCandidates.find(c => c && (c.isHeadquarters || c.source === "contact" || c.source === "headquarters")) || crawlData.addressCandidates[0];
     }
+    let bestRaw = selectedAiCandidate ? (typeof selectedAiCandidate === "object" ? selectedAiCandidate.raw : selectedAiCandidate) : "";
     if (!bestRaw && crawlData) {
       bestRaw = (crawlData.contactPageText || crawlData.bodyText || crawlData.combinedText || crawlData.mainHtml || "").slice(0, 5000);
     }
@@ -5309,13 +5499,23 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.companyAddress = addr;
 
-    // 4. State & City QC (CRITICAL QC RULE: A SUBURB IS NOT A CITY!)
+    // 4. State & City: Directly trust Gemini AI's returned values ("Available" / "Not Available")
+    // Only fall back to local evaluator if Gemini returned empty/invalid values (e.g. non-AI or mock test objects)
+    const normalizeAvailability = (val) => {
+      const s = String(val || "").trim().toLowerCase();
+      if (s === "available") return "Available";
+      if (s === "not available") return "Not Available";
+      return "";
+    };
+    const aiState = normalizeAvailability(result.state);
+    const aiCity = normalizeAvailability(result.city);
+
     if (!addr || addr.length < 5 || addr.toLowerCase() === "not available") {
-      result.state = "Not Available";
-      result.city = "Not Available";
+      result.state = aiState || "Not Available";
+      result.city = aiCity || "Not Available";
     } else {
-      result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
-      result.city = evaluateCityQC(addr, country);
+      result.state = aiState || (hasStateInAddress(addr, country) ? "Available" : "Not Available");
+      result.city = aiCity || evaluateCityQC(addr, country);
     }
 
     result.businessType = String(result.businessType || "").trim();
@@ -5381,6 +5581,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.numberOfProducts = imgCount;
     result.numberOfProductDescriptions = imgCount;
 
+    populateEvidenceAndSourceLinks(result, crawlData, selectedAiCandidate, bestRaw);
     return result;
   }
 
@@ -5462,6 +5663,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.numberOfProducts = "";
       result.productImages = "";
       result.numberOfProductDescriptions = "";
+      populateEvidenceAndSourceLinks(result, crawlData, null, "");
       return result;
     }
   }
@@ -5603,6 +5805,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.numberOfProducts = "";
       result.productImages = "";
       result.numberOfProductDescriptions = "";
+      populateEvidenceAndSourceLinks(result, crawlData, null, "");
       return result;
     }
   }
@@ -6156,24 +6359,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.websiteStatus = "Working";
   }
 
-  // Quality check source links: Company Name, Primary Email, Secondary Email
-  result.companyNameSource = determineCompanyNameSource(result.companyName, crawlData);
-  result.primaryEmailSource = result.emailId ? resolveBestEmailSource(result.emailId, crawlData) : "";
-  result.secondaryEmailSource = result.secondaryEmailId ? resolveBestEmailSource(result.secondaryEmailId, crawlData) : "";
-
-  // Business Type Evidence & Source Link
-  if (result.websiteStatus === "Working" || result.websiteStatus === "Redirect Site") {
-    const btEvidence = findBusinessTypeEvidence(result.businessType, crawlData.crawledPages, (crawlData.bodyText || "") + " " + (crawlData.mainHtml || ""));
-    result.businessTypeKeyword = btEvidence.keyword || "";
-    result.businessTypeSource = btEvidence.sourceUrl || crawlData.primaryAboutUrl || crawlData.finalUrl || "";
-    result.businessTypeSnippet = btEvidence.snippet || "";
-  }
-
-  // Company Address Source Link
-  result.companyAddressSource = (selectedCandidate && selectedCandidate.pageUrl)
-    ? selectedCandidate.pageUrl
-    : (crawlData.primaryContactUrl || crawlData.finalUrl || "");
-  result.selectedAddressCandidateRaw = rawSource || "";
+  // Populate all quality check & evidence source links (Company Name, Emails, Business Type, Company Address)
+  populateEvidenceAndSourceLinks(result, crawlData, selectedCandidate, rawSource);
 
   // Carry over Restricted Site, Shop Cart, and Disallowed Evidence
   if (restrictedCheck && restrictedCheck.isRestricted) {

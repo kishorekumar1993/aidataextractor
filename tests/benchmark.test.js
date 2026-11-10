@@ -344,6 +344,162 @@ runTest('discoverContactLinks finds international contact and about pages', () =
   assert.ok(links.includes("https://example.eu/contactez-nous"), "Must discover French /contactez-nous");
 });
 
+// 17. Source Link Attribution (Emails, Address, Company Name, Business Type) in AI & Fallback Modes
+runTest('AI and fallback modes populate accurate subpage source links for all fields', () => {
+  const emailSourceMap = {};
+  ctx.updateEmailSource(emailSourceMap, "info@auliajati.com", "https://www.auliajati.com/", "https://www.auliajati.com/");
+  ctx.updateEmailSource(emailSourceMap, "info@auliajati.com", "https://www.auliajati.com/contact-us/", "https://www.auliajati.com/");
+  ctx.updateEmailSource(emailSourceMap, "info@auliajati.com", "https://www.auliajati.com/privacy-policy/", "https://www.auliajati.com/");
+  ctx.updateEmailSource(emailSourceMap, "support@auliajati.com", "https://www.auliajati.com/warranty/", "https://www.auliajati.com/");
+  assert.strictEqual(emailSourceMap["info@auliajati.com"], "https://www.auliajati.com/contact-us/", "Contact page must beat homepage and privacy page for primary email");
+  assert.strictEqual(emailSourceMap["support@auliajati.com"], "https://www.auliajati.com/warranty/", "Support/warranty email must keep warranty page URL");
+
+  // Map embed on /contact.html preserves its exact subpage URL
+  const mapCands = [];
+  ctx.extractMapAddresses(
+    '<iframe src="https://maps.google.com/maps?q=No.+228,+Baoshun+Rd,+Houhu+Village,+Chiayi+City,+Taiwan"></iframe>',
+    mapCands,
+    "https://www.yi-shyang.com.tw/contact.html"
+  );
+  assert.strictEqual(mapCands[0].pageUrl, "https://www.yi-shyang.com.tw/contact.html", "Map address must retain contact subpage URL");
+
+  const crawlData = {
+    originalUrl: "https://www.auliajati.com/",
+    finalUrl: "https://www.auliajati.com/",
+    primaryContactUrl: "https://www.auliajati.com/contact-us/",
+    primaryAboutUrl: "https://www.auliajati.com/about-us/",
+    mainHtml: "<html><body><h1>Auliajati Indofurni</h1><p>Welcome to our site.</p><footer><a href='/privacy'>Privacy</a></footer></body></html>",
+    bodyText: "Auliajati Indofurni Welcome to our site.",
+    contactPageText: "Office & Factory: Jl. RA. Kardinah, Senenan, Jepara Email: info@auliajati.com",
+    profilePageText: "About Us: CV. Aulia Jati Indofurni. We manufacture indoor and outdoor furniture in our own factory.",
+    copyrightText: "CV. Aulia Jati Indofurni",
+    copyrightSourceUrl: "https://www.auliajati.com/about-us/",
+    legalCompanyCandidates: ["CV. Aulia Jati Indofurni"],
+    legalCandidateSources: { "CV. Aulia Jati Indofurni": "https://www.auliajati.com/about-us/" },
+    emails: ["info@auliajati.com", "support@auliajati.com"],
+    emailSourceMap,
+    phones: ["+62 2136903270"],
+    detectedImageCount: 3,
+    detectedProductCount: 3,
+    detectedDescCount: 3,
+    hasCompanyProfile: true,
+    addressCandidates: [
+      { raw: "Jl. RA. Kardinah, Senenan, Jepara, Central Java", source: "contact", isHeadquarters: true, pageUrl: "https://www.auliajati.com/contact-us/" }
+    ],
+    crawledPages: [
+      {
+        url: "https://www.auliajati.com/",
+        html: "<html><body><h1>Auliajati</h1><img src='/images/factory-hero.png' alt='factory'></body></html>",
+        text: "Auliajati Welcome to our homepage."
+      },
+      {
+        url: "https://www.auliajati.com/about-us/",
+        html: "<html><body><p>CV. Aulia Jati Indofurni. We manufacture wooden furniture in our own factory. <a href='/privacy'>Privacy</a></p></body></html>",
+        text: "CV. Aulia Jati Indofurni. We manufacture wooden furniture in our own factory."
+      },
+      {
+        url: "https://www.auliajati.com/contact-us/",
+        html: "<html><body><p>Office & Factory: Jl. RA. Kardinah, Senenan, Jepara, Central Java</p><a href='mailto:info@auliajati.com'>info@auliajati.com</a></body></html>",
+        text: "Office & Factory: Jl. RA. Kardinah, Senenan, Jepara, Central Java info@auliajati.com"
+      },
+      {
+        url: "https://www.auliajati.com/warranty/",
+        html: "<html><body><p>Warranty inquiries: support@auliajati.com</p></body></html>",
+        text: "Warranty inquiries: support@auliajati.com"
+      }
+    ]
+  };
+
+  const aiResult = ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "CV. Aulia Jati Indofurni",
+    countryName: "Indonesia",
+    companyAddress: "Jl. RA. Kardinah, Senenan, Jepara, Central Java",
+    state: "Available",
+    city: "Available",
+    emailId: "info@auliajati.com",
+    secondaryEmailId: "support@auliajati.com",
+    phoneNumber: "+62 2136903270",
+    numberOfProducts: "3",
+    productImages: "3",
+    numberOfProductDescriptions: "3"
+  }, crawlData, { isRestricted: false });
+
+  assert.strictEqual(aiResult.primaryEmailSource, "https://www.auliajati.com/contact-us/", "AI mode must populate Contact page as primaryEmailSource");
+  assert.strictEqual(aiResult.secondaryEmailSource, "https://www.auliajati.com/warranty/", "AI mode must populate Warranty page as secondaryEmailSource");
+  assert.strictEqual(aiResult.companyAddressSource, "https://www.auliajati.com/contact-us/", "AI mode must populate Contact page as companyAddressSource");
+  assert.strictEqual(aiResult.companyNameSource, "https://www.auliajati.com/about-us/", "AI mode must attribute legal name to /about-us/, not homepage");
+  assert.strictEqual(aiResult.businessTypeSource, "https://www.auliajati.com/about-us/", "AI mode must attribute BT Source to /about-us/ page, not image or /privacy");
+
+  const fallbackResult = ctx.applyStrictInstructions({
+    _isFromAi: false,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "CV. Aulia Jati Indofurni",
+    countryName: "Indonesia",
+    companyAddress: "Jl. RA. Kardinah, Senenan, Jepara, Central Java",
+    emailId: "info@auliajati.com",
+    secondaryEmailId: "support@auliajati.com",
+    phoneNumber: "+62 2136903270",
+    productImages: "3"
+  }, crawlData, { isRestricted: false });
+
+  assert.strictEqual(fallbackResult.primaryEmailSource, aiResult.primaryEmailSource, "Fallback and AI primaryEmailSource must match");
+  assert.strictEqual(fallbackResult.secondaryEmailSource, aiResult.secondaryEmailSource, "Fallback and AI secondaryEmailSource must match");
+  assert.strictEqual(fallbackResult.companyAddressSource, aiResult.companyAddressSource, "Fallback and AI companyAddressSource must match");
+  assert.strictEqual(fallbackResult.companyNameSource, aiResult.companyNameSource, "Fallback and AI companyNameSource must match");
+  assert.strictEqual(fallbackResult.businessTypeSource, aiResult.businessTypeSource, "Fallback and AI businessTypeSource must match");
+});
+
+runTest('updateEmailSource handles international contact slugs like /kontakt and /contacto', () => {
+  const map = {};
+  ctx.updateEmailSource(map, "sales@firma.de", "https://firma.de/", "https://firma.de/");
+  ctx.updateEmailSource(map, "sales@firma.de", "https://firma.de/kontakt", "https://firma.de/");
+  assert.strictEqual(map["sales@firma.de"], "https://firma.de/kontakt", "German /kontakt must beat homepage");
+
+  const mapEs = {};
+  ctx.updateEmailSource(mapEs, "hola@empresa.es", "https://empresa.es/", "https://empresa.es/");
+  ctx.updateEmailSource(mapEs, "hola@empresa.es", "https://empresa.es/contacto/", "https://empresa.es/");
+  assert.strictEqual(mapEs["hola@empresa.es"], "https://empresa.es/contacto/", "Spanish /contacto/ must beat homepage");
+});
+
+// 19. State and City strictly trust Gemini AI values directly (no local crawler override)
+runTest('State and City use Gemini API returned values directly in AI mode', () => {
+  const aiCase1 = {
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "Global Example Ltd",
+    countryName: "Australia",
+    companyAddress: "40 Sample Road, Unknown Suburb",
+    state: "Available",
+    city: "Available",
+    productImages: "3"
+  };
+  const res1 = ctx.applyStrictInstructions(aiCase1, {}, {});
+  assert.strictEqual(res1.state, "Available", "Must preserve Gemini's state=Available even if local regex wouldn't find it");
+  assert.strictEqual(res1.city, "Available", "Must preserve Gemini's city=Available without local override");
+
+  const aiCase2 = {
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "Melbourne Example Ltd",
+    countryName: "Australia",
+    companyAddress: "123 Collins Street, Melbourne, Victoria",
+    state: "Not Available",
+    city: "Not Available",
+    productImages: "3"
+  };
+  const res2 = ctx.applyStrictInstructions(aiCase2, {}, {});
+  assert.strictEqual(res2.state, "Not Available", "Must preserve Gemini's state=Not Available");
+  assert.strictEqual(res2.city, "Not Available", "Must preserve Gemini's city=Not Available");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');
