@@ -4417,7 +4417,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyName: {
       type: "STRING",
-      description: "Official corporate name in full expanded form and Title Case where EVERY word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited, PEM Fountain Company, Hsin Hsin Metals, Limited, Commanditaire Vennootschap Aulia Jati Indofurni). MANDATORY FULL FORM EXPANSION: Expand ALL legal entity and business abbreviations to full form: Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company, Pty Ltd -> Proprietary Limited, Pte Ltd/Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad, PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima/Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers. Remove brackets ()/[] keeping inner text. Keep '&' as '&' (never 'And'). Keep comma before corporate suffix if on site (e.g. 'Hsin Hsin Metals, Limited'). Keep uppercase brand acronyms (PEM, BMW, AKS). Empty string \"\" if websiteStatus is not Working."
+      description: "Official corporate name in full expanded form and Title Case where EVERY word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited, PEM Fountain Company, Hsin Hsin Metals, Limited, Commanditaire Vennootschap Aulia Jati Indofurni, Zuber & Compagnie). MANDATORY FULL FORM EXPANSION: Expand ALL legal entity and business abbreviations to full form: Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company, Pty Ltd -> Proprietary Limited, Pte Ltd/Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad, PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima/Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers. Remove brackets ()/[] keeping inner text. Keep '&' as '&' (never 'And'). Keep comma before corporate suffix if on site (e.g. 'Hsin Hsin Metals, Limited'). Keep uppercase brand acronyms (PEM, BMW, AKS). Empty string \"\" if websiteStatus is not Working."
     },
     countryName: {
       type: "STRING",
@@ -4430,7 +4430,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     state: {
       type: "STRING",
       enum: ["Available", "Not Available"],
-      description: "Available if state, province, county (e.g. Derbyshire, Leicestershire), territory, prefecture, or national capital is identifiable in address; else Not Available."
+      description: "Available ONLY IF a State, Province, County (e.g. Derbyshire, Leicestershire), Territory, Prefecture, or National Capital word is LITERALLY PRESENT in companyAddress. Do NOT guess or infer state from external knowledge if no state word is written in companyAddress (e.g. '28 Rue Zuber, Rixheim' has no state/region written -> MUST be 'Not Available')."
     },
     city: {
       type: "STRING",
@@ -4447,7 +4447,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     phoneNumber: {
       type: "STRING",
-      description: "Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero. Digits only."
+      description: "Complete phone number with ONLY the country code (+1, +33, +44, +61, +62, +886) and trunk (0) removed, keeping ALL remaining national digits (e.g. '+33 (0) 3 89 44 13 88' -> '389441388', NEVER drop '3'; '+6282136903270' -> '82136903270'). Digits only. Do not take toll-free numbers. Do not take numbers starting with zero."
     },
     numberOfProducts: {
       type: "STRING",
@@ -4523,7 +4523,7 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
 - EXPAND ALL CORPORATE & INDUSTRY ABBREVIATIONS:
   * Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company.
   * Pty Ltd -> Proprietary Limited, Pte Ltd / Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad.
-  * PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata.
+  * PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata.
   * Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises.
 - Remove brackets ()/[] keeping inner text (e.g. "Company (Malaysia) Sdn Bhd" -> "Company Malaysia Sendirian Berhad"). If country name is inside company name, keep it as is.
 - Do NOT truncate names containing "&" or "and" (e.g. "CJ Tool & Mouldings Limited", NEVER omit words before & or expand "&" to "And").
@@ -4546,11 +4546,11 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
   * NEVER put commas inside a street name ("Pump Lane" not "Pump, Lane"), inside an industrial park name ("Argent Trade Park" not "Argent, Trade Park"), or between street number and street name ("604 Progress Drive" not "604, Progress Drive").
   * Address MUST NOT end with a comma or period.
 
-7. STATE & CITY QC RULES (EVALUATED FROM EXTRACTED ADDRESS ONLY):
-- State: Mark "Available" if State, Province, County, Prefecture, or Country Capital is present in the address. Otherwise "Not Available".
+7. STATE & CITY QC RULES (EVALUATED STRICTLY FROM WORDS PRESENT IN companyAddress ONLY):
+- State: Mark "Available" ONLY IF a State, Province, County, Territory, Prefecture, Region, or Country Capital word is LITERALLY WRITTEN inside companyAddress! Do NOT guess or infer a state from external geography if no state word appears in companyAddress! (Example: "28 Rue Zuber, Rixheim" has NO state/department written -> State MUST be "Not Available"; "Number 228, Baoshun Road, East District, Chiayi City" has NO state written -> State MUST be "Not Available").
 - City:
   * CRITICAL: A SUBURB IS NOT A CITY! Suburbs in Australia (e.g. Campbellfield, Rowville, Oakleigh South), South Africa (e.g. Sandton), New Zealand (e.g. Penrose), or UK are NOT cities -> mark "city": "Not Available"!
-  * Mark "Available" ONLY if an official recognized City, Town, Township, District, or Municipality is in the address (e.g. Melbourne, Sydney, London, Chicago, Austin, Park Hills, Heanor).
+  * Mark "Available" ONLY if an official recognized City, Town, Township, District, or Municipality is in the address (e.g. Melbourne, Sydney, London, Chicago, Austin, Park Hills, Heanor, Rixheim).
   * GEOGRAPHIC NORMALIZATION: Recognized UK town localities (e.g. "Heanor Gate" -> Heanor, Derbyshire) qualify as City: "Available".
 
 8. EMAIL ID & SECONDARY EMAIL ID:
@@ -4559,7 +4559,7 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
 - Must NOT be identical. Reject privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix). Empty string "" if none found.
 
 9. PHONE NUMBER (CRITICAL QC RULE):
-- Complete telephone number with international calling code STRIPPED (+1, +44, +61, +886 removed).
+- Complete telephone number with ONLY the international calling code (+1, +33, +44, +61, +62, +886) and optional trunk "(0)" removed. Keep ALL remaining national/area digits intact (Example: "+33 (0) 3 89 44 13 88" -> strip +33 and (0) -> "389441388", NEVER drop the area digit '3'; "+6282136903270" -> strip +62 -> "82136903270").
 - Digits only (no spaces, hyphens, brackets, or dots).
 - Strip leading zeroes. MUST NEVER start with zero.
 - STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). If only toll-free is available, return empty string "".
