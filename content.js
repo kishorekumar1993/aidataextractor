@@ -717,7 +717,7 @@
             const opt = element.options[i];
             const val = (opt.value || "").trim().toLowerCase();
             const txt = (opt.text || "").trim().toLowerCase();
-            if (val === "turkey" || txt === "turkey" || val === "türkiye" || txt === "türkiye") {
+            if (val === "turkey" || txt === "turkey" || val === "turkiye" || txt === "turkiye" || val === "türkiye" || txt === "türkiye") {
               matchedIndex = i;
               break;
             }
@@ -1359,7 +1359,8 @@
 
   /**
    * Standardizes country names globally per official QC mandate.
-   * E.g., "Czech Republic" -> "Czechia", "Turkey" -> "Turkiye", "USA" -> "United States Of America"
+   * E.g., "Czechia" -> "Czech Republic", "Turkey/Turkiye" -> "Türkiye", "USA" -> "United States",
+   * "Deutschland" -> "Germany", "España" -> "Spain", "Hrvatska" -> "Croatia"
    */
   function normalizeCountryName(country) {
     if (!country || typeof country !== "string") return "";
@@ -1369,23 +1370,26 @@
     const lower = c.toLowerCase();
     const unaccented = lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    // 1. Czech Republic -> Czechia (Mandatory QC Rule)
+    // 1. Czechia -> Czech Republic (#32 in QC Valid List)
     if (/\b(?:czech\s*republic|ceska\s*republika|cesko|czechia)\b/i.test(unaccented) || /^czech(?:ia)?$/i.test(unaccented)) {
-      return "Czechia";
+      return "Czech Republic";
     }
 
-    // 2. Turkey / Türkiye -> Turkiye
+    // 2. Turkey / Turkiye -> Türkiye (#124 in QC Valid List & Table)
     if (/\b(?:turkey|turkiye|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented)) {
-      return "Turkiye";
+      return "Türkiye";
     }
 
-    // 3. United States -> United States Of America
+    // 3. USA -> United States (#129 in QC Valid List & Table)
     if (/^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?|the\s*united\s*states)$/i.test(unaccented) || /\bunited\s*states\s*of\s*america\b/i.test(unaccented)) {
-      return "United States Of America";
+      return "United States";
     }
 
-    // 4. Taiwan
-    if (/taiwan/i.test(unaccented) || /r\.?o\.?c\.?/i.test(unaccented) || /republic\s*of\s*china/i.test(unaccented)) {
+    // 4. People's Republic of China -> China vs Republic of China -> Taiwan
+    if (/\b(?:people['’]?s?\s*republic\s*of\s*china|p\.?r\.?c\.?)\b/i.test(unaccented)) {
+      return "China";
+    }
+    if (/taiwan/i.test(unaccented) || /\br\.?o\.?c\.?\b/i.test(unaccented) || /\brepublic\s*of\s*china\b/i.test(unaccented)) {
       return "Taiwan";
     }
 
@@ -1399,9 +1403,27 @@
       return "United Kingdom";
     }
 
-    // 6. South Korea
+    // 6. North Korea vs South Korea (#85 & #111 in QC Valid List)
+    if (/\b(?:north\s*korea|democratic\s*people['’]?s\s*republic\s*of\s*korea|dprk)\b/i.test(unaccented)) {
+      return "North Korea";
+    }
     if (/\b(?:south\s*korea|korea,\s*republic\s*of|republic\s*of\s*korea|korea\s*republic|rok)\b/i.test(unaccented) || /^korea$/i.test(unaccented)) {
       return "South Korea";
+    }
+
+    // 7. Croatia / Hrvatska
+    if (/\b(?:hrvatska|croatia|republic\s*of\s*croatia)\b/i.test(unaccented) || /^(?:hr|hrv)$/i.test(unaccented)) {
+      return "Croatia";
+    }
+
+    // 8. Kingdom of Bahrain -> Bahrain
+    if (/\b(?:kingdom\s*of\s*bahrain|bahrain)\b/i.test(unaccented) || /^(?:bh|bhr)$/i.test(unaccented)) {
+      return "Bahrain";
+    }
+
+    // 9. Sultanate of Oman -> Oman
+    if (/\b(?:sultanate\s*of\s*oman|oman)\b/i.test(unaccented) || /^(?:om|omn)$/i.test(unaccented)) {
+      return "Oman";
     }
 
     // 7. Swaziland -> Eswatini
@@ -1444,9 +1466,9 @@
       return "Vietnam";
     }
 
-    // 15. Brunei
+    // 15. Brunei -> Brunei Darussalam
     if (/\b(?:brunei\s*darussalam|brunei)\b/i.test(unaccented)) {
-      return "Brunei";
+      return "Brunei Darussalam";
     }
 
     // 16. Syria
@@ -1644,6 +1666,65 @@
       return "Philippines";
     }
 
+    // 55. Hong Kong & Trinidad and Tobago
+    if (/\b(?:hong\s*kong|hongkong)\b/i.test(unaccented) || /^(?:hk|hkg)$/i.test(unaccented)) {
+      return "Hong Kong";
+    }
+    if (/\b(?:trinidad\s*(?:and|&)\s*tobago)\b/i.test(unaccented)) {
+      return "Trinidad and Tobago";
+    }
+
+    // 56. Strip common official prefixes ("Kingdom of X", "Sultanate of X", "Republic of X")
+    const strippedOfficial = unaccented
+      .replace(/^(?:the\s+)?(?:kingdom|sultanate|principality|grand\s+duchy|commonwealth|state|federation|republic|islamic\s+republic|people['’]?s\s+republic|democratic\s+republic)\s+of\s+/i, "")
+      .trim();
+
+    // 57. Canonical map across all 135 QC valid countries
+    const exactCountryMap = {
+      "afghanistan": "Afghanistan", "albania": "Albania", "algeria": "Algeria", "andorra": "Andorra",
+      "angola": "Angola", "argentina": "Argentina", "armenia": "Armenia", "australia": "Australia",
+      "austria": "Austria", "azerbaijan": "Azerbaijan", "bahamas": "Bahamas", "bahrain": "Bahrain",
+      "bangladesh": "Bangladesh", "barbados": "Barbados", "belarus": "Belarus", "belgium": "Belgium",
+      "belize": "Belize", "bhutan": "Bhutan", "bolivia": "Bolivia", "botswana": "Botswana",
+      "brazil": "Brazil", "brunei": "Brunei Darussalam", "brunei darussalam": "Brunei Darussalam",
+      "bulgaria": "Bulgaria", "cambodia": "Cambodia", "canada": "Canada",
+      "cayman islands": "Cayman Islands", "china": "China", "colombia": "Colombia",
+      "costa rica": "Costa Rica", "croatia": "Croatia", "cyprus": "Cyprus",
+      "czech republic": "Czech Republic", "czechia": "Czech Republic", "denmark": "Denmark",
+      "dominican republic": "Dominican Republic", "egypt": "Egypt", "estonia": "Estonia",
+      "ethiopia": "Ethiopia", "fiji": "Fiji", "finland": "Finland", "france": "France",
+      "germany": "Germany", "ghana": "Ghana", "greece": "Greece", "greenland": "Greenland",
+      "guatemala": "Guatemala", "guyana": "Guyana", "hong kong": "Hong Kong", "hungary": "Hungary",
+      "iceland": "Iceland", "india": "India", "indonesia": "Indonesia", "iran": "Iran",
+      "iraq": "Iraq", "ireland": "Ireland", "israel": "Israel", "italy": "Italy",
+      "jamaica": "Jamaica", "japan": "Japan", "jordan": "Jordan", "kazakhstan": "Kazakhstan",
+      "kenya": "Kenya", "kuwait": "Kuwait", "latvia": "Latvia", "lebanon": "Lebanon",
+      "liechtenstein": "Liechtenstein", "lithuania": "Lithuania", "luxembourg": "Luxembourg",
+      "madagascar": "Madagascar", "malaysia": "Malaysia", "maldives": "Maldives", "malta": "Malta",
+      "mauritius": "Mauritius", "mexico": "Mexico", "moldova": "Moldova", "mongolia": "Mongolia",
+      "morocco": "Morocco", "mozambique": "Mozambique", "myanmar": "Myanmar", "namibia": "Namibia",
+      "nepal": "Nepal", "netherlands": "Netherlands", "new zealand": "New Zealand",
+      "nicaragua": "Nicaragua", "nigeria": "Nigeria", "north korea": "North Korea",
+      "north macedonia": "North Macedonia", "norway": "Norway", "oman": "Oman",
+      "pakistan": "Pakistan", "panama": "Panama", "papua new guinea": "Papua New Guinea",
+      "paraguay": "Paraguay", "peru": "Peru", "philippines": "Philippines", "poland": "Poland",
+      "portugal": "Portugal", "qatar": "Qatar", "romania": "Romania", "russia": "Russia",
+      "rwanda": "Rwanda", "saint lucia": "Saint Lucia", "st lucia": "Saint Lucia", "samoa": "Samoa",
+      "saudi arabia": "Saudi Arabia", "serbia": "Serbia", "seychelles": "Seychelles",
+      "sierra leone": "Sierra Leone", "singapore": "Singapore", "slovakia": "Slovakia",
+      "slovenia": "Slovenia", "south africa": "South Africa", "south korea": "South Korea",
+      "spain": "Spain", "sri lanka": "Sri Lanka", "sudan": "Sudan", "suriname": "Suriname",
+      "sweden": "Sweden", "switzerland": "Switzerland", "syria": "Syria", "taiwan": "Taiwan",
+      "tanzania": "Tanzania", "thailand": "Thailand", "trinidad and tobago": "Trinidad and Tobago",
+      "tunisia": "Tunisia", "turkiye": "Türkiye", "turkey": "Türkiye", "uganda": "Uganda",
+      "ukraine": "Ukraine", "united arab emirates": "United Arab Emirates",
+      "united kingdom": "United Kingdom", "united states": "United States", "uruguay": "Uruguay",
+      "uzbekistan": "Uzbekistan", "vanuatu": "Vanuatu", "vietnam": "Vietnam",
+      "zambia": "Zambia", "zimbabwe": "Zimbabwe"
+    };
+    if (exactCountryMap[unaccented]) return exactCountryMap[unaccented];
+    if (exactCountryMap[strippedOfficial]) return exactCountryMap[strippedOfficial];
+
     return toTitleCase(c);
   }
 
@@ -1723,31 +1804,128 @@
       { match: ["malaysia"], code: "60", minLen: 10 },
       { match: ["south africa"], code: "27", minLen: 11 },
       { match: ["australia"], code: "61", minLen: 11 },
-      { match: ["united states", "canada", "usa", "america"], code: "1", minLen: 11 },
-      { match: ["united kingdom", "england", "scotland", "wales", "great britain", "uk"], code: "44", minLen: 12 },
+      { match: ["united states", "canada", "usa", "america", "jamaica", "bahamas", "barbados", "cayman islands", "dominican republic", "saint lucia", "trinidad and tobago"], code: "1", minLen: 11 },
+      { match: ["united kingdom", "northern ireland", "england", "scotland", "wales", "great britain", "uk"], code: "44", minLen: 12 },
       { match: ["taiwan"], code: "886", minLen: 11 },
       { match: ["india"], code: "91", minLen: 12 },
       { match: ["singapore"], code: "65", minLen: 10 },
       { match: ["china"], code: "86", minLen: 12 },
       { match: ["hong kong"], code: "852", minLen: 11 },
       { match: ["japan"], code: "81", minLen: 11 },
+      { match: ["north korea"], code: "850", minLen: 11 },
       { match: ["south korea", "korea"], code: "82", minLen: 11 },
       { match: ["germany", "deutschland"], code: "49", minLen: 11 },
       { match: ["france"], code: "33", minLen: 11 },
-      { match: ["italy"], code: "39", minLen: 11 },
-      { match: ["spain"], code: "34", minLen: 11 },
-      { match: ["netherlands"], code: "31", minLen: 11 },
-      { match: ["switzerland"], code: "41", minLen: 11 },
+      { match: ["italy", "italia"], code: "39", minLen: 11 },
+      { match: ["spain", "españa", "espana"], code: "34", minLen: 11 },
+      { match: ["netherlands", "nederland"], code: "31", minLen: 11 },
+      { match: ["switzerland", "schweiz"], code: "41", minLen: 11 },
+      { match: ["austria", "österreich", "oesterreich"], code: "43", minLen: 11 },
+      { match: ["belgium"], code: "32", minLen: 11 },
       { match: ["united arab emirates", "uae"], code: "971", minLen: 12 },
       { match: ["saudi arabia"], code: "966", minLen: 12 },
+      { match: ["qatar"], code: "974", minLen: 11 },
+      { match: ["kuwait"], code: "965", minLen: 11 },
+      { match: ["bahrain"], code: "973", minLen: 11 },
+      { match: ["oman"], code: "968", minLen: 11 },
+      { match: ["jordan"], code: "962", minLen: 11 },
+      { match: ["lebanon"], code: "961", minLen: 11 },
+      { match: ["israel"], code: "972", minLen: 12 },
+      { match: ["türkiye", "turkiye", "turkey"], code: "90", minLen: 12 },
       { match: ["new zealand"], code: "64", minLen: 11 },
       { match: ["indonesia"], code: "62", minLen: 11 },
       { match: ["philippines"], code: "63", minLen: 11 },
       { match: ["thailand"], code: "66", minLen: 11 },
       { match: ["vietnam"], code: "84", minLen: 11 },
-      { match: ["czechia", "czech"], code: "420", minLen: 12 },
-      { match: ["turkiye", "turkey"], code: "90", minLen: 12 },
-      { match: ["ireland"], code: "353", minLen: 11 }
+      { match: ["cambodia"], code: "855", minLen: 11 },
+      { match: ["brunei"], code: "673", minLen: 10 },
+      { match: ["myanmar"], code: "95", minLen: 10 },
+      { match: ["pakistan"], code: "92", minLen: 12 },
+      { match: ["bangladesh"], code: "880", minLen: 13 },
+      { match: ["sri lanka"], code: "94", minLen: 11 },
+      { match: ["nepal"], code: "977", minLen: 12 },
+      { match: ["bhutan"], code: "975", minLen: 11 },
+      { match: ["maldives"], code: "960", minLen: 10 },
+      { match: ["mongolia"], code: "976", minLen: 11 },
+      { match: ["afghanistan"], code: "93", minLen: 11 },
+      { match: ["iran"], code: "98", minLen: 12 },
+      { match: ["iraq"], code: "964", minLen: 12 },
+      { match: ["syria"], code: "963", minLen: 11 },
+      { match: ["ireland"], code: "353", minLen: 11 },
+      { match: ["poland"], code: "48", minLen: 11 },
+      { match: ["portugal"], code: "351", minLen: 12 },
+      { match: ["greece"], code: "30", minLen: 12 },
+      { match: ["sweden"], code: "46", minLen: 11 },
+      { match: ["norway"], code: "47", minLen: 10 },
+      { match: ["denmark"], code: "45", minLen: 10 },
+      { match: ["finland"], code: "358", minLen: 11 },
+      { match: ["iceland"], code: "354", minLen: 10 },
+      { match: ["luxembourg"], code: "352", minLen: 11 },
+      { match: ["liechtenstein"], code: "423", minLen: 10 },
+      { match: ["andorra"], code: "376", minLen: 9 },
+      { match: ["malta"], code: "356", minLen: 11 },
+      { match: ["cyprus"], code: "357", minLen: 11 },
+      { match: ["czech republic", "czechia", "czech"], code: "420", minLen: 12 },
+      { match: ["slovakia"], code: "421", minLen: 12 },
+      { match: ["hungary"], code: "36", minLen: 11 },
+      { match: ["romania"], code: "40", minLen: 11 },
+      { match: ["bulgaria"], code: "359", minLen: 12 },
+      { match: ["croatia", "hrvatska"], code: "385", minLen: 11 },
+      { match: ["slovenia"], code: "386", minLen: 11 },
+      { match: ["serbia"], code: "381", minLen: 11 },
+      { match: ["north macedonia"], code: "389", minLen: 11 },
+      { match: ["albania"], code: "355", minLen: 11 },
+      { match: ["moldova"], code: "373", minLen: 11 },
+      { match: ["ukraine"], code: "380", minLen: 12 },
+      { match: ["belarus"], code: "375", minLen: 12 },
+      { match: ["estonia"], code: "372", minLen: 10 },
+      { match: ["latvia"], code: "371", minLen: 11 },
+      { match: ["lithuania"], code: "370", minLen: 11 },
+      { match: ["russia", "kazakhstan"], code: "7", minLen: 11 },
+      { match: ["uzbekistan"], code: "998", minLen: 12 },
+      { match: ["azerbaijan"], code: "994", minLen: 12 },
+      { match: ["armenia"], code: "374", minLen: 11 },
+      { match: ["brazil"], code: "55", minLen: 12 },
+      { match: ["mexico"], code: "52", minLen: 12 },
+      { match: ["argentina"], code: "54", minLen: 12 },
+      { match: ["colombia"], code: "57", minLen: 12 },
+      { match: ["peru"], code: "51", minLen: 11 },
+      { match: ["uruguay"], code: "598", minLen: 11 },
+      { match: ["paraguay"], code: "595", minLen: 12 },
+      { match: ["bolivia"], code: "591", minLen: 11 },
+      { match: ["costa rica"], code: "506", minLen: 11 },
+      { match: ["panama"], code: "507", minLen: 10 },
+      { match: ["guatemala"], code: "502", minLen: 11 },
+      { match: ["nicaragua"], code: "505", minLen: 11 },
+      { match: ["belize"], code: "501", minLen: 10 },
+      { match: ["guyana"], code: "592", minLen: 10 },
+      { match: ["suriname"], code: "597", minLen: 10 },
+      { match: ["egypt"], code: "20", minLen: 12 },
+      { match: ["morocco"], code: "212", minLen: 12 },
+      { match: ["algeria"], code: "213", minLen: 12 },
+      { match: ["tunisia"], code: "216", minLen: 11 },
+      { match: ["nigeria"], code: "234", minLen: 13 },
+      { match: ["kenya"], code: "254", minLen: 12 },
+      { match: ["ghana"], code: "233", minLen: 12 },
+      { match: ["ethiopia"], code: "251", minLen: 12 },
+      { match: ["tanzania"], code: "255", minLen: 12 },
+      { match: ["uganda"], code: "256", minLen: 12 },
+      { match: ["rwanda"], code: "250", minLen: 12 },
+      { match: ["botswana"], code: "267", minLen: 11 },
+      { match: ["namibia"], code: "264", minLen: 11 },
+      { match: ["zambia"], code: "260", minLen: 12 },
+      { match: ["zimbabwe"], code: "263", minLen: 12 },
+      { match: ["mozambique"], code: "258", minLen: 12 },
+      { match: ["angola"], code: "244", minLen: 12 },
+      { match: ["madagascar"], code: "261", minLen: 12 },
+      { match: ["mauritius"], code: "230", minLen: 10 },
+      { match: ["seychelles"], code: "248", minLen: 10 },
+      { match: ["sierra leone"], code: "232", minLen: 11 },
+      { match: ["sudan"], code: "249", minLen: 12 },
+      { match: ["fiji"], code: "679", minLen: 10 },
+      { match: ["papua new guinea"], code: "675", minLen: 11 },
+      { match: ["samoa"], code: "685", minLen: 8 },
+      { match: ["vanuatu"], code: "678", minLen: 8 }
     ];
 
     let codeRemoved = false;
@@ -1811,7 +1989,9 @@
       if (len < 8 || len > 12) return "";
     } else if (cLower.includes("singapore")) {
       if (len !== 8) return "";
-    } else if (cLower.includes("spain") || cLower.includes("espana")) {
+    } else if (cLower.includes("spain") || cLower.includes("espana") || cLower.includes("españa")) {
+      if (len !== 9) return "";
+    } else if (cLower.includes("france")) {
       if (len !== 9) return "";
     } else {
       if (len < 8 || len > 12) return "";

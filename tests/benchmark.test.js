@@ -500,6 +500,53 @@ runTest('State and City use Gemini API returned values directly in AI mode', () 
   assert.strictEqual(res2.city, "Not Available", "Must preserve Gemini's city=Not Available");
 });
 
+// 20. Global 135-Country Standardization, QC Corrections, Global State/City & Calling Codes
+runTest('Global 135-country QC corrections, State/City detection, and calling codes', () => {
+  const corrections = [
+    ["Deutschland", "Germany"],
+    ["España", "Spain"],
+    ["Italia", "Italy"],
+    ["Nederland", "Netherlands"],
+    ["Österreich", "Austria"],
+    ["Schweiz", "Switzerland"],
+    ["Hrvatska", "Croatia"],
+    ["Turkiye", "Türkiye"],
+    ["Turkey", "Türkiye"],
+    ["UAE", "United Arab Emirates"],
+    ["UK", "United Kingdom"],
+    ["USA", "United States"],
+    ["Republic of Korea", "South Korea"],
+    ["Republic of China", "Taiwan"],
+    ["Peoples Republic of China", "China"],
+    ["Kingdom of Bahrain", "Bahrain"],
+    ["Sultanate of Oman", "Oman"],
+    ["Czechia", "Czech Republic"],
+    ["Brunei", "Brunei Darussalam"],
+    ["Hong Kong", "Hong Kong"],
+    ["Trinidad and Tobago", "Trinidad and Tobago"]
+  ];
+  for (const [raw, expected] of corrections) {
+    assert.strictEqual(ctx.normalizeCountryName(raw), expected, `${raw} must standardize to ${expected}`);
+  }
+
+  // Global State & City fallback evaluation
+  assert.strictEqual(ctx.evaluateCityQC("28 Rue Zuber, Rixheim", "France"), "Available", "Rixheim in France is a recognized city/town");
+  assert.strictEqual(ctx.hasStateInAddress("28 Rue Zuber, Rixheim", "France"), false, "28 Rue Zuber, Rixheim omits Haut-Rhin/Grand Est");
+  assert.strictEqual(ctx.hasStateInAddress("Ilica 10, Zagreb", "Croatia"), true, "Zagreb is Croatia's National Capital");
+  assert.strictEqual(ctx.evaluateCityQC("Ilica 10, Zagreb", "Croatia"), "Available", "Zagreb is Croatia's city/capital");
+  assert.strictEqual(ctx.detectCountryFromAddress("12 Calea Victoriei, Bucharest"), "Romania");
+  assert.strictEqual(ctx.detectCountryFromAddress("PO Box 100, Muscat"), "Oman");
+  assert.strictEqual(ctx.detectCountryFromAddress("Av. Corrientes 500, Buenos Aires"), "Argentina");
+  assert.strictEqual(ctx.detectCountryFromAddress("ul. Marszalkowska 10, Warsaw"), "Poland");
+
+  // Calling codes across newly added countries
+  assert.strictEqual(ctx.cleanPhoneNumber("+385 1 234 5678", "Croatia"), "12345678");
+  assert.strictEqual(ctx.cleanPhoneNumber("+971 4 321 9876", "United Arab Emirates"), "43219876");
+  assert.strictEqual(ctx.cleanPhoneNumber("+974 4412 3456", "Qatar"), "44123456");
+  assert.strictEqual(ctx.cleanPhoneNumber("+48 22 654 3210", "Poland"), "226543210");
+  assert.strictEqual(ctx.cleanPhoneNumber("+55 11 98765 4321", "Brazil"), "11987654321");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');
