@@ -799,6 +799,88 @@ runTest('Indonesian RT/RW/Dk/province expansion, decimal KM comma, and ec-indone
   assert.strictEqual(ctx.isUnwantedEmail("tes@gmail.com"), true, "Dummy test email tes@gmail.com must be rejected");
 });
 
+// Test 26: Placeholder emails/phones (example@mail.com), ID vs Idaho guard, extended company/address expansions, boundary special chars
+runTest('Placeholder emails/phones blocked, ID vs Idaho fixed, company/address expansions & symbol preservation', () => {
+  // 1. Placeholder form inputs never leak into emails or secondaryEmailId
+  const formHtml = `
+    <form>
+      <label>Email *</label><input type="email" placeholder="e.g., example@mail.com">
+      <label>Phone *</label><input type="tel" placeholder="e.g., 123-456-7890">
+      <a href="mailto:sales@kayulama.com">sales@kayulama.com</a>
+    </form>
+  `;
+  const parsedFormEmails = ctx.extractEmailsFromHtml(formHtml, "kayulama.com");
+  assert.strictEqual(JSON.stringify(parsedFormEmails), JSON.stringify(["sales@kayulama.com"]), "Placeholder example@mail.com must be excluded from HTML email extraction");
+  assert.strictEqual(ctx.isUnwantedEmail("example@mail.com"), true, "example@mail.com must be rejected by isUnwantedEmail");
+  assert.strictEqual(ctx.cleanPhoneNumber("123-456-7890", "United States"), "", "Dummy placeholder phone 123-456-7890 must be rejected");
+
+  const aiKayulama = ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "Kayulama",
+    countryName: "Indonesia",
+    companyAddress: "Jl. Raya Batealit - Bangsri, Kec. Batealit, Kab. Jepara, Jateng",
+    state: "Available",
+    city: "Available",
+    emailId: "sales@kayulama.com",
+    secondaryEmailId: "example@mail.com",
+    phoneNumber: "+62 247619249",
+    productImages: "3"
+  }, { emails: ["sales@kayulama.com", "example@mail.com"] }, {});
+  assert.strictEqual(aiKayulama.secondaryEmailId, "", "AI secondaryEmailId example@mail.com must be stripped");
+  assert.strictEqual(
+    aiKayulama.companyAddress,
+    "Jalan Raya Batealit - Bangsri, Kecamatan Batealit, Kabupaten Jepara, Jawa Tengah"
+  );
+
+  // 2. Indonesian ", ID" + 5-digit postcode must NOT mis-detect as Idaho / USA
+  assert.strictEqual(
+    ctx.detectCountryFromAddress("Jalan Raya Batealit - Bangsri, Kabupaten Jepara, 59461, ID"),
+    "Indonesia"
+  );
+  assert.ok(
+    !/idaho/i.test(ctx.expandAddressAndStateAbbreviations("Jalan Raya Batealit - Bangsri, Kabupaten Jepara, 59461, ID", "")),
+    "Indonesian JSON-LD ', ID' must not expand to Idaho"
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Perumahan Semarang Indah Blok B2 No.3, Semarang Bar., Jateng", "Indonesia"),
+    "Perumahan Semarang Indah Blok B2 Number 3, Semarang Barat, Jawa Tengah",
+    "Blok B2 must NOT become Basement 2 and No.3 / Semarang Bar. / Jateng must expand"
+  );
+  assert.strictEqual(
+    ctx.expandAddressAndStateAbbreviations("Jl. Jend. A. Yani, Prov. Babel", "Indonesia"),
+    "Jalan Jenderal Ahmad Yani, Provinsi Bangka Belitung"
+  );
+
+  // 3. Extended Company Abbreviations, boundary special chars, and unexpanded symbols
+  assert.strictEqual(
+    ctx.expandCompanyAbbreviations("P.T. Karya Indl. & Eng. Mfg. Co., Ltd.", "Indonesia"),
+    "Perseroan Terbatas Karya Industrial & Engineering Manufacturing Company, Limited"
+  );
+  assert.strictEqual(
+    ctx.expandCompanyAbbreviations("ABC Hydr. & Pneum. Matls. Pty.Ltd.", "Australia"),
+    "ABC Hydraulics & Pneumatics Materials Proprietary Limited"
+  );
+  const symAndAbbr = ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "*** ®Smith And Co., Ltd. ™ —",
+    countryName: "United Kingdom",
+    companyAddress: "Unit 2, Ind. Est., Kettering, Northants",
+    state: "Available",
+    city: "Available",
+    emailId: "info@smithco.co.uk",
+    phoneNumber: "+44 1536 123456",
+    productImages: "3"
+  }, { logoText: "Smith & Co., Ltd.", title: "Smith & Co., Ltd." }, {});
+  assert.strictEqual(symAndAbbr.companyName, "Smith & Company, Limited", "Boundary special chars removed, Co. -> Company, And -> & restored");
+  assert.strictEqual(symAndAbbr.companyAddress, "Unit 2, Industrial Estate, Kettering, Northamptonshire");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');

@@ -1807,25 +1807,47 @@
     n = n.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
     n = n.replace(/[\(\)\[\]\{\}]/g, " ");
 
+    // Indonesia & Malaysia legal forms
+    n = n.replace(/(^|[\s,])(?:p\.?\s*t)\b\.?\s+/gi, "$1Perseroan Terbatas ");
+    n = n.replace(/(^|[\s,])(?:c\.?\s*v)\b\.?\s+/gi, "$1Commanditaire Vennootschap ");
+    n = n.replace(/(^|[\s,])(?:u\.?\s*d)\b\.?\s+/gi, "$1Usaha Dagang ");
+    n = n.replace(/\btbk\b\.?/gi, "Terbuka");
+    n = n.replace(/\bsdn\.?\s*bhd\b\.?/gi, "Sendirian Berhad");
+
+    // Common business & industry abbreviations
+    n = n.replace(/\b(?:mfg|manuf|mnfg)[\.\s]*co[\.\s]*(,)?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, (m, c) => c ? "Manufacturing Company, Limited" : "Manufacturing Company Limited");
+    n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*(,)?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, (m, c) => c ? "Industries Company, Limited" : "Industries Company Limited");
+    n = n.replace(/\b(?:mfg|manuf|mnfg)\b\.?/gi, "Manufacturing");
+    n = n.replace(/\b(?:ind['’]?l|indl)\b\.?/gi, "Industrial");
+    n = n.replace(/\b(?:inds|indust|ind)\b\.?/gi, "Industries");
+    n = n.replace(/\b(?:intl|int['’]?l)\b\.?/gi, "International");
+    n = n.replace(/\b(?:engg|engr)\b\.?/gi, "Engineering");
+    n = n.replace(/\b(?:bros)\b\.?/gi, "Brothers");
+    n = n.replace(/\b(?:tech)\b\.?/gi, "Technology");
+    n = n.replace(/\b(?:systs|syst|sys)\b\.?/gi, "Systems");
+    n = n.replace(/\b(?:svcs|servs|svc|serv)\b\.?/gi, "Services");
+    n = n.replace(/\b(?:equip|eqpt)\b\.?/gi, "Equipment");
+    n = n.replace(/\b(?:prods|prod)\b\.?/gi, "Products");
+
     // Co., Ltd vs Co. Ltd (preserve comma if present, omit if not)
-    n = n.replace(/\bmfg[\.\s]*co[\.\s]*(,)?[\.\s]*ltd(?:\.|\b)/gi, (m, c) => c ? "Manufacturing Company, Limited" : "Manufacturing Company Limited");
-    n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*(,)?[\.\s]*ltd(?:\.|\b)/gi, (m, c) => c ? "Industries Company, Limited" : "Industries Company Limited");
-    n = n.replace(/\bco[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Company, Limited");
-    n = n.replace(/\bco[\.\s]+ltd(?:\.|\b)/gi, "Company Limited");
+    n = n.replace(/\bco[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Company, Limited");
+    n = n.replace(/\bco[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Company Limited");
 
-    // Private / Proprietary Limited
-    n = n.replace(/\bpte[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Private, Limited");
-    n = n.replace(/\bpte[\.\s]+ltd(?:\.|\b)/gi, "Private Limited");
-    n = n.replace(/\bpvt[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Private, Limited");
-    n = n.replace(/\bpvt[\.\s]+ltd(?:\.|\b)/gi, "Private Limited");
-    n = n.replace(/\bpty[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Proprietary, Limited");
-    n = n.replace(/\bpty[\.\s]+ltd(?:\.|\b)/gi, "Proprietary Limited");
+    // Private / Proprietary Limited & US/Global entities
+    n = n.replace(/\bp[\.\s]*t[\.\s]*e[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Private, Limited");
+    n = n.replace(/\bp[\.\s]*t[\.\s]*e[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Private Limited");
+    n = n.replace(/\bp[\.\s]*v[\.\s]*t[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Private, Limited");
+    n = n.replace(/\bp[\.\s]*v[\.\s]*t[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Private Limited");
+    n = n.replace(/\bp[\.\s]*t[\.\s]*y[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Proprietary, Limited");
+    n = n.replace(/\bp[\.\s]*t[\.\s]*y[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Proprietary Limited");
 
-    n = n.replace(/\bltd(?:\.|\b)/gi, "Limited");
-    n = n.replace(/\binc(?:\.|\b)/gi, "Incorporated");
-    n = n.replace(/\bcorp(?:\.|\b)/gi, "Corporation");
+    n = n.replace(/\bl[\.\s]*l[\.\s]*c\b\.?/gi, "Limited Liability Company");
+    n = n.replace(/\bl[\.\s]*t[\.\s]*d\b\.?/gi, "Limited");
+    n = n.replace(/\bi[\.\s]*n[\.\s]*c\b\.?/gi, "Incorporated");
+    n = n.replace(/\bc[\.\s]*o[\.\s]*r[\.\s]*p\b\.?/gi, "Corporation");
+    n = n.replace(/\bco\b\.?/gi, "Company");
 
-    // Rule: Special character should not start and should not end
+    // Rule: Special character should not start and should not end (internal symbols like &, +, @, %, / preserved)
     n = n.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
     n = n.replace(/[^\p{L}\p{N}]+$/gu, "").trim();
     n = n.replace(/\s+/g, " ").trim();

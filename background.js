@@ -2529,7 +2529,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   let hm;
   while ((hm = headingRegex.exec(processedHtml)) !== null) {
     const hText = stripHtml(hm[1]);
-    if (!/address|location|head\s*office|headquarters|contact\s*us|contact|postal\s*address|direcci[oó]n|domicilio|sede|ubicaci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|encu[eé]ntranos|辦事處|办事处|地址|總部|总部/i.test(hText)) continue;
+    if (!/address|location|head\s*office|headquarters|factory(?:\s*(?:&|and)\s*showroom)?|showroom|workshop|office|contact\s*us|contact|postal\s*address|direcci[oó]n|domicilio|sede|ubicaci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|encu[eé]ntranos|alamat|kantor|pabrik|辦事處|办事处|地址|總部|总部/i.test(hText)) continue;
     if (/email|e-mail|newsletter|subscribe|phone|tel|telephone|opening\s*hours|working\s*hours/i.test(hText)) continue;
 
     const ctx = getContext(hText, defaultSource);
@@ -2583,7 +2583,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 5. Explicit label prefixes Add: / Address: / Addr: / Where You Can Find Us / Find Us / Location: / Alamat: / Dirección: / 地址:
-  const labelAddrRegex = /(?:^|[^a-zA-Z0-9])(?:where\s+(?:you\s+can\s+)?find\s+us|find\s+us|our\s+(?:office|address|location|factory|workshop)|postal\s*address|address|alamat|kantor|lokasi|pabrik|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]?\s*(?:\s*<[^>]+>)*\s*([\s\S]{10,400}?)(?=<h[1-6]\b|<form\b|<footer\b|\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|fax)\b\s*[:：]|$)/gi;
+  const labelAddrRegex = /(?:^|[^a-zA-Z0-9])(?:where\s+(?:you\s+can\s+)?find\s+us|find\s+us|our\s+(?:office|address|location|factory|workshop|showroom)|[A-Za-z]+\s+(?:office|factory(?:\s*(?:&|and)\s*showroom)?|showroom|warehouse)|postal\s*address|address|alamat|kantor|lokasi|pabrik|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]?\s*(?:\s*<[^>]+>)*\s*([\s\S]{10,400}?)(?=<h[1-6]\b|<form\b|<footer\b|\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|fax)\b\s*[:：]|$)/gi;
   let lm;
   while ((lm = labelAddrRegex.exec(processedHtml)) !== null) {
     const beforeText = processedHtml.slice(Math.max(0, lm.index - 500), lm.index);
@@ -3025,8 +3025,9 @@ function isUnwantedEmail(email) {
   if (/^(?:noreply|no-reply|donotreply|do-not-reply|postmaster|hostmaster|abuse|mailer-daemon|bounce|unsubscribe|notification|notifications|alert|alerts|sentry|git|npm|dpo|privacy|compliance|legal|security|webmaster|cookie|accessibility|terms)@/i.test(em)) return true;
 
   // Placeholder / dummy emails
-  if (/^(?:user|email|name|test|sample|placeholder|yourname|youremail|username|example|domain|contact|admin|info)@(?:example|domain|test|sample|email|placeholder|yoursite|mysite|mycompany|yourcompany|company|website|sitename)\./i.test(em)) return true;
-  if (/^(?:test\d*|tes\d*|dummy\d*|sample\d*|placeholder|yourname|youremail|example\d*)@(?:gmail|yahoo|hotmail|outlook)\./i.test(em)) return true;
+  if (/^(?:user|email|name|test|sample|placeholder|yourname|youremail|username|example|domain|contact|admin|info)@(?:example|domain|yourdomain|mydomain|domainname|test|sample|email|placeholder|yoursite|mysite|mycompany|yourcompany|company|website|sitename)\./i.test(em)) return true;
+  if (/^(?:test\d*|tes\d*|dummy\d*|sample\d*|placeholder|yourname|youremail|username|user\d*|name|email|example\d*|johndoe|janedoe|john\.doe|jane\.doe)@(?:gmail|googlemail|yahoo|ymail|hotmail|outlook|live|mail|email|icloud|aol|proton|protonmail)\./i.test(em)) return true;
+  if (/^(?:info|contact|admin|sales|support|enquiry|hello|mail)@mail\.com$/i.test(em)) return true;
 
   // Hex hashes / DSN keys / tokens (e.g. Sentry tracking DSN 605a7baede844d278b89dc95ae0a9123@...)
   if (/^[a-f0-9]{16,64}$/i.test(user)) return true;
@@ -3167,8 +3168,13 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     } catch (e) { }
   }
 
+  // Strip form placeholder attributes BEFORE scanning raw HTML or script hydration so dummy emails like placeholder="e.g., example@mail.com" never extract
+  const htmlWithoutPlaceholders = html
+    .replace(/\b(?:aria-)?placeholder\s*=\s*"[^"]*"/gi, " ")
+    .replace(/\b(?:aria-)?placeholder\s*=\s*'[^']*'/gi, " ");
+
   // 5. Extract emails from data attributes, hidden inputs, meta tags, and structured attributes
-  const attrMatches = [...html.matchAll(/(?:data-[a-z0-9_-]*(?:email|mail|contact)|value|content|title|alt)=["']([a-zA-Z0-9._%+-]+(?:@|%40|&#64;)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
+  const attrMatches = [...htmlWithoutPlaceholders.matchAll(/(?:data-[a-z0-9_-]*(?:email|mail|contact)|value|content|title|alt)=["']([a-zA-Z0-9._%+-]+(?:@|%40|&#64;)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
   for (const am of attrMatches) {
     const rawEm = am[1].replace(/%40|&#64;/gi, "@").toLowerCase().trim();
     if (isValidCorporateEmail(rawEm) && !isUnwantedEmail(rawEm)) {
@@ -3177,7 +3183,7 @@ function extractEmailsFromHtml(html, hostDomain = "") {
   }
 
   // 6. Extract emails from JSON-LD, script hydration, Next.js / Nuxt state, and social profile JSON before stripping scripts
-  const scriptMatches = [...html.matchAll(/[a-zA-Z0-9._%+-]+(?:@|\\u0040|%40)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)];
+  const scriptMatches = [...htmlWithoutPlaceholders.matchAll(/[a-zA-Z0-9._%+-]+(?:@|\\u0040|%40)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)];
   for (const sm of scriptMatches) {
     const emClean = sm[0].replace(/\\u0040|%40/gi, "@").toLowerCase().trim();
     if (isValidCorporateEmail(emClean) && !isUnwantedEmail(emClean)) {
@@ -3187,7 +3193,7 @@ function extractEmailsFromHtml(html, hostDomain = "") {
 
   // 7. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
   // Strip <script> and <style> tags to avoid capturing error tracking, analytics tokens, and bundle code
-  const emailSearchText = html
+  const emailSearchText = htmlWithoutPlaceholders
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
     .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, " ")
@@ -3434,10 +3440,13 @@ function parseHtmlDetails(html, baseUrl) {
   // Extract Phone Numbers strictly from telephone contexts (including tel:, icon labels, and WhatsApp)
   const phoneLinks = [...html.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
   const waLinks = [...html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\?[^"']*phone=)(\+?\d{8,15})/gi)].map(m => "+" + m[1].replace(/^\+/, ""));
+  const cleanHtmlForPhones = cleanHtml
+    .replace(/\b(?:aria-)?placeholder\s*=\s*"[^"]*"/gi, " ")
+    .replace(/\b(?:aria-)?placeholder\s*=\s*'[^']*'/gi, " ");
   const contextPhoneRegex = /(?:(?:tel|telephone|phone|call|mobile|cell|whatsapp|contact|总机|總機|电话|電話|手机|手機|座机|座機)[\s:：]*|(?:bxs:phone-call|fa-phone|fa-mobile)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().-]{7,20})/gi;
   let pMatch;
   const contextPhones = [];
-  while ((pMatch = contextPhoneRegex.exec(cleanHtml)) !== null) {
+  while ((pMatch = contextPhoneRegex.exec(cleanHtmlForPhones)) !== null) {
     contextPhones.push(pMatch[1].trim());
   }
 
@@ -5580,6 +5589,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
     } catch (e) { }
 
+    compName = compName.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
     compName = restoreLegalSuffixIfOmitted(compName, crawlData);
     compName = expandCompanyAbbreviations(compName, result.countryName || "");
     compName = toTitleCase(compName);
@@ -5643,7 +5653,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         addr = restoreTaiwanVillageIfOmitted(addr, bestRaw, crawlData);
         addr = stripExtraWordsFromAddress(addr, bestRaw);
       }
-      addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+$/g, "").trim();
+      addr = expandAddressAndStateAbbreviations(addr, country);
+      if (bestRaw) {
+        addr = stripExtraWordsFromAddress(addr, bestRaw);
+      }
+      addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N})]+$/gu, "").trim();
     } else {
       addr = "Not Available";
     }
@@ -5671,8 +5685,21 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.businessType = String(result.businessType || "").trim();
     result.companyProfile = String(result.companyProfile || "").trim();
     result.emailId = stripTrailingContactWordsFromEmail(String(result.emailId || "").trim().toLowerCase());
+    if (result.emailId && (!isValidCorporateEmail(result.emailId) || isUnwantedEmail(result.emailId))) {
+      result.emailId = "";
+    }
+    if (!result.emailId && crawlData && Array.isArray(crawlData.emails) && crawlData.emails.length > 0) {
+      const validPrim = crawlData.emails
+        .map(e => stripTrailingContactWordsFromEmail(String(e || "").trim().toLowerCase()))
+        .find(e => e && isValidCorporateEmail(e) && !isUnwantedEmail(e));
+      if (validPrim) result.emailId = validPrim;
+    }
+
     result.secondaryEmailId = stripTrailingContactWordsFromEmail(String(result.secondaryEmailId || "").trim().toLowerCase());
     if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(result.secondaryEmailId)) {
+      result.secondaryEmailId = "";
+    }
+    if (result.secondaryEmailId && (!isValidCorporateEmail(result.secondaryEmailId) || isUnwantedEmail(result.secondaryEmailId))) {
       result.secondaryEmailId = "";
     }
     // QC Rule: Primary email and secondary email MUST NOT be the same (or malformed mailto duplicate)!
@@ -6939,8 +6966,9 @@ function hasStateInAddress(addr, country) {
   // United States state abbreviations with 5-digit ZIP or comma (e.g. IL 60060, TX 78731, Allenton, WI)
   const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
   const isUSState = !country || /^(?:u\.?s\.?a?\.?|united\s*states(?:\s*of\s*america)?|america)$/i.test(country) || /\b(usa|united\s*states)\b/i.test(lower);
-  if (new RegExp(`\\b(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return true;
-  if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})(?:\\s*,|\\s*\\d{5}|\\s*$)`, "i").test(lower)) return true;
+  const skipUsCodeFallback = hasIndonesiaAddressSignal(addr, country) || /indonesia/i.test(country || "");
+  if (!skipUsCodeFallback && new RegExp(`\\b(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return true;
+  if (!skipUsCodeFallback && new RegExp(`,\\s*(?:${US_STATE_CODES_STR})(?:\\s*,|\\s*\\d{5}|\\s*$)`, "i").test(lower)) return true;
   if (isUSState && new RegExp(`^(?:${US_STATE_CODES_STR})(?:\\s+\\d{5}(?:-\\d{4})?)?$`, "i").test(lower.trim())) return true;
 
   // Canadian province abbreviations (e.g. ON, QC, BC, AB, MB, SK, NS, NB, NL, PE)
@@ -7051,11 +7079,15 @@ const UK_CITIES_AND_TOWNS = [
 function isUnitedStatesLocation(address, country) {
   const c = (country || "").toLowerCase();
   if (/\b(?:united\s*states|usa|u\.s\.a\.|america)\b/i.test(c)) return true;
-  if (c && !/\b(?:united\s*states|usa|u\.s\.a\.|america)\b/i.test(c) && /\b(?:canada|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|spain|malaysia|indonesia|new\s+zealand)\b/i.test(c)) {
+  if (c && !/\b(?:united\s*states|usa|u\.s\.a\.|america)\b/i.test(c) && /\b(?:canada|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|spain|malaysia|indonesia|new\s+zealand|japan|vietnam|philippines|south\s*korea|netherlands|belgium|switzerland|austria|poland|portugal|sweden|norway|denmark|finland)\b/i.test(c)) {
+    return false;
+  }
+  if (hasIndonesiaAddressSignal(address, country)) {
     return false;
   }
   const a = (address || "").toLowerCase();
   if (/\b(?:united\s*states|usa|u\.s\.a\.)\b/i.test(a)) return true;
+
   const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
   if (new RegExp(`(?:^|[,\\s])(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(a)) return true;
   if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})\\s*$`, "i").test(a)) return true;
@@ -8018,8 +8050,27 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
     { sym: "+", words: ["Plus"] },
     { sym: "@", words: ["At"] },
     { sym: "%", words: ["Percent", "Per\\s+Cent"] },
-    { sym: "/", words: ["Slash", "Or"] }
+    { sym: "/", words: ["Slash", "Or"] },
+    { sym: "#", words: ["Number", "Hash"] }
   ];
+
+  const expandedRightMap = {
+    company: "co\\.?",
+    limited: "ltd\\.?",
+    incorporated: "inc\\.?",
+    corporation: "corp\\.?",
+    manufacturing: "mfg\\.?",
+    industries: "ind(?:s)?\\.?",
+    industrial: "ind(?:l)?\\.?",
+    engineering: "eng(?:g|r)?\\.?",
+    brothers: "bros\\.?",
+    associates: "assoc(?:s)?\\.?",
+    solutions: "sol(?:n|ns|s)\\.?",
+    services: "svc(?:s)?\\.?",
+    products: "prod(?:s)?\\.?",
+    technologies: "tech(?:s)?\\.?",
+    technology: "tech\\.?"
+  };
 
   for (const spec of symbolSpecs) {
     if (!combinedEvidence.includes(spec.sym)) continue;
@@ -8031,8 +8082,10 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
       const updated = n.replace(pairRegex, (match, p1, p2) => {
         const p1Esc = escRe(p1);
         const p2Esc = escRe(p2);
-        const noSpaceRegex = new RegExp(`(?:^|[^\\p{L}\\p{N}])${p1Esc}${symEsc}${p2Esc}(?:$|[^\\p{L}\\p{N}])`, "iu");
-        const spaceRegex = new RegExp(`(?:^|[^\\p{L}\\p{N}])${p1Esc}\\s+${symEsc}\\s+${p2Esc}(?:$|[^\\p{L}\\p{N}])`, "iu");
+        const p2Abbr = expandedRightMap[p2.toLowerCase()];
+        const p2Group = p2Abbr ? `(?:${p2Esc}|${p2Abbr})` : p2Esc;
+        const noSpaceRegex = new RegExp(`(?:^|[^\\p{L}\\p{N}])${p1Esc}${symEsc}${p2Group}(?:$|[^\\p{L}\\p{N}])`, "iu");
+        const spaceRegex = new RegExp(`(?:^|[^\\p{L}\\p{N}])${p1Esc}\\s+${symEsc}\\s+${p2Group}(?:$|[^\\p{L}\\p{N}])`, "iu");
         if (noSpaceRegex.test(combinedEvidence)) {
           return `${p1}${spec.sym}${p2}`;
         }
@@ -8049,6 +8102,12 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
       n = n.replace(/(\b\d+(?:\.\d+)?)\s+(?:Percent|Per\s+Cent)\b/gi, (match, num) => {
         const pctRegex = new RegExp(`(?:^|[^\\d])${escRe(num)}%`, "i");
         return pctRegex.test(combinedEvidence) ? `${num}%` : match;
+      });
+    }
+    if (spec.sym === "#") {
+      n = n.replace(/\b(?:Number|Hash)\s+(\d+[A-Za-z]?)\b/gi, (match, num) => {
+        const hashRegex = new RegExp(`(?:^|[^\\p{L}\\p{N}])#${escRe(num)}\\b`, "iu");
+        return hashRegex.test(combinedEvidence) ? `#${num}` : match;
       });
     }
   }
@@ -8236,30 +8295,33 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:e[\.\s]*i[\.\s]*r[\.\s]*l|eirl)\b\.?/gi, "Empresa Individual de Responsabilidad Limitada");
   n = n.replace(/\b(?:c[\.\s]*a|ca)\b\.?$/gi, "Compañía Anónima");
 
-  // 4. Indonesia entities (prefix and suffix)
-  n = n.replace(/(^|[\s,])(?:pt|p\.t\.)\b\.?\s+/gi, "$1Perseroan Terbatas ");
-  n = n.replace(/\b(?:pt|p\.t\.)\b\.?$/gi, "Perseroan Terbatas");
-  n = n.replace(/(^|[\s,])(?:cv|c\.v\.)\b\.?\s+/gi, "$1Commanditaire Vennootschap ");
-  n = n.replace(/\b(?:cv|c\.v\.)\b\.?$/gi, "Commanditaire Vennootschap");
-  n = n.replace(/(^|[\s,])(?:ud|u\.d\.)\b\.?\s+/gi, "$1Usaha Dagang ");
-  n = n.replace(/\b(?:ud|u\.d\.)\b\.?$/gi, "Usaha Dagang");
-  n = n.replace(/(^|[\s,])(?:pd|p\.d\.)\b\.?\s+/gi, "$1Perusahaan Daerah ");
+  // 4. Indonesia entities (prefix and suffix; \b before optional dot so "P.T. " matches)
+  n = n.replace(/(^|[\s,])(?:p\.?\s*t)\b\.?\s+/gi, "$1Perseroan Terbatas ");
+  n = n.replace(/(^|[\s,])(?:p\.?\s*t)\b\.?$/gi, "$1Perseroan Terbatas");
+  n = n.replace(/(^|[\s,])(?:c\.?\s*v)\b\.?\s+/gi, "$1Commanditaire Vennootschap ");
+  n = n.replace(/(^|[\s,])(?:c\.?\s*v)\b\.?$/gi, "$1Commanditaire Vennootschap");
+  n = n.replace(/(^|[\s,])(?:u\.?\s*d)\b\.?\s+/gi, "$1Usaha Dagang ");
+  n = n.replace(/(^|[\s,])(?:u\.?\s*d)\b\.?$/gi, "$1Usaha Dagang");
+  n = n.replace(/(^|[\s,])(?:p\.?\s*d)\b\.?\s+/gi, "$1Perusahaan Daerah ");
+  n = n.replace(/(^|[\s,])(?:p\.?\s*d)\b\.?$/gi, "$1Perusahaan Daerah");
+  if ((country || "").toLowerCase().includes("indonesia")) {
+    n = n.replace(/(^|[\s,])(?:f\.?\s*a)\b\.?\s+/gi, "$1Firma ");
+  }
   n = n.replace(/\b(?:tbk)\b\.?/gi, "Terbuka");
 
   // 5. Malaysia entities
-  n = n.replace(/\bsdn[\.\s]+bhd\.?\b/gi, "Sendirian Berhad");
-  n = n.replace(/\bsdn\s*bhd\.?\b/gi, "Sendirian Berhad");
+  n = n.replace(/\bsdn\.?\s*bhd\b\.?/gi, "Sendirian Berhad");
   n = n.replace(/\bsdn\b\.?/gi, "Sendirian");
   n = n.replace(/\bbhd\b\.?/gi, "Berhad");
   n = n.replace(/\bplt\b\.?/gi, "Perkongsian Liabiliti Terhad");
 
   // 6. Germany / Austria / Switzerland (DACH)
   // Preserve special characters like "&" or "+" unexpanded (do NOT turn "&" / "+" into "and")
-  n = n.replace(/\bgmbh\s*(&|\+|und|and|u\.?)\s*co\.?\s*kg\.?\b/gi, (_, op) => {
+  n = n.replace(/\bgmbh\s*(&|\+|und|and|u\.?)\s*co\.?\s*kg\.?/gi, (_, op) => {
     const conn = /^(&|\+)$/.test(op) ? op : (/^and$/i.test(op) ? "and" : "und");
     return `Gesellschaft mit beschränkter Haftung ${conn} Compagnie Kommanditgesellschaft`;
   });
-  n = n.replace(/\bgmbh\s*(&|\+|und|and|u\.?)\s*co\.?\b/gi, (_, op) => {
+  n = n.replace(/\bgmbh\s*(&|\+|und|and|u\.?)\s*co\b\.?/gi, (_, op) => {
     const conn = /^(&|\+)$/.test(op) ? op : (/^and$/i.test(op) ? "and" : "und");
     return `Gesellschaft mit beschränkter Haftung ${conn} Compagnie`;
   });
@@ -8278,39 +8340,44 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:e[\.\s]*v|ev)\b\.?$/gi, "eingetragener Verein");
 
   // 7. Italian entities
-  n = n.replace(/\b(?:s[\.\s]*r[\.\s]*l[\.\s]*s|srls)\b/gi, "Società a Responsabilità Limitata Semplificata");
-  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*a[\.\s]*r[\.\s]*l|scarl)\b/gi, "Società Cooperativa a Responsabilità Limitata");
-  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p[\.\s]*a|scpa)\b/gi, "Società Cooperativa per Azioni");
-  n = n.replace(/\b(?:s[\.\s]*r[\.\s]*l|srl)\b/gi, "Società a Responsabilità Limitata");
-  n = n.replace(/\b(?:s[\.\s]*p[\.\s]*a|spa)\b/gi, "Società per Azioni");
-  n = n.replace(/\b(?:s[\.\s]*n[\.\s]*c|snc)\b/gi, "Società in Nome Collettivo");
-  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b/gi, "Società in Accomandita Semplice");
-  n = n.replace(/\bs[\.\s]*s[\.\s]*\b/gi, "Società Semplice ");
+  n = n.replace(/\b(?:s[\.\s]*r[\.\s]*l[\.\s]*s|srls)\b\.?/gi, "Società a Responsabilità Limitata Semplificata");
+  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*a[\.\s]*r[\.\s]*l|scarl)\b\.?/gi, "Società Cooperativa a Responsabilità Limitata");
+  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p[\.\s]*a|scpa)\b\.?/gi, "Società Cooperativa per Azioni");
+  n = n.replace(/\b(?:s[\.\s]*r[\.\s]*l|srl)\b\.?/gi, "Società a Responsabilità Limitata");
+  n = n.replace(/\b(?:s[\.\s]*p[\.\s]*a|spa)\b\.?/gi, "Società per Azioni");
+  n = n.replace(/\b(?:s[\.\s]*n[\.\s]*c|snc)\b\.?/gi, "Società in Nome Collettivo");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b\.?/gi, "Società in Accomandita Semplice");
+  if (/italy|italia/i.test(country)) {
+    n = n.replace(/\bs[\.\s]*s\b\.?/gi, "Società Semplice");
+  }
 
-  // 8. Spanish & Latin America entities
-  n = n.replace(/\b(?:s[\.\s]*l[\.\s]*u\.?|slu)\b/gi, "Sociedad Limitada Unipersonal");
-  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*u\.?|sau)\b/gi, "Sociedad Anónima Unipersonal");
-  n = n.replace(/\b(?:s[\.\s]+l|s\.l\.?|sl)\b\.?/gi, "Sociedad Limitada");
-  n = n.replace(/\b(?:s[\.\s]+a|s\.a\.?|sa)\b\.?/gi, "Sociedad Anónima");
-  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p\.?|scp)\b/gi, "Sociedad Civil Privada");
-  n = n.replace(/\b(?:s[\.\s]*coop\.?|scoop)\b/gi, "Sociedad Cooperativa");
+  // 8. Spanish, Portuguese & Latin America entities
+  n = n.replace(/\b(?:s[\.\s]*l[\.\s]*u|slu)\b\.?/gi, "Sociedad Limitada Unipersonal");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*u|sau)\b\.?/gi, "Sociedad Anónima Unipersonal");
+  n = n.replace(/\b(?:s[\.\s]*l|sl)\b\.?/gi, "Sociedad Limitada");
+  n = n.replace(/\b(?:s[\.\s]*a|sa)\b\.?/gi, "Sociedad Anónima");
+  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*p|scp)\b\.?/gi, "Sociedad Civil Privada");
+  n = n.replace(/\b(?:s[\.\s]*coop|scoop)\b\.?/gi, "Sociedad Cooperativa");
+  n = n.replace(/\b(?:u[\.\s]*n[\.\s]*i[\.\s]*p(?:essoal)?\.?\s*lda)\b\.?/gi, "Unipessoal Limitada");
   n = n.replace(/\b(?:l[\.\s]*t[\.\s]*d[\.\s]*a|ltda)\b\.?/gi, "Limitada");
+  n = n.replace(/\b(?:lda)\b\.?$/gi, "Limitada");
+  n = n.replace(/\b(?:c[\.\s]*i[\.\s]*a|cia)\b\.?/gi, "Compañía");
 
   // 9. France & Belgium
   n = n.replace(/\b(?:c[\.\s]*i[\.\s]*e|cie)\b\.?/gi, "Compagnie");
-  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*r[\.\s]*l|sarl)\b/gi, "Société à Responsabilité Limitée");
-  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s[\.\s]*u|sasu)\b/gi, "Société par Actions Simplifiée Unipersonnelle");
-  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b/gi, "Société par Actions Simplifiée");
-  n = n.replace(/\b(?:s[\.\s]*p[\.\s]*r[\.\s]*l|sprl)\b/gi, "Société Privée à Responsabilité Limitée");
-  n = n.replace(/\b(?:b[\.\s]*v[\.\s]*b[\.\s]*a|bvba)\b/gi, "Besloten Vennootschap met Beperkte Aansprakelijkheid");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*r[\.\s]*l|sarl)\b\.?/gi, "Société à Responsabilité Limitée");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s[\.\s]*u|sasu)\b\.?/gi, "Société par Actions Simplifiée Unipersonnelle");
+  n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b\.?/gi, "Société par Actions Simplifiée");
+  n = n.replace(/\b(?:s[\.\s]*p[\.\s]*r[\.\s]*l|sprl)\b\.?/gi, "Société Privée à Responsabilité Limitée");
+  n = n.replace(/\b(?:b[\.\s]*v[\.\s]*b[\.\s]*a|bvba)\b\.?/gi, "Besloten Vennootschap met Beperkte Aansprakelijkheid");
 
   // 10. Netherlands & Belgium
-  n = n.replace(/\b(?:b[\.\s]*v\.?|bv)\b/gi, "Besloten Vennootschap");
-  n = n.replace(/\b(?:n[\.\s]*v\.?|nv)\b/gi, "Naamloze Vennootschap");
-  n = n.replace(/\b(?:v[\.\s]*o[\.\s]*f\.?|vof)\b/gi, "Vennootschap onder Firma");
+  n = n.replace(/\b(?:b[\.\s]*v|bv)\b\.?/gi, "Besloten Vennootschap");
+  n = n.replace(/\b(?:n[\.\s]*v|nv)\b\.?/gi, "Naamloze Vennootschap");
+  n = n.replace(/\b(?:v[\.\s]*o[\.\s]*f|vof)\b\.?/gi, "Vennootschap onder Firma");
 
   // 11. Poland
-  n = n.replace(/\b(?:sp\.?\s*z\s*o\.?\s*o\.?|sp[oó][lł]ka\s+z\s+o\.?o\.?)\b/gi, "Spółka z ograniczoną odpowiedzialnością");
+  n = n.replace(/\b(?:sp\.?\s*z\.?\s*o\.?\s*o|sp[oó][lł]ka\s+z\s+o\.?o)\b\.?/gi, "Spółka z ograniczoną odpowiedzialnością");
 
   // 12. Eastern Europe & Russia (Joint Stock Companies)
   n = n.replace(/\b(?:p[\.\s]*j[\.\s]*s[\.\s]*c|pjsc)\b\.?/gi, "Public Joint Stock Company");
@@ -8319,12 +8386,12 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:j[\.\s]*s[\.\s]*c|jsc)\b\.?/gi, "Joint Stock Company");
 
   // 13. Czechia, Slovakia, Hungary, Balkans
-  n = n.replace(/\b(?:spol\.?\s*s\s*r\.?o\.?|s[\.\s]*r[\.\s]*o\.?|sro)\b/gi, "společnost s ručením omezeným");
-  n = n.replace(/\b(?:a[\.\s]*s\.?|akc\.?\s*spol\.?)\b(?!\s+(?:de\s+c\.?v\.?))/gi, "akciová společnost");
-  n = n.replace(/\b(?:d[\.\s]*o[\.\s]*o\.?|doo)\b/gi, "društvo s ograničenom odgovornošću");
-  n = n.replace(/\b(?:k[\.\s]*f[\.\s]*t\.?|kft)\b/gi, "Korlátolt Felelősségű Társaság");
-  n = n.replace(/\b(?:z[\.\s]*r[\.\s]*t\.?|zrt)\b/gi, "Zártkörűen működő Részvénytársaság");
-  n = n.replace(/\b(?:n[\.\s]*y[\.\s]*r[\.\s]*t\.?|nyrt)\b/gi, "Nyilvánosan működő Részvénytársaság");
+  n = n.replace(/\b(?:spol\.?\s*s\.?\s*r\.?\s*o|s[\.\s]*r[\.\s]*o|sro)\b\.?/gi, "společnost s ručením omezeným");
+  n = n.replace(/\b(?:a[\.\s]*s|akc\.?\s*spol)\b\.?(?!\s+(?:de\s+c\.?v\.?))/gi, "akciová společnost");
+  n = n.replace(/\b(?:d[\.\s]*o[\.\s]*o|doo)\b\.?/gi, "društvo s ograničenom odgovornošću");
+  n = n.replace(/\b(?:k[\.\s]*f[\.\s]*t|kft)\b\.?/gi, "Korlátolt Felelősségű Társaság");
+  n = n.replace(/\b(?:z[\.\s]*r[\.\s]*t|zrt)\b\.?/gi, "Zártkörűen működő Részvénytársaság");
+  n = n.replace(/\b(?:n[\.\s]*y[\.\s]*r[\.\s]*t|nyrt)\b\.?/gi, "Nyilvánosan működő Részvénytársaság");
 
   // 14. Nordics
   n = n.replace(/\b(?:aktiebolag|ab)\b\.?$/gi, "Aktiebolag");
@@ -8351,121 +8418,130 @@ function expandCompanyAbbreviations(name, country = "") {
 
   // 18. Common Business, Technical, and Industry Word Abbreviations in Company Names
   // Manufacturing / Makers
-  n = n.replace(/\bmfg[\.\s]*co[\.\s]*(,)?[\.\s]*ltd(?:\.|\b)/gi, (match, comma) => {
+  n = n.replace(/\b(?:mfg|manuf|mnfg)[\.\s]*co[\.\s]*(,)?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, (match, comma) => {
     return comma ? "Manufacturing Company, Limited" : "Manufacturing Company Limited";
   });
-  n = n.replace(/\bmfg(?:\.|\b)/gi, "Manufacturing");
-  n = n.replace(/\bmfrs(?:\.|\b)/gi, "Manufacturers");
-  n = n.replace(/\bmfr(?:\.|\b)/gi, "Manufacturer");
+  n = n.replace(/\b(?:mfg|manuf|mnfg)\b\.?/gi, "Manufacturing");
+  n = n.replace(/\bmfrs\b\.?/gi, "Manufacturers");
+  n = n.replace(/\bmfr\b\.?/gi, "Manufacturer");
 
   // Industries / Industrial
-  n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*(,)?[\.\s]*ltd(?:\.|\b)/gi, (match, comma) => {
+  n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*(,)?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, (match, comma) => {
     return comma ? "Industries Company, Limited" : "Industries Company Limited";
   });
-  n = n.replace(/\binds(?:\.|\b)/gi, "Industries");
-  n = n.replace(/\bindust(?:\.|\b)/gi, "Industries");
-  n = n.replace(/\bind\b\.?\s*(?=(?:services?|solutions?|suppl(?:y|ies)|products?|equipment|park|estate|zone|area)\b)/gi, "Industrial ");
-  n = n.replace(/\bind(?:\.|\b)/gi, "Industries");
+  n = n.replace(/\b(?:ind['’]?l|indl)\b\.?/gi, "Industrial");
+  n = n.replace(/\binds\b\.?/gi, "Industries");
+  n = n.replace(/\bindust\b\.?/gi, "Industries");
+  n = n.replace(/\bind\b\.?\s*(?=(?:services?|solutions?|suppl(?:y|ies)|products?|equipment|park|estate|zone|area|mfg|manufacturing|eng|engineering|tech|technology|group|holdings?)\b)/gi, "Industrial ");
+  n = n.replace(/\bind\b\.?/gi, "Industries");
 
   // International / National
   n = n.replace(/\b(?:int['’]?l|intl)\b\.?/gi, "International");
   n = n.replace(/\b(?:nat['’]?l|natl)\b\.?/gi, "National");
 
   // Technology / Technologies
-  n = n.replace(/\btechs(?:\.|\b)/gi, "Technologies");
+  n = n.replace(/\btechs\b\.?/gi, "Technologies");
   n = n.replace(/\b(?:technol|tech)\b\.?/gi, "Technology");
 
   // Engineering
-  n = n.replace(/\b(?:engg|engr|eng)\b\.?\s*(?=(?:works|solutions?|services?|systems?|products?|co|company|corp|ltd|limited|inc|llc)\b)/gi, "Engineering ");
+  n = n.replace(/\b(?:engg|engr|eng)\b\.?(?=\s*(?:&|\+|,|works|solutions?|services?|systems?|products?|supplies?|equipment|industries|mfg|manufacturing|co|company|corp|ltd|limited|inc|llc|$))/gi, "Engineering");
   n = n.replace(/\b(?:engg|engr)\b\.?/gi, "Engineering");
 
   // Equipment, Products, Systems, Development
   n = n.replace(/\b(?:eqpt|equip)\b\.?/gi, "Equipment");
-  n = n.replace(/\bprods(?:\.|\b)/gi, "Products");
-  n = n.replace(/\bprod(?:\.|\b)/gi, "Products");
-  n = n.replace(/\b(?:syst|sys)\b\.?/gi, "Systems");
+  n = n.replace(/\bprods\b\.?/gi, "Products");
+  n = n.replace(/\bprod\b\.?/gi, "Products");
+  n = n.replace(/\b(?:systs|syst|sys)\b\.?/gi, "Systems");
   n = n.replace(/\b(?:devel|dev)\b\.?/gi, "Development");
 
   // Services, Solutions, Associates, Group
-  n = n.replace(/\b(?:svcs|svc|serv)\b\.?/gi, "Services");
+  n = n.replace(/\b(?:svcs|servs|svc|serv)\b\.?/gi, "Services");
   n = n.replace(/\b(?:solns|soln|sols)\b\.?/gi, "Solutions");
   n = n.replace(/\b(?:assocs|assoc)\b\.?/gi, "Associates");
   n = n.replace(/\bgrp\b\.?/gi, "Group");
 
   // Chemical, Electrical / Electronics, Automotive, Automation
-  n = n.replace(/\bchems(?:\.|\b)/gi, "Chemicals");
-  n = n.replace(/\bchem\b\.?\s*(?=(?:ind|industries|co|company|corp|ltd|limited|inc|llc|products?|supplies)\b)/gi, "Chemical ");
-  n = n.replace(/\bchem(?:\.|\b)/gi, "Chemicals");
-  n = n.replace(/\b(?:elect|elec)\b\.?\s*(?=(?:and|&|engineering|services?|supplies)\b)/gi, "Electrical ");
+  n = n.replace(/\bchems\b\.?/gi, "Chemicals");
+  n = n.replace(/\bchem\b\.?\s*(?=(?:ind|industries|industrial|co|company|corp|ltd|limited|inc|llc|products?|supplies|works|mfg|manufacturing)\b|\s*(?:&|\+|and)\b)/gi, "Chemical ");
+  n = n.replace(/\bchem\b\.?/gi, "Chemicals");
+  n = n.replace(/\b(?:elect|elec)\b\.?\s*(?=(?:and|&|\+|engineering|services?|supplies?|works|mfg|co|company|corp|ltd|limited|inc|llc|systems?|products?)\b)/gi, "Electrical ");
   n = n.replace(/\b(?:elect|elec)\b\.?/gi, "Electronics");
-  n = n.replace(/\bauto\b\.?\s*(?=(?:parts?|components?|industr(?:y|ies)|vehicles?)\b)/gi, "Automotive ");
-  n = n.replace(/\bauto\b\.?\s*(?=(?:systems?|solutions?|engineering)\b)/gi, "Automation ");
+  n = n.replace(/\bauto\b\.?\s*(?=(?:parts?|components?|industr(?:y|ies)|vehicles?|access(?:ories)?|mfg|co|corp|ltd|inc|llc)\b|\s*(?:&|\+)\b)/gi, "Automotive ");
+  n = n.replace(/\bauto\b\.?\s*(?=(?:systems?|solutions?|engineering|tech|technology|controls?)\b)/gi, "Automation ");
 
-  // Distribution, Fabrication, Machinery, Packaging
-  n = n.replace(/\b(?:distrib|dist)\b\.?\s*(?=(?:co|company|corp|ltd|limited|inc|llc|of)\b)/gi, "Distributors ");
-  n = n.replace(/\b(?:distrib|dist)\b\.?/gi, "Distribution");
+  // Distribution, Fabrication, Machinery, Packaging, Trading, Furniture, Building, Hardware
+  n = n.replace(/\b(?:distrs|distrib|dist)\b\.?\s*(?=(?:co|company|corp|ltd|limited|inc|llc|of)\b)/gi, "Distributors ");
+  n = n.replace(/\b(?:distrs|distrib|dist)\b\.?/gi, "Distribution");
   n = n.replace(/\bfab\b\.?/gi, "Fabrication");
   n = n.replace(/\bmach\b\.?/gi, "Machinery");
   n = n.replace(/\b(?:pkg|pack)\b\.?/gi, "Packaging");
+  n = n.replace(/\btrdg\b\.?/gi, "Trading");
+  n = n.replace(/\bfurn\b\.?/gi, "Furniture");
+  n = n.replace(/\bbldg\b\.?/gi, "Building");
+  n = n.replace(/\b(?:hdwe|hdw)\b\.?/gi, "Hardware");
+  n = n.replace(/\bmaint\b\.?/gi, "Maintenance");
 
   // Management, Communications, Laboratories, Materials
   n = n.replace(/\b(?:mgmt|mgt)\b\.?/gi, "Management");
   n = n.replace(/\b(?:comms|comm)\b\.?/gi, "Communications");
   n = n.replace(/\b(?:labs|lab)\b\.?/gi, "Laboratories");
-  n = n.replace(/\b(?:matl|mat)\b\.?/gi, "Materials");
+  n = n.replace(/\b(?:matls|matl|mat)\b\.?/gi, "Materials");
 
   // Technical prefixes
-  n = n.replace(/\bappl\b\.?\s*(?=(?:technol|tech|sciences?|systems?|materials?|engineering)\b)/gi, "Applied ");
-  n = n.replace(/\badv\b\.?\s*(?=(?:technol|tech|materials?|systems?|engineering|solutions?)\b)/gi, "Advanced ");
-  n = n.replace(/\bgen\b\.?\s*(?=(?:electric|motors?|trading|commercial|engineering|industries)\b)/gi, "General ");
-  n = n.replace(/\bstd\b\.?\s*(?=(?:products?|engineering|parts?|fasteners?)\b)/gi, "Standard ");
-  n = n.replace(/\b(?:envr|env)\b\.?\s*(?=(?:solutions?|services?|systems?|engineering)\b)/gi, "Environmental ");
-  n = n.replace(/\b(?:transp|trans)\b\.?\s*(?=(?:solutions?|services?|systems?|logistics?)\b)/gi, "Transportation ");
-  n = n.replace(/\b(?:logist|log)\b\.?\s*(?=(?:solutions?|services?|systems?)\b)/gi, "Logistics ");
-  n = n.replace(/\b(?:constr|const)\b\.?\s*(?=(?:solutions?|services?|systems?|materials?|equipment|co|company|ltd|corp|inc)\b)/gi, "Construction ");
+  n = n.replace(/\bappl\b\.?\s*(?=(?:technol|tech|sciences?|systems?|materials?|engineering|products?|solutions?|co|company|corp|ltd|limited|inc|llc)\b)/gi, "Applied ");
+  n = n.replace(/\badv\b\.?\s*(?=(?:technol|tech|materials?|systems?|engineering|solutions?|products?|mfg|co|company|corp|ltd|limited|inc|llc)\b)/gi, "Advanced ");
+  n = n.replace(/\bgen\b\.?\s*(?=(?:electric|electrical|motors?|trading|commercial|engineering|industries|industrial|co|company|corp|ltd|inc|llc)\b)/gi, "General ");
+  n = n.replace(/\bstd\b\.?\s*(?=(?:products?|engineering|parts?|fasteners?|mfg|co|company|corp|ltd|inc|llc)\b)/gi, "Standard ");
+  n = n.replace(/\b(?:environ|envir|envr|env)\b\.?\s*(?=(?:solutions?|services?|systems?|engineering|tech|products?|co|corp|ltd|inc)\b)/gi, "Environmental ");
+  n = n.replace(/\b(?:transp|trans)\b\.?\s*(?=(?:solutions?|services?|systems?|logistics?|co|company|corp|ltd|inc)\b)/gi, "Transportation ");
+  n = n.replace(/\blogist\b\.?/gi, "Logistics");
+  n = n.replace(/\blog\b\.?\s*(?=(?:solutions?|services?|systems?|co|ltd|inc)\b)/gi, "Logistics ");
+  n = n.replace(/\b(?:constr|const)\b\.?\s*(?=(?:solutions?|services?|systems?|materials?|equipment|works|group|co|company|ltd|corp|inc)\b|\s*(?:&|\+|,|$))/gi, "Construction ");
+  n = n.replace(/\bagric?\b\.?\s*(?=(?:products?|machinery|equip|equipment|supplies|industries|mfg|co|corp|ltd|inc|llc)\b)/gi, "Agricultural ");
+  n = n.replace(/\bsci\b\.?\s*(?=(?:&|\+|instruments?|labs?|laboratories|equip|equipment|co|corp|ltd|inc)\b)/gi, "Scientific ");
   n = n.replace(/\bpharm\b\.?/gi, "Pharmaceuticals");
-  n = n.replace(/\btelecom\b\.?/gi, "Telecommunications");
+  n = n.replace(/\b(?:telecomms|telecoms|telecomm|telecom)\b\.?/gi, "Telecommunications");
   n = n.replace(/\bbros\b\.?/gi, "Brothers");
-  n = n.replace(/\b(?:enterp|ent)\b\.?(?=\s|$|,)/gi, "Enterprises");
+  n = n.replace(/\b(?:enterpr|enterp|entp|ent)\b\.?(?=\s|$|,)/gi, "Enterprises");
   n = n.replace(/\bhldgs\b\.?/gi, "Holdings");
   n = n.replace(/\bhldg\b\.?/gi, "Holding");
-  n = n.replace(/\binstr\b\.?/gi, "Instruments");
+  n = n.replace(/\b(?:instrum|instr)\b\.?/gi, "Instruments");
+  n = n.replace(/\belectromech\b\.?/gi, "Electromechanical");
   n = n.replace(/\bmech\b\.?/gi, "Mechanical");
-  n = n.replace(/\bhyd\b\.?/gi, "Hydraulics");
+  n = n.replace(/\b(?:hydr|hyd)\b\.?/gi, "Hydraulics");
+  n = n.replace(/\bpneum\b\.?/gi, "Pneumatics");
+  n = n.replace(/\binsul\b\.?/gi, "Insulation");
+  n = n.replace(/\brefrig\b\.?/gi, "Refrigeration");
+  n = n.replace(/\bventil\b\.?/gi, "Ventilation");
   n = n.replace(/\bplast\b\.?/gi, "Plastics");
   n = n.replace(/\bprec\b\.?/gi, "Precision");
   n = n.replace(/\bapp\b\.?(?=\s+(?:co|company|corp|ltd|limited|inc|llc|mfg)\b)/gi, "Apparatus");
 
   // 19. United States & Global Legal Entities (must run after Mfg/Ind compound rules)
-  n = n.replace(/\bpllc(?:\.|\b)/gi, "Professional Limited Liability Company");
-  n = n.replace(/\bllp(?:\.|\b)/gi, "Limited Liability Partnership");
-  n = n.replace(/\bllc(?:\.|\b)/gi, "Limited Liability Company");
-  n = n.replace(/\bl\.?l\.?c(?:\.|\b)/gi, "Limited Liability Company");
-  n = n.replace(/\blp(?:\.|\b)/gi, "Limited Partnership");
-  n = n.replace(/\bl\.?p(?:\.|\b)/gi, "Limited Partnership");
+  n = n.replace(/\bp[\.\s]*l[\.\s]*l[\.\s]*c\b\.?/gi, "Professional Limited Liability Company");
+  n = n.replace(/\bl[\.\s]*l[\.\s]*p\b\.?/gi, "Limited Liability Partnership");
+  n = n.replace(/\bl[\.\s]*l[\.\s]*c\b\.?/gi, "Limited Liability Company");
+  n = n.replace(/\bl[\.\s]*p\b\.?/gi, "Limited Partnership");
+  n = n.replace(/\bp[\.\s]*l[\.\s]*c\b\.?/gi, "Public Limited Company");
 
   // "Co., Ltd." vs "Co. Ltd"
   // If comma is present between Co and Ltd (e.g. "Co., Ltd." or "Co.,Ltd") -> "Company, Limited"
   // If WITHOUT comma (e.g. "Co. Ltd" or "Co Ltd") -> "Company Limited"
-  n = n.replace(/\bco[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Company, Limited");
-  n = n.replace(/\bco[\.\s]+ltd(?:\.|\b)/gi, "Company Limited");
+  n = n.replace(/\bco[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Company, Limited");
+  n = n.replace(/\bco[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Company Limited");
 
   // Private, Proprietary Limited with/without comma
-  n = n.replace(/\bpte[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Private, Limited");
-  n = n.replace(/\bpte[\.\s]+ltd(?:\.|\b)/gi, "Private Limited");
-  n = n.replace(/\bpvt[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Private, Limited");
-  n = n.replace(/\bpvt[\.\s]+ltd(?:\.|\b)/gi, "Private Limited");
-  n = n.replace(/\bpty[\.\s]*(,)\s*ltd(?:\.|\b)/gi, "Proprietary, Limited");
-  n = n.replace(/\bpty[\.\s]+ltd(?:\.|\b)/gi, "Proprietary Limited");
+  n = n.replace(/\bp[\.\s]*t[\.\s]*e[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Private, Limited");
+  n = n.replace(/\bp[\.\s]*t[\.\s]*e[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Private Limited");
+  n = n.replace(/\bp[\.\s]*v[\.\s]*t[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Private, Limited");
+  n = n.replace(/\bp[\.\s]*v[\.\s]*t[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Private Limited");
+  n = n.replace(/\bp[\.\s]*t[\.\s]*y[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Proprietary, Limited");
+  n = n.replace(/\bp[\.\s]*t[\.\s]*y[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Proprietary Limited");
 
-  n = n.replace(/\bltd(?:\.|\b)/gi, "Limited");
-  n = n.replace(/\bl\.?t\.?d(?:\.|\b)/gi, "Limited");
-  n = n.replace(/\binc(?:\.|\b)/gi, "Incorporated");
-  n = n.replace(/\bi\.?n\.?c(?:\.|\b)/gi, "Incorporated");
-  n = n.replace(/\bcorp(?:\.|\b)/gi, "Corporation");
-  n = n.replace(/\bc\.?o\.?r\.?p(?:\.|\b)/gi, "Corporation");
-  n = n.replace(/\bco(?:\.|\b)/gi, "Company");
-  n = n.replace(/\bc\.?o(?:\.|\b)/gi, "Company");
+  n = n.replace(/\bl[\.\s]*t[\.\s]*d\b\.?/gi, "Limited");
+  n = n.replace(/\bi[\.\s]*n[\.\s]*c\b\.?/gi, "Incorporated");
+  n = n.replace(/\bc[\.\s]*o[\.\s]*r[\.\s]*p\b\.?/gi, "Corporation");
+  n = n.replace(/\b(?:co|c\.o)\b\.?/gi, "Company");
 
   // Clean semicolons and normalize commas without stripping dots and commas per Rule 4
   n = n.replace(/;+/g, " ");
@@ -8932,7 +9008,7 @@ function hasIndonesiaAddressSignal(text, country = "") {
   const cLower = (country || "").toLowerCase();
   if (cLower.includes("indonesia")) return true;
   if (!text) return false;
-  return /\b(?:jalan|jl\.?|jln\.?|gang|gg\.?|komp\.?|kompl\.?|perum\.?|kav\.?|kel\.?|kec\.?|kab\.?|desa|ds\.?|dusun|dsn\.?|dukuh|dk\.?|dkh\.?|lingkungan|lingk\.?|lk\.?|kodya|rukun\s+tetangga|rukun\s+warga|rt\.?\s*\d+\s*\/?\s*rw\.?\s*\d+|kawasan|mm2100|cibitung|jepara|pakis\s+aji|tahunan|mayong|pecangaan|welahan|bangsri|mlonggo|kalinyamatan|nalumsari|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|serang|cirebon|kudus|klaten|sukoharjo|pati|demak|pekalongan|tegal|magelang|salatiga|purwokerto|cilacap|jawa|central\s+java|west\s+java|east\s+java|north\s+sumatra|west\s+sumatra|south\s+sumatra|south\s+sulawesi|east\s+kalimantan|sumatra|sumatera|kalimantan|sulawesi|banten|bali|jateng|jabar|jatim|sumut|sumbar|sumsel|sulsel|sulut|sulteng|sultra|kaltim|kalbar|kalsel|kalteng|kalut|kepri|ntb|ntt|dki|diy)\b/i.test(text);
+  return /\b(?:jalan|jl\.?|jln\.?|gang|gg\.?|komp\.?|kompl\.?|perum\.?|perumahan|kav\.?|kavling|blok|kel\.?|kelurahan|kec\.?|kecamatan|kab\.?|kabupaten|kodya|kotamadya|prov\.?|prop\.?|provinsi|desa|ds\.?|dusun|dsn\.?|dukuh|dk\.?|dkh\.?|lingkungan|lingk\.?|lk\.?|kp\.?|kampung|rukun\s+tetangga|rukun\s+warga|rt\.?\s*\d+(?:\s*[-/,]\s*rw\.?\s*\d+)?|rw\.?\s*\d+|kawasan|kaw\.?\s*ind|mm2100|jababeka|ejip|kiic|cibitung|jepara|pakis\s+aji|batealit|tahunan|mayong|pecangaan|welahan|bangsri|mlonggo|kalinyamatan|nalumsari|tawangmas|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|serang|cilegon|cirebon|kudus|klaten|sukoharjo|pati|demak|pekalongan|tegal|magelang|salatiga|purwokerto|cilacap|pemalang|mojokerto|kediri|madiun|jambi|padang|banjarmasin|samarinda|pontianak|manado|jawa|central\s+java|west\s+java|east\s+java|north\s+sumatra|west\s+sumatra|south\s+sumatra|south\s+sulawesi|east\s+kalimantan|sumatra|sumatera|kalimantan|sulawesi|banten|bali|aceh|gorontalo|papua|maluku|jateng|jabar|jatim|sumut|sumbar|sumsel|sulsel|sulut|sulteng|sultra|sulbar|kaltim|kalbar|kalsel|kalteng|kalut|kaltara|kepri|malut|ntb|ntt|babel|dki|diy)\b/i.test(text);
 }
 
 function expandAddressAndStateAbbreviations(addr, country = "") {
@@ -9031,7 +9107,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])(\d{1,3})(?:st|nd|rd|th)?\s*(?:Flr?|Floor)\.?\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
   a = a.replace(/(^|[,\s])(?:G\s*\/\s*F\.?|GF\b|Gnd\s*Flr?\.?)/gi, "$1Ground Floor");
   a = a.replace(/(^|[,\s])(?:B\s*\/\s*F\.?|BF\b|Bsmt\b\.?)/gi, "$1Basement Floor");
-  a = a.replace(/(^|[,\s])B(\d{1,2})\b/gi, "$1Basement $2");
+  a = a.replace(/(^|[,\s])(?<!\b(?:Blok|Block|Kavling|Kav\.?|Lot|Plot|Unit|Suite|Ste\.?|Apartment|Apt\.?|Tower|Wing|Bay|Dock|Zone|Gate|Section|Sec\.?)\s+)B(\d{1,2})\b/gi, "$1Basement $2");
   a = a.replace(/(^|[,\s])Lvl\.?\s*(\d{1,3}|[A-Za-z])/gi, "$1Level $2");
 
   // 4. Administrative abbreviations
@@ -9047,12 +9123,12 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bhsien\b/gi, "County");
 
   // 5. Street types expansion (Global) - standard set only (avoids corrupting normal words)
-  a = a.replace(/\bpkwy\b\.?/gi, "Parkway");
-  a = a.replace(/\bpky\b\.?/gi, "Parkway");
+  a = a.replace(/\b(?:pkwy|pky|pwy)\b\.?/gi, "Parkway");
+  a = a.replace(/\bmwy\b\.?/gi, "Motorway");
   a = a.replace(/\bblvd\b\.?/gi, "Boulevard");
   a = a.replace(/\bbvd\b\.?/gi, "Boulevard");
   a = a.replace(/\bboul\b\.?/gi, "Boulevard");
-  a = a.replace(/\bcres\b\.?/gi, "Crescent");
+  a = a.replace(/\b(?:cresc|cres)\b\.?/gi, "Crescent");
   a = a.replace(/\btpke\b\.?/gi, "Turnpike");
   a = a.replace(/\bcswy\b\.?/gi, "Causeway");
   a = a.replace(/\bgdns\b\.?/gi, "Gardens");
@@ -9063,16 +9139,18 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bave\b\.?/gi, "Avenue");
   a = a.replace(/\bav\b\.?/gi, "Avenue");
   a = a.replace(/\bcnr\b\.?/gi, "Corner");
-  a = a.replace(/\btce\b\.?/gi, "Terrace");
-  a = a.replace(/\bter\b\.?/gi, "Terrace");
+  a = a.replace(/\b(?:terr|tce|ter)\b\.?/gi, "Terrace");
   a = a.replace(/\bpde\b\.?/gi, "Parade");
   a = a.replace(/\besp\b\.?/gi, "Esplanade");
   a = a.replace(/\brte\b\.?/gi, "Route");
   a = a.replace(/\bctr\b\.?/gi, "Centre");
+  a = a.replace(/\bplz\b\.?/gi, "Plaza");
+  a = a.replace(/\bhse\b\.?/gi, "House");
+  a = a.replace(/\bwks\b\.?/gi, "Works");
   a = a.replace(/\bcl\b\.?/gi, "Close");
-  a = a.replace(/(?<!,\s*)\bct\b\.?(?!\s*\d{5})/gi, "Court");
+  a = a.replace(/(?<!,\s*)\b(?:crt|ct)\b\.?(?!\s*\d{5})/gi, "Court");
   a = a.replace(/\bpl\b\.?/gi, "Place");
-  a = a.replace(/\bsq\b\.?/gi, "Square");
+  a = a.replace(/\b(?:sqr|sq)\b\.?/gi, "Square");
   a = a.replace(/\bst\b\.?(?!\s+(?:[A-Z][a-z']+\s+)*(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Rd|Ave|Dr|Ln|Blvd)\b)/gi, "Street");
   a = a.replace(/\brd\b\.?/gi, "Road");
   a = a.replace(/\bdr\b\.?(?!\s+[A-Z][a-z']+\b)/gi, "Drive");
@@ -9084,14 +9162,15 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bbyp\b\.?/gi, "Bypass");
   a = a.replace(/\bmfg\b\.?/gi, "Manufacturing");
   a = a.replace(/\bwhse\b\.?/gi, "Warehouse");
-  a = a.replace(/\bind\b\.?\s*est\b\.?/gi, "Industrial Estate");
-  a = a.replace(/\bind\b\.?\s+(?=(?:area|park|estate|zone|district|region|complex|center|centre|corridor|hub|facility)\b)/gi, "Industrial ");
+  a = a.replace(/\b(?:ind['’]?l|indl|ind)\b\.?\s*est\b\.?/gi, "Industrial Estate");
+  a = a.replace(/\b(?:ind['’]?l|indl|ind)\b\.?\s+(?=(?:area|park|estate|est\.?|zone|district|region|complex|center|centre|ctr\.?|corridor|hub|facility|rd|road|st|street|ave|avenue|dr|drive|way|blvd|pkwy)\b)/gi, "Industrial ");
   a = a.replace(/\bindl\b\.?/gi, "Industrial");
-  a = a.replace(/\bbus\.?\s+(?=(?:park|center|centre|district|hub|complex)\b)/gi, "Business ");
-  a = a.replace(/\btech\.?\s+(?=(?:park|center|centre|zone|hub|corridor)\b)/gi, "Technology ");
+  a = a.replace(/\bcomml?\b\.?\s+(?=(?:park|estate|est\.?|center|centre|ctr\.?|district|area|zone|hub|complex|rd|road)\b)/gi, "Commercial ");
+  a = a.replace(/\bbus\.?\s+(?=(?:park|estate|est\.?|center|centre|ctr\.?|district|hub|complex)\b)/gi, "Business ");
+  a = a.replace(/\btech\.?\s+(?=(?:park|estate|est\.?|center|centre|ctr\.?|zone|hub|corridor|blvd|rd|way|dr)\b)/gi, "Technology ");
   a = a.replace(/\bpk\b\.?/gi, "Park");
   a = a.replace(/\best\b\.?\s+(?=(?:park|area|zone)\b)/gi, "Estate ");
-  a = a.replace(/\b(\w+\s+(?:Industrial|Business|Trade|Trading|Commercial)\s+)est\b\.?/gi, "$1Estate");
+  a = a.replace(/\b([A-Za-z0-9]+\s+(?:Industrial|Business|Trade|Trading|Commercial|Manor|Factory|Enterprise|Logistics|Distribution|Technology|Science)\s+)est\b\.?/gi, "$1Estate");
   a = a.replace(/\bjln\b\.?/gi, "Jalan");
   a = a.replace(/\blrg\b\.?/gi, "Lorong");
   a = a.replace(/(^|[\s,])bt\.?\s+caves\b/gi, '$1Batu Caves');
@@ -9165,12 +9244,22 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/,\s*\b(?:pe|pei)\b\.?/gi, ", Prince Edward Island");
   }
 
-  // United States - Only when country is United States or has US zip or explicit US context
-  const isUsAddress = !isCanadaAddress && ((typeof isUnitedStatesLocation === "function" && isUnitedStatesLocation(a, country)) ||
+  // United States - Only when country is United States or has US zip or explicit US context (NEVER override Indonesia / non-US countries)
+  const nonUsCountries = [
+    "australia", "canada", "united kingdom", "india", "indonesia", "south africa", "malaysia",
+    "spain", "espana", "italy", "italia", "germany", "deutschland", "france", "taiwan",
+    "japan", "china", "singapore", "thailand", "vietnam", "philippines", "south korea",
+    "netherlands", "belgium", "switzerland", "austria", "poland", "portugal", "sweden",
+    "norway", "denmark", "finland", "ireland", "new zealand", "turkey", "türkiye", "czech republic",
+    "brazil", "mexico", "united arab emirates", "saudi arabia", "hong kong"
+  ];
+  const isUsAddress = !isCanadaAddress && !hasIndoHint && !nonUsCountries.includes(cLower) && (
+    (typeof isUnitedStatesLocation === "function" && isUnitedStatesLocation(a, country)) ||
     cLower.includes("united states") || cLower.includes("usa") || cLower.includes("america") ||
-    /\b\d{5}(?:-\d{4})?\b/.test(a) || (!country && /,\s*[A-Z]{2}\b/.test(a)));
+    /\b\d{5}(?:-\d{4})?\b/.test(a) || (!country && /,\s*[A-Z]{2}\b/.test(a))
+  );
 
-  if (isUsAddress && !["australia", "canada", "united kingdom", "india", "south africa", "malaysia", "spain", "espana", "italy", "italia", "germany", "deutschland", "france"].includes(cLower)) {
+  if (isUsAddress) {
     const usAbbreviations = [
       ["ca", "California"], ["tx", "Texas"], ["ny", "New York"], ["fl", "Florida"],
       ["il", "Illinois"], ["pa", "Pennsylvania"], ["oh", "Ohio"], ["ga", "Georgia"],
@@ -9427,31 +9516,37 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   const hasIndoSignal = hasIndoHint || hasIndonesiaAddressSignal(a, country);
 
   a = a.replace(/(^|[,\s])jln?\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Jalan ');
-  // Honorific street titles (e.g. "Jl. RA. Kardinah", "Jl.RA. Kardinah", "Jalan R. A. Kartini" -> "Jalan Raden Ajeng Kardinah")
+  // Honorific street titles (e.g. "Jl. RA. Kardinah", "Jl. Jend. A. Yani" -> "Jalan Jenderal Ahmad Yani")
   if (hasIndoSignal) {
-    a = a.replace(/(\bJalan\s+|,\s*)\bR\.?\s*A(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Raden Ajeng ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bK\.?\s*H(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Kiai Haji ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bH\.?\s*O\.?\s*S(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Haji Oemar Said ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bH\.?\s*R(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Haji Rangkayo ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bM\.?\s*H(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Mohammad Husni ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bM\.?\s*T(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Mas Tirtodarmo ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bW\.?\s*R(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Wage Rudolf ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bT\.?\s*B(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Tahi Bonar ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bD\.?\s*I\.?\s+(?=Panjaitan\b)/gi, '$1Donald Isaac ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bA\.?\s+(?=Yani\b)/gi, '$1Ahmad ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bS\.?\s+(?=Parman\b)/gi, '$1Siswondo ');
-    a = a.replace(/(\bJalan\s+)\bHj(?:\.|\b)\s*(?=[A-Za-z])/gi, '$1Hajjah ');
-    a = a.replace(/(\bJalan\s+)\bH\.(?=\s*[A-Z][a-z]+)/g, '$1Haji');
-    a = a.replace(/(\bJalan\s+|,\s*)\bLet\.?\s*Jen(?:d)?\.?\s*(?=[A-Za-z])/gi, '$1Letnan Jenderal ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bMay\.?\s*Jen(?:d)?\.?\s*(?=[A-Za-z])/gi, '$1Mayor Jenderal ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bBrig\.?\s*Jen(?:d)?\.?\s*(?=[A-Za-z])/gi, '$1Brigadir Jenderal ');
+    // Strip trailing JSON-LD ISO country code ", ID" when address is Indonesian
+    a = a.replace(/,\s*ID\s*$/i, "");
+    // Military / honorific ranks FIRST so chained "Jl. Jend. A. Yani" or "Jl. Letjen S. Parman" expands both rank and name
+    a = a.replace(/(\bJalan\s+|,\s*)\b(?:Let\.?\s*Jen(?:d)?|Letjen)\b\.?\s*(?=[A-Za-z])/gi, '$1Letnan Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\b(?:May\.?\s*Jen(?:d)?|Mayjen)\b\.?\s*(?=[A-Za-z])/gi, '$1Mayor Jenderal ');
+    a = a.replace(/(\bJalan\s+|,\s*)\b(?:Brig\.?\s*Jen(?:d)?|Brigjen)\b\.?\s*(?=[A-Za-z])/gi, '$1Brigadir Jenderal ');
     a = a.replace(/(\bJalan\s+|,\s*)\bJend\.?\s*(?=[A-Za-z])/gi, '$1Jenderal ');
     a = a.replace(/(\bJalan\s+|,\s*)\bKol\.?\s*(?=[A-Za-z])/gi, '$1Kolonel ');
     a = a.replace(/(\bJalan\s+|,\s*)\bKapt\.?\s*(?=[A-Za-z])/gi, '$1Kapten ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bProf\.?\s*(?=[A-Za-z])/gi, '$1Professor ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bIr\.?\s*(?=[A-Za-z])/gi, '$1Insinyur ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bDrs\.?\s*(?=[A-Za-z])/gi, '$1Doktorandus ');
-    a = a.replace(/(\bJalan\s+|,\s*)\bDr\.?\s*(?=[A-Z][a-z])/g, '$1Doktor ');
+
+    const streetOrRank = `(\\bJalan\\s+(?:(?:Letnan|Mayor|Brigadir)?\\s*Jenderal\\s+|Kolonel\\s+|Kapten\\s+)?|,\\s*)`;
+    a = a.replace(new RegExp(`${streetOrRank}\\bR\\.?\\s*A(?:\\.|\\b)\\s*(?=[A-Za-z])`, "gi"), '$1Raden Ajeng ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bK\\.?\\s*H(?:\\.|\\b)\\s*(?=[A-Za-z])`, "gi"), '$1Kiai Haji ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bH\\.?\\s*O\\.?\\s*S(?:\\.|\\b)\\s*(?=[A-Za-z])`, "gi"), '$1Haji Oemar Said ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bH\\.?\\s*R(?:\\.|\\b)\\s*(?=[A-Za-z])`, "gi"), '$1Haji Rangkayo ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bM\\.?\\s*H(?:\\.|\\b)\\s*(?=[A-Za-z])`, "gi"), '$1Mohammad Husni ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bM\\.?\\s*T(?:\\.|\\b)\\s*(?=[A-Za-z])`, "gi"), '$1Mas Tirtodarmo ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bW\\.?\\s*R(?:\\.|\\b)\\s*(?=[A-Za-z])`, "gi"), '$1Wage Rudolf ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bT\\.?\\s*B(?:\\.|\\b)\\s*(?=[A-Za-z])`, "gi"), '$1Tahi Bonar ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bD\\.?\\s*I\\.?\\s+(?=Panjaitan\\b)`, "gi"), '$1Donald Isaac ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bA\\.?\\s+(?=Yani\\b)`, "gi"), '$1Ahmad ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bS\\.?\\s+(?=Parman\\b)`, "gi"), '$1Siswondo ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bHj(?:\\.|\\b)\\s*(?=[A-Za-z])`, "gi"), '$1Hajjah ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bH\\.(?=\\s*[A-Z][a-z]+)`, "g"), '$1Haji');
+    a = a.replace(new RegExp(`${streetOrRank}\\bProf\\.?\\s*(?=[A-Za-z])`, "gi"), '$1Professor ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bIr\\.?\\s*(?=[A-Za-z])`, "gi"), '$1Insinyur ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bDrs\\.?\\s*(?=[A-Za-z])`, "gi"), '$1Doktorandus ');
+    a = a.replace(new RegExp(`${streetOrRank}\\bDr\\.?\\s*(?=[A-Z][a-z])`, "g"), '$1Doktor ');
+
     a = a.replace(/(^|[,\s])perum\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Perumahan ');
     a = a.replace(/(^|[,\s])dkh?\b\.?\s*(?=[A-Za-z])/gi, '$1Dukuh ');
     a = a.replace(/(^|[,\s])ds\b\.?\s*(?=[A-Za-z])/gi, '$1Desa ');
@@ -9463,6 +9558,16 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/(^|[,\s])lt\.?\s*(\d+)/gi, '$1Lantai $2');
     a = a.replace(/(^|[,\s])blk\.?\s*(?=[A-Za-z0-9])/gi, '$1Blok ');
     a = a.replace(/(^|[,\s])km\.?\s*(\d+)/gi, '$1Kilometer $2');
+    a = a.replace(/(^|[,\s])(?:tjg|tj)\b\.?\s+(?=[A-Za-z])/gi, '$1Tanjung ');
+    a = a.replace(/(^|[,\s])gn\b\.?\s+(?=[A-Za-z])/gi, '$1Gunung ');
+    a = a.replace(/\b(?:kaw|kws)\.?\s*(?=(?:industri|perindustrian|berikat|pergudangan|bisnis|niaga|terpadu|ekonomi|[A-Z][a-z]+)\b)/gi, 'Kawasan ');
+    a = a.replace(/\bperind\b\.?/gi, 'Perindustrian');
+    // Directional city suffixes: Jakarta Sel. -> Jakarta Selatan, Semarang Bar. -> Semarang Barat, etc.
+    a = a.replace(/\b(Jakarta|Semarang|Surabaya|Bandung|Bekasi|Tangerang|Bogor|Lampung|Minahasa)\s+(Sel|Tim|Bar|Utr?|Pst|Pus|Teng)\b\.?/gi, (m, city, dir) => {
+      const dirMap = { sel: "Selatan", tim: "Timur", bar: "Barat", ut: "Utara", utr: "Utara", pst: "Pusat", pus: "Pusat", teng: "Tengah" };
+      const fullDir = dirMap[dir.toLowerCase()];
+      return fullDir ? `${city} ${fullDir}` : m;
+    });
     const indoProvMap = [
       ["jabar", "Jawa Barat"], ["jateng", "Jawa Tengah"], ["jatim", "Jawa Timur"],
       ["sumut", "Sumatera Utara"], ["sumbar", "Sumatera Barat"], ["sumsel", "Sumatera Selatan"],
@@ -9471,13 +9576,13 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
       ["kaltim", "Kalimantan Timur"], ["kalbar", "Kalimantan Barat"], ["kalsel", "Kalimantan Selatan"],
       ["kalteng", "Kalimantan Tengah"], ["kalut", "Kalimantan Utara"], ["kaltara", "Kalimantan Utara"],
       ["kepri", "Kepulauan Riau"], ["malut", "Maluku Utara"],
-      ["ntb", "Nusa Tenggara Barat"], ["ntt", "Nusa Tenggara Timur"]
+      ["ntb", "Nusa Tenggara Barat"], ["ntt", "Nusa Tenggara Timur"],
+      ["babel", "Bangka Belitung"]
     ];
     for (const [abbr, full] of indoProvMap) {
       a = a.replace(new RegExp(`(^|[,\\s])\\b${abbr}\\b\\.?(?=[,\\s\\d]|$)`, "gi"), `$1${full}`);
     }
-    a = a.replace(/,\s*\bbabel\b\.?/gi, ', Bangka Belitung');
-    a = a.replace(/,\s*\bd\.?i\.?y\.?\b/gi, ', DI Yogyakarta');
+    a = a.replace(/(^|[,\s])\bd\.?i\.?y\b\.?(?=[,\s\d]|$)/gi, '$1DI Yogyakarta');
     a = a.replace(/(^|[,\s\/])\brt\.?\s*(\d+)/gi, '$1Rukun Tetangga $2');
     a = a.replace(/(^|[,\s\/])\brw\.?\s*(\d+)/gi, '$1Rukun Warga $2');
   }
@@ -9603,10 +9708,11 @@ function repairBlindlySeparatedCommas(addr) {
   const parkTypes = "Park|Estate|Zone|District|Centre|Center|Area";
   const parkQualifiers = "Trade|Trading|Industrial|Business|Technology|Tech|Science|Commercial|Retail|Enterprise|Logistics";
 
+  const premisePrefixGuard = "(?<!\\b(?:Unit|Lot|Plot|Suite|Ste|Building|Bldg|Floor|Flr?|Level|Block|Blk|Blok|Apartment|Apt|Flat|Shed|Warehouse|Factory|Kav|Kavling|Room|Rm|No|Number)\\s+)";
   // "Argent, Trade, Park" -> "Argent Trade Park"
-  a = a.replace(new RegExp(`\\b([A-Za-z0-9]+),\\s*(${parkQualifiers}),\\s*(${parkTypes})\\b`, "gi"), "$1 $2 $3");
+  a = a.replace(new RegExp(`${premisePrefixGuard}\\b([A-Za-z][A-Za-z0-9]*),\\s*(${parkQualifiers}),\\s*(${parkTypes})\\b`, "gi"), "$1 $2 $3");
   // "Argent, Trade Park" -> "Argent Trade Park"
-  a = a.replace(new RegExp(`\\b([A-Za-z0-9]+),\\s*(${parkQualifiers})\\s+(${parkTypes})\\b`, "gi"), "$1 $2 $3");
+  a = a.replace(new RegExp(`${premisePrefixGuard}\\b([A-Za-z][A-Za-z0-9]*),\\s*(${parkQualifiers})\\s+(${parkTypes})\\b`, "gi"), "$1 $2 $3");
   // "Trade, Park" -> "Trade Park"
   a = a.replace(new RegExp(`\\b(${parkQualifiers}),\\s*(${parkTypes})\\b`, "gi"), "$1 $2");
 
@@ -10405,6 +10511,11 @@ function cleanPhoneNumber(rawPhone, country) {
     return "";
   }
 
+  // Reject dummy placeholder phone patterns (e.g. 1234567890, 9876543210, 5551234567, or all-identical digits like 99999999)
+  if (/^(?:123456789\d?|0?123456789|9876543210?|5551234567|(\d)\1{6,})$/.test(digits)) {
+    return "";
+  }
+
   // Rule: STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (US 800/888/877/866/855/844/833, AU 1800/1300, UK 0800/0808/0500)
   // Note: International mobile prefixes like Indonesia 0888 (Smartfren -> 888...) are NOT North American toll-free!
   if (/^(?:1800|1300|0800|0808|0500)/.test(digits)) {
@@ -11034,6 +11145,11 @@ function detectCountryFromAddress(address) {
     /,\s*(?:QC|BC|AB|ON|MB|SK|NS|NB|NL|PE)(?:,\s*CA)?\s*$/i.test(address) ||
     /\b(?:Montreal|Toronto|Vancouver|Calgary|Edmonton|Ottawa|Winnipeg|Quebec\s*City|Hamilton|Kitchener|London|Victoria|Halifax|Longueuil|Laval|Gatineau|Burnaby|Richmond|Saskatoon|Regina)\b/i.test(lower) && /\b(?:Canada|CA|QC|BC|AB|ON|MB|SK)\b/i.test(address)) {
     return "Canada";
+  }
+
+  // Indonesia check MUST run before US 2-letter state code + 5-digit zip fallback (because Indonesia uses 5-digit postcodes and ISO code ", ID")
+  if (hasIndonesiaAddressSignal(address, "") || (/\b(?:jepara|semarang|surabaya|bandung|bekasi|tangerang|jakarta|jawa|kabupaten|kecamatan|jalan|perumahan)\b/i.test(lower) && /,\s*id\s*$/i.test(lower))) {
+    return "Indonesia";
   }
 
   const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
