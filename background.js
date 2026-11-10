@@ -1624,45 +1624,46 @@ async function crawlWebsite(targetUrl) {
     const allCrawlText = mainHtml + "\n" + contactHtml;
     companySocials = extractOfficialSocialLinks(allCrawlText);
 
-    // High-speed smart social check: if email is missing or fewer than 2 distinct emails found on website,
-    // check company's official Facebook and LinkedIn pages for primary/secondary emails.
+    // High-speed smart social check: ONLY if NO email was discovered on the website at all,
+    // check company's official Facebook/LinkedIn pages concurrently with tight 1.5s timeout.
     const socialCandidates = [companySocials.facebook, companySocials.linkedin].filter(Boolean);
-    if (allDiscoveredEmails.size < 2 && socialCandidates.length > 0) {
-      for (const socialUrl of socialCandidates) {
-        if (!socialUrl || fetchedUrls.has(socialUrl)) continue;
-        fetchedUrls.add(socialUrl);
-        try {
-          const sRes = await fetchDecodedHtml(socialUrl, {
-            timeoutMs: 3500,
-            headers: {
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-              "Sec-Fetch-Dest": "document",
-              "Sec-Fetch-Mode": "navigate",
-              "Sec-Fetch-Site": "none",
-              "Sec-Fetch-User": "?1",
-              "Upgrade-Insecure-Requests": "1"
-            }
-          });
-          if (sRes && sRes.ok && sRes.html) {
-            // Un-escape Facebook/LinkedIn JSON Unicode email obfuscation (\u0040 and %40)
-            const decodedSocialHtml = sRes.html.replace(/\\u0040/g, "@").replace(/%40/g, "@");
-            const rawSocialMatches = decodedSocialHtml.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-            for (const em of rawSocialMatches) {
-              const cleanEm = em.toLowerCase().trim();
-              if (isValidCorporateEmail(cleanEm) && !isUnwantedEmail(cleanEm)) {
-                allDiscoveredEmails.add(cleanEm);
-                updateEmailSource(emailSourceMap, cleanEm, socialUrl, finalUrl, targetUrl);
+    if (allDiscoveredEmails.size === 0 && socialCandidates.length > 0) {
+      const socialTasks = socialCandidates
+        .filter(url => url && !fetchedUrls.has(url))
+        .map(async (socialUrl) => {
+          fetchedUrls.add(socialUrl);
+          try {
+            const sRes = await fetchDecodedHtml(socialUrl, {
+              timeoutMs: 1500,
+              headers: {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "Upgrade-Insecure-Requests": "1"
+              }
+            });
+            if (sRes && sRes.ok && sRes.html) {
+              // Un-escape Facebook/LinkedIn JSON Unicode email obfuscation (\u0040 and %40)
+              const decodedSocialHtml = sRes.html.replace(/\\u0040/g, "@").replace(/%40/g, "@");
+              const rawSocialMatches = decodedSocialHtml.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+              for (const em of rawSocialMatches) {
+                const cleanEm = em.toLowerCase().trim();
+                if (isValidCorporateEmail(cleanEm) && !isUnwantedEmail(cleanEm)) {
+                  allDiscoveredEmails.add(cleanEm);
+                  updateEmailSource(emailSourceMap, cleanEm, socialUrl, finalUrl, targetUrl);
+                }
+              }
+              for (const em of extractEmailsFromHtml(decodedSocialHtml, finalUrl)) {
+                allDiscoveredEmails.add(em);
+                updateEmailSource(emailSourceMap, em, socialUrl, finalUrl, targetUrl);
               }
             }
-            for (const em of extractEmailsFromHtml(decodedSocialHtml, finalUrl)) {
-              allDiscoveredEmails.add(em);
-              updateEmailSource(emailSourceMap, em, socialUrl, finalUrl, targetUrl);
-            }
-          }
-        } catch (e) { }
-        if (allDiscoveredEmails.size >= 2) break;
-      }
+          } catch (e) { }
+        });
+      await Promise.allSettled(socialTasks);
     }
   } catch (err) {
     fetchError = err.message || "Failed to fetch website";

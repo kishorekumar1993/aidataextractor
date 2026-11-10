@@ -1811,7 +1811,7 @@
     } else if (cLower.includes("spain") || cLower.includes("espana")) {
       if (len !== 9) return "";
     } else {
-      if (len < 7 || len > 12) return "";
+      if (len < 8 || len > 12) return "";
     }
 
     return digits;
@@ -2019,6 +2019,7 @@
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
     const elements = detectFormElements();
+    clearFilledFields(); // Reset all form fields to prevent ghost bleed-through from previous record
     let filledCount = 0;
 
     const allowedWorkingTypes = new Set([
@@ -2206,9 +2207,10 @@
 
     // 9. Email ID
     try {
-      if (elements.emailId && data.emailId) {
-        let cleanEmail = stripTrailingContactWordsFromEmail(String(data.emailId).trim());
-        if (setInputValue(elements.emailId, cleanEmail)) {
+      if (elements.emailId) {
+        let cleanEmail = data.emailId ? stripTrailingContactWordsFromEmail(String(data.emailId).trim()) : "";
+        setInputValue(elements.emailId, cleanEmail);
+        if (cleanEmail) {
           highlightField(elements.emailId);
           filledCount++;
         }
@@ -2219,26 +2221,27 @@
     try {
       if (elements.secondaryEmailId) {
         try { elements.secondaryEmailId.setAttribute("autocomplete", "off"); } catch (e) { }
-        let secEmail = stripTrailingContactWordsFromEmail(String(data.secondaryEmailId || "").trim());
-        const primEmail = stripTrailingContactWordsFromEmail(String(data.emailId || "").trim()).toLowerCase();
+        let secEmail = data.secondaryEmailId ? stripTrailingContactWordsFromEmail(String(data.secondaryEmailId || "").trim()) : "";
+        const primEmail = data.emailId ? stripTrailingContactWordsFromEmail(String(data.emailId || "").trim()).toLowerCase() : "";
         if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(secEmail) || secEmail.toLowerCase() === primEmail) {
           secEmail = "";
         }
         setInputValue(elements.secondaryEmailId, secEmail);
-        if (secEmail) highlightField(elements.secondaryEmailId);
-        filledCount++;
+        if (secEmail) {
+          highlightField(elements.secondaryEmailId);
+          filledCount++;
+        }
       }
     } catch (e) { console.warn("Error setting secondaryEmailId:", e); }
 
     // 11. Phone Number (Digits only, country code and leading zeroes stripped)
     try {
-      if (elements.phoneNumber && data.phoneNumber) {
-        let phoneVal = String(data.phoneNumber).trim();
-        if (phoneVal && phoneVal !== "Not Available") {
-          if (setInputValue(elements.phoneNumber, phoneVal)) {
-            highlightField(elements.phoneNumber);
-            filledCount++;
-          }
+      if (elements.phoneNumber) {
+        let phoneVal = (data.phoneNumber && data.phoneNumber !== "Not Available") ? String(data.phoneNumber).trim() : "";
+        setInputValue(elements.phoneNumber, phoneVal);
+        if (phoneVal) {
+          highlightField(elements.phoneNumber);
+          filledCount++;
         }
       }
     } catch (e) { console.warn("Error setting phoneNumber:", e); }
