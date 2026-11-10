@@ -286,6 +286,16 @@ runTest('Global mobile numbers (12-digit ID, Smartfren 0888, UK, AU) & address e
   );
 });
 
+// 15. Global Company Name Abbreviation Expansion
+runTest('Company name abbreviations expand to full legal & industry forms', () => {
+  assert.strictEqual(ctx.expandCompanyAbbreviations("Amoretti Bros. LLC", "United States").trim(), "Amoretti Brothers Limited Liability Company");
+  assert.strictEqual(ctx.expandCompanyAbbreviations("Acme Mfg. Co., Ltd.", "Taiwan").trim(), "Acme Manufacturing Company, Limited");
+  assert.strictEqual(ctx.expandCompanyAbbreviations("Global (Malaysia) Sdn Bhd", "Malaysia").replace(/\s+/g, " ").trim(), "Global Malaysia Sendirian Berhad");
+  assert.strictEqual(ctx.expandCompanyAbbreviations("PT Karya Ind. Tbk", "Indonesia").trim(), "Perseroan Terbatas Karya Industries Terbuka");
+  assert.strictEqual(ctx.expandCompanyAbbreviations("Krupp Tech. GmbH", "Germany").trim(), "Krupp Technology Gesellschaft mit beschränkter Haftung");
+  assert.strictEqual(ctx.expandCompanyAbbreviations("Pacific Precision Pty Ltd", "Australia").trim(), "Pacific Precision Proprietary Limited");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');

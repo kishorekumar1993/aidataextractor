@@ -4300,7 +4300,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyName: {
       type: "STRING",
-      description: "Official corporate name in Title Case where EVERY single word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited, PEM Fountain Company, Hsin Hsin Metals, Limited). CRITICAL QC RULE: DO NOT expand symbols like '&' into 'And' (keep '&' as it is: e.g. 'H&R Manufacturing', 'Johnson & Johnson'). If a comma precedes the corporate legal suffix on the website (e.g. 'HSINHSIN METALS, LTD.'), you MUST retain the comma (e.g. 'Hsin Hsin Metals, Limited'). DO NOT invent or add 'Company' if not in the official name. Brand acronyms/trademarks must be in UPPERCASE (e.g. PEM, BMW, AKS, HR, CRP). Expand all corporate abbreviations to full form (Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated). Empty string \"\" if websiteStatus is not Working."
+      description: "Official corporate name in full expanded form and Title Case where EVERY word starts with a Capital letter (e.g. Inter Outstanding Electronics Incorporated, H&R Manufacturing, Web Rack Industrial Company Limited, PEM Fountain Company, Hsin Hsin Metals, Limited, Commanditaire Vennootschap Aulia Jati Indofurni). MANDATORY FULL FORM EXPANSION: Expand ALL legal entity and business abbreviations to full form: Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company, Pty Ltd -> Proprietary Limited, Pte Ltd/Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad, PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima/Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers. Remove brackets ()/[] keeping inner text. Keep '&' as '&' (never 'And'). Keep comma before corporate suffix if on site (e.g. 'Hsin Hsin Metals, Limited'). Keep uppercase brand acronyms (PEM, BMW, AKS). Empty string \"\" if websiteStatus is not Working."
     },
     countryName: {
       type: "STRING",
@@ -4402,10 +4402,16 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
 - Mark "Available" if site has dedicated About Us, Company Profile, history, mission, or factory overview. Otherwise "Not Available".
 
 4. COMPANY NAME (CRITICAL QC RULE):
-- Extract the official legal registered company name including corporate suffix (Limited, Ltd, LLC, Inc, Corporation, GmbH, Pty Ltd, Sdn Bhd).
-- Do NOT truncate names containing "&" or "and" (e.g. "CJ Tool & Mouldings Limited", NEVER omit words before &).
-- Format in Title Case where EVERY word starts with a capital letter.
-- Separate corporate suffix with a comma if standard (e.g. "ECU Testing, Limited" or "Mocap, Limited Liability Company").
+- Extract the official legal registered company name in COMPLETE FULL FORM.
+- EXPAND ALL CORPORATE & INDUSTRY ABBREVIATIONS:
+  * Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company.
+  * Pty Ltd -> Proprietary Limited, Pte Ltd / Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad.
+  * PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata.
+  * Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises.
+- Remove brackets ()/[] keeping inner text (e.g. "Company (Malaysia) Sdn Bhd" -> "Company Malaysia Sendirian Berhad"). If country name is inside company name, keep it as is.
+- Do NOT truncate names containing "&" or "and" (e.g. "CJ Tool & Mouldings Limited", NEVER omit words before & or expand "&" to "And").
+- Format in Title Case where EVERY word starts with a capital letter (keep brand acronyms like PEM, BMW in UPPERCASE). Remove special characters at start/end.
+- Preserve comma before corporate suffix if standard or present on website (e.g. "ECU Testing, Limited", "Mocap, Limited Liability Company").
 
 5. COUNTRY NAME (CRITICAL QC RULE):
 - Format full official name in Title Case (e.g. "United States Of America", "United Kingdom", "Australia", "Taiwan", "Germany").
@@ -4415,7 +4421,7 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
 - FULL PHYSICAL HEADQUARTERS ADDRESS: Include premise/building/suite, street number, street name, suburb/town, city, and state/county.
 - STRICT NO EXTRA WORDS RULE: Retain authentic address words from the website. Never invent words not present (e.g. do not add "City" or "Number" if not written).
 - STRICT PRESERVATION: NEVER drop leading street/building numbers (e.g. "12110 Best Place" -> keep 12110; "40 Sarah Street" -> keep 40).
-- EXPAND ALL ABBREVIATIONS: St -> Street, Rd -> Road, Ave -> Avenue, Dr -> Drive, Blvd -> Boulevard, Ste -> Suite, Bldg -> Building, Flr/Fl -> Floor, No. -> Number, Ln -> Lane, Aly -> Alley, Sec -> Section, VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland, etc.
+- EXPAND ALL ABBREVIATIONS: St -> Street (but St. before saint name -> Saint), Rd -> Road, Ave -> Avenue, Dr -> Drive (but Dr. before person name -> Doctor/Doktor), Blvd -> Boulevard, Ste -> Suite, Bldg -> Building, Flr/Fl -> Floor, No. -> Number, Ln -> Lane, Aly -> Alley, Sec -> Section, Ind. Est. -> Industrial Estate, Jl. -> Jalan, RA. -> Raden Ajeng, VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland, Northants -> Northamptonshire, etc. Remove brackets ()/[].
 - STRIP ONLY: Postal codes (ZIP codes), Country name, and Telephone/Fax numbers.
 - COMMA SEPARATION:
   * Put commas between structural components: [Premise], [Street], [Suburb/Town/City], [State/County].
@@ -7936,6 +7942,16 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:constr|const)\b\.?\s*(?=(?:solutions?|services?|systems?|materials?|equipment|co|company|ltd|corp|inc)\b)/gi, "Construction ");
   n = n.replace(/\bpharm\b\.?/gi, "Pharmaceuticals");
   n = n.replace(/\btelecom\b\.?/gi, "Telecommunications");
+  n = n.replace(/\bbros\b\.?/gi, "Brothers");
+  n = n.replace(/\b(?:enterp|ent)\b\.?(?=\s|$|,)/gi, "Enterprises");
+  n = n.replace(/\bhldgs\b\.?/gi, "Holdings");
+  n = n.replace(/\bhldg\b\.?/gi, "Holding");
+  n = n.replace(/\binstr\b\.?/gi, "Instruments");
+  n = n.replace(/\bmech\b\.?/gi, "Mechanical");
+  n = n.replace(/\bhyd\b\.?/gi, "Hydraulics");
+  n = n.replace(/\bplast\b\.?/gi, "Plastics");
+  n = n.replace(/\bprec\b\.?/gi, "Precision");
+  n = n.replace(/\bapp\b\.?(?=\s+(?:co|company|corp|ltd|limited|inc|llc|mfg)\b)/gi, "Apparatus");
 
   // 19. United States & Global Legal Entities (must run after Mfg/Ind compound rules)
   n = n.replace(/\bpllc(?:\.|\b)/gi, "Professional Limited Liability Company");
