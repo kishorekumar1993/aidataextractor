@@ -927,6 +927,88 @@ runTest('Placeholder emails/phones blocked, ID vs Idaho fixed, company/address e
   assert.strictEqual(symAndAbbr.companyAddress, "Unit 2, Industrial Estate, Kettering, Northamptonshire");
 });
 
+// Test 27: Strip unwanted narrative prose clauses & boilerplate labels from Company Name, and support Sp. z o.o. / Ges.m.b.H.
+runTest('Strip unwanted prose clauses & field labels from company names and support Polish Sp. z o.o.', () => {
+  const aboutHtml = `<html><body><p>In 1997, AK Engineering was transformed into Mechatronic Systems GmbH and began developing products. Company is renamed Mechatronic Systems GmbH.</p></body></html>`;
+  const contactHtml = `<html><body><p>Company information</p><p>Company name: Mechatronic Engineering Sp.z.o.o</p><footer>© 2026 Mechatronic Engineering Sp.z.o.o All Rights Reserved.</footer></body></html>`;
+  const mainHtml = `<html><head><script type="application/ld+json">{"@type":"Organization","name":"Mechatronic Systems","legalName":"Mechatronic Engineering Sp. z o.o."}</script></head><body></body></html>`;
+
+  const aboutCands = ctx.extractLegalCandidatesFromHtml(aboutHtml);
+  for (const c of aboutCands) {
+    assert.ok(!/\b(?:was|transformed|into|is|renamed)\b/i.test(c), `Prose word leaked into candidate: ${c}`);
+  }
+  assert.ok(aboutCands.includes("Mechatronic Systems GmbH"));
+
+  const contactCands = ctx.extractLegalCandidatesFromHtml(contactHtml);
+  assert.ok(contactCands.includes("Mechatronic Engineering Sp.z.o.o"), "Expected labeled Polish company name");
+  assert.strictEqual(ctx.extractJsonLdOrganizationName(mainHtml), "Mechatronic Engineering Sp. z o.o.");
+  assert.strictEqual(ctx.hasCompleteLegalSuffix("Mechatronic Engineering Sp.z.o.o"), true);
+
+  assert.strictEqual(
+    ctx.cleanCompanyPrefixesAndSuffixes("Engineering Was Transformed Into Mechatronic Systems GmbH"),
+    "Mechatronic Systems GmbH"
+  );
+  assert.strictEqual(
+    ctx.cleanCompanyPrefixesAndSuffixes("Company information Company name: Acme Ltd - Leading Supplier"),
+    "Acme Ltd"
+  );
+  assert.strictEqual(
+    ctx.cleanCompanyPrefixesAndSuffixes("Welcome to our website Beta Corp."),
+    "Beta Corp"
+  );
+  assert.strictEqual(
+    ctx.expandCompanyAbbreviations("Alpine Optics Ges.m.b.H.", "Austria"),
+    "Alpine Optics Gesellschaft mit beschränkter Haftung"
+  );
+
+  const mechatronicCrawl = {
+    originalUrl: "http://www.mechatronic-systems.com",
+    finalUrl: "https://mechatronic-systems.com/",
+    mainHtml,
+    contactHtml,
+    copyrightText: "Mechatronic Engineering Sp.z.o.o",
+    legalCompanyCandidates: Array.from(new Set([...contactCands, ...aboutCands])),
+    logoText: "Mechatronic Systems",
+    title: "SMT machines | Mechatronic Systems",
+    addressCandidates: [{ raw: "Innowacyjna 6, Gardno, 74-100 Gryfino", source: "contact" }],
+    emails: ["info@mechatronic-systems.com"],
+    phones: ["693893855"]
+  };
+
+  const aiFixed = ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "Engineering Was Transformed Into Mechatronic Systems GmbH",
+    countryName: "Poland",
+    companyAddress: "Innowacyjna 6, Gardno, Gryfino",
+    state: "Not Available",
+    city: "Not Available",
+    emailId: "info@mechatronic-systems.com",
+    phoneNumber: "693893855",
+    productImages: "3"
+  }, mechatronicCrawl, {});
+  assert.ok(!/transformed|into|was/i.test(aiFixed.companyName), `AI companyName retained prose noise: ${aiFixed.companyName}`);
+  assert.strictEqual(aiFixed.companyName, "Mechatronic Systems Gesellschaft Mit Beschränkter Haftung");
+
+  const aiCleanShort = ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "Mechatronic Systems",
+    countryName: "Poland",
+    companyAddress: "Innowacyjna 6, Gardno, Gryfino",
+    state: "Not Available",
+    city: "Not Available",
+    emailId: "info@mechatronic-systems.com",
+    phoneNumber: "693893855",
+    productImages: "3"
+  }, mechatronicCrawl, {});
+  assert.strictEqual(aiCleanShort.companyName, "Mechatronic Engineering Spółka Z Ograniczoną Odpowiedzialnością");
+});
+
 console.log('\n========================================================');
 console.log(`Results: ${passed} Passed, ${failed} Failed`);
 console.log('========================================================');

@@ -1003,6 +1003,50 @@ function stripBoundarySpecialChars(str) {
  * Strips navigational, CTA, and page-context prefixes and marketing taglines from company names.
  * Ensures official registered names are clean, complete, and free of extraneous artifacts.
  */
+const LEGAL_ENTITY_SUFFIX_CORE =
+  "Pty\\.?\\s*Ltd\\.?|Proprietary\\s*Limited|Limited|Ltd\\.?|Inc\\.?|Incorporated|LLC|LLP|PLLC|Corp\\.?|Corporation|Co\\.,?\\s*Ltd\\.?|Company,?\\s*Limited|Pte\\.?\\s*Ltd\\.?|Pvt\\.?\\s*Ltd\\.?|Sdn\\.?\\s*Bhd\\.?|Sendirian\\s*Berhad|Berhad|GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|Ges\\.?\\s*m\\.?\\s*b\\.?\\s*H\\.?|Gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+Haftung|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\\.?L\\.?U\\.?|S\\.?A\\.?U\\.?|S\\.?L\\.?|S\\.?A\\.?|Sociedad\\s*Limitada(?:\\s*Unipersonal)?|Sociedad\\s*An[oó]nima(?:\\s*Unipersonal)?|S\\.?r\\.?l\\.?s?|S\\.?p\\.?A\\.?|Besloten\\s*Vennootschap|Naamloze\\s*Vennootschap|B\\.?V\\.?|N\\.?V\\.?|Tbk\\.?|Terbuka|Sp\\.?\\s*z\\.?\\s*o\\.?\\s*o\\.?|Sp[oó][lł]ka\\s+z\\s+ograniczon[aą]\\s+odpowiedzialno[sś]ci[aą]|Sp\\.?\\s*k\\.?|SARL|SASU?|EURL|SPRL|BVBA|s\\.?r\\.?o\\.?|d\\.?o\\.?o\\.?|Kft\\.?|Zrt\\.?|Ltda\\.?|ApS|Oyj?";
+
+const COMPANY_PROSE_NOISE_RE =
+  /\b(?:was|were|is|are|am|been|being|became|become|began|started|transformed|renamed|converted|rebranded|relocated|acquired|merged|operates|provides|offers|produces|manufactures|supplies|distributes|specializes|into|onto|because|although|however|therefore|which|whose|whom)\b/i;
+
+function hasCompanyProseNoise(name) {
+  if (!name || typeof name !== "string") return false;
+  if (COMPANY_PROSE_NOISE_RE.test(name)) return true;
+  // Detect 3+ consecutive lowercase non-connector words (narrative sentence body text)
+  const words = name.trim().split(/\s+/);
+  const allowedLowerConnectors = /^(?:of|and|for|the|in|at|on|by|to|from|with|van|der|den|von|und|mit|für|fur|auf|aus|des|les|los|las|del|de|da|do|du|la|le|et|y|e|a|u|o|z|w|i|mbh|beschränkter|beschrankter|haftung|ograniczoną|odpowiedzialnością|responsabilité|responsabilite|limitée|limitee|responsabilità|azioni|capital|variable)$/i;
+  let lowerRun = 0;
+  for (const w of words) {
+    const cleanW = w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    if (!cleanW) continue;
+    if (/^[a-z]{3,}$/.test(cleanW) && !allowedLowerConnectors.test(cleanW)) {
+      lowerRun++;
+      if (lowerRun >= 2) return true;
+    } else {
+      lowerRun = 0;
+    }
+  }
+  return false;
+}
+
+function stripProseClausesFromCompanyName(rawName) {
+  if (!rawName || typeof rawName !== "string") return "";
+  let n = rawName.trim();
+  // Strip chained transition/narrative clauses where the actual target entity follows on the right
+  n = n.replace(/^.*?\b(?:(?:was|were|is|are|has\s+been|have\s+been)?\s*(?:transformed|converted|rebranded)\s+(?:into|to)|(?:was|were|is|are|has\s+been|have\s+been)\s+(?:renamed|called|known\s+as)|changed\s+(?:its|our|the)\s+name\s+to|(?:(?:this\s+)?(?:website|site|store|shop|portal|platform|domain)\s+(?:is\s+)?)?(?:operated|owned|managed|run)\s+by|all\s+products\s+(?:are\s+)?(?:manufactured|made|supplied|distributed)\s+by)\b\s*[:\-–—]?\s*/i, "").trim();
+  // Strip explicit leading field labels even when chained (e.g. "Company information Company name: X")
+  let prev = "";
+  while (prev !== n) {
+    prev = n;
+    n = n.replace(/^(?:company\s*information|contact\s*details|company\s*details|company\s*name|legal\s*name|registered\s*name|official\s*name|business\s*name|entity\s*name|organization\s*name|vendor\s*name|nazwa\s*firmy|firma|name)\b\s*[:\-–—]?\s*/i, "").trim();
+  }
+  return n;
+}
+
+/**
+ * Strips navigational, CTA, and page-context prefixes and marketing taglines from company names.
+ * Ensures official registered names are clean, complete, and free of extraneous artifacts.
+ */
 function cleanCompanyPrefixesAndSuffixes(rawName) {
   if (!rawName || typeof rawName !== "string") return "";
   let name = rawName.trim();
@@ -1019,25 +1063,29 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   // Remove special characters from the beginning per Rule 4
   name = name.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
 
+  // 1a. Strip embedded prose/transition clauses & field labels (e.g. "Engineering Was Transformed Into Mechatronic Systems GmbH")
+  name = stripProseClausesFromCompanyName(name);
+
   // 1b. Strip embedded CTA / navigational breadcrumbs if present:
   // e.g. "Aerospace Contact Us Data Plastics Ltd" -> "Data Plastics Ltd"
-  name = name.replace(/^.*?\b(?:contact(?:\s+us)?|about(?:\s+us)?|welcome(?:\s+to(?:\s+the\s+official\s+website\s+of)?)?|get\s+in\s+touch(?:\s+with)?|reach\s+us|visit\s+us|find\s+us)\b\s*[:\-–—|•·*\/]?\s*/i, "").trim();
+  name = name.replace(/^.*?\b(?:contact(?:\s+us)?|about(?:\s+us)?|welcome(?:\s+to(?:\s+(?:the|our)\s+(?:official\s+)?(?:website|site|home\s*page|store|portal)(?:\s+of)?)?)?|get\s+in\s+touch(?:\s+with)?|reach\s+us|visit\s+us|find\s+us)\b\s*[:\-–—|•·*\/]?\s*/i, "").trim();
   name = name.replace(/^(?:(?:[A-Za-z0-9\s]{1,30}\s+[•·|*]\s+)|(?:(?:home|about(?:\s+us)?|contact(?:\s+us)?|products?|services?|shop|store|catalog|news|blog)\s*\/\s+))/i, "").trim();
 
   // 2. Strip common unwanted leading prefixes (iterative loop to handle chained prefixes like "Submit scroll to top Contact")
-  const prefixRegex = /^(?:(?:contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+the\s+official\s+website\s+of)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo|facebook|instagram|linkedin|twitter|youtube|pinterest|tiktok|vimeo|social\s*media|follow\s*us|connect\s*with\s*us)\b[\s\-_|:•·,]*)+/i;
+  const prefixRegex = /^(?:(?:company\s*information|company\s*details|contact\s*details|company\s*name|legal\s*name|registered\s*name|official\s*name|business\s*name|nazwa\s*firmy|firma|contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+(?:the|our)\s+(?:official\s+)?(?:website|site|home\s*page|store|portal)(?:\s+of)?)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo|facebook|instagram|linkedin|twitter|youtube|pinterest|tiktok|vimeo|social\s*media|follow\s*us|connect\s*with\s*us)\b[\s\-_|:•·,]*)+/i;
 
   let prev = "";
   while (prev !== name) {
     prev = name;
+    name = stripProseClausesFromCompanyName(name);
     name = name.replace(prefixRegex, "").trim();
     name = name.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
   }
 
-  // 3. Strip trailing marketing taglines / SEO categories if corporate legal suffix is already present
+  // 3. Strip trailing marketing taglines / SEO categories / profile fields if corporate legal suffix is already present
   // e.g. "Danzer UK Limited - Timber Merchants Suppliers of Hardwoods" -> "Danzer UK Limited"
   // e.g. "YUKIWA SEIKO USA INC. Drill Chucks, Tool Holder..." -> "YUKIWA SEIKO USA INC."
-  const legalSuffixCutoff = /\b(Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company,\s*Limited|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Berhad|GmbH|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada|Sociedad\s*An[oó]nima|Joint\s+Stock\s+Company|Societas\s+Europaea|Limitada|Ltda\.?|P?JSC|Spółka\s+z\s+ograniczoną\s+odpowiedzialnością|Besloten\s+Vennootschap|Naamloze\s+Vennootschap|Societ[aà]\s+per\s+Azioni|Societ[aà]\s+a\s+Responsabilit[aà]\s+Limitata|Aktiebolag|Aksjeselskap|Osakeyhtiö)\b(?:\s*[-–—|:•·,]\s*|\s+(?:Drill|Tool|Rotary|Spring|Chucks|Holder|Tables|Collets|Manufacturer|Supplier|Wholesaler|Distributor|Products|Services|Solutions|Store|Shop|Leading|Specialists|Machining|Precision|Online|Official)\b|\.\s+[A-Z]).*$/i;
+  const legalSuffixCutoff = new RegExp(`\\b(${LEGAL_ENTITY_SUFFIX_CORE}|Limited\\s+Liability\\s+(?:Company|Partnership)|Public\\s+Limited\\s+Company|Proprietary\\s+Limited|Private\\s+Limited|Sendirian\\s+Berhad|Joint\\s+Stock\\s+Company|Societas\\s+Europaea|Soci[eé]t[eé]\\s+[aà]\\s+Responsabilit[eé]\\s+Limit[eé]e|Soci[eé]t[eé]\\s+par\\s+Actions\\s+Simplifi[eé]e|Societ[aà]\\s+per\\s+Azioni|Societ[aà]\\s+a\\s+Responsabilit[aà]\\s+Limitata|Aktiebolag|Aksjeselskap|Osakeyhti[oö])\\b(?:\\s*[-–—|:•·,]\\s*|\\s+(?:Drill|Tool|Rotary|Spring|Chucks|Holder|Tables|Collets|Manufacturer|Supplier|Wholesaler|Distributor|Products|Services|Solutions|Store|Shop|Leading|Specialists|Machining|Precision|Online|Official|CEO|VAT|NIP|KRS|Tel|Phone|Email|Address|All\\s+Rights|Is\\s+A|Began|Started|Provides|Offers|Manufactures)\\b|\\.\\s+[A-Z]).*$`, "i");
   name = name.replace(legalSuffixCutoff, "$1");
 
   // 4. Strip trailing SEO taglines even without separator if starts with " - Manufacturer of...", " | Suppliers of..."
@@ -1054,56 +1102,82 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
  */
 function extractLegalCandidatesFromHtml(html) {
   if (!html) return [];
-  const text = html.replace(/<script[\s\S]*?<\/script>/gi, " ")
+  const rawText = html.replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<\/(?:a|span|p|div|h[1-6]|li|td|tr|th|header|footer|nav|section|article|aside|caption|blockquote|ul|ol|table|br\s*\/?)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ");
+  const text = decodeHtmlEntities(rawText);
 
   const candidates = new Set();
 
   function addCleanCandidate(rawCand) {
     if (!rawCand) return;
-    // Strip leading words at the very beginning like "and", "the", "or", "from", "with", "between", "fault arises and"
-    let candidateToClean = rawCand.replace(/^(?:and|or|by|for|with|from|including|between|the|to|at|arises)\s+/i, "").trim();
+    // Strip leading connector words at the very beginning like "and", "the", "or", "from", "with", "between"
+    let candidateToClean = rawCand.replace(/^(?:and|or|by|for|with|from|including|between|the|to|at|arises|into|as)\s+/i, "").trim();
     const cleaned = cleanCompanyPrefixesAndSuffixes(candidateToClean || rawCand);
-    if (!cleaned) return;
+    if (!cleaned || hasCompanyProseNoise(cleaned)) return;
     // Reject third-party job portals, HR platforms, web hosts, CMS, analytics, payment gateways
     if (/\b(?:Dayforce|Ceridian|Workday|BambooHR|Zenefits|Paychex|ADP|UltiPro|Greenhouse|Lever|Jobvite|SmartRecruiters|iCIMS|WordPress|Shopify|Wix|Squarespace|Cloudflare|Google|Facebook|Meta|Twitter|LinkedIn|Instagram|YouTube|Adobe|Salesforce|PayPal|Stripe)\b/i.test(cleaned)) {
       return;
     }
-    if (cleaned.length >= 3 && cleaned.length <= 60 && !/^(?:and|the|for|with|from|including|our|your|their|loss|damage|expenses|costs)\b/i.test(cleaned) && !/^all\s+(?:rights|damages|losses|claims|disclaimers)\b/i.test(cleaned)) {
+    if (cleaned.length >= 3 && cleaned.length <= 75 && !/^(?:and|the|for|with|from|including|our|your|their|loss|damage|expenses|costs)\b/i.test(cleaned) && !/^all\s+(?:rights|damages|losses|claims|disclaimers)\b/i.test(cleaned)) {
       candidates.add(cleaned);
     }
   }
 
-  // Pattern 1: ABN / ACN / CIF / NIF preceded or followed by company name (e.g. "Custom Flatpack Pty Ltd ... ABN : 37 139 481 575" or "Empresa S.L. ... CIF: B-12345678")
-  const abnNearRegex = /([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))[^\.\n\r<]{0,60}?(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?/gi;
+  // Pattern 0: Explicit labeled company / legal name lines (e.g. "Company name: Mechatronic Engineering Sp.z.o.o")
+  const labeledNameRegex = /(?:^|[\n\r|])\s*(?:company\s*name|legal\s*name|registered\s*name|official\s*name|business\s*name|nazwa\s*firmy|firma)\s*[:：]\s*([^\n\r|<]{3,85})/gi;
   let m;
+  while ((m = labeledNameRegex.exec(text)) !== null) {
+    if (m[1]) {
+      const cut = m[1].split(/\s+(?:CEO|VAT|NIP|KRS|REGON|ABN|ACN|Tel|Phone|E-?mail|Address|Localization)\b[:：\s]?/i)[0].trim();
+      if (cut && cut.length >= 3) addCleanCandidate(cut);
+    }
+  }
+
+  // Pattern 1: ABN / ACN / CIF / NIF preceded or followed by company name
+  const abnNearRegex = new RegExp(`([A-Z0-9][A-Za-z0-9\\u00C0-\\u024F&,.'\\- ]{2,55}\\s+(?:${LEGAL_ENTITY_SUFFIX_CORE}))[^\\.\\n\\r<]{0,60}?(?:ABN|ACN|Registration\\s*No|Reg\\s*No|CIF|NIF|VAT|NIP|KRS)[\\s:]*[A-Z0-9][- ]*\\d[\\d\\s\\-]{4,15}[A-Z0-9]?`, "gi");
   while ((m = abnNearRegex.exec(text)) !== null) {
     if (m[1]) addCleanCandidate(m[1].trim());
   }
 
-  // Reverse: ABN / CIF followed by name
-  const abnBeforeRegex = /(?:ABN|ACN|Registration\s*No|Reg\s*No|CIF|NIF)[\s:]*[A-Z0-9][- ]*\d[\d\s\-]{4,15}[A-Z0-9]?[^\.\n\r<]{0,60}?([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))/gi;
+  // Reverse: ABN / CIF / VAT / NIP followed by name
+  const abnBeforeRegex = new RegExp(`(?:ABN|ACN|Registration\\s*No|Reg\\s*No|CIF|NIF|VAT|NIP|KRS)[\\s:]*[A-Z0-9][- ]*\\d[\\d\\s\\-]{4,15}[A-Z0-9]?[^\\.\\n\\r<]{0,60}?([A-Z0-9][A-Za-z0-9\\u00C0-\\u024F&,.'\\- ]{2,55}\\s+(?:${LEGAL_ENTITY_SUFFIX_CORE}))`, "gi");
   while ((m = abnBeforeRegex.exec(text)) !== null) {
     if (m[1]) addCleanCandidate(m[1].trim());
   }
 
   // Pattern 2: "means [Name] Pty Ltd", "operated by [Name] Pty Ltd", "authority of [Name] Pty Ltd", "trading as [Name] Pty Ltd"
-  const legalContextRegex = /(?:means|operated\s+by|registered\s+as|trading\s+as|property\s+of|authority\s+of)\s+([A-Z0-9][A-Za-z0-9&,.'\- ]{2,50}\s+(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka))/gi;
+  const legalContextRegex = new RegExp(`(?:means|operated\\s+by|registered\\s+as|trading\\s+as|property\\s+of|authority\\s+of)\\s+([A-Z0-9][A-Za-z0-9\\u00C0-\\u024F&,.'\\- ]{2,55}\\s+(?:${LEGAL_ENTITY_SUFFIX_CORE}))`, "gi");
   while ((m = legalContextRegex.exec(text)) !== null) {
     if (m[1]) addCleanCandidate(m[1].trim());
   }
 
-  // Pattern 3: Explicit legal suffix preceded by capitalized words (horizontal spaces only to avoid cross-line/inline link merging, supporting optional comma)
-  const generalLegalRegex = /\b((?:[A-Z0-9][a-zA-Z0-9&.'\-]*(?:[^\S\r\n]+(?:&|[A-Z0-9][a-zA-Z0-9&.'\-]*)){0,5})(?:,[^\S\r\n]*|[^\S\r\n]+)(?:Pty\.?\s*Ltd\.?|Proprietary\s*Limited|Limited|Ltd\.?|Inc\.?|Incorporated|LLC|LLP|Corp\.?|Corporation|Co\.,\s*Ltd\.?|Company\s*Limited|Pte\.?\s*Ltd\.?|Pvt\.?\s*Ltd\.?|Sdn\.?\s*Bhd\.?|Sendirian\s*Berhad|Berhad|GmbH(?:\s*&\s*Co\.?\s*KG)?|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\.?L\.?U\.?|S\.?A\.?U\.?|S\.?L\.?|S\.?A\.?|Sociedad\s*Limitada(?:\s*Unipersonal)?|Sociedad\s*An[oó]nima(?:\s*Unipersonal)?|S\.?r\.?l\.?s?|S\.?p\.?A\.?|Besloten\s*Vennootschap|B\.?V\.?|N\.?V\.?|Tbk\.?|Terbuka)(?:\.|\b))/gi;
+  // Pattern 3: Explicit legal suffix preceded by capitalized words (trimming any prose clauses via addCleanCandidate)
+  const generalLegalRegex = new RegExp(`\\b((?:[A-Z0-9\\u00C0-\\u024F][a-zA-Z0-9\\u00C0-\\u024F&.'\\-]*(?:[^\\S\\r\\n]+(?:&|[A-Z0-9\\u00C0-\\u024F][a-zA-Z0-9\\u00C0-\\u024F&.'\\-]*)){0,5})(?:,[^\\S\\r\\n]*|[^\\S\\r\\n]+)(?:${LEGAL_ENTITY_SUFFIX_CORE})(?:\\.|\\b))`, "gi");
   while ((m = generalLegalRegex.exec(text)) !== null) {
-    const cand = m[1].trim();
+    let cand = m[1].trim();
+    // Strip leading sentence prose before capitalized company core (e.g. "Engineering was transformed into Mechatronic Systems GmbH" -> "Mechatronic Systems GmbH")
+    cand = stripProseClausesFromCompanyName(cand);
+    const words = cand.split(/\s+/);
+    const suffixTestRe = new RegExp(`^(?:${LEGAL_ENTITY_SUFFIX_CORE})\\.?$`, "i");
+    const safeConnectorRe = /^(?:of|and|for|the|van|der|den|von|und|mit|für|fur|auf|aus|des|les|los|las|del|de|da|do|du|la|le|et|y|e|z|w|i|mbh)$/i;
+    let cutIdx = 0;
+    for (let i = 0; i < words.length; i++) {
+      const cleanW = words[i].replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+      if (suffixTestRe.test(cleanW) || suffixTestRe.test(words.slice(i).join(" "))) break;
+      if (/^[a-z]{2,}$/.test(cleanW) && !safeConnectorRe.test(cleanW)) {
+        cutIdx = i + 1;
+      }
+    }
+    if (cutIdx > 0 && cutIdx < words.length) {
+      cand = words.slice(cutIdx).join(" ").trim();
+    }
     if (!/\b(?:loss|damage|expenses|costs|disbursements|information|services|warranties|discretion|price)\b/i.test(cand) &&
       !/^(?:and|the|for|with|from|including|our|your|their)\b/i.test(cand) &&
       !/^all\s+(?:rights|damages|losses|claims|disclaimers)\b/i.test(cand) &&
-      cand.length >= 3 && cand.length <= 60) {
+      cand.length >= 3 && cand.length <= 75) {
       addCleanCandidate(cand);
     }
   }
@@ -5094,7 +5168,7 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   const text = crawlData.combinedText;
 
   let companyName = "";
-  if (crawlData.copyrightText && /\b(ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|co\.?)\b/i.test(crawlData.copyrightText)) {
+  if (crawlData.copyrightText && (hasCompleteLegalSuffix(crawlData.copyrightText) || /\b(ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|co\.?)\b/i.test(crawlData.copyrightText))) {
     companyName = crawlData.copyrightText;
   }
   if (!companyName && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0) {
@@ -5572,6 +5646,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
     // 1. Company Name: Align, expand, Title Case, restore symbols, restore comma before legal suffix
     let compName = decodeHtmlEntities(String(result.companyName || "").trim());
+    compName = cleanCompanyPrefixesAndSuffixes(compName);
 
     // Domain-matching safeguard: If AI returned an unmatching Pinyin or auxiliary name, verify against domain stem
     try {
@@ -5585,14 +5660,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
           const candidatesToSearch = [
             crawlData.logoText,
             crawlData.title,
+            crawlData.copyrightText,
             ...(crawlData.legalCompanyCandidates || [])
-          ].filter(Boolean);
+          ].filter(c => c && !hasCompanyProseNoise(c));
 
           for (const cand of candidatesToSearch) {
-            const candNorm = cand.toLowerCase().replace(/[^a-z0-9]/g, "");
-            if (candNorm.includes(domainStem) && hasCompleteLegalSuffix(cand)) {
-              console.log(`[AI Safeguard] Corrected mismatched company name "${compName}" to domain-matching official candidate "${cand}"`);
-              compName = cand;
+            const cleanedCand = cleanCompanyPrefixesAndSuffixes(cand);
+            if (!cleanedCand || hasCompanyProseNoise(cleanedCand)) continue;
+            const candNorm = cleanedCand.toLowerCase().replace(/[^a-z0-9]/g, "");
+            if (candNorm.includes(domainStem) && hasCompleteLegalSuffix(cleanedCand)) {
+              console.log(`[AI Safeguard] Corrected mismatched company name "${compName}" to domain-matching official candidate "${cleanedCand}"`);
+              compName = cleanedCand;
               break;
             }
           }
@@ -5602,7 +5680,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
     compName = compName.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
     compName = restoreLegalSuffixIfOmitted(compName, crawlData);
+    compName = cleanCompanyPrefixesAndSuffixes(compName);
     compName = expandCompanyAbbreviations(compName, result.countryName || "");
+    compName = cleanCompanyPrefixesAndSuffixes(compName);
     compName = toTitleCase(compName);
     compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
     compName = restoreOriginalSymbolsInCompanyName(compName, crawlData);
@@ -6041,7 +6121,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const dStemNorm = normalizeNameForComparison(dStem);
   const curNormComp = normalizeNameForComparison(compName);
   const compMatchesDomain = dStemNorm && (curNormComp.includes(dStemNorm) || dStemNorm.includes(curNormComp));
-  const hasLegalCandidates = crawlData && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0;
+  const cleanLegalCandidates = ((crawlData && crawlData.legalCompanyCandidates) || []).filter(c => c && !hasCompanyProseNoise(cleanCompanyPrefixesAndSuffixes(c)));
+  const hasLegalCandidates = cleanLegalCandidates.length > 0;
   const companyEvidenceSnippet = crawlData ? `${crawlData.logoText || ""} ${crawlData.ogSiteName || ""} ${crawlData.title || ""} ${crawlData.copyrightText || ""} ${(crawlData.mainHtml || "").slice(0, 10000)}` : "";
   const hasExpandedSymbol = (
     (/\bAnd\b/i.test(compName) && companyEvidenceSnippet.includes("&")) ||
@@ -7838,7 +7919,7 @@ function evaluateCityQC(address, country) {
 }
 
 const LEGAL_SUFFIX_CAPTURE =
-  "((?:[\\(\\[]?\\s*(?:pty|pte|pvt|sdn|bhd|co\\.?|corp\\.?|inc\\.?|llc|llp|pllc|gmbh|sa|bv|nv|ag|kg|oy|ab|as|m|malaysia)\\s*[\\)\\]]?[\\s,]*){0,3}(?:ltd\\.?|limited|inc\\.?|incorporated|bhd\\.?|berhad|sdn[\\.\\s]+bhd\\.?|sendirian\\s*berhad|llc|pllc|llp|gmbh(?:\\s*(?:&|\\+|und|and|u\\.)\\s*co\\.?\\s*kg)?|gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+haftung(?:\\s+and\\s+compagnie\\s+kommanditgesellschaft)?|aktiengesellschaft|kommanditgesellschaft|ag|kg|s\\.?r\\.?l\\.?s?|s\\.?p\\.?a\\.?|s\\.?l\\.?u?\\.?|s\\.?a\\.?u?\\.?|sociedad\\s*limitada|sociedad\\s*an[oó]nima|tbk\\.?|terbuka|plc\\.?|corp\\.?|corporation|company\\s+limited|proprietary\\s+limited|private\\s+limited|besloten\\s*vennootschap|b\\.?v\\.?|n\\.?v\\.?|joint\\s+stock\\s+company|societas\\s+europaea|limitada|ltda\\.?|p?jsc|sro|doo|kft))";
+  "((?:[\\(\\[]?\\s*(?:pty|pte|pvt|sdn|bhd|co\\.?|corp\\.?|inc\\.?|llc|llp|pllc|gmbh|ges\\.?m\\.?b\\.?h\\.?|sa|bv|nv|ag|kg|oy|ab|as|m|malaysia)\\s*[\\)\\]]?[\\s,]*){0,3}(?:ltd\\.?|limited|inc\\.?|incorporated|bhd\\.?|berhad|sdn[\\.\\s]+bhd\\.?|sendirian\\s*berhad|llc|pllc|llp|gmbh(?:\\s*(?:&|\\+|und|and|u\\.)\\s*co\\.?\\s*kg)?|ges\\.?\\s*m\\.?\\s*b\\.?\\s*h\\.?|gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+haftung(?:\\s+and\\s+compagnie\\s+kommanditgesellschaft)?|aktiengesellschaft|kommanditgesellschaft|ag|kg|sp\\.?\\s*z\\.?\\s*o\\.?\\s*o\\.?|sp[oó][lł]ka\\s+z\\s+ograniczon[aą]\\s+odpowiedzialno[sś]ci[aą]|sp\\.?\\s*k\\.?|s\\.?r\\.?l\\.?s?|s\\.?p\\.?a\\.?|s\\.?l\\.?u?\\.?|s\\.?a\\.?u?\\.?|sarl|sasu?|eurl|eirl|sprl|bvba|sociedad\\s*limitada|sociedad\\s*an[oó]nima|tbk\\.?|terbuka|plc\\.?|corp\\.?|corporation|company\\s+limited|proprietary\\s+limited|private\\s+limited|besloten\\s*vennootschap|b\\.?v\\.?|n\\.?v\\.?|joint\\s+stock\\s+company|societas\\s+europaea|limitada|ltda\\.?|p?jsc|sro|doo|kft|zrt|oyj?|aps))";
 
 function companyEvidenceCorpus(crawlData) {
   if (!crawlData) return "";
@@ -7865,8 +7946,15 @@ function extractJsonLdOrganizationName(html) {
       for (const item of items) {
         if (!item || typeof item !== "object") continue;
         const type = String(item["@type"] || "");
-        if (/Organization|LocalBusiness|Corporation|Company/i.test(type) && item.name) {
-          return String(item.name).trim();
+        if (/Organization|LocalBusiness|Corporation|Company/i.test(type)) {
+          const legal = typeof item.legalName === "string" ? item.legalName.trim() : "";
+          const brand = typeof item.name === "string" ? item.name.trim() : "";
+          if (legal && legal.length >= 2 && legal.length <= 120 && !hasCompanyProseNoise(legal)) {
+            return legal;
+          }
+          if (brand && !hasCompanyProseNoise(brand)) {
+            return brand;
+          }
         }
       }
     } catch (e) { }
@@ -7880,8 +7968,11 @@ function hasCompleteLegalSuffix(name) {
   if (/\b(?:co\.?|company|pty\.?|pte\.?|pvt\.?|sdn\.?)\s*$/i.test(n)) return false;
   // Indonesian prefixes
   if (/^(?:PT|P\.T\.|CV|C\.V\.|UD|U\.D\.|Perseroan\s+Terbatas)\b/i.test(n)) return true;
-  // Complete forms across countries
-  return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|berhad|perkongsian\s+liabiliti\s+terhad|limited\s+liability\s+(?:company|partnership)|gesellschaft\s+mit\s+beschr[äa]nkter\s+haftung|aktiengesellschaft|kommanditgesellschaft|offene\s+handelsgesellschaft|unternehmergesellschaft|eingetragener\s+kaufmann|sociedad\s+limitada|sociedad\s+an[oó]nima|societ[aà]\s+(?:a\s+responsabilit[aà]\s+limitata|per\s+azioni|in\s+accomandita\s+semplice|in\s+nome\s+collettivo)|soci[eé]t[eé]\s+(?:[aà]\s+responsabilit[eé]\s+limit[eé]e|par\s+actions\s+simplifi[eé]e|anonyme)|compagnie|cie|besloten\s+vennootschap|naamloze\s+vennootschap|sp[oó][lł]ka\s+z\s+ograniczon[aą]\s+odpowiedzialno[sś]ci[aą]|aktiebolag|aksjeselskap|osakeyhti[oö]|terbuka|tbk|gmbh|ag|kg|llc|llp|pllc|ltd|limited|inc|incorporated|incorporation|plc|corp|corporation|joint\s+stock\s+company|societas\s+europaea|limitada|společnost\s+s\s+ručením\s+omezeným|društvo\s+s\s+ograničenom\s+odgovornošću|korlátolt\s+felelősségű\s+társaság|jsc|pjsc|ojsc|cjsc|sro|doo|kft|ltda|aps|sarl|sas|sasu|sprl|bv|nv|srl|spa|sl|sa|bvba|eirl)\b/i.test(n);
+  // Complete forms across countries (including Sp. z o.o. / Sp.z.o.o, Ges.m.b.H., S.r.l., S.p.A.)
+  if (/\b(?:sp\.?\s*z\.?\s*o\.?\s*o|sp\.?\s*k|ges\.?\s*m\.?\s*b\.?\s*h|s\.?\s*r\.?\s*l\.?\s*s?|s\.?\s*p\.?\s*a|e\.?\s*u\.?\s*r\.?\s*l|s\.?\s*r\.?\s*o|d\.?\s*o\.?\s*o|k\.?\s*f\.?\s*t|z\.?\s*r\.?\s*t|o\.?\s*y\.?j?|a\.?\s*p\.?\s*s|b\.?\s*v\.?\s*b\.?\s*a|s\.?\s*p\.?\s*r\.?\s*l)\b\.?/i.test(n)) {
+    return true;
+  }
+  return /\b(proprietary\s+limited|private\s+limited|public\s+limited\s+company|sendirian\s+berhad|berhad|perkongsian\s+liabiliti\s+terhad|limited\s+liability\s+(?:company|partnership)|gesellschaft\s+mit\s+beschr[äa]nkter\s+haftung|aktiengesellschaft|kommanditgesellschaft|offene\s+handelsgesellschaft|unternehmergesellschaft|eingetragener\s+kaufmann|sociedad\s+limitada|sociedad\s+an[oó]nima|societ[aà]\s+(?:a\s+responsabilit[aà]\s+limitata|per\s+azioni|in\s+accomandita\s+semplice|in\s+nome\s+collettivo)|soci[eé]t[eé]\s+(?:[aà]\s+responsabilit[eé]\s+limit[eé]e|par\s+actions\s+simplifi[eé]e|anonyme)|compagnie|cie|besloten\s+vennootschap|naamloze\s+vennootschap|sp[oó][lł]ka\s+z\s+ograniczon[aą]\s+odpowiedzialno[sś]ci[aą]|aktiebolag|aksjeselskap|osakeyhti[oö]|terbuka|tbk|gmbh|ag|kg|llc|llp|pllc|ltd|limited|inc|incorporated|incorporation|plc|corp|corporation|joint\s+stock\s+company|societas\s+europaea|limitada|společnost\s+s\s+ručením\s+omezeným|društvo\s+s\s+ograničenom\s+odgovornošću|korlátolt\s+felelősségű\s+társaság|jsc|pjsc|ojsc|cjsc|sro|doo|kft|zrt|ltda|aps|oyj?|sarl|sas|sasu|eurl|sprl|bv|nv|srl|spa|sl|sa|bvba|eirl)\b/i.test(n);
 }
 
 function companyNamesMatch(a, b) {
@@ -7952,12 +8043,12 @@ function preferOfficialCompanyName(name, crawlData) {
   }
 
   // 2. Search for the FULL official registered corporate name (with complete legal suffix/prefix/category).
-  // If current name is missing legal suffix (incomplete, e.g. "Custom Flat Packs"), an official candidate matching the domain/brand MUST win!
+  // Prioritize authoritative metadata/copyright/JSON-LD legal names ahead of general body candidates and filter out prose noise.
   const titleCandidate = cleanCompanyPrefixesAndSuffixes(extractBestBrandFromTitle(title, domain, logoText, ogSiteName));
   const logoCandidate = cleanCompanyPrefixesAndSuffixes(logoText);
-  const allCandidates = [...legalCandidates, jsonLdName, copyrightName, logoCandidate, titleCandidate]
+  const allCandidates = Array.from(new Set([jsonLdName, copyrightName, ...legalCandidates, logoCandidate, titleCandidate]
     .map(n => cleanCompanyPrefixesAndSuffixes(n))
-    .filter(n => n && n.length >= 3 && n.length <= 160);
+    .filter(n => n && n.length >= 3 && n.length <= 160 && !hasCompanyProseNoise(n))));
 
   let bestOfficial = null;
   let bestScore = -1;
@@ -8031,9 +8122,18 @@ function preferOfficialCompanyName(name, crawlData) {
       }
     }
 
-    // Boost candidate matching copyright text
-    if (copyrightName && (offNorm === normalizeNameForComparison(copyrightName) || companyNamesMatch(copyrightName, official))) {
-      score += 100;
+    // Boost candidate matching copyright text and Schema.org JSON-LD name/legalName
+    const copyMatch = copyrightName && (offNorm === normalizeNameForComparison(copyrightName) || companyNamesMatch(copyrightName, official));
+    const jsonLdNorm = normalizeNameForComparison(jsonLdName);
+    const jsonLdExact = jsonLdNorm && offNorm === jsonLdNorm && hasCompleteLegalSuffix(jsonLdName);
+    if (copyMatch) {
+      score += (offNorm === normalizeNameForComparison(copyrightName)) ? 130 : 80;
+    }
+    if (jsonLdExact) {
+      score += 120;
+    }
+    if (copyMatch && jsonLdExact) {
+      score += 80;
     }
 
     // Headquarters alignment: if explicit headquarters candidate was found, boost official candidate associated with HQ!
@@ -8216,10 +8316,16 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
     return cleanName;
   }
 
-  // 1. Check legal company candidates discovered across all pages
+  // 1. Check legal company candidates discovered across all pages (reject prose noise or oversized unrelated prefix additions)
+  const cleanTokensCount = cleanName.replace(/[^a-zA-Z0-9\s]/g, " ").trim().split(/\s+/).filter(Boolean).length;
   const legalCandidates = (crawlData && crawlData.legalCompanyCandidates) || [];
-  for (const cand of legalCandidates) {
-    if (hasCompleteLegalSuffix(cand) && companyNamesMatch(cleanName, cand)) {
+  for (const rawCand of legalCandidates) {
+    const cand = cleanCompanyPrefixesAndSuffixes(rawCand);
+    if (!cand || hasCompanyProseNoise(cand)) continue;
+    const candTokensCount = cand.replace(/[^a-zA-Z0-9\s]/g, " ").trim().split(/\s+/).filter(Boolean).length;
+    // Allow expanding a legal suffix (+1..6 words for multi-word suffixes like Sp. z o.o. / LLC / GMBH), but block unrelated extra leading prose words
+    const candStartsLikeClean = normalizeNameForComparison(cand).startsWith(normalizeNameForComparison(cleanName).slice(0, 6));
+    if (hasCompleteLegalSuffix(cand) && companyNamesMatch(cleanName, cand) && (candStartsLikeClean || candTokensCount <= cleanTokensCount + 4)) {
       return cand;
     }
   }
@@ -8377,7 +8483,7 @@ function expandCompanyAbbreviations(name, country = "") {
     const conn = /^(&|\+)$/.test(op) ? op : (/^and$/i.test(op) ? "and" : "und");
     return `Gesellschaft mit beschränkter Haftung ${conn} Compagnie`;
   });
-  n = n.replace(/\b(?:g[\.\s]*m[\.\s]*b[\.\s]*h|gmbh)\b\.?/gi, "Gesellschaft mit beschränkter Haftung");
+  n = n.replace(/\b(?:g[\.\s]*m[\.\s]*b[\.\s]*h|gmbh|ges[\.\s]*m[\.\s]*b[\.\s]*h|gesmbh)\b\.?/gi, "Gesellschaft mit beschränkter Haftung");
   n = n.replace(/\b(?:u[\.\s]*g|ug)\s*(?:\(haftungsbeschr[äa]nkt\)|haftungsbeschr[äa]nkt)?\b\.?/gi, "Unternehmergesellschaft haftungsbeschränkt");
   n = n.replace(/\b(?:k[\.\s]*g[\.\s]*a[\.\s]*a|kgaa)\b\.?/gi, "Kommanditgesellschaft auf Aktien");
   n = n.replace(/\b(?:a[\.\s]*g|ag)\b\.?$/gi, "Aktiengesellschaft");
