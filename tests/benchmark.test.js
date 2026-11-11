@@ -1279,7 +1279,7 @@ async function runAsyncTests() {
     }
   }
 
-  await runAsyncTest('Gemini & Groq (console.groq.com) config, legacy migration, and /models-first resolution work end-to-end', async () => {
+  await runAsyncTest('Gemini & Groq (console.groq.com) config, direct-first 1-call path, and /models fallback on failure work end-to-end', async () => {
     const groqCfg = ctx.resolveAiProviderConfig({
       aiProvider: 'groq',
       groqApiKey: 'gsk_test_groq_key',
@@ -1299,16 +1299,8 @@ async function runAsyncTests() {
     assert.strictEqual(migratedCfg.apiKey, 'gsk_legacy_key');
     assert.strictEqual(migratedCfg.model, 'openai/gpt-oss-120b');
 
-    // Even if an old saved config still holds deprecated/unavailable llama-3.3-70b-versatile,
-    // /openai/v1/models pre-flight must skip it so zero 404 chat/completions requests are made.
-    const staleCfg = ctx.resolveAiProviderConfig({
-      aiProvider: 'groq',
-      groqApiKey: 'gsk_stale_key_test',
-      groqModel: 'llama-3.3-70b-versatile'
-    });
-    assert.strictEqual(staleCfg.model, 'llama-3.3-70b-versatile');
-
-    const calls = [];
+    let calls = [];
+    let forceFallbackMode = false;
     ctx.fetch = async (url, opts) => {
       const sampleJson = JSON.stringify({
         websiteStatus: 'Working',
@@ -1334,8 +1326,10 @@ async function runAsyncTests() {
           status: 200,
           json: async () => ({
             data: [
-              { id: 'whisper-large-v3', active: true },
-              { id: 'openai/gpt-oss-120b', active: true }
+              { id: 'whisper-large-v3', active: true, output_modalities: ['transcription'] },
+              { id: 'meta-llama/llama-prompt-guard-2-86m', active: true, output_modalities: ['text'] },
+              { id: 'canopylabs/orpheus-v1-english', active: true, output_modalities: ['speech'] },
+              { id: 'allam-2-7b', active: true, output_modalities: ['text'] }
             ]
           })
         };
@@ -1345,7 +1339,8 @@ async function runAsyncTests() {
       calls.push({ url, model: parsedBody.model });
 
       if (url === 'https://api.groq.com/openai/v1/chat/completions') {
-        if (parsedBody.model !== 'openai/gpt-oss-120b') {
+        const expectedModel = forceFallbackMode ? 'allam-2-7b' : 'openai/gpt-oss-120b';
+        if (parsedBody.model !== expectedModel) {
           return {
             ok: false,
             status: 404,
@@ -1380,33 +1375,51 @@ async function runAsyncTests() {
       detectedDescCount: 3
     };
 
-    const groqOut = await ctx.analyzeWithAi(mockCrawl, staleCfg, {}, 0);
+    // 1. Happy path: direct 1-call chat/completions without calling /openai/v1/models
+    calls = [];
+    forceFallbackMode = false;
+    const groqOut = await ctx.analyzeWithAi(mockCrawl, groqCfg, {}, 0);
     assert.strictEqual(groqOut._aiProvider, 'Groq');
     assert.strictEqual(groqOut._aiModel, 'openai/gpt-oss-120b');
     assert.strictEqual(groqOut.emailId, 'sales@swanseaindustrial.com');
     assert.strictEqual(groqOut.secondaryEmailId, 'info@swanseaindustrial.com');
-    assert.ok(calls[0] && calls[0].url === 'https://api.groq.com/openai/v1/models', 'Must query /openai/v1/models BEFORE /chat/completions');
-    const completionCalls = calls.filter(c => c.url === 'https://api.groq.com/openai/v1/chat/completions');
-    assert.strictEqual(completionCalls.length, 1, 'Must succeed on first chat/completions call with 0 404 retries');
-    assert.strictEqual(completionCalls[0].model, 'openai/gpt-oss-120b');
+    assert.strictEqual(calls.length, 1, 'Happy path must make only 1 API call (no /models call)');
+    assert.strictEqual(calls[0].url, 'https://api.groq.com/openai/v1/chat/completions');
+    assert.strictEqual(calls[0].model, 'openai/gpt-oss-120b');
 
-    const testGroq = await ctx.testAiProviderKey({ provider: 'groq', apiKey: 'gsk_stale_key_test', modelName: 'llama-3.3-70b-versatile' });
-    assert.strictEqual(testGroq.success, true);
-    assert.strictEqual(testGroq.provider, 'groq');
-    assert.strictEqual(testGroq.activeModel, 'openai/gpt-oss-120b');
-    assert.deepStrictEqual([...testGroq.availableModels], ['openai/gpt-oss-120b']);
+    // 2. Key test happy path: 1 API call total without /models
+    calls = [];
+    const testDirect = await ctx.testAiProviderKey({ provider: 'groq', apiKey: 'gsk_test_groq_key', modelName: 'openai/gpt-oss-120b' });
+    assert.strictEqual(testDirect.success, true);
+    assert.strictEqual(testDirect.activeModel, 'openai/gpt-oss-120b');
+    assert.strictEqual(calls.length, 1, 'Key test happy path must make only 1 API call');
+
+    // 3. Failure fallback path: when initial candidate models fail, /openai/v1/models is called to discover active models
+    calls = [];
+    forceFallbackMode = true;
+    const fallbackOut = await ctx.analyzeWithAi(mockCrawl, groqCfg, {}, 0);
+    assert.strictEqual(fallbackOut._aiModel, 'allam-2-7b');
+    assert.ok(calls.some(c => c.url === 'https://api.groq.com/openai/v1/models'), 'Must call /models only after candidate models fail');
+
+    calls = [];
+    const testFallback = await ctx.testAiProviderKey({ provider: 'groq', apiKey: 'gsk_stale_key_test', modelName: 'llama-3.3-70b-versatile' });
+    assert.strictEqual(testFallback.success, true);
+    assert.strictEqual(testFallback.provider, 'groq');
+    assert.strictEqual(testFallback.activeModel, 'allam-2-7b');
+    assert.deepStrictEqual([...testFallback.availableModels], ['allam-2-7b']);
 
     const testMissing = await ctx.testAiProviderKey({ provider: 'groq', apiKey: '' });
     assert.strictEqual(testMissing.success, false);
 
-    // Verify popup HTML & JS expose Gemini & Groq only (no xAI / DeepSeek / llama-3.3-70b-versatile default)
+    // Verify popup HTML & JS expose Gemini & updated active Groq models only
     const popupHtml = fs.readFileSync(path.join(rootDir, 'popup.html'), 'utf8');
     const popupJs = fs.readFileSync(path.join(rootDir, 'popup.js'), 'utf8');
     const configJs = fs.readFileSync(path.join(rootDir, 'src/background/config.js'), 'utf8');
     assert.ok(popupHtml.includes('id="provider-select"'));
     assert.ok(popupHtml.includes('id="groq-api-key-input"'));
     assert.ok(!popupHtml.includes('id="grok-api-key-input"'));
-    assert.ok(!/deepseek|api\.x\.ai|llama-3\.3-70b-versatile/i.test(popupHtml + popupJs + configJs), 'Only Gemini and supported Groq models should remain');
+    assert.ok(!/deepseek|api\.x\.ai|llama-3\.3-70b-versatile|llama-4-scout|qwen3-32b|llama-3\.1-8b-instant/i.test(popupHtml + popupJs + configJs), 'Only Gemini and active Groq models should remain');
+    assert.ok(popupJs.includes('qwen/qwen3.8-27b') && configJs.includes('allam-2-7b'));
     assert.ok(popupJs.includes('PROVIDER_MODELS_UI') && popupJs.includes('groqApiKey'));
   });
 }

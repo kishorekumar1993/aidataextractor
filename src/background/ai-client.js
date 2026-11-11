@@ -312,15 +312,14 @@ async function fetchActiveChatModels(modelsEndpoint, apiKey, forceRefresh = fals
     const data = await res.json();
     const ids = (data && Array.isArray(data.data) ? data.data : [])
       .filter(m => m && m.id && m.active !== false)
+      .filter(m => !Array.isArray(m.output_modalities) || m.output_modalities.includes("text"))
       .map(m => m.id)
       .filter(id => !/(?:whisper|tts|playai|guard|orpheus|safeguard|prompt-guard|compound-beta)/i.test(id));
     const priorityOrder = [
       "openai/gpt-oss-120b",
-      "meta-llama/llama-4-scout-17b-16e-instruct",
-      "qwen/qwen3-32b",
+      "qwen/qwen3.8-27b",
       "openai/gpt-oss-20b",
-      "llama-3.1-8b-instant",
-      "llama-3.3-70b-versatile"
+      "allam-2-7b"
     ];
     const ordered = [
       ...priorityOrder.filter(p => ids.includes(p)),
@@ -353,66 +352,113 @@ async function resolveVerifiedChatModels(cfg, apiKey, preferredModel, forceRefre
   };
 }
 
-async function callOpenAiCompatibleApi({ providerLabel, endpoint, modelsEndpoint = "", apiKey, candidateModels, prompt, crawlStartTime = 0 }) {
+async function runOpenAiModelsWithFallback({ providerLabel, modelsEndpoint = "", apiKey, candidateModels, crawlStartTime = 0, attemptFn }) {
   let lastError = null;
-  const { models: verifiedQueue, authError } = modelsEndpoint
-    ? await resolveVerifiedChatModels({ modelsEndpoint, models: candidateModels }, apiKey, candidateModels[0])
-    : { models: Array.from(new Set(candidateModels)).filter(Boolean), authError: "" };
+  let isAuthError = false;
+  const tried = new Set();
+  let attemptIndex = 0;
 
-  if (authError) {
-    throw new Error(`${providerLabel} authorization error 401: ${authError}`);
+  const tryModels = async (modelsList) => {
+    for (const modelToTry of modelsList) {
+      if (!modelToTry || tried.has(modelToTry)) continue;
+      tried.add(modelToTry);
+
+      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) {
+        console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting ${providerLabel} calls.`);
+        break;
+      }
+
+      const idx = attemptIndex++;
+      try {
+        const outcome = await attemptFn(modelToTry, idx);
+        if (outcome && outcome.ok) {
+          return { ok: true, value: outcome.value, activeModel: modelToTry };
+        }
+        if (outcome && outcome.authError) {
+          isAuthError = true;
+          lastError = outcome.error;
+          break;
+        }
+        if (outcome && outcome.error) {
+          lastError = outcome.error;
+        }
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    return null;
+  };
+
+  // Direct chat/completions first using configured candidate models (no upfront /models call)
+  const initialQueue = Array.from(new Set(candidateModels)).filter(Boolean).slice(0, 3);
+  const directHit = await tryModels(initialQueue);
+  if (directHit) return directHit;
+
+  // Only query /models if direct attempts failed (excluding auth errors) to discover active models
+  const withinBudget = !(crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000);
+  if (!isAuthError && modelsEndpoint && withinBudget) {
+    const { models: liveModels, authError } = await resolveVerifiedChatModels(
+      { modelsEndpoint, models: candidateModels },
+      apiKey,
+      candidateModels[0],
+      true
+    );
+    if (authError) {
+      return { ok: false, isAuthError: true, error: new Error(`${providerLabel} authorization error 401: ${authError}`) };
+    }
+    const fallbackModels = liveModels.filter(m => !tried.has(m)).slice(0, 2);
+    const fallbackHit = await tryModels(fallbackModels);
+    if (fallbackHit) {
+      return { ...fallbackHit, verifiedModels: liveModels };
+    }
   }
 
-  const queue = verifiedQueue.slice(0, 3);
-  const tried = new Set();
+  return { ok: false, isAuthError, error: lastError };
+}
 
-  for (let i = 0; i < queue.length; i++) {
-    const modelToTry = queue[i];
-    if (tried.has(modelToTry)) continue;
-    tried.add(modelToTry);
-
-    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) {
-      console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting ${providerLabel} calls.`);
-      break;
-    }
-
-    const sendChatRequest = async (useJsonFormat) => {
-      const abortCtrl = new AbortController();
-      const timeoutPerModel = (i === 0) ? 10000 : 6000;
-      const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
-      const bodyPayload = {
-        model: modelToTry,
-        messages: [
-          { role: "system", content: "You are a strict QC data-entry extractor. Always reply with a valid JSON object only." },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.1
+async function callOpenAiCompatibleApi({ providerLabel, endpoint, modelsEndpoint = "", apiKey, candidateModels, prompt, crawlStartTime = 0 }) {
+  const result = await runOpenAiModelsWithFallback({
+    providerLabel,
+    modelsEndpoint,
+    apiKey,
+    candidateModels,
+    crawlStartTime,
+    attemptFn: async (modelToTry, idx) => {
+      const sendChatRequest = async (useJsonFormat) => {
+        const abortCtrl = new AbortController();
+        const timeoutPerModel = (idx === 0) ? 10000 : 6000;
+        const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
+        const bodyPayload = {
+          model: modelToTry,
+          messages: [
+            { role: "system", content: "You are a strict QC data-entry extractor. Always reply with a valid JSON object only." },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.1
+        };
+        if (useJsonFormat && !/reasoner/i.test(modelToTry)) {
+          bodyPayload.response_format = { type: "json_object" };
+        }
+        try {
+          return await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${apiKey}`
+            },
+            signal: abortCtrl.signal,
+            body: JSON.stringify(bodyPayload)
+          });
+        } finally {
+          clearTimeout(abortTimer);
+        }
       };
-      if (useJsonFormat && !/reasoner/i.test(modelToTry)) {
-        bodyPayload.response_format = { type: "json_object" };
-      }
-      try {
-        return await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
-          },
-          signal: abortCtrl.signal,
-          body: JSON.stringify(bodyPayload)
-        });
-      } finally {
-        clearTimeout(abortTimer);
-      }
-    };
 
-    try {
       let response = await sendChatRequest(true);
       if (!response.ok) {
         const errText = await response.text();
         if (response.status === 401 || response.status === 403) {
-          lastError = new Error(`${providerLabel} authorization error ${response.status}: ${errText}`);
-          break;
+          return { authError: true, error: new Error(`${providerLabel} authorization error ${response.status}: ${errText}`) };
         }
         if (response.status === 400) {
           const retryRes = await sendChatRequest(false);
@@ -420,23 +466,27 @@ async function callOpenAiCompatibleApi({ providerLabel, endpoint, modelsEndpoint
             const retryJson = await retryRes.json();
             const rawRetry = retryJson?.choices?.[0]?.message?.content;
             const parsed = parseAiJsonPayload(rawRetry);
-            if (parsed) return { parsed, activeModel: modelToTry };
+            if (parsed) return { ok: true, value: parsed };
           }
         }
-        lastError = new Error(`${providerLabel} API error ${response.status} (${modelToTry}): ${errText}`);
-        continue;
+        return { error: new Error(`${providerLabel} API error ${response.status} (${modelToTry}): ${errText}`) };
       }
 
       const resJson = await response.json();
       const rawText = resJson?.choices?.[0]?.message?.content;
-      if (!rawText) throw new Error(`Empty response from ${providerLabel} model ${modelToTry}`);
+      if (!rawText) {
+        return { error: new Error(`Empty response from ${providerLabel} model ${modelToTry}`) };
+      }
       const parsed = parseAiJsonPayload(rawText);
-      if (parsed) return { parsed, activeModel: modelToTry };
-    } catch (err) {
-      lastError = err;
+      if (parsed) return { ok: true, value: parsed };
+      return { error: new Error(`Invalid JSON payload from ${providerLabel} model ${modelToTry}`) };
     }
+  });
+
+  if (result && result.ok) {
+    return { parsed: result.value, activeModel: result.activeModel };
   }
-  throw lastError || new Error(`All ${providerLabel} models failed to return structured data`);
+  throw (result && result.error) || new Error(`All ${providerLabel} models failed to return structured data`);
 }
 
 async function analyzeWithAi(crawlData, aiConfig = {}, restrictedCheck = null, crawlStartTime = 0) {
@@ -859,16 +909,13 @@ async function testAiProviderKey({ provider = "gemini", apiKey = "", modelName =
     if (!cleanKey) {
       return { success: false, error: `Please enter a valid ${cfg.label} API key (starts with gsk_).` };
     }
-    const { models: verifiedModels, authError } = await resolveVerifiedChatModels(cfg, cleanKey, normalized.model, true);
-    if (authError) {
-      return { success: false, error: `API HTTP 401: ${authError}` };
-    }
-
-    const queue = verifiedModels.slice(0, 3);
-    let lastError = null;
-
-    for (const model of queue) {
-      try {
+    const candidateModels = Array.from(new Set([normalized.model, ...(cfg.models || [])])).filter(Boolean);
+    const result = await runOpenAiModelsWithFallback({
+      providerLabel: cfg.label,
+      modelsEndpoint: cfg.modelsEndpoint,
+      apiKey: cleanKey,
+      candidateModels,
+      attemptFn: async (model) => {
         const abortCtrl = new AbortController();
         const abortTimer = setTimeout(() => abortCtrl.abort(), 5000);
         let res;
@@ -891,22 +938,29 @@ async function testAiProviderKey({ provider = "gemini", apiKey = "", modelName =
           clearTimeout(abortTimer);
         }
         if (res.ok) {
-          return {
-            success: true,
-            provider: "groq",
-            message: `Connected successfully with Groq (${model})!`,
-            activeModel: model,
-            availableModels: verifiedModels
-          };
+          return { ok: true, value: true };
         }
-        const err = await res.text();
-        lastError = `API HTTP ${res.status} (${model}): ${err}`;
-        if (res.status === 401 || res.status === 403) break;
-      } catch (e) {
-        lastError = e.message;
+        const errText = await res.text();
+        if (res.status === 401 || res.status === 403) {
+          return { authError: true, error: new Error(`API HTTP ${res.status}: ${errText}`) };
+        }
+        return { error: new Error(`API HTTP ${res.status} (${model}): ${errText}`) };
       }
+    });
+
+    if (result && result.ok) {
+      const response = {
+        success: true,
+        provider: "groq",
+        message: `Connected successfully with Groq (${result.activeModel})!`,
+        activeModel: result.activeModel
+      };
+      if (Array.isArray(result.verifiedModels) && result.verifiedModels.length > 0) {
+        response.availableModels = result.verifiedModels;
+      }
+      return response;
     }
-    return { success: false, error: lastError || "Failed to connect with Groq" };
+    return { success: false, error: (result && result.error && result.error.message) || "Failed to connect with Groq" };
   }
 
   const effectiveKey = cleanKey || DEFAULT_API_KEY;

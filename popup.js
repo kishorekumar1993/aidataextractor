@@ -24,10 +24,9 @@ const PROVIDER_MODELS_UI = {
   ],
   groq: [
     { value: "openai/gpt-oss-120b", label: "GPT-OSS 120B (Default)" },
+    { value: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B" },
     { value: "openai/gpt-oss-20b", label: "GPT-OSS 20B" },
-    { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B" },
-    { value: "qwen/qwen3-32b", label: "Qwen 3 32B" },
-    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Ultra Fast)" }
+    { value: "allam-2-7b", label: "ALLaM-2 7B" }
   ]
 };
 
