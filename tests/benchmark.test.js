@@ -1659,14 +1659,20 @@ async function runAsyncTests() {
     assert.ok(strictQcJs.includes('_extractionSource = "ai"'), 'strict-qc.js must flag AI extraction source');
   });
 
-  // 36. AI extracted values are strictly preserved without own-crawl overwrite (Peri SE & Post Office Box)
-  runTest('AI extracted values are strictly preserved without own-crawl overwrite (Peri SE & Post Office Box)', () => {
-    // 1. Post Office Box address sanitization
+  // 36. Rule 4 Company Name and Rule 6 Address Mandatory Expansions (Peri SE -> PERI Societas Europaea & Box -> Post Office Box)
+  runTest('Rule 4 Company Name and Rule 6 Address Mandatory Expansions (Peri SE -> PERI Societas Europaea & Box -> Post Office Box)', () => {
+    // 1. Post Office Box address expansion from Box / P.O. Box
     const poBoxInput = 'Post Office Box 1264, Weissenhorn';
-    const cleanedAddr = ctx.sanitizeRule6CompanyAddress(poBoxInput, 'Peri Se', 'Germany');
-    assert.strictEqual(cleanedAddr, 'Post Office Box 1264, Weissenhorn', 'Must preserve Post Office Box without stripping Post Office');
+    assert.strictEqual(ctx.sanitizeRule6CompanyAddress(poBoxInput, 'Peri Se', 'Germany'), 'Post Office Box 1264, Weissenhorn', 'Must preserve Post Office Box');
 
-    // 2. AI Path must preserve AI company name and address without adopting crawl candidates
+    const rawBoxInput = 'Box 1264, Weissenhorn';
+    assert.strictEqual(ctx.sanitizeRule6CompanyAddress(rawBoxInput, 'Peri Se', 'Germany'), 'Post Office Box 1264, Weissenhorn', 'Must expand Box to Post Office Box');
+
+    // 2. Company Name expansion: SE -> Societas Europaea
+    const compExpanded = ctx.expandCompanyAbbreviations('Peri Se', 'Germany');
+    assert.strictEqual(compExpanded, 'Peri Societas Europaea', 'Must expand SE / Se to Societas Europaea');
+
+    // 3. End-to-end applyStrictInstructions on AI path
     const mockAiData = {
       websiteStatus: 'Working',
       businessType: 'Manufacturer',
@@ -1693,8 +1699,8 @@ async function runAsyncTests() {
     };
 
     const result = ctx.applyStrictInstructions(mockAiData, mockCrawlData, {});
-    assert.strictEqual(result.companyName, 'Peri Se', 'AI company name must not be replaced by own-crawl legal candidate');
-    assert.strictEqual(result.companyAddress, 'Post Office Box 1264, Weissenhorn', 'AI address must not be replaced or stripped by own crawl');
+    assert.strictEqual(result.companyName, 'PERI Societas Europaea', 'Must expand SE to Societas Europaea and preserve uppercase brand PERI');
+    assert.strictEqual(result.companyAddress, 'Post Office Box 1264, Weissenhorn', 'Must preserve full Post Office Box address');
   });
 }
 

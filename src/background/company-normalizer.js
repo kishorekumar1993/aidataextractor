@@ -674,7 +674,7 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
     const up = word.toUpperCase();
     if (upperAcronyms.has(up)) return up;
     const exactUpperRegex = new RegExp(`(^|[^A-Za-z0-9])${up}([^A-Za-z0-9]|$)`);
-    if (exactUpperRegex.test(titleAndLogo) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO)$/i.test(up)) {
+    if ((exactUpperRegex.test(titleAndLogo) || exactUpperRegex.test(combinedEvidence)) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO|PAGE|VIEW|HOME|MENU|NEWS|SITE)$/i.test(up)) {
       return up;
     }
     return word;

@@ -675,7 +675,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/\bblk\b\.?/gi, "Block");
   }
   a = a.replace(/(^|[,\s])\b(?:p\.?o\.?\s*box|pob)\b\.?/gi, "$1Post Office Box");
-  a = a.replace(/(^|[,\s])\bBox\s*(\d+[A-Za-z]?(?:[-/]\d+)?)\b/gi, "$1Post Office Box $2");
+  a = a.replace(/(^|[,\s])(?<!\b(?:post\s+office|general\s+post\s+office)\s+)\bBox\s*(\d+[A-Za-z]?(?:[-/]\d+)?)\b/gi, "$1Post Office Box $2");
 
   // 6. Expand State & Province abbreviations (Global)
   // Australia
