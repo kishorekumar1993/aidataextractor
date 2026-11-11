@@ -384,6 +384,19 @@
         }
       }
 
+      // 2b. If target was 2 or 3 and no exact 'Two' option exists, map to 'Three' / '3'
+      if (matchedIndex === -1 && (isTwo || isThree)) {
+        for (let i = 0; i < element.options.length; i++) {
+          const opt = element.options[i];
+          const val = (opt.value || "").trim().toLowerCase();
+          const txt = (opt.text || "").trim().toLowerCase();
+          if (val === "3" || txt === "3" || val === "three" || txt.includes("three")) {
+            matchedIndex = i;
+            break;
+          }
+        }
+      }
+
       // 3. Substring match (skip placeholder option 0 if multiple options exist)
       if (matchedIndex === -1 && element.options.length > 1) {
         for (let i = 1; i < element.options.length; i++) {
@@ -899,9 +912,34 @@
     };
 
     const hasCountVal = (v) => v !== undefined && v !== null && String(v).trim() !== "";
-    const imageCount = parseCountStr(data.productImages);
-    const prodCount = hasCountVal(data.numberOfProducts) ? parseCountStr(data.numberOfProducts) : imageCount;
-    const descCount = hasCountVal(data.numberOfProductDescriptions) ? parseCountStr(data.numberOfProductDescriptions) : imageCount;
+    const rawImageCount = parseCountStr(data.productImages);
+    const rawProdCount = hasCountVal(data.numberOfProducts) ? parseCountStr(data.numberOfProducts) : rawImageCount;
+    const rawDescCount = hasCountVal(data.numberOfProductDescriptions) ? parseCountStr(data.numberOfProductDescriptions) : rawImageCount;
+
+    const isWorkingSite = data.websiteStatus === "Working" || data.websiteStatus === "Redirect Site" || !data.websiteStatus;
+    const resolveProductDropdownValue = (val, selectElem) => {
+      let count = parseCountStr(val);
+      if (selectElem && selectElem.options) {
+        const optionValues = Array.from(selectElem.options).map(o => (o.value || o.text || "").toLowerCase());
+        const hasZeroOpt = optionValues.some(v => v === "0" || v === "zero");
+        const hasTwoOpt = optionValues.some(v => v === "2" || v === "two");
+        const hasThreeOpt = optionValues.some(v => v === "3" || v.includes("three"));
+
+        // If portal does not have "Two", 2 maps to "3" (Three)
+        if (count === "2" && !hasTwoOpt && hasThreeOpt) {
+          count = "3";
+        }
+        // If portal only has "One" & "Three" (no zero) and site is Working, Rule 12/13/14 requires never selecting zero
+        if ((count === "0" || !count) && isWorkingSite && !hasZeroOpt && hasThreeOpt) {
+          count = "3";
+        }
+      }
+      return count;
+    };
+
+    const prodCount = resolveProductDropdownValue(rawProdCount, elements.numberOfProducts);
+    const imageCount = resolveProductDropdownValue(rawImageCount, elements.productImages);
+    const descCount = resolveProductDropdownValue(rawDescCount, elements.numberOfProductDescriptions);
 
     // 12. Number of Products
     try {

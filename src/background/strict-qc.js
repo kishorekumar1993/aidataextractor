@@ -1589,9 +1589,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.numberOfProducts = finalProductCount;
   result.numberOfProductDescriptions = finalProductCount;
 
-  // Final safeguard: If website has 0 products and company has no physical address, it CANNOT be a working site
+  // Final safeguard: If website has 0 products and company has no physical address, email, phone, or identity, it cannot be working
   const finalHasAddr = result.companyAddress && result.companyAddress !== "Not Available" && result.companyAddress.trim().length > 5;
-  if ((result.websiteStatus === "Working" || !result.websiteStatus) && iCount === 0 && !finalHasAddr) {
+  const hasBasicContactOrIdentity = !!((result.emailId && result.emailId.trim()) || (result.phoneNumber && result.phoneNumber.trim()) || (result.companyName && result.companyName.trim().length >= 3));
+  if ((result.websiteStatus === "Working" || !result.websiteStatus) && iCount === 0 && !finalHasAddr && !hasBasicContactOrIdentity) {
     result.websiteStatus = "Not Working";
     result.errorCategory = "No Business Products / 0 Products";
     result.errorKeyword = "0 Products / No Catalog";

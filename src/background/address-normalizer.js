@@ -2025,22 +2025,34 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
   a = a.replace(/[\(\)\[\]\{\}]/g, " ");
 
-  // 3. Strip corporate registration disclaimers & legal office prefixes
+  // 3. Strip breadcrumbs, menu, and UI navigation remnants (e.g. "Home > Contact Us >", "Navigation")
+  a = a.replace(/^(?:home\s*[>/\\|»-]+\s*(?:about(?:\s*us)?|contact(?:\s*us)?|our\s*locations?|find\s*us)?\s*[>/\\|»-]+\s*)+/i, "").trim();
+  a = a.replace(/^(?:menu|navigation|quick\s*links|sidebar|footer)\s*[:：\-–|,]?\s*/i, "").trim();
+
+  // 4. Strip corporate registration disclaimers & legal office prefixes
   a = a.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
   a = a.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
 
-  // 4. Strip conversational boilerplate from start
-  a = a.replace(/^(?:if\s+you\s+have\s+any\s+enquiries|require\s+a\s+quote|want\s+to\s+book\s+a\s+survey|please\s+feel\s+free\s+to\s+call\s+us|send\s+us\s+a\s+message|with\s+your\s+requirements|get\s+in\s+touch|contact\s+us\s+at)[\s\S]*?(?=\b\d+\s+[A-Za-z]|\b(?:po\s*box|unit|suite|building|floor|no\.?)\b)/i, "").trim();
+  // 5. Strip conversational boilerplate and promotional marketing slogans from start
+  a = a.replace(/^(?:if\s+you\s+have\s+any\s+(?:enquiries|questions)|require\s+a\s+quote|want\s+to\s+book\s+a\s+survey|please\s+(?:feel\s+free\s+to\s+)?(?:call|contact|email|reach|write)\s*(?:us|our\s+team)?|send\s+us\s+a\s+message|with\s+your\s+requirements|get\s+in\s+touch(?:\s+with\s+us)?|contact\s+us\s+at|welcome\s+to[\s\S]*?facility|committed\s+to[\s\S]*?quality|leading\s+manufacturer\s+of[\s\S]*?(?:solutions|products|systems)|specializing\s+in[\s\S]*?(?:moulding|engineering|manufacturing)|serving\s+(?:our\s+)?clients\s+worldwide|for\s+more\s+information(?:\s+please\s+contact\s+us)?)[\s\S]*?(?=\b\d+\s+[A-Za-z]|\b(?:po\s*box|post\s*office\s*box|unit|suite|building|floor|level|lot|plot|block|factory|shed|no\.?)\b)/i, "").trim();
 
-  // 5. Strip office, department, branch, or headquarters label prefix at start of address
+  // 6. Strip contact, location, department, or office label prefixes at start of address
   // (NEVER match or strip authentic Post Office Box / General Post Office Box)
   if (!/^\s*(?:general\s+)?post\s+office\s+box\b/i.test(a)) {
-    const officePrefixRegex = /^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|(?<!\b(?:post|general\s+post)\s+)office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|direcci[oó]n|ubicaci[oó]n|alamat|kantor|pabrik|廠址|地址)\s*(?:[:：\-–,]+\s*|\s+(?=\b(?:\d{1,5}|no\.?\s*\d+|unit|suite|building|floor|level|room)\b))/i;
+    // Strip "Contact Us:", "Find Us:", "Where To Find Us:", "Our Location:", "Visit Us:", "We Are Located At:", etc.
+    const contactHeadingPrefix = /^(?:where\s+to\s+find\s+us|where\s+we\s+are|how\s+to\s+find\s+us|find\s+us|visit\s+us|come\s+visit\s+us|our\s+locations?|office\s+locations?|locate\s+us|get\s+in\s+touch|contact\s+us\s+at|contact\s+us|contact|reach\s+us|reach\s+out|we\s+are\s+located\s+at|we're\s+located\s+at|our\s+factory|our\s+plant|our\s+showroom|our\s+warehouse|our\s+office|our\s+address|location\s+map|google\s+maps?|view\s+on\s+map)\s*[:：\-–|,]?\s*(?=\b(?:\d{1,5}|no\.?\s*\d+|unit|suite|building|floor|level|lot|plot|block|factory|shed|po\s*box|post\s*office\s*box|[A-Z][a-z]+)\b)/i;
+    a = a.replace(contactHeadingPrefix, "").trim();
+
+    // Strip office type prefixes e.g. "Head Office:", "Corporate Headquarters:", "Factory Location:", etc.
+    const officePrefixRegex = /^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|(?<!\b(?:post|general\s+post)\s+)office|plant|factory|warehouse|workshop|facility|showroom|hq|sede\s*central|domicilio\s*social|sede\s*principal|direcci[oó]n|ubicaci[oó]n|alamat|kantor|pabrik|廠址|地址)\s*(?:[:：\-–,]+\s*|\s+(?=\b(?:\d{1,5}|no\.?\s*\d+|unit|suite|building|floor|level|room|lot|plot)\b))/i;
     a = a.replace(officePrefixRegex, "").trim();
-    a = a.replace(/^(?:address|add|addr|location|alamat|direcci[oó]n|地址)\s*[:：\-–,\s]+/i, "").trim();
+
+    // Strip address field labels in multiple languages: "Address:", "Addr:", "Physical Address:", "Postal Address:", "Street Address:", "Mailing Address:", etc.
+    a = a.replace(/^(?:(?:physical|postal|mailing|street|corporate|registered|business|office|factory|plant|showroom|warehouse|workshop|main|head)\s+)?(?:address|add|addr|location|alamat|direcci[oó]n|ubicaci[oó]n|sede|anschrift|adresse|standort|indirizzo|地址|廠址|公司地址)\s*[:：\-–,\|\s]+/i, "").trim();
+    a = a.replace(/^(?:where\s+we\s+are|where\s+to\s+find\s+us|find\s+us|visit\s+us|contact\s+us|contact|ubicaci[oó]n|direcci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|cont[aá]ctenos|encu[eé]ntranos|alamat\s*kami|hubungi\s*kami|dove\s*siamo|standort|kontak|聯絡我們|联系我们)\s*[:：\-–,\|\s]+/i, "").trim();
   }
 
-  // 6. Strip Company Name from start of address per Rule 6
+  // 7. Strip Company Name from start of address per Rule 6
   const cleanComp = (companyName || "").trim();
   if (cleanComp && cleanComp.length >= 3) {
     const compClean = cleanComp.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+/g, " ").trim();
@@ -2048,22 +2060,52 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = a.replace(compRegex, "").trim();
 
     // Strip brand stem without legal suffixes (e.g. "Teflex Plastics Pty Ltd" -> stem "Teflex Plastics")
-    const brandStem = compClean.replace(/\b(?:pty|ltd|limited|inc|incorporated|llc|corp|corporation|co|company|proprietary|plc|gmbh|sdn|bhd)\b/gi, "").trim();
+    const brandStem = compClean.replace(/\b(?:pty|ltd|limited|inc|incorporated|llc|corp|corporation|co|company|proprietary|plc|gmbh|sdn|bhd|sa|bv|nv|srl|sl|sp\s*z\s*o\.?o\.?|se)\b/gi, "").trim();
     if (brandStem && brandStem.length >= 4) {
-      const brandRegex = new RegExp(`^${brandStem.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*(?:(?:pty|ltd|limited|inc|llc|corp|co)\\.?)?\\s*[,\\-–]?\\s*`, "i");
+      const brandRegex = new RegExp(`^${brandStem.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*(?:(?:pty|ltd|limited|inc|llc|corp|co|se|gmbh)\\.?)?\\s*[,\\-–]?\\s*`, "i");
       a = a.replace(brandRegex, "").trim();
+    }
+  }
+
+  // Strip brand/domain stem from crawlData if start of address duplicates site brand
+  if (crawlData) {
+    const siteUrl = (crawlData.originalUrl || crawlData.finalUrl || "").toLowerCase();
+    const dStem = (typeof cleanDomainStem === "function" ? cleanDomainStem(siteUrl) : "").trim();
+    if (dStem && dStem.length >= 4) {
+      const dRegex = new RegExp(`^${dStem.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b(?:\\s+(?:pty|ltd|limited|inc|llc|corp|co|gmbh|services|products|group|enterprises|systems))?\\s*[,\\-–]?\\s*`, "i");
+      a = a.replace(dRegex, "").trim();
+    }
+    if (crawlData.logoText && typeof crawlData.logoText === "string" && crawlData.logoText.trim().length >= 4) {
+      const logoClean = crawlData.logoText.trim().replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+/g, " ");
+      const logoRegex = new RegExp(`^${logoClean.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*[,\\-–]?\\s*`, "i");
+      a = a.replace(logoRegex, "").trim();
     }
   }
 
   // Strip generic leftover company words at start of address
   a = a.replace(/^(?:company|co\.?|incorporated|inc\.?|corporation|corp\.?|llc|limited|ltd\.?|equipment|systems|industries|technologies|enterprises|group|products)\b[\s,:\-–]*/i, "").trim();
 
-  // 7. Strip trailing contact / communication fields (Phone, Tel, Email, Fax, Hours, Map)
-  a = a.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip)\b\s*[:：\-–]?.*)$/i, "").trim();
-  a = a.replace(/[,;\s]*(?:\b(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[\s\S]*?(?:am|pm).*)$/i, "").trim();
-  a = a.replace(/[,;\s]*(?:\b(?:view\s*map|open\s*map|open\s*in\s*maps?|get\s*directions?|see\s*on\s*maps?|google\s*maps?|directions?)\b.*)$/i, "").trim();
+  // 8. Strip embedded and trailing email addresses, URLs, and communication links
+  a = a.replace(/(?:^|[\s,;])(?:email|e-mail|mail)\s*[:：\-–]?\s*[^\s,;]+@[^\s,;]+/gi, " ");
+  a = a.replace(/\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/g, " ");
+  a = a.replace(/\[email\s*protected\]|data-cfemail\S*/gi, " ");
+  a = a.replace(/(?:^|[\s,;])(?:web|website|site|url)\s*[:：\-–]?\s*(?:https?:\/\/|www\.)[^\s,;]+/gi, " ");
+  a = a.replace(/https?:\/\/[^\s,;]+/gi, " ");
+  a = a.replace(/\bwww\.[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}(?:\/[^\s,;]*)?/gi, " ");
 
-  // 8. Detect country and expand abbreviations
+  // 9. Strip trailing contact, communication, tax, and hours fields
+  a = a.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Ph|Mob|Mobile|Cell|Fax|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|WhatsApp|Postcode|Zip)\b\s*[:：\-–]?.*)$/i, "").trim();
+  a = a.replace(/[,;\s]*(?:\b(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[\s\S]*?(?:am|pm).*)$/i, "").trim();
+  a = a.replace(/[,;\s]*(?:\b(?:opening|business|working|office|trading)?\s*hours\b\s*[:：\-–]?.*)$/i, "").trim();
+  a = a.replace(/[,;\s]*(?:\b(?:view\s*map|open\s*map|open\s*in\s*maps?|get\s*directions?|see\s*on\s*maps?|google\s*maps?|driving\s*directions?|directions?)\b.*)$/i, "").trim();
+  a = a.replace(/[,;\s]*(?:\b(?:gps|coordinates?|latitude|longitude|lat|long)\b\s*[:：\-–]?\s*-?\d+\.\d+.*)$/i, "").trim();
+  a = a.replace(/[,;\s]*(?:\b(?:cin|gstin|gst|tin|vat|tax\s*id|ein|abn|acn|cif|nif|siret|siren|kvk|hrb|uid|registration\s*no|reg\s*no|company\s*number|co\s*reg)\b\s*[:：\-–]?\s*[A-Za-z0-9\-\/]+.*)$/i, "").trim();
+  a = a.replace(/[,;\s]*(?:\b(?:copyright|all\s*rights\s*reserved|privacy\s*policy|terms\s*(?:and|&)\s*conditions|terms\s*of\s*use)\b.*)$/i, "").trim();
+
+  // Strip loose trailing telephone numbers (e.g. ", +1 217 555 1234", ", 0113 245 6789", ", 0812-3456-7890")
+  a = a.replace(/[,;\s]+(?:\+?\d{1,4}[-\s.]*)?(?:\(?\d{2,5}\)?[-\s.]*){2,4}\d{2,6}\s*$/g, "").trim();
+
+  // 10. Detect country and expand abbreviations
   let resolvedCountry = (countryName || "").trim();
   if (!resolvedCountry || resolvedCountry.length < 2) {
     resolvedCountry = (typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(a) : "") || "";
@@ -2072,7 +2114,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = expandAddressAndStateAbbreviations(a, resolvedCountry);
   }
 
-  // 9. Strip country names from address per Rule 6
+  // 11. Strip country names from address per Rule 6
   a = a.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
   a = a.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
   a = a.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
@@ -2081,14 +2123,21 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = a.replace(cRegex, " ");
   }
 
-  // 10. Strip postal codes per Rule 6
+  // Strip trailing country codes (e.g. ", USA", ", UK", ", AU", ", NZ") - never strip ", CA" if United States
+  if (resolvedCountry && /united states/i.test(resolvedCountry)) {
+    a = a.replace(/[,;\s]+\b(?:USA|US)\b\s*$/i, "").trim();
+  } else {
+    a = a.replace(/[,;\s]+\b(?:CA|USA|US|UK|AU|NZ|ZA|DE|FR|ES|IT|IN|CN|TW|MY|ID)\b\s*$/i, "").trim();
+  }
+
+  // 12. Strip postal codes per Rule 6
   if (typeof removePostalCodesCarefully === "function") {
     a = removePostalCodesCarefully(a);
   }
   // Strip loose trailing 3-6 digit postal codes
   a = a.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "").trim();
 
-  // 11. Ensure comma before state and format
+  // 13. Ensure comma before state and format
   if (typeof ensureCommaBeforeState === "function") {
     a = ensureCommaBeforeState(a);
   }
@@ -2096,7 +2145,10 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = toTitleCase(a);
   }
 
-  // 12. Final cleanup of commas, spaces, and boundary special characters
+  // 14. Final cleanup of commas, spaces, and boundary special characters
+  // Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
+  a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
+
   a = a.replace(/\s+,/g, ",");
   a = a.replace(/,\s*,+/g, ", ");
   // Ensure space after commas except between digits (preserve decimal numbers e.g. 5,5 km)

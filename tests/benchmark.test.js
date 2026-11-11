@@ -1765,6 +1765,38 @@ async function runAsyncTests() {
     assert.strictEqual(finalStrictData.phoneNumber, '73099500');
     assert.strictEqual(finalStrictData.city, 'Available');
   });
+
+  // 38. Address Quality Control & Sanitization (Elimination of Unwanted Content & Pending Items)
+  runTest('Address Quality Control & Sanitization (Elimination of Unwanted Content & Pending Items)', () => {
+    // 1. Elimination of Unwanted Content: Contact headings, labels, emails, URLs, phones, hours, and tax IDs
+    const dirtyAddr1 = "Contact Us: 100 Main Street, Suite 400, Austin, TX 78701, USA Email: info@example.com Phone: +1 512 555 1234";
+    const clean1 = ctx.sanitizeRule6CompanyAddress(dirtyAddr1, "Acme Corp", "United States Of America");
+    assert.strictEqual(clean1, "100 Main Street, Suite 400, Austin, Texas", "Must strip Contact Us prefix, trailing email, phone, and postal code");
+
+    const dirtyAddr2 = "Physical Address: Unit 4, 12 Industrie Road, Penrose, Auckland 1061, New Zealand Web: www.teflexplastics.co.za Hours: Mon-Fri 8am-5pm";
+    const clean2 = ctx.sanitizeRule6CompanyAddress(dirtyAddr2, "Teflex Plastics", "New Zealand");
+    assert.strictEqual(clean2, "Unit 4, 12 Industrie Road, Penrose, Auckland", "Must strip Physical Address label, website URL, hours, postal code, and country");
+
+    const dirtyAddr3 = "Where To Find Us: Plot No. 45, GIDC Industrial Estate, Makarpura, Vadodara, Gujarat 390010 CIN: U12345GJ2000PTC123456 GSTIN: 24AAAAA0000A1Z5";
+    const clean3 = ctx.sanitizeRule6CompanyAddress(dirtyAddr3, "Baroda Polymers Ltd", "India");
+    assert.strictEqual(clean3, "Plot Number 45, Gujarat Industrial Development Corporation Industrial Estate, Makarpura, Vadodara, Gujarat", "Must strip Where To Find Us, CIN, GSTIN, and Indian postal code while expanding abbreviations");
+
+    const dirtyAddr4 = "Our Location: 45 Queens Road, Leeds, West Yorkshire LS1 2TW, United Kingdom Get Directions View On Google Maps";
+    const clean4 = ctx.sanitizeRule6CompanyAddress(dirtyAddr4, "Apex Solutions", "United Kingdom");
+    assert.strictEqual(clean4, "45 Queens Road, Leeds, West Yorkshire", "Must strip Our Location, UK postcode, and map links");
+
+    // 2. Elimination of Pending Items: Multi-line address extraction from broken HTML text
+    const multiLineBrokenText = "About Our Facility\nUnit 4, 12 Industrie Road\nPenrose, Auckland 1061\nNew Zealand\nPhone: +64 9 555 1234";
+    const extractedMulti = ctx.extractLikelyAddress(multiLineBrokenText);
+    assert.ok(extractedMulti.length > 10, "Must extract multi-line address instead of leaving address pending");
+    assert.ok(extractedMulti.includes("Industrie Road"), "Must capture street from multi-line text");
+    const sanitizedMulti = ctx.sanitizeRule6CompanyAddress(extractedMulti, "Teflex Plastics", "New Zealand");
+    assert.strictEqual(sanitizedMulti, "Unit 4, 12 Industrie Road, Penrose, Auckland", "Must sanitize extracted multi-line address cleanly");
+
+    // 3. Industrial Park / Estate recognition in isFullAddressCandidate
+    assert.ok(ctx.isFullAddressCandidate("Plot 45, GIDC Industrial Estate, Makarpura, Vadodara, Gujarat"), "Must recognize industrial estate as valid address structure");
+    assert.ok(ctx.isFullAddressCandidate("Unit 3, Riverside Business Park, Olympic Way, Wembley, London HA9 0GU"), "Must recognize business park as valid address structure");
+  });
 }
 
 runAsyncTests().then(() => {

@@ -518,7 +518,8 @@ async function crawlWebsite(targetUrl) {
           detectedDescCount = Math.max(detectedDescCount, subSignals.detectedDescCount);
         }
 
-        if (includeAddresses && !isLowQualitySubpage) {
+        const isExcludedAddressSubpage = /(?:cart|checkout|cookie|sitemap)/i.test(cUrl);
+        if (includeAddresses && !isExcludedAddressSubpage) {
           extractEmbeddedScriptAddresses(cText, addressCandidates, cUrl);
           extractMapAddresses(cText, addressCandidates, cUrl);
           extractMetaAddresses(cText, addressCandidates, cUrl);
