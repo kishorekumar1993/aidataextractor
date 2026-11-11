@@ -639,7 +639,7 @@
   function fillFormFields(data) {
     if (!data) return { filledCount: 0 };
     const elements = detectFormElements();
-    clearFilledFields(); // Reset all form fields to prevent ghost bleed-through from previous record
+    clearFilledFields({ silent: true }); // Reset all form fields to prevent ghost bleed-through from previous record
     let filledCount = 0;
 
     const allowedWorkingTypes = new Set([
@@ -877,13 +877,15 @@
       return (!isNaN(n) && n > 0) ? (n >= 3 ? "3" : String(n)) : "0";
     };
 
-    // 12, 13, 14. Product Metrics: Whatever Image Product has, put the same for No. of Product Description and Number of Product
+    const hasCountVal = (v) => v !== undefined && v !== null && String(v).trim() !== "";
     const imageCount = parseCountStr(data.productImages);
+    const prodCount = hasCountVal(data.numberOfProducts) ? parseCountStr(data.numberOfProducts) : imageCount;
+    const descCount = hasCountVal(data.numberOfProductDescriptions) ? parseCountStr(data.numberOfProductDescriptions) : imageCount;
 
-    // 12. Number of Products (same as Image Product)
+    // 12. Number of Products
     try {
       if (elements.numberOfProducts) {
-        if (setSelectValue(elements.numberOfProducts, imageCount)) {
+        if (setSelectValue(elements.numberOfProducts, prodCount)) {
           highlightField(elements.numberOfProducts);
           filledCount++;
         }
@@ -900,10 +902,10 @@
       }
     } catch (e) { console.warn("Error setting productImages:", e); }
 
-    // 14. Number of Product Descriptions (same as Image Product)
+    // 14. Number of Product Descriptions
     try {
       if (elements.numberOfProductDescriptions) {
-        if (setSelectValue(elements.numberOfProductDescriptions, imageCount)) {
+        if (setSelectValue(elements.numberOfProductDescriptions, descCount)) {
           highlightField(elements.numberOfProductDescriptions);
           filledCount++;
         }
@@ -913,7 +915,7 @@
     return { filledCount };
   }
 
-  function clearFilledFields() {
+  function clearFilledFields(options = {}) {
     const elements = detectFormElements();
     for (const [key, el] of Object.entries(elements)) {
       if (!el || key === "websiteUrl") continue;
@@ -925,7 +927,9 @@
       }
       el.classList.remove("ai-prefilled-field");
     }
-    AIExt.updateStatus("Form fields reset.", "idle");
+    if (!options || !options.silent) {
+      AIExt.updateStatus("Form fields reset.", "idle");
+    }
   }
 
   Object.assign(AIExt, {

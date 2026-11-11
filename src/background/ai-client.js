@@ -191,11 +191,16 @@ function finalizeParsedAiResult(parsed, crawlData) {
     parsed.phoneNumber = crawlData.phones[0];
   }
 
-  const ownCrawlProdCount = computeOwnCrawlProductCount(crawlData);
   if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {
-    parsed.numberOfProducts = ownCrawlProdCount;
-    parsed.productImages = ownCrawlProdCount;
-    parsed.numberOfProductDescriptions = ownCrawlProdCount;
+    const hasProd = parsed.numberOfProducts !== undefined && parsed.numberOfProducts !== null && String(parsed.numberOfProducts).trim() !== "";
+    const hasImg = parsed.productImages !== undefined && parsed.productImages !== null && String(parsed.productImages).trim() !== "";
+    const hasDesc = parsed.numberOfProductDescriptions !== undefined && parsed.numberOfProductDescriptions !== null && String(parsed.numberOfProductDescriptions).trim() !== "";
+    if (!hasProd || !hasImg || !hasDesc) {
+      const ownCrawlProdCount = computeOwnCrawlProductCount(crawlData);
+      if (!hasProd) parsed.numberOfProducts = hasImg ? normalizeCountValue(parsed.productImages) : ownCrawlProdCount;
+      if (!hasImg) parsed.productImages = hasProd ? normalizeCountValue(parsed.numberOfProducts) : ownCrawlProdCount;
+      if (!hasDesc) parsed.numberOfProductDescriptions = hasImg ? normalizeCountValue(parsed.productImages) : ownCrawlProdCount;
+    }
   } else {
     parsed.numberOfProducts = "";
     parsed.productImages = "";

@@ -129,45 +129,49 @@ runTest('Distributor with shopping cart is Not Working', () => {
   assert.strictEqual(isMfg, false, "Distributor must not be classified as Manufacturer");
 });
 
-// 9. Product Metrics Synchronization (Own crawl only — ignores Gemini and keeps all 3 identical)
-runTest('Product items use own crawl only (ignores Gemini) and keep all 3 fields identical', () => {
-  const aiDataWithBadZero = {
+// 9. Product Metrics Synchronization (Takes API values when provided; falls back to own crawl only if missing or in manual mode)
+runTest('Product items use API values when present and fall back to own crawl when missing or manual', () => {
+  const aiData = {
     _isFromAi: true,
     websiteStatus: "Working",
     businessType: "Manufacturer",
     companyName: "Test Manufacturing Ltd",
-    numberOfProducts: "0",
+    numberOfProducts: "1",
     productImages: "1",
-    numberOfProductDescriptions: "2"
+    numberOfProductDescriptions: "1"
   };
   const crawlWithThree = {
     detectedProductCount: 2,
     detectedImageCount: 3,
     detectedDescCount: 1
   };
-  const res = ctx.applyStrictInstructions(aiDataWithBadZero, crawlWithThree, {});
-  assert.strictEqual(res.productImages, "3", "productImages must use own crawl (3), ignoring Gemini (1)");
-  assert.strictEqual(res.numberOfProducts, "3", "numberOfProducts must match own crawl (3)");
-  assert.strictEqual(res.numberOfProductDescriptions, "3", "numberOfProductDescriptions must match own crawl (3)");
+  const res = ctx.applyStrictInstructions(aiData, crawlWithThree, {});
+  assert.strictEqual(res.productImages, "1", "productImages must take API value (1)");
+  assert.strictEqual(res.numberOfProducts, "1", "numberOfProducts must take API value (1)");
+  assert.strictEqual(res.numberOfProductDescriptions, "1", "numberOfProductDescriptions must take API value (1)");
 
-  const aiDataWithOvercount = {
+  const aiMissingProducts = {
     _isFromAi: true,
     websiteStatus: "Working",
     businessType: "Manufacturer",
-    companyName: "Test One Product Ltd",
-    numberOfProducts: "3",
-    productImages: "3",
-    numberOfProductDescriptions: "3"
+    companyName: "Test Missing Product Counts Ltd"
   };
-  const resOne = ctx.applyStrictInstructions(aiDataWithOvercount, { detectedImageCount: 1, detectedProductCount: 0, detectedDescCount: 0 }, {});
-  assert.strictEqual(resOne.productImages, "1", "productImages must use own crawl (1), ignoring Gemini (3)");
-  assert.strictEqual(resOne.numberOfProducts, "1", "numberOfProducts must match own crawl (1)");
-  assert.strictEqual(resOne.numberOfProductDescriptions, "1", "numberOfProductDescriptions must match own crawl (1)");
+  const resFallback = ctx.applyStrictInstructions(aiMissingProducts, crawlWithThree, {});
+  assert.strictEqual(resFallback.productImages, "3", "Missing API productImages must fall back to own crawl (3)");
+  assert.strictEqual(resFallback.numberOfProducts, "3", "Missing API numberOfProducts must fall back to own crawl (3)");
+  assert.strictEqual(resFallback.numberOfProductDescriptions, "3", "Missing API numberOfProductDescriptions must fall back to own crawl (3)");
 
-  const resZero = ctx.applyStrictInstructions(aiDataWithOvercount, { detectedImageCount: 0, detectedProductCount: 0, detectedDescCount: 0 }, {});
-  assert.strictEqual(resZero.productImages, "0", "productImages uses own crawl (0)");
-  assert.strictEqual(resZero.numberOfProducts, "0", "numberOfProducts mirrors 0");
-  assert.strictEqual(resZero.numberOfProductDescriptions, "0", "numberOfProductDescriptions mirrors 0");
+  const manualRes = ctx.applyStrictInstructions({
+    _isFromAi: false,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "Manual Crawl Ltd",
+    countryName: "United States Of America",
+    companyAddress: "100 Main Street, Chicago, Illinois"
+  }, { mainHtml: "<html><body>Industrial Products</body></html>", detectedImageCount: 0, detectedProductCount: 0, detectedDescCount: 0 }, {});
+  assert.strictEqual(manualRes.productImages, "0", "Manual fallback uses own crawl (0)");
+  assert.strictEqual(manualRes.numberOfProducts, "0", "Manual fallback mirrors 0");
+  assert.strictEqual(manualRes.numberOfProductDescriptions, "0", "Manual fallback mirrors 0");
 });
 
 // 10. Cross-Field Sanity Check (Non-working fields cleared)
@@ -210,9 +214,9 @@ runTest('Taiwan Google Maps embed merge & village restoration (Yi-Shyang test ca
   const romanized = ctx.romanizeChineseAddress(mergedChinese);
   assert.strictEqual(romanized, "Number 228, Baoshun Road, Houhu Village, East District, Chiayi City", "Romanized must expand No. -> Number and order smallest to largest");
 
-  // Test applyStrictInstructions with buggy bare output
-  const buggyAiData = {
-    _isFromAi: true,
+  // Test manual fallback restoration when AI fails / is omitted
+  const manualTaiwanData = {
+    _isFromAi: false,
     websiteStatus: "Working",
     businessType: "Manufacturer",
     companyName: "Yi Shyang Machinery Company, Limited",
@@ -221,17 +225,18 @@ runTest('Taiwan Google Maps embed merge & village restoration (Yi-Shyang test ca
     productImages: "3"
   };
   const crawlData = {
+    mainHtml: "<html><body>Machinery Products</body></html>",
     country: "Taiwan",
     addressCandidates: [
       { raw: "No.228, Pao Shun Road, Hoo Hu Li, Chia Yi City, 60079, Taiwan, R.O.C.", source: "contact" },
       { raw: "嘉義市東區後湖里保順路228號", source: "map" }
     ]
   };
-  const res = ctx.applyStrictInstructions(buggyAiData, crawlData, {});
+  const res = ctx.applyStrictInstructions(manualTaiwanData, crawlData, {});
   assert.strictEqual(
     res.companyAddress,
     "Number 228, Baoshun Road, Houhu Village, East District, Chiayi City",
-    "Company address must restore Number prefix and Houhu Village"
+    "Manual fallback must restore Number prefix and Houhu Village"
   );
   assert.strictEqual(res.state, "Not Available", "Taiwan provincial city has State Not Available");
   assert.strictEqual(res.city, "Available", "Chiayi City is Available");
@@ -524,10 +529,40 @@ runTest('updateEmailSource handles international contact slugs like /kontakt and
   assert.strictEqual(mapEs["hola@empresa.es"], "https://empresa.es/contacto/", "Spanish /contacto/ must beat homepage");
 });
 
-// 19. State and City strictly enforce instruction sheet rules in AI mode (suburbs never allowed; missing state never invented)
-runTest('State and City enforce instruction sheet rules in AI mode (reject suburbs, require written state)', () => {
-  const aiSuburbCase = {
+// 19. State and City trust API values when provided, and enforce QC rules on missing API values & manual crawl fallback
+runTest('State and City enforce instruction sheet rules in manual crawl and missing-field AI fallback', () => {
+  const aiDirectValues = {
     _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "Global Example Ltd",
+    countryName: "Australia",
+    companyAddress: "Building 2, 1090 Centre Road, Oakleigh South, Victoria",
+    state: "Available",
+    city: "Not Available",
+    productImages: "3"
+  };
+  const resAiDirect = ctx.applyStrictInstructions(aiDirectValues, {}, {});
+  assert.strictEqual(resAiDirect.state, "Available", "API state must be taken directly");
+  assert.strictEqual(resAiDirect.city, "Not Available", "API city must be taken directly");
+
+  const aiMissingStateCity = {
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyName: "Melbourne Example Ltd",
+    countryName: "Australia",
+    companyAddress: "123 Collins Street, Melbourne, Victoria",
+    productImages: "3"
+  };
+  const resMissing = ctx.applyStrictInstructions(aiMissingStateCity, {}, {});
+  assert.strictEqual(resMissing.state, "Available", "Missing API state must fall back to Victoria QC check");
+  assert.strictEqual(resMissing.city, "Available", "Missing API city must fall back to Melbourne QC check");
+
+  const manualCrawlStub = { mainHtml: "<html><body>Industrial Products</body></html>" };
+
+  const manualSuburbCase = {
+    _isFromAi: false,
     websiteStatus: "Working",
     businessType: "Manufacturer",
     companyName: "Global Example Ltd",
@@ -537,12 +572,12 @@ runTest('State and City enforce instruction sheet rules in AI mode (reject subur
     city: "Available",
     productImages: "3"
   };
-  const res1 = ctx.applyStrictInstructions(aiSuburbCase, {}, {});
+  const res1 = ctx.applyStrictInstructions(manualSuburbCase, manualCrawlStub, {});
   assert.strictEqual(res1.state, "Available", "Victoria in address must keep state=Available");
-  assert.strictEqual(res1.city, "Not Available", "Suburb Oakleigh South must be overridden to city=Not Available even if Gemini says Available");
+  assert.strictEqual(res1.city, "Not Available", "Manual crawl suburb Oakleigh South must be city=Not Available");
 
-  const aiUnknownSuburb = {
-    _isFromAi: true,
+  const manualUnknownSuburb = {
+    _isFromAi: false,
     websiteStatus: "Working",
     businessType: "Manufacturer",
     companyName: "Sample Co Ltd",
@@ -552,27 +587,12 @@ runTest('State and City enforce instruction sheet rules in AI mode (reject subur
     city: "Available",
     productImages: "3"
   };
-  const resUnknown = ctx.applyStrictInstructions(aiUnknownSuburb, {}, {});
-  assert.strictEqual(resUnknown.state, "Not Available", "No state written in address must be overridden to state=Not Available");
-  assert.strictEqual(resUnknown.city, "Not Available", "Unknown Suburb must be overridden to city=Not Available");
+  const resUnknown = ctx.applyStrictInstructions(manualUnknownSuburb, manualCrawlStub, {});
+  assert.strictEqual(resUnknown.state, "Not Available", "No state written in address must be state=Not Available in manual mode");
+  assert.strictEqual(resUnknown.city, "Not Available", "Unknown Suburb must be city=Not Available in manual mode");
 
-  const aiMissedCityState = {
-    _isFromAi: true,
-    websiteStatus: "Working",
-    businessType: "Manufacturer",
-    companyName: "Melbourne Example Ltd",
-    countryName: "Australia",
-    companyAddress: "123 Collins Street, Melbourne, Victoria",
-    state: "Not Available",
-    city: "Not Available",
-    productImages: "3"
-  };
-  const res2 = ctx.applyStrictInstructions(aiMissedCityState, {}, {});
-  assert.strictEqual(res2.state, "Available", "Victoria in address must be fixed to state=Available");
-  assert.strictEqual(res2.city, "Available", "Melbourne in address must be fixed to city=Available");
-
-  const aiSuburbVillage = {
-    _isFromAi: true,
+  const manualSuburbVillage = {
+    _isFromAi: false,
     websiteStatus: "Working",
     businessType: "Manufacturer",
     companyName: "NZ Example Ltd",
@@ -582,7 +602,7 @@ runTest('State and City enforce instruction sheet rules in AI mode (reject subur
     city: "Available",
     productImages: "3"
   };
-  const resNz = ctx.applyStrictInstructions(aiSuburbVillage, {}, {});
+  const resNz = ctx.applyStrictInstructions(manualSuburbVillage, manualCrawlStub, {});
   assert.strictEqual(resNz.state, "Not Available", "Penrose without region/capital must have state=Not Available");
   assert.strictEqual(resNz.city, "Not Available", "Penrose suburb alone must have city=Not Available");
 
@@ -622,8 +642,8 @@ runTest('State and City enforce instruction sheet rules in AI mode (reject subur
     ["10 Rue de Rivoli, Paris", "France"],
     ["123 Zhongxiao Road, Taipei City", "Taiwan"]
   ]) {
-    const capRes = ctx.applyStrictInstructions({
-      _isFromAi: true,
+    const capResManual = ctx.applyStrictInstructions({
+      _isFromAi: false,
       websiteStatus: "Working",
       businessType: "Manufacturer",
       companyName: "Capital Corp Limited",
@@ -632,9 +652,21 @@ runTest('State and City enforce instruction sheet rules in AI mode (reject subur
       state: "Not Available",
       city: "Not Available",
       productImages: "3"
+    }, manualCrawlStub, {});
+    assert.strictEqual(capResManual.state, "Available", `Capital in "${capAddr}" must make State Available in manual mode`);
+    assert.strictEqual(capResManual.city, "Available", `Capital in "${capAddr}" must make City Available in manual mode`);
+
+    const capResAiMissing = ctx.applyStrictInstructions({
+      _isFromAi: true,
+      websiteStatus: "Working",
+      businessType: "Manufacturer",
+      companyName: "Capital Corp Limited",
+      countryName: capCountry,
+      companyAddress: capAddr,
+      productImages: "3"
     }, {}, {});
-    assert.strictEqual(capRes.state, "Available", `Capital in "${capAddr}" must make State Available`);
-    assert.strictEqual(capRes.city, "Available", `Capital in "${capAddr}" must make City Available`);
+    assert.strictEqual(capResAiMissing.state, "Available", `Missing AI state for capital in "${capAddr}" must fall back to Available`);
+    assert.strictEqual(capResAiMissing.city, "Available", `Missing AI city for capital in "${capAddr}" must fall back to Available`);
   }
 
   const rule7Prompt = ctx.buildExtractionPrompt({ originalUrl: "https://example.com", title: "Ex", emails: [], phones: [] }, false);
@@ -1093,7 +1125,23 @@ runTest('Strip unwanted prose clauses & field labels from company names and supp
     phoneNumber: "693893855",
     productImages: "3"
   }, mechatronicCrawl, {});
-  assert.strictEqual(aiCleanShort.companyName, "Mechatronic Engineering Spółka Z Ograniczoną Odpowiedzialnością");
+  assert.strictEqual(aiCleanShort.companyName, "Mechatronic Systems", "AI companyName must be preserved when API returned a clean name");
+
+  const manualShort = ctx.applyStrictInstructions({
+    _isFromAi: false,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "",
+    countryName: "Poland",
+    companyAddress: "Innowacyjna 6, Gardno, Gryfino",
+    state: "Not Available",
+    city: "Not Available",
+    emailId: "info@mechatronic-systems.com",
+    phoneNumber: "693893855",
+    productImages: "3"
+  }, mechatronicCrawl, {});
+  assert.ok(/Mechatronic/i.test(manualShort.companyName) && /Gesellschaft Mit Beschränkter Haftung|Spółka Z Ograniczoną Odpowiedzialnością/i.test(manualShort.companyName));
 });
 
 // 28. Modular Split Integrity: manifest.json content_scripts load cleanly & resolve all AIExt references
@@ -1167,6 +1215,13 @@ runTest('Modular MV3 split loads all content scripts cleanly with valid AIExt bi
       assert.ok(m[1] in ext, `Undefined AIExt.${m[1]} referenced in ${rel}`);
     }
   }
+
+  // Verify #ai-crawl-btn ("Auto-Crawl & Pre-Fill") resolves AIExt.triggerCrawlAndFill lazily even if widget was created before content.js
+  const overlaySrc = fs.readFileSync(path.join(rootDir, 'src/content/overlay-ui.js'), 'utf8');
+  assert.ok(!/crawlBtn\.addEventListener\(\s*["']click["']\s*,\s*AIExt\.triggerCrawlAndFill\s*\)/.test(overlaySrc),
+    '#ai-crawl-btn must wrap AIExt.triggerCrawlAndFill in a function instead of passing undefined before content.js loads');
+  assert.ok(overlaySrc.includes('type="button" class="ai-action-btn ai-btn-primary" id="ai-crawl-btn"'),
+    '#ai-crawl-btn must have type="button"');
 });
 
 // 29. Rule 4 Company Name formatting (brackets, copyright symbols, U.S. dots, internal commas/ampersands)

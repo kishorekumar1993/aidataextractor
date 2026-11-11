@@ -127,7 +127,10 @@
     const crawlBtn = document.getElementById("ai-crawl-btn");
     const headerCrawlBtn = document.getElementById("ai-header-crawl-btn");
     const quickBtn = document.getElementById("ai-quick-btn");
-    if (crawlBtn) crawlBtn.disabled = true;
+    if (crawlBtn) {
+      crawlBtn.disabled = true;
+      crawlBtn.innerHTML = "<span>⏳ Crawling...</span>";
+    }
     if (headerCrawlBtn) {
       headerCrawlBtn.disabled = true;
       headerCrawlBtn.innerHTML = "⏳ Crawling...";

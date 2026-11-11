@@ -543,7 +543,8 @@ function computeOwnCrawlProductCount(crawlData) {
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const result = { ...data };
 
-  // 1. Authoritative API Ground Truth: When Gemini API provided the extraction, use the API response directly!
+  // 1. Authoritative API Ground Truth: When AI API succeeded, take ALL 14 fields from the API response.
+  // Only fall back to local/manual crawl helpers for individual fields that the API left empty/invalid.
   if (data._isFromAi) {
     result._isFromAi = true;
     result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
@@ -567,164 +568,127 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       return result;
     }
 
-    // 1. Company Name: Align, expand, Title Case, restore symbols, restore comma before legal suffix
-    let compName = decodeHtmlEntities(String(result.companyName || "").trim());
-    compName = cleanCompanyPrefixesAndSuffixes(compName);
-
-    // Domain-matching safeguard: Only override AI company name if missing or corrupted with prose noise
-    try {
-      const targetHost = (crawlData.finalUrl || crawlData.originalUrl || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].split(":")[0];
-      const domainParts = targetHost.split(".");
-      const domainStem = domainParts[0].toLowerCase().replace(/[^a-z0-9]/g, "");
-
-      if (domainStem && domainStem.length >= 4 && (!compName || hasCompanyProseNoise(compName))) {
-        const compNorm = compName.toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (!compNorm.includes(domainStem)) {
-          const candidatesToSearch = [
-            crawlData.logoText,
-            crawlData.title,
-            crawlData.copyrightText,
-            ...(crawlData.legalCompanyCandidates || [])
-          ].filter(c => c && !hasCompanyProseNoise(c));
-
-          for (const cand of candidatesToSearch) {
-            const cleanedCand = cleanCompanyPrefixesAndSuffixes(cand);
-            if (!cleanedCand || hasCompanyProseNoise(cleanedCand)) continue;
-            const candNorm = cleanedCand.toLowerCase().replace(/[^a-z0-9]/g, "");
-            if (candNorm.includes(domainStem) && hasCompleteLegalSuffix(cleanedCand)) {
-              console.log(`[AI Safeguard] Corrected mismatched company name "${compName}" to domain-matching official candidate "${cleanedCand}"`);
-              compName = cleanedCand;
-              break;
-            }
-          }
-        }
-      }
-    } catch (e) { }
-
-    compName = compName.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
-    compName = restoreLegalSuffixIfOmitted(compName, crawlData);
-    compName = cleanCompanyPrefixesAndSuffixes(compName);
-    compName = expandCompanyAbbreviations(compName, result.countryName || "");
-    compName = cleanCompanyPrefixesAndSuffixes(compName);
-    compName = toTitleCase(compName);
-    compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
-    compName = restoreOriginalSymbolsInCompanyName(compName, crawlData);
-    result.companyName = stripBoundarySpecialChars(compName);
-
-    // 2. Country Name: Full form Title Case, and UK constituent refinement (Mandatory QC Rule)
-    let country = toTitleCase(normalizeCountryName(result.countryName));
-    if (!country && result.companyAddress) {
-      country = toTitleCase(detectCountryFromAddress(result.companyAddress));
-    }
-    country = resolveUkCountryName(country, result.companyAddress || "", crawlData);
-    result.countryName = country;
-
-    // 3. Company Address: Strict QC sanitization - preserve valid AI extraction, expand abbreviations, remove postal codes & country
-    let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
-    const aiAddrMatch = resolveBestAddressCandidateAndSource(addr, crawlData);
-    const matchedAiCandidate = !!aiAddrMatch.candidate;
-    let selectedAiCandidate = aiAddrMatch.candidate || null;
-    if (!selectedAiCandidate && crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates.length > 0) {
-      selectedAiCandidate = crawlData.addressCandidates.find(c => c && (c.isHeadquarters || c.source === "contact" || c.source === "headquarters")) || crawlData.addressCandidates[0];
-    }
-    let bestRaw = selectedAiCandidate ? (typeof selectedAiCandidate === "object" ? selectedAiCandidate.raw : selectedAiCandidate) : "";
-    if (!bestRaw && crawlData) {
-      bestRaw = (crawlData.contactPageText || crawlData.bodyText || crawlData.combinedText || crawlData.mainHtml || "").slice(0, 5000);
-    }
-    if (addr && addr.toLowerCase() !== "not available") {
-      addr = expandAddressAndStateAbbreviations(addr, country);
-      if (bestRaw) {
-        addr = restoreStateIfOmitted(addr, bestRaw, country);
-        addr = expandAddressAndStateAbbreviations(addr, country);
-        addr = restoreStreetNumberIfOmitted(addr, bestRaw, crawlData);
-        addr = restoreTaiwanVillageIfOmitted(addr, bestRaw, crawlData);
-        addr = stripBlindlyAddedNumber(addr, bestRaw, bestRaw);
-        if (matchedAiCandidate) {
-          addr = stripExtraWordsFromAddress(addr, bestRaw);
-        }
-      }
-      addr = removePostalCodesCarefully(addr);
-      addr = ensureCommaBeforeState(addr);
-      if (bestRaw) {
-        addr = stripBlindlyAddedNumber(addr, bestRaw, bestRaw);
-        if (matchedAiCandidate) {
-          addr = stripExtraWordsFromAddress(addr, bestRaw);
-        }
-      }
-      // Unconditionally strip country names from address so country never appears inside the street address field
-      addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
-      addr = addr.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
-      addr = addr.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
-      if (country && country.length > 2) {
-        const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
-        addr = addr.replace(countryRegex, " ");
-      }
-      addr = addr.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
-      addr = addr.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
-      addr = addr.replace(/\s+/g, " ");
-      addr = toTitleCase(addr);
-      addr = repairBlindlySeparatedCommas(addr);
-      addr = normalizeTaiwanDivisions(addr);
-      if (bestRaw) {
-        addr = restoreStreetNumberIfOmitted(addr, bestRaw, crawlData);
-        addr = restoreTaiwanVillageIfOmitted(addr, bestRaw, crawlData);
-        if (matchedAiCandidate) {
-          addr = stripExtraWordsFromAddress(addr, bestRaw);
-        }
-      }
-      addr = expandAddressAndStateAbbreviations(addr, country);
-      if (bestRaw && matchedAiCandidate) {
-        addr = stripExtraWordsFromAddress(addr, bestRaw);
-      }
-      addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N})]+$/gu, "").trim();
-    } else {
-      addr = "Not Available";
-    }
-    result.companyAddress = addr;
-
-    // 4. State & City: Strictly enforce instruction-sheet QC rules in BOTH AI and deterministic modes!
-    // Suburbs alone MUST NEVER be marked City: Available, and State MUST be literally present in companyAddress (or National Capital).
     const normalizeAvailability = (val) => {
       const s = String(val || "").trim().toLowerCase();
       if (s === "available") return "Available";
       if (s === "not available") return "Not Available";
       return "";
     };
-    const aiCity = normalizeAvailability(result.city);
 
-    if (!addr || addr.length < 5 || addr.toLowerCase() === "not available") {
-      result.state = "Not Available";
-      result.city = "Not Available";
+    // 1. Business Type & Company Profile: Take directly from API (normalize common alias only)
+    const btAliasMap = {
+      "manufacturer": "Manufacturer",
+      "manufacturing": "Manufacturer",
+      "manufacture": "Manufacturer",
+      "industrial services": "Industrial Services",
+      "industrial service": "Industrial Services",
+      "exporter": "Exporter",
+      "export": "Exporter",
+      "trader": "Trader",
+      "trading": "Trader",
+      "distributer": "Distributer",
+      "distributor": "Distributer",
+      "supplier": "Supplier",
+      "wholesaler": "Wholesaler",
+      "wholesale": "Wholesaler",
+      "service provider": "Service Provider",
+      "online shopping": "Online Shopping",
+      "restricted site": "Restricted Site",
+      "other": "Other"
+    };
+    const rawBt = String(result.businessType || "").trim();
+    result.businessType = btAliasMap[rawBt.toLowerCase()] || rawBt;
+
+    const apiProfile = normalizeAvailability(result.companyProfile);
+    if (apiProfile) {
+      result.companyProfile = apiProfile;
     } else {
-      result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
-      const qcCity = evaluateCityQC(addr, country);
-      const isStrictCityCountry =
-        isAustralianLocation(addr, country) ||
-        isNewZealandLocation(addr, country) ||
-        isSouthAfricanLocation(addr, country) ||
-        isTaiwanLocation(addr, country) ||
-        isIndonesianLocation(addr, country) ||
-        isMalaysianLocation(addr, country) ||
-        isUkLocation(addr, country) ||
-        isUnitedStatesLocation(addr, country) ||
-        /\b(?:canada|spain|espana)\b/i.test(country || addr);
+      const profileDetected = crawlData && (crawlData.hasCompanyProfile || checkCompanyProfilePresence(crawlData.mainHtml, crawlData.bodyText, crawlData.profilePageText));
+      result.companyProfile = profileDetected ? "Available" : "Not Available";
+    }
 
-      if (qcCity === "Available") {
-        result.city = "Available";
-      } else if (isStrictCityCountry || addressLooksLikeSuburbOnly(addr)) {
-        result.city = "Not Available";
-      } else if (aiCity === "Available") {
-        // Non-strict minor countries: only allow AI's Available if there is a genuine non-suburb, non-street locality segment
-        const locSegs = extractAddressLocalitySegments(addr) || [];
-        const lastLoc = locSegs.length > 0 ? locSegs[locSegs.length - 1] : "";
-        result.city = (lastLoc && !isNotCitySegment(lastLoc)) ? "Available" : "Not Available";
+    // 2. Company Name: Take directly from API with safe prefix/abbreviation cleanup; fall back to crawl ONLY if API returned empty
+    let compName = decodeHtmlEntities(String(result.companyName || "").trim());
+    compName = cleanCompanyPrefixesAndSuffixes(compName);
+    compName = compName.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
+    if (!compName && crawlData) {
+      const fallbackCand = [crawlData.logoText, crawlData.title, crawlData.copyrightText, ...(crawlData.legalCompanyCandidates || [])]
+        .find(c => c && !hasCompanyProseNoise(cleanCompanyPrefixesAndSuffixes(c)));
+      if (fallbackCand) {
+        compName = cleanCompanyPrefixesAndSuffixes(fallbackCand);
+        compName = expandCompanyAbbreviations(compName, result.countryName || "");
+        compName = toTitleCase(compName);
+        compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
+      }
+    } else {
+      compName = expandCompanyAbbreviations(compName, result.countryName || "");
+      compName = cleanCompanyPrefixesAndSuffixes(compName);
+      compName = toTitleCase(compName);
+      compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
+      compName = restoreOriginalSymbolsInCompanyName(compName, crawlData);
+    }
+    result.companyName = stripBoundarySpecialChars(compName);
+
+    // 3. Country Name: Take from API and standardize full English name; fall back to address detection only if empty
+    let country = toTitleCase(normalizeCountryName(result.countryName));
+    if (!country && result.companyAddress) {
+      country = toTitleCase(detectCountryFromAddress(result.companyAddress));
+    }
+    if (/^(?:uk|united\s*kingdom|great\s*britain)$/i.test(String(result.countryName || "").trim()) &&
+        !/\b(?:united\s*kingdom|great\s*britain|uk)\b/i.test(String(result.countryName || ""))) {
+      country = resolveUkCountryName(country, result.companyAddress || "", crawlData);
+    } else if (!country) {
+      country = resolveUkCountryName(country, result.companyAddress || "", crawlData);
+    }
+    result.countryName = country;
+
+    // 4. Company Address: Take directly from API with safe cleanup; fall back to crawl ONLY if API returned empty / Not Available
+    let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
+    const aiAddrMatch = resolveBestAddressCandidateAndSource(addr, crawlData);
+    const selectedAiCandidate = aiAddrMatch.candidate || (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates[0]) || null;
+    const bestRaw = selectedAiCandidate ? (typeof selectedAiCandidate === "object" ? selectedAiCandidate.raw : selectedAiCandidate) : "";
+
+    if (!addr || addr.toLowerCase() === "not available") {
+      if (bestRaw) {
+        addr = bestRaw;
       } else {
-        result.city = "Not Available";
+        addr = "Not Available";
       }
     }
 
-    result.businessType = String(result.businessType || "").trim();
-    result.companyProfile = String(result.companyProfile || "").trim();
+    if (addr && addr !== "Not Available") {
+      addr = addr.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
+      addr = removePostalCodesCarefully(addr);
+      // Strip trailing/standalone country name if API accidentally kept it in companyAddress
+      addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
+      addr = addr.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
+      addr = addr.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
+      if (country && country.length > 2) {
+        const countryRegex = new RegExp(`\\b${country.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "gi");
+        addr = addr.replace(countryRegex, " ");
+      }
+      addr = addr.replace(/,\s*,+/g, ", ");
+      addr = addr.replace(/\s+,/g, ",");
+      addr = addr.replace(/\s+/g, " ");
+      addr = expandAddressAndStateAbbreviations(addr, country);
+      addr = ensureCommaBeforeState(addr);
+      addr = toTitleCase(addr);
+      addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N})]+$/gu, "").trim();
+    }
+    result.companyAddress = addr || "Not Available";
+
+    // 5. State & City: Take directly from API when valid ("Available" / "Not Available"); fall back to QC rules ONLY if missing/invalid
+    const apiState = normalizeAvailability(result.state);
+    const apiCity = normalizeAvailability(result.city);
+    if (!result.companyAddress || result.companyAddress.toLowerCase() === "not available") {
+      result.state = apiState || "Not Available";
+      result.city = apiCity || "Not Available";
+    } else {
+      result.state = apiState || (hasStateInAddress(result.companyAddress, country) ? "Available" : "Not Available");
+      result.city = apiCity || evaluateCityQC(result.companyAddress, country);
+    }
+
+    // 6. Email ID & Secondary Email ID: Take from API; fall back to crawl ONLY if empty/invalid
     result.emailId = stripTrailingContactWordsFromEmail(String(result.emailId || "").trim().toLowerCase());
     if (result.emailId && (!isValidCorporateEmail(result.emailId) || isUnwantedEmail(result.emailId))) {
       result.emailId = "";
@@ -743,14 +707,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     if (result.secondaryEmailId && (!isValidCorporateEmail(result.secondaryEmailId) || isUnwantedEmail(result.secondaryEmailId))) {
       result.secondaryEmailId = "";
     }
-    // QC Rule: Primary email and secondary email MUST NOT be the same (or malformed mailto duplicate)!
     if (result.secondaryEmailId && result.emailId && (
       result.secondaryEmailId.toLowerCase() === result.emailId.toLowerCase() ||
       result.secondaryEmailId.toLowerCase() === ("mailto" + result.emailId.toLowerCase())
     )) {
       result.secondaryEmailId = "";
     }
-    // If secondaryEmailId is empty or duplicate, attempt to find a distinct corporate email from crawlData
     if (!result.secondaryEmailId && crawlData && Array.isArray(crawlData.emails) && crawlData.emails.length > 0) {
       const primLower = (result.emailId || "").toLowerCase();
       const distinctCand = crawlData.emails.find(e => {
@@ -761,13 +723,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         result.secondaryEmailId = stripTrailingContactWordsFromEmail(distinctCand.trim().toLowerCase());
       }
     }
-    if (result.secondaryEmailId && result.emailId && (
-      result.secondaryEmailId.toLowerCase() === result.emailId.toLowerCase() ||
-      result.secondaryEmailId.toLowerCase() === ("mailto" + result.emailId.toLowerCase())
-    )) {
-      result.secondaryEmailId = "";
-    }
-    // QC Rule: Take the complete phone number, but remove the country code, special characters, and spaces. Do not take toll-free numbers. Do not take numbers starting with zero.
+
+    // 7. Phone Number: Take from API (cleaned via calling-code & toll-free rules); fall back to crawl ONLY if empty/invalid
     result.phoneNumber = cleanPhoneNumber(result.phoneNumber, result.countryName);
     if (!result.phoneNumber && crawlData && crawlData.phones && crawlData.phones.length > 0) {
       for (const cand of crawlData.phones) {
@@ -778,12 +735,15 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         }
       }
     }
-    // Product metrics synchronization (Rules 12, 13, 14):
-    // Product items use OWN CRAWL ONLY (never Gemini), and all 3 fields must stay identical
-    const ownCrawlCount = computeOwnCrawlProductCount(crawlData);
-    result.productImages = ownCrawlCount;
-    result.numberOfProducts = ownCrawlCount;
-    result.numberOfProductDescriptions = ownCrawlCount;
+
+    // 8. Product counts: Take directly from API; fall back to own crawl ONLY if API left them empty
+    const hasApiProd = result.numberOfProducts !== undefined && result.numberOfProducts !== null && String(result.numberOfProducts).trim() !== "";
+    const hasApiImg = result.productImages !== undefined && result.productImages !== null && String(result.productImages).trim() !== "";
+    const hasApiDesc = result.numberOfProductDescriptions !== undefined && result.numberOfProductDescriptions !== null && String(result.numberOfProductDescriptions).trim() !== "";
+    const fallbackProdCount = (!hasApiProd || !hasApiImg || !hasApiDesc) ? computeOwnCrawlProductCount(crawlData) : "";
+    result.productImages = hasApiImg ? normalizeCountValue(result.productImages) : fallbackProdCount;
+    result.numberOfProducts = hasApiProd ? normalizeCountValue(result.numberOfProducts) : (hasApiImg ? result.productImages : fallbackProdCount);
+    result.numberOfProductDescriptions = hasApiDesc ? normalizeCountValue(result.numberOfProductDescriptions) : (hasApiImg ? result.productImages : fallbackProdCount);
 
     populateEvidenceAndSourceLinks(result, crawlData, selectedAiCandidate, bestRaw);
     return result;
@@ -1233,7 +1193,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // CRITICAL GLOBAL FIX: Restore missing initial street / building / premise number if dropped
       // Restore missing number ONLY from the selected candidate's raw text (NEVER mix multiple addresses)
       if (rawSource) {
-        addr = restoreStreetNumberIfOmitted(addr, rawSource);
+        addr = restoreStreetNumberIfOmitted(addr, rawSource, crawlData);
+        addr = restoreTaiwanVillageIfOmitted(addr, rawSource, crawlData);
       }
 
       // Unconditionally strip country names from address so the country name never appears inside the street address field

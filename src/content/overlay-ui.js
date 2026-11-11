@@ -436,8 +436,8 @@
           <span>AI Data Entry Assistant</span>
         </div>
         <div class="ai-header-controls">
-          <button class="ai-btn-quick-crawl" id="ai-header-crawl-btn" title="Quick AI Crawl & Fill">⚡ AI Crawl</button>
-          <button class="ai-btn-icon" id="ai-toggle-minimize" title="Minimize / Expand">−</button>
+          <button type="button" class="ai-btn-quick-crawl" id="ai-header-crawl-btn" title="Quick AI Crawl & Fill">⚡ AI Crawl</button>
+          <button type="button" class="ai-btn-icon" id="ai-toggle-minimize" title="Minimize / Expand">−</button>
         </div>
       </div>
       <div id="ai-prefill-body">
@@ -449,7 +449,7 @@
           <div class="ai-url-value" id="ai-current-target-url">Searching for website URL...</div>
         </div>
 
-        <button class="ai-action-btn ai-btn-primary" id="ai-crawl-btn">
+        <button type="button" class="ai-action-btn ai-btn-primary" id="ai-crawl-btn">
           <span>⚡ Auto-Crawl & Pre-Fill</span>
         </button>
 
@@ -662,14 +662,24 @@
     }
 
     const crawlBtn = document.getElementById("ai-crawl-btn");
-    if (crawlBtn) crawlBtn.addEventListener("click", AIExt.triggerCrawlAndFill);
+    if (crawlBtn) {
+      crawlBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof AIExt.triggerCrawlAndFill === "function") {
+          AIExt.triggerCrawlAndFill();
+        }
+      });
+    }
 
     const headerCrawlBtn = document.getElementById("ai-header-crawl-btn");
     if (headerCrawlBtn) {
       headerCrawlBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        AIExt.triggerCrawlAndFill();
+        if (typeof AIExt.triggerCrawlAndFill === "function") {
+          AIExt.triggerCrawlAndFill();
+        }
       });
     }
 
@@ -694,7 +704,15 @@
     }
 
     const clearBtn = document.getElementById("ai-clear-btn");
-    if (clearBtn) clearBtn.addEventListener("click", AIExt.clearFilledFields);
+    if (clearBtn) {
+      clearBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof AIExt.clearFilledFields === "function") {
+          AIExt.clearFilledFields();
+        }
+      });
+    }
   }
 
   function injectInlineQuickButton() {
