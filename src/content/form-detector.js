@@ -124,7 +124,23 @@
     elements.businessType = document.getElementById("selectBusinessType") || document.getElementById("business-type");
     elements.companyProfile = document.getElementById("selectCompanyProfile") || document.getElementById("company-profile");
     elements.companyName = document.getElementById("inputCompanyName") || document.getElementById("company-name");
-    elements.companyAddress = document.getElementById("inputCompanyAddress") || document.getElementById("company-address");
+    elements.companyAddress = document.getElementById("inputCompanyAddress") ||
+      document.getElementById("company-address") ||
+      document.getElementById("companyAddress") ||
+      document.getElementById("company_address") ||
+      document.getElementById("input-company-address") ||
+      document.getElementById("txtCompanyAddress") ||
+      document.getElementById("txtAddress") ||
+      document.getElementById("address") ||
+      document.getElementById("inputAddress") ||
+      document.querySelector('textarea[name="company_address"]') ||
+      document.querySelector('textarea[name="companyAddress"]') ||
+      document.querySelector('textarea[name="address"]') ||
+      document.querySelector('textarea[name="txtCompanyAddress"]') ||
+      document.querySelector('textarea[name="txtAddress"]') ||
+      document.querySelector('input[name="company_address"]') ||
+      document.querySelector('input[name="companyAddress"]') ||
+      document.querySelector('input[name="address"]');
     elements.countryName = document.getElementById("inputCountry") || document.getElementById("country-name");
     elements.state = document.getElementById("selectState") || document.getElementById("state");
     elements.city = document.getElementById("selectCity") || document.getElementById("city");
@@ -183,9 +199,14 @@
 
     if (!elements.companyAddress) {
       elements.companyAddress = allTextareas.find(ta => {
-        return (ta.placeholder || "").toLowerCase().includes("address") || getElementContext(ta).includes("address");
+        const ph = (ta.placeholder || "").toLowerCase();
+        const ctx = getElementContext(ta);
+        return ph.includes("address") || ctx.includes("address") || ctx.includes("addr");
       }) || allInputs.find(inp => {
-        return inp !== elements.companyName && (inp.placeholder || "").toLowerCase().includes("address");
+        if (inp === elements.companyName || inp === elements.countryName || inp === elements.emailId || inp === elements.secondaryEmailId || inp === elements.phoneNumber) return false;
+        const ph = (inp.placeholder || "").toLowerCase();
+        const ctx = getElementContext(inp);
+        return ph.includes("address") || ctx.includes("address") || ctx.includes("addr");
       });
     }
 

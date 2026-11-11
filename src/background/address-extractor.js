@@ -35,6 +35,8 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   let cleaned = decoded
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
+    .replace(/^[^\w\d#]*(?:["']\s*>?|>|\/?>)\s*/g, "")
+    .replace(/^[^a-zA-Z0-9#]+/g, "")
     .replace(/^(?:[A-Za-z0-9&,.'\-()\[\]\s]{2,100}?\s+)?(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "")
     .replace(/^(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)/i, "")
     .replace(/^(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "")
@@ -512,12 +514,13 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 5. Explicit label prefixes Add: / Address: / Addr: / Where You Can Find Us / Find Us / Location: / Alamat: / Dirección: / 地址:
-  const labelAddrRegex = /(?:^|[^a-zA-Z0-9])(?:where\s+(?:you\s+can\s+)?find\s+us|find\s+us|our\s+(?:office|address|location|factory|workshop|showroom)|[A-Za-z]+\s+(?:office|factory(?:\s*(?:&|and)\s*showroom)?|showroom|warehouse)|postal\s*address|address|alamat|kantor|lokasi|pabrik|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]?\s*(?:\s*<[^>]+>)*\s*([\s\S]{10,400}?)(?=<h[1-6]\b|<form\b|<footer\b|\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|fax)\b\s*[:：]|$)/gi;
+  const labelAddrRegex = /(?:^|>|&nbsp;|\n)\s*(?:where\s+(?:you\s+can\s+)?find\s+us|find\s+us|our\s+(?:office|address|location|factory|workshop|showroom)|[A-Za-z]+\s+(?:office|factory(?:\s*(?:&|and)\s*showroom)?|showroom|warehouse)|postal\s*address|address|alamat|kantor|lokasi|pabrik|add|addr|direcci[oó]n|domicilio\s*social|domicilio|sede\s*central|sede|ubicaci[oó]n|localizaci[oó]n|地址|廠址|厂址)\s*[:：]?\s*(?:\s*<[^>]+>)*\s*([\s\S]{10,400}?)(?=<h[1-6]\b|<form\b|<footer\b|\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|fax)\b\s*[:：]|$)/gi;
   let lm;
   while ((lm = labelAddrRegex.exec(processedHtml)) !== null) {
     const beforeText = processedHtml.slice(Math.max(0, lm.index - 500), lm.index);
     const ctx = getContext(beforeText, defaultSource);
     let block = stripHtml(lm[1]);
+    block = block.replace(/^[^\w\d#]*(?:["']\s*>?|>|\/?>)\s*/g, "").replace(/^[^a-zA-Z0-9#]+/g, "").trim();
     block = block.replace(/(?:\b(?:phone|tel|telephone|email|working\s*hours|opening\s*hours|fax)\b[\s\S]*)/i, "").trim();
     const combinedBlock = block.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
@@ -818,26 +821,27 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
     bestRaw = getRaw(fuller);
   }
 
-  // 3. SOURCE OF TRUTH MANDATE (Correction for Problem 1):
-  // The verified website candidate is the absolute source of truth!
-  // We NEVER allow Gemini to invent, drop, or alter address components.
-  //
-  // Case A: The verified website candidate is in English / Latin:
-  // -> Return bestRaw directly as the base source of truth!
-  const isCandidateEnglish = bestCandidate.isEnglish || ((bestRaw.match(/[a-zA-Z]/g) || []).length >= 4 && !/[\u4e00-\u9fa5]/.test(bestRaw));
-  if (isCandidateEnglish) {
-    return { address: bestRaw, selectedCandidate: bestCandidate };
+  // 3. SOURCE OF TRUTH MANDATE:
+  // If Gemini provided a valid extracted address, trust and verify it!
+  const hasGemini = geminiAddr && geminiAddr.length >= 8 && !/^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim()) &&
+    !/\b(?:email\s*and\s*number|email\s*protected|\bprotected\b|data-cfemail)\b/i.test(geminiAddr);
+
+  if (hasGemini) {
+    // Foreign country conflict rejection: If Gemini returned an address in a foreign country (e.g. USA for Chinese company), reject Gemini
+    const geminiCountry = (typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(geminiAddr) : "") || "";
+    const isConflict = geminiCountry && provenHomeCountry &&
+      geminiCountry.toLowerCase() !== provenHomeCountry &&
+      !/(?:united kingdom|great britain|uk|england|scotland|wales)/i.test(geminiCountry + " " + provenHomeCountry) &&
+      !/(?:united states|usa|u\.s\.a\.)/i.test(geminiCountry + " " + provenHomeCountry);
+
+    if (!isConflict) {
+      return { address: geminiAddr, selectedCandidate: bestCandidate };
+    }
   }
 
   // Case B: The verified website candidate is in non-Latin script (e.g. Chinese):
   // -> If Gemini provided an English translation, verify that Gemini faithfully translates bestRaw:
   if (geminiAddr && geminiAddr.length >= 5 && !/^(?:not\s*available|n\/?a|none|unknown)$/i.test(geminiAddr.trim()) && !/[\u4e00-\u9fa5]/.test(geminiAddr)) {
-    // Foreign country conflict rejection: If Gemini returned an address in a foreign country (e.g. USA for Chinese company), reject Gemini!
-    const geminiCountry = detectCountryFromAddress(geminiAddr);
-    if (geminiCountry && provenHomeCountry && geminiCountry.toLowerCase() !== provenHomeCountry) {
-      return { address: bestRaw, selectedCandidate: bestCandidate };
-    }
-
     const candComp = extractAddressComponents(bestRaw);
     const geminiComp = extractAddressComponents(geminiAddr);
 
@@ -852,21 +856,12 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
       if (!hasMatchingNum) geminiFaithful = false;
     }
 
-    // Check localities: Gemini must NOT introduce a foreign/conflicting city
-    if (candComp.localities.length > 0 && geminiComp.localities.length > 0) {
-      const conflicting = geminiComp.localities.filter(gLoc => !bestRaw.toLowerCase().includes(gLoc) && !candComp.localities.includes(gLoc));
-      const matching = geminiComp.localities.filter(gLoc => bestRaw.toLowerCase().includes(gLoc) || candComp.localities.includes(gLoc));
-      if (conflicting.length > 0 && matching.length === 0) {
-        geminiFaithful = false;
-      }
-    }
-
     if (geminiFaithful) {
       return { address: geminiAddr, selectedCandidate: bestCandidate };
     }
   }
 
-  // Fallback for non-Latin candidate: deterministic romanization (e.g. romanizeChineseAddress)
+  // Fallback for Own Crawl: return bestRaw from the verified website candidate
   return { address: bestRaw, selectedCandidate: bestCandidate };
 }
 

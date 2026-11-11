@@ -1568,6 +1568,52 @@ async function runAsyncTests() {
     assert.ok(popupJs.includes('qwen/qwen3.8-27b') && configJs.includes('allam-2-7b'));
     assert.ok(popupJs.includes('PROVIDER_MODELS_UI') && popupJs.includes('groqApiKey'));
   });
+
+  // 34. Rule 6 Company Address Sanitization for AI and Own Crawl modes
+  runTest('Rule 6 Company Address sanitizes company name, postal code, country, phone, and HTML remnants', () => {
+    // Case 1: Raw footer candidate with leading HTML artifact, company name, postal code, and country
+    const rawCandidate = '">, Teflex Plastics Pty Ltd, Unit 4, 12 Industrie Road, Penrose, Auckland 1061, New Zealand';
+    const cleaned = ctx.sanitizeRule6CompanyAddress(rawCandidate, 'Teflex Plastics Pty Ltd', 'New Zealand');
+    assert.strictEqual(cleaned, 'Unit 4, 12 Industrie Road, Penrose, Auckland', 'Must strip leading artifacts, company name, postal code, and country');
+
+    // Case 2: AI returned address with company name, country, and state abbreviation
+    const aiInput = 'Acme Industrial Co., 123 Main Street, Suite 400, Austin, TX, United States Of America';
+    const cleanedAi = ctx.sanitizeRule6CompanyAddress(aiInput, 'Acme Industrial Co.', 'United States Of America');
+    assert.strictEqual(cleanedAi, '123 Main Street, Suite 400, Austin, Texas', 'Must strip company name and country, expand TX to Texas');
+
+    // Case 3: Address with office label, phone, fax, and UK postcode
+    const officeAddr = 'Head Office: 45 Queens Road, Leeds, West Yorkshire LS1 2TW Tel: +44 113 245 6789 Fax: +44 113 245 6790';
+    const cleanedOffice = ctx.sanitizeRule6CompanyAddress(officeAddr, 'Apex Business Solutions', 'United Kingdom');
+    assert.strictEqual(cleanedOffice, '45 Queens Road, Leeds, West Yorkshire', 'Must strip Head Office prefix, phone/fax, and UK postcode');
+
+    // Case 4: End-to-end applyStrictInstructions on AI path
+    const mockAiData = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      companyName: 'Acme Industrial Co.',
+      countryName: 'United States Of America',
+      companyAddress: 'Acme Industrial Co., 123 Main Street, Suite 400, Austin, TX, United States Of America'
+    };
+    const mockCrawlData = {
+      addressCandidates: [],
+      emails: ['info@test.com'],
+      phones: ['12345678'],
+      mainHtml: '<html><body>Test</body></html>'
+    };
+    const resAi = ctx.applyStrictInstructions(mockAiData, mockCrawlData, {});
+    assert.strictEqual(resAi.companyAddress, '123 Main Street, Suite 400, Austin, Texas', 'applyStrictInstructions AI path must strictly sanitize address');
+
+    // Case 5: End-to-end applyStrictInstructions on Own Crawl path
+    const mockOwnData = {
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Teflex Plastics Pty Ltd',
+      countryName: 'New Zealand',
+      companyAddress: '">, Teflex Plastics Pty Ltd, Unit 4, 12 Industrie Road, Penrose, Auckland 1061, New Zealand'
+    };
+    const resOwn = ctx.applyStrictInstructions(mockOwnData, mockCrawlData, {});
+    assert.strictEqual(resOwn.companyAddress, 'Unit 4, 12 Industrie Road, Penrose, Auckland', 'applyStrictInstructions Own Crawl path must strictly sanitize address');
+  });
 }
 
 runAsyncTests().then(() => {

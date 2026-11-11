@@ -642,13 +642,13 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.countryName = country;
 
-    // 4. Company Address: Take directly from API with safe cleanup; fall back to crawl ONLY if API returned empty / Not Available
+    // 4. Company Address: Take directly from API with safe Rule 6 cleanup; fall back to crawl ONLY if API returned empty / Not Available
     let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
     const aiAddrMatch = resolveBestAddressCandidateAndSource(addr, crawlData);
     const selectedAiCandidate = aiAddrMatch.candidate || (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates[0]) || null;
     const bestRaw = selectedAiCandidate ? (typeof selectedAiCandidate === "object" ? selectedAiCandidate.raw : selectedAiCandidate) : "";
 
-    if (!addr || addr.toLowerCase() === "not available") {
+    if (!addr || addr.toLowerCase() === "not available" || addr.length < 5) {
       if (bestRaw) {
         addr = bestRaw;
       } else {
@@ -657,23 +657,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     if (addr && addr !== "Not Available") {
-      addr = addr.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
-      addr = removePostalCodesCarefully(addr);
-      // Strip trailing/standalone country name if API accidentally kept it in companyAddress
-      addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
-      addr = addr.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
-      addr = addr.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
-      if (country && country.length > 2) {
-        const countryRegex = new RegExp(`\\b${country.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "gi");
-        addr = addr.replace(countryRegex, " ");
-      }
-      addr = addr.replace(/,\s*,+/g, ", ");
-      addr = addr.replace(/\s+,/g, ",");
-      addr = addr.replace(/\s+/g, " ");
-      addr = expandAddressAndStateAbbreviations(addr, country);
-      addr = ensureCommaBeforeState(addr);
-      addr = toTitleCase(addr);
-      addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N})]+$/gu, "").trim();
+      addr = typeof sanitizeRule6CompanyAddress === "function"
+        ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData)
+        : toTitleCase(addr);
     }
     result.companyAddress = addr || "Not Available";
 
@@ -1095,19 +1081,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     rawSource = (crawlData.contactPageText || crawlData.bodyText || crawlData.combinedText || crawlData.mainHtml || "").slice(0, 5000);
   }
 
-  // MANDATORY COMPLETE FULL ADDRESS QC CHECK:
-  // If Gemini returned an incomplete or partial address (e.g. only street name, or missing premise/suite/floor,
-  // or missing suburb/locality/city/state), but a complete candidate exists on the website, adopt the complete address!
-  if (rawSource && typeof rawSource === "string") {
-    if (rawSource.length > addr.length && rawSource.toLowerCase().includes(addr.toLowerCase())) {
+  // Adopt candidate only if candidate itself is a concise, verified full address (never adopt entire page text)
+  if (selectedCandidate && rawSource && typeof rawSource === "string" && rawSource.length < 350) {
+    if (isFullAddressCandidate(rawSource) && !isFullAddressCandidate(addr)) {
       addr = rawSource;
-    } else if (isFullAddressCandidate(rawSource) && !isFullAddressCandidate(addr)) {
-      addr = rawSource;
-    } else if (rawSource.length > addr.length + 5) {
-      const streetChunk = addr.match(/(?:no\.?|nos\.?|number|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+)?[,\s]+[A-Za-z0-9\u00C0-\u024F\s\-]+?\b(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b/i);
-      if (streetChunk && rawSource.toLowerCase().includes(streetChunk[0].toLowerCase())) {
-        addr = rawSource;
-      }
     }
   }
 
@@ -1292,7 +1269,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   } else {
     addr = "Not Available";
   }
-  result.companyAddress = toTitleCase(addr);
+  if (addr && addr !== "Not Available") {
+    addr = typeof sanitizeRule6CompanyAddress === "function"
+      ? sanitizeRule6CompanyAddress(addr, compName, country, crawlData)
+      : toTitleCase(addr);
+  } else {
+    addr = "Not Available";
+  }
+  result.companyAddress = addr;
 
   // Infer country strictly from physical address evidence if missing
   if (!country || country.length < 2) {
@@ -1347,8 +1331,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         domRaw = removePostalCodesCarefully(domRaw);
         domRaw = expandAddressAndStateAbbreviations(domRaw, country);
         domRaw = toTitleCase(domRaw);
-        addr = domRaw.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
-        result.companyAddress = toTitleCase(addr);
+        addr = typeof sanitizeRule6CompanyAddress === "function"
+          ? sanitizeRule6CompanyAddress(domRaw, compName, country, crawlData)
+          : toTitleCase(domRaw);
+        result.companyAddress = addr;
       }
     }
   }

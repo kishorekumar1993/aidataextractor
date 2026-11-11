@@ -1997,6 +1997,119 @@ function removePostalCodesCarefully(addr) {
 }
 
 /**
+ * Universal Rule 6 Address Sanitizer for both AI and Own Crawl engines.
+ * Strictly adheres to Rule 6 specification:
+ * - Full physical address (premise, street number, street name, suburb/town, city, state/county) in Title Case.
+ * - Automatically strips HTML remnants, stray tags, quotes, and brackets () [] {}.
+ * - Strips office, department, and headquarters labels (e.g. "Head Office:", "Registered Office:").
+ * - Automatically strips company name and corporate brand stems.
+ * - Automatically strips telephone, fax, email, and opening hours.
+ * - Automatically strips country names and postal/ZIP codes without dropping street numbers.
+ * - Normalizes punctuation, commas, and strips boundary special characters.
+ */
+function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", crawlData = null) {
+  if (!addr || typeof addr !== "string") return "Not Available";
+  let a = (typeof decodeHtmlEntities === "function" ? decodeHtmlEntities(addr) : addr).trim();
+  if (!a || a.toLowerCase() === "not available" || a.length < 5) return "Not Available";
+
+  // 1. Strip raw HTML tags, stray tag closers / attribute fragments e.g. '">, ', 'class="...", '
+  a = a.replace(/<[^>]+>/g, " ");
+  a = a.replace(/^(?:class|id|style|data-[a-z-]+)=["'][^"']*["']\s*>?\s*/gi, "");
+  a = a.replace(/^[^\w\d#]*(?:["']\s*>?|>|\/?>)\s*/g, "");
+  a = a.replace(/^[^a-zA-Z0-9#]+/g, "").trim();
+
+  // 2. Decode quotes and remove brackets per Rule 4/6
+  a = a.replace(/&quot;|&apos;|&#34;|&#39;/gi, " ");
+  a = a.replace(/["“”‘’«»`]+/g, " ");
+  // Remove brackets keeping inner text
+  a = a.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");
+  a = a.replace(/[\(\)\[\]\{\}]/g, " ");
+
+  // 3. Strip corporate registration disclaimers & legal office prefixes
+  a = a.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
+  a = a.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
+
+  // 4. Strip conversational boilerplate from start
+  a = a.replace(/^(?:if\s+you\s+have\s+any\s+enquiries|require\s+a\s+quote|want\s+to\s+book\s+a\s+survey|please\s+feel\s+free\s+to\s+call\s+us|send\s+us\s+a\s+message|with\s+your\s+requirements|get\s+in\s+touch|contact\s+us\s+at)[\s\S]*?(?=\b\d+\s+[A-Za-z]|\b(?:po\s*box|unit|suite|building|floor|no\.?)\b)/i, "").trim();
+
+  // 5. Strip office, department, branch, or headquarters label prefix at start of address
+  const officePrefixRegex = /^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|direcci[oó]n|ubicaci[oó]n|alamat|kantor|pabrik|廠址|地址)\s*[:：\-–,\s]+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|floor)\b|[A-Za-z])/i;
+  a = a.replace(officePrefixRegex, "").trim();
+  a = a.replace(/^(?:address|add|addr|location|alamat|direcci[oó]n|地址)\s*[:：\-–,\s]+/i, "").trim();
+
+  // 6. Strip Company Name from start of address per Rule 6
+  const cleanComp = (companyName || "").trim();
+  if (cleanComp && cleanComp.length >= 3) {
+    const compClean = cleanComp.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+/g, " ").trim();
+    const compRegex = new RegExp(`^${compClean.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*[,\\-–]?\\s*`, "i");
+    a = a.replace(compRegex, "").trim();
+
+    // Strip brand stem without legal suffixes (e.g. "Teflex Plastics Pty Ltd" -> stem "Teflex Plastics")
+    const brandStem = compClean.replace(/\b(?:pty|ltd|limited|inc|incorporated|llc|corp|corporation|co|company|proprietary|plc|gmbh|sdn|bhd)\b/gi, "").trim();
+    if (brandStem && brandStem.length >= 4) {
+      const brandRegex = new RegExp(`^${brandStem.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*(?:(?:pty|ltd|limited|inc|llc|corp|co)\\.?)?\\s*[,\\-–]?\\s*`, "i");
+      a = a.replace(brandRegex, "").trim();
+    }
+  }
+
+  // Strip generic leftover company words at start of address
+  a = a.replace(/^(?:company|co\.?|incorporated|inc\.?|corporation|corp\.?|llc|limited|ltd\.?|equipment|systems|industries|technologies|enterprises|group|products)\b[\s,:\-–]*/i, "").trim();
+
+  // 7. Strip trailing contact / communication fields (Phone, Tel, Email, Fax, Hours, Map)
+  a = a.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
+  a = a.replace(/[,;\s]*(?:\b(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[\s\S]*?(?:am|pm).*)$/i, "").trim();
+  a = a.replace(/[,;\s]*(?:\b(?:view\s*map|open\s*map|open\s*in\s*maps?|get\s*directions?|see\s*on\s*maps?|google\s*maps?|directions?)\b.*)$/i, "").trim();
+
+  // 8. Detect country and expand abbreviations
+  let resolvedCountry = (countryName || "").trim();
+  if (!resolvedCountry || resolvedCountry.length < 2) {
+    resolvedCountry = (typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(a) : "") || "";
+  }
+  if (typeof expandAddressAndStateAbbreviations === "function") {
+    a = expandAddressAndStateAbbreviations(a, resolvedCountry);
+  }
+
+  // 9. Strip country names from address per Rule 6
+  a = a.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
+  a = a.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
+  a = a.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
+  if (resolvedCountry && resolvedCountry.length > 2) {
+    const cRegex = new RegExp(`\\b${resolvedCountry.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "gi");
+    a = a.replace(cRegex, " ");
+  }
+
+  // 10. Strip postal codes per Rule 6
+  if (typeof removePostalCodesCarefully === "function") {
+    a = removePostalCodesCarefully(a);
+  }
+  // Strip loose trailing 3-6 digit postal codes
+  a = a.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "").trim();
+
+  // 11. Ensure comma before state and format
+  if (typeof ensureCommaBeforeState === "function") {
+    a = ensureCommaBeforeState(a);
+  }
+  if (typeof toTitleCase === "function") {
+    a = toTitleCase(a);
+  }
+
+  // 12. Final cleanup of commas, spaces, and boundary special characters
+  a = a.replace(/\s+,/g, ",");
+  a = a.replace(/,\s*,+/g, ", ");
+  // Ensure space after commas except between digits (preserve decimal numbers e.g. 5,5 km)
+  a = a.replace(/(?<!\d),(?!\d)\s*/g, ", ");
+  a = a.replace(/[,;.\s\-_/\\|]+$/g, "").trim();
+  a = a.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
+  a = a.replace(/\s+/g, " ");
+
+  // Rule: Special character should not start and should not end
+  a = a.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
+  a = a.replace(/[^\p{L}\p{N})]+$/gu, "").trim();
+
+  return a || "Not Available";
+}
+
+/**
  * Country-specific phone cleaner and validator strictly conforming to Rule 11.
  * Strips international calling codes globally and removes leading zeros.
  */

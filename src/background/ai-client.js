@@ -773,24 +773,32 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     companyName = "";
   }
 
-  const topCandidate = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
-    ? crawlData.addressCandidates[0]
-    : null;
-  let address = topCandidate
-    ? (typeof topCandidate === "object" ? topCandidate.raw : topCandidate)
-    : extractLikelyAddress(crawlData.contactPageText || crawlData.footerText || text);
+  let address = "";
+  if (crawlData.addressCandidates && crawlData.addressCandidates.length > 0) {
+    const verified = typeof verifyAndSelectAddress === "function"
+      ? verifyAndSelectAddress("", crawlData.addressCandidates, crawlData)
+      : null;
+    address = (typeof verified === "object" && verified !== null && verified.address !== undefined)
+      ? verified.address
+      : (typeof verified === "string" ? verified : "");
+  }
+  if (!address || address.toLowerCase() === "not available" || address.length < 6) {
+    address = typeof extractLikelyAddress === "function"
+      ? extractLikelyAddress(crawlData.contactPageText || crawlData.footerText || text)
+      : "";
+  }
 
-  let country = detectCountryFromAddress(address);
+  let country = typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(address) : "";
   if (/^(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)$/i.test((country || "").trim())) {
     country = "United Kingdom";
   }
 
   if (address) {
-    address = address.replace(/^[\s\S]*?\b(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "").trim();
-    address = address.replace(/^[\s\S]*?\b(?:company\s+registration(?:\s+no\.?|\s+number)?\s*[:：\-–,\s]*[\dA-Za-z]+\.?\s*,?\s*)/i, "").trim();
-    address = expandAddressAndStateAbbreviations(address, country);
+    address = typeof sanitizeRule6CompanyAddress === "function"
+      ? sanitizeRule6CompanyAddress(address, companyName, country, crawlData)
+      : address;
   }
-  const emailId = crawlData.emails.length > 0 ? stripTrailingContactWordsFromEmail(crawlData.emails[0]) : "";
+  const emailId = (crawlData.emails && crawlData.emails.length > 0) ? stripTrailingContactWordsFromEmail(crawlData.emails[0]) : "";
   let targetDomain = "";
   try {
     targetDomain = new URL(crawlData.originalUrl || crawlData.url).hostname.replace(/^www\./i, "").toLowerCase();
