@@ -168,23 +168,32 @@ function hasStateInAddress(addr, country) {
     if (/\b(county|hsien|province)\b/i.test(lower) || /[\u7701\u7e23\u53bf]/.test(addr)) {
       return true;
     }
-    // Provincial cities (Chiayi City, Hsinchu City) without County -> State: Not Available!
-    if (/\b(?:chiayi|hsinchu)\s+city\b/i.test(lower) && !/\b(?:chiayi|hsinchu)\s+(?:county|hsien)\b/i.test(lower)) {
+    // Provincial & county-administered cities (Chiayi City, Hsinchu City, Changhua City, etc.) without County -> State: Not Available!
+    if (/\b(?:chiayi|hsinchu|changhua|chang\s+hua|hualien|taitung|pingtung|yilan|miaoli|nantou)\s+city\b/i.test(lower) &&
+        !/\b(?:county|hsien|province)\b/i.test(lower)) {
+      // Only return false if the county name does not also appear independently outside "<Name> City"
+      const withoutCityTerm = lower.replace(/\b(?:chiayi|hsinchu|changhua|chang\s+hua|hualien|taitung|pingtung|yilan|miaoli|nantou)\s+city\b/gi, " ");
+      const hasIndependentCounty = TAIWAN_COUNTIES.some(c => {
+        if (isPlaceUsedAsStreetName(withoutCityTerm, c)) return false;
+        const esc = c.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+        return new RegExp(`\\b${esc}\\b(?!\\s+city\\b)`, "i").test(withoutCityTerm);
+      });
+      if (!hasIndependentCounty) return false;
+    }
+    if (/(?:嘉義市|新竹市|彰化市|花蓮市|台東市|臺東市|屏東市|宜蘭市|苗栗市|南投市)/.test(addr) &&
+        !/(?:嘉義縣|新竹縣|彰化縣|花蓮縣|台東縣|臺東縣|屏東縣|宜蘭縣|苗栗縣|南投縣)/.test(addr)) {
       return false;
     }
-    if (/(?:嘉義市|新竹市)/.test(addr) && !/(?:嘉義縣|新竹縣)/.test(addr)) {
-      return false;
-    }
-    // All 13 official Taiwan Counties (with or without "County" / "Hsien"):
+    // All 13 official Taiwan Counties (with or without "County" / "Hsien", excluding "<Name> City"):
     for (const county of TAIWAN_COUNTIES) {
       if (isPlaceUsedAsStreetName(lower, county)) continue;
       const escaped = county.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-      if (new RegExp(`\\b${escaped}\\b`, "i").test(lower)) {
+      if (new RegExp(`\\b${escaped}\\b(?!\\s+city\\b)`, "i").test(lower)) {
         return true;
       }
     }
-    // Chinese county names
-    if (/(?:彰化|嘉義|新竹|花蓮|金門|連江|馬祖|苗栗|南投|澎湖|屏東|台東|臺東|宜蘭|雲林)(?:縣|县)?/.test(addr)) {
+    // Chinese county names (excluding "<Name>市" cities)
+    if (/(?:彰化|嘉義|新竹|花蓮|金門|連江|馬祖|苗栗|南投|澎湖|屏東|台東|臺東|宜蘭|雲林)(?:縣|县|(?!市))/.test(addr)) {
       return true;
     }
     return false;

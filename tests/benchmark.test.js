@@ -235,6 +235,37 @@ runTest('Taiwan Google Maps embed merge & village restoration (Yi-Shyang test ca
   );
   assert.strictEqual(res.state, "Not Available", "Taiwan provincial city has State Not Available");
   assert.strictEqual(res.city, "Available", "Chiayi City is Available");
+
+  // County-administered city without County/Hsien (e.g. Changhua City / Chang Hua City) must have State Not Available
+  const changhuaCityRes = ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "Jen-Mao Industrial Company, Limited",
+    countryName: "Taiwan",
+    companyAddress: "Number 262 Lane 23, Kuo Sheng Road, Chang Hua City",
+    state: "Not Available",
+    city: "Available",
+    emailId: "jmmail@hardware168.com",
+    phoneNumber: "88647322367",
+    productImages: "3"
+  }, {
+    originalUrl: "http://www.hardware168.com/",
+    finalUrl: "https://www.hardware168.com/en/index.html",
+    country: "Taiwan",
+    addressCandidates: [
+      { raw: "No. 262 Lane 23, Kuo Sheng Rd., Chang Hua City 500, Taiwan", source: "contact" }
+    ],
+    emails: ["jmmail@hardware168.com"],
+    phones: ["+886-4-732-2367"],
+    detectedImageCount: 133
+  }, {});
+  assert.strictEqual(changhuaCityRes.state, "Not Available", "Changhua City without Changhua County must be State Not Available");
+  assert.strictEqual(changhuaCityRes.city, "Available", "Changhua City must be City Available");
+  assert.strictEqual(changhuaCityRes.phoneNumber, "47322367");
+  assert.strictEqual(ctx.hasStateInAddress("Number 10, Road, Changhua County", "Taiwan"), true, "Explicit Changhua County must be State Available");
+  assert.strictEqual(ctx.hasStateInAddress("Number 10, Road, Changhua City, Changhua County", "Taiwan"), true, "Changhua City with Changhua County must be State Available");
 });
 
 // 12. Global Phone Country Code Double-Stripping Guard
