@@ -1086,10 +1086,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
 
   // 4. Country Name: Full official country name, Title Case
-  let country = normalizeCountryName(result.countryName || "");
-  if (!country && result.companyAddress) {
-    country = detectCountryFromAddress(result.companyAddress);
-  }
+  let country = typeof resolveCountryFromAllEvidence === "function"
+    ? resolveCountryFromAllEvidence(result.countryName, result.companyAddress, crawlData)
+    : toTitleCase(normalizeCountryName(result.countryName || (result.companyAddress && detectCountryFromAddress(result.companyAddress)) || ""));
 
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
   let compName = decodeHtmlEntities((result.companyName || "").trim());
@@ -1301,7 +1300,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
 
       // Strip trailing contact / communication fields early before postal code removal
-      addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
+      addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip)\b\s*[:：\-–]?.*)$/i, "").trim();
 
       // Remove international postal codes carefully without stripping street numbers
       addr = removePostalCodesCarefully(addr);
@@ -1351,7 +1350,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = normalizeTaiwanDivisions(addr);
 
       // Strip trailing contact / communication fields or loose periods attached to address
-      addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
+      addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip)\b\s*[:：\-–]?.*)$/i, "").trim();
       addr = addr.replace(/(?:\s*\.\s*)+$/g, "").trim();
       // Strip trailing map UI links (e.g. "View Map", "Open Map", "Get Directions", "See on Maps")
       addr = addr.replace(/[,;\s]*(?:\b(?:view\s*map|open\s*map|open\s*in\s*maps?|get\s*directions?|see\s*on\s*maps?|google\s*maps?|directions?)\b.*)$/i, "").trim();
@@ -1395,17 +1394,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
   result.companyAddress = addr;
 
-  // Infer country strictly from physical address evidence if missing
+  // Infer country strictly from physical address evidence and crawl signals if missing
   if (!country || country.length < 2) {
-    country = detectCountryFromAddress(addr);
-    if (!country && crawlData) {
-      const urlStr = (crawlData.originalUrl || "") + " " + (crawlData.finalUrl || "");
-      if (/\.au(?:\/|$)/i.test(urlStr)) country = "Australia";
-      else if (/\.es(?:\/|$)/i.test(urlStr)) country = "Spain";
-      else if (/\.(?:my|com\.my|org\.my|net\.my|edu\.my|gov\.my)(?:[:\/\?]|$)/i.test(urlStr)) country = "Malaysia";
-      else if (/\.(?:id|co\.id|web\.id|or\.id|net\.id|ac\.id|go\.id)(?:[:\/\?]|$)/i.test(urlStr)) country = "Indonesia";
-      else if (/\.(?:nz|co\.nz|org\.nz|net\.nz|gen\.nz|ac\.nz|govt\.nz)(?:[:\/\?]|$)/i.test(urlStr)) country = "New Zealand";
-    }
+    country = typeof resolveCountryFromAllEvidence === "function"
+      ? resolveCountryFromAllEvidence(country, addr, crawlData)
+      : toTitleCase(normalizeCountryName(detectCountryFromAddress(addr) || ""));
   }
   country = toTitleCase(normalizeCountryName(country));
   country = resolveUkCountryName(country, addr, crawlData);

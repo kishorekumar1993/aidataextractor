@@ -1,8 +1,8 @@
 // Address candidate extraction (HTML, JSON-LD, maps, meta, embedded scripts) and address verification.
 
 function isFullAddressCandidate(raw) {
-  if (!raw || typeof raw !== "string" || raw.length < 15) return false;
-  const hasStreetOrPremise = /\b(?:street|road|avenue|lane|drive|way|place|court|terrace|boulevard|highway|parkway|crescent|close|walk|row|parade|circuit|square|esplanade|mews|alley|st\b|rd\b|ave\b|ln\b|dr\b|blvd\b|hwy\b|suite|unit|bldg|building|floor|fl|flr|level|lot|plot|block|factory|shed|office\s*park|no\.?\s*\d+|\d+\s*[号號]|strasse|straße|rue|via|viale|calle|avenida|jalan|jl)\b/i.test(raw) ||
+  if (!raw || typeof raw !== "string" || raw.length < 10) return false;
+  const hasStreetOrPremise = /\b(?:street|road|avenue|lane|drive|way|place|court|terrace|boulevard|highway|parkway|crescent|close|walk|row|parade|circuit|square|esplanade|mews|alley|st\b|rd\b|ave\b|ln\b|dr\b|blvd\b|hwy\b|suite|unit|bldg|building|floor|fl|flr|level|lot|plot|block|factory|shed|office\s*park|no\.?\s*\d+|\d+\s*[号號]|strasse|straße|rue|via|viale|calle|avenida|jalan|jl|post\s+office\s+box|po\s*box|pob|postfach|boite\s*postale|apartado\s*postal|postbus|box\s+\d+)\b/i.test(raw) ||
     /(?:大道|路|街|巷|弄|号|號|工业区|工业园|产业园|高新区)/.test(raw);
   const hasLocalityOrAdmin = hasStateInAddress(raw, "") ||
     hasCityDesignation(raw) ||
@@ -78,7 +78,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   // 2. Thoroughfare suffix (Street, Road, Ave, Lane, Drive, Boulevard, Highway, Way, Close, Court, Terrace, Crescent, etc.)
   // 3. Or locality/postal code (e.g. 4-6 digit postal code, UK alphanumeric postcodes, state abbreviation with ZIP, or East Asian structural address)
   const hasPremiseNum = /\b(?:number|no\.?|nos\.?|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?\b/i.test(cleaned) ||
-    /\b(?:lot|plot|unit|suite|ste|bldg|building|floor|level|rm|room|shed|warehouse|kav|kavling|apt|apartment|po\s*box)\s+[A-Za-z0-9\-\/]+/i.test(cleaned) ||
+    /\b(?:lot|plot|unit|suite|ste|bldg|building|floor|level|rm|room|shed|warehouse|kav|kavling|apt|apartment|po\s*box|post\s*office\s*box|postfach|box)\s+[A-Za-z0-9\-\/]+/i.test(cleaned) ||
     /\b(?:centre|center|house|hall|mill|works|court|lodge|grange|tower|park|estate|chambers|wharf|barn|farm)\b/i.test(cleaned);
 
   const hasThoroughfare = /\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|row|walk|mews|passage|grove|view|hill|rise|vale|gate|approach|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|jl|jln|jalan|gang|gg|taman|lorong|lebuh|komp|komplek|perum|perumahan|dukuh|dk|desa|ds|dusun|dsn|kecamatan|kec|kabupaten|kab|rt\.?\s*\d+|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|apt\b|str\b|strasse|platz|comune|provincia|daerah|mukim)\b/i.test(cleaned);
@@ -97,7 +97,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
 
   const isValidStructure = (hasPremiseNum && hasThoroughfare) ||
     (hasThoroughfare && hasLocalityOrPostcode) ||
-    (hasPremiseNum && hasLocalityOrPostcode && (isHq || source === "headquarters" || source === "jsonld")) ||
+    (hasPremiseNum && hasLocalityOrPostcode) ||
     hasChineseAddressStructure;
 
   if (!isValidStructure) {
@@ -868,9 +868,20 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
 
 function extractLikelyAddress(text) {
   if (!text) return "";
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 10);
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length >= 10 && l.length <= 250);
   for (const line of lines) {
-    if (/\b(street|road|avenue|drive|lane|way|boulevard|park|industrial|building|box|suite|town|district|county|hsien|marg|nagar|estate|floor|block|sector|plot|no\.?|mumbai|delhi|bangalore|chennai|kolkata|hyderabad|pune|ahmedabad)\b/i.test(line)) {
+    if (/[?!]/.test(line)) continue;
+    // Reject marketing and conversational copy
+    if (/\b(?:welcome|committed|leading|innovative|we\s+provide|we\s+offer|our\s+(?:products|services|mission|team|facility|story|history)|years\s+of|experience|feel\s+free|call\s+us|contact\s+us|email\s+us|inquiry|click\s+here|read\s+more|cookies?|privacy\s*policy|terms\s*of|copyright|all\s*rights)\b/i.test(line)) {
+      continue;
+    }
+    if (typeof isFullAddressCandidate === "function" && isFullAddressCandidate(line)) {
+      return line;
+    }
+    const hasPremise = /\b(?:number|no\.?|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+)?\b/i.test(line) || /\b(?:po\s*box|post\s*office\s*box|postfach|box)\s+\d+\b/i.test(line);
+    const hasStreet = /\b(road|street|avenue|lane|drive|way|boulevard|highway|crescent|close|court|place|terrace|st\b|rd\b|ave\b|dr\b|strasse|calle|rue|via)\b/i.test(line);
+    const hasLocOrPost = /\b\d{4,6}\b/.test(line) || (typeof hasStateInAddress === "function" && hasStateInAddress(line, "")) || (typeof evaluateCityQC === "function" && evaluateCityQC(line, "") === "Available");
+    if (hasPremise && (hasStreet || hasLocOrPost)) {
       return line;
     }
   }

@@ -1702,6 +1702,69 @@ async function runAsyncTests() {
     assert.strictEqual(result.companyName, 'PERI Societas Europaea', 'Must expand SE to Societas Europaea and preserve uppercase brand PERI');
     assert.strictEqual(result.companyAddress, 'Post Office Box 1264, Weissenhorn', 'Must preserve full Post Office Box address');
   });
+
+  // 37. Own Crawl Heuristic Extraction & Fallback Robustness
+  runTest('Own Crawl Heuristic Extraction & Fallback Robustness (Accurate Fields, No Excess/Missing Data)', () => {
+    // 1. Promotional text rejection in extractLikelyAddress
+    const marketingText = "Welcome to our state-of-the-art industrial park facility!\nWe provide innovative building solutions.\nBox 1264, 89264 Weissenhorn";
+    const extractedAddr = ctx.extractLikelyAddress(marketingText);
+    assert.ok(!extractedAddr.includes("Welcome"), "Must reject marketing slogans");
+    assert.ok(!extractedAddr.includes("innovative"), "Must reject promotional copy");
+    assert.ok(extractedAddr.includes("Box 1264"), "Must extract valid address line");
+
+    // 2. Country resolution from phone calling code & domain ccTLD
+    const mockGermanCrawl = {
+      originalUrl: 'http://www.peri.de',
+      finalUrl: 'https://www.peri.de',
+      phones: ['+49 7309 9500'],
+      addressCandidates: [{ raw: 'Box 1264, 89264 Weissenhorn', source: 'contact' }]
+    };
+    const resolvedCountry = ctx.resolveCountryFromAllEvidence('', 'Box 1264, 89264 Weissenhorn', mockGermanCrawl);
+    assert.strictEqual(resolvedCountry, 'Germany', 'Must resolve Germany from phone calling code +49 and ccTLD .de');
+
+    // 3. International PO Box expansions (Postfach -> Post Office Box)
+    const postfachAddr = ctx.sanitizeRule6CompanyAddress('Postfach 1264, 89264 Weissenhorn', 'PERI SE', 'Germany');
+    assert.strictEqual(postfachAddr, 'Post Office Box 1264, Weissenhorn', 'Must expand Postfach to Post Office Box and strip German postal code');
+
+    // 4. End-to-end Own Crawl heuristicExtraction + applyStrictInstructions
+    const fullMockCrawl = {
+      originalUrl: 'http://www.peri.com',
+      finalUrl: 'https://www.peri.com',
+      title: 'PERI SE Formwork Scaffolding Engineering',
+      logoText: 'PERI',
+      copyrightText: 'Copyright © 2026 PERI SE - All Rights Reserved | Privacy Policy',
+      legalCompanyCandidates: ['PERI SE', 'PERI Societas Europaea'],
+      addressCandidates: [{ raw: 'Box 1264, 89264 Weissenhorn', source: 'contact', priority: 1 }],
+      emails: ['info@peri.com', 'data.protection@peri.com'],
+      phones: ['+49 7309 9500'],
+      combinedText: 'PERI is a leading manufacturer of formwork and scaffolding systems for construction projects globally.',
+      mainHtml: '<html><body>PERI SE Manufacturer Formwork Scaffolding Engineering</body></html>',
+      detectedProductCount: 3,
+      hasCompanyProfile: true
+    };
+
+    const ownData = ctx.heuristicExtraction(fullMockCrawl, { isRestricted: false });
+    assert.strictEqual(ownData.websiteStatus, 'Working');
+    assert.strictEqual(ownData.businessType, 'Manufacturer');
+    assert.strictEqual(ownData.companyProfile, 'Available');
+    assert.strictEqual(ownData.companyName, 'PERI Societas Europaea', 'Own crawl must expand SE to Societas Europaea and restore uppercase brand');
+    assert.strictEqual(ownData.countryName, 'Germany', 'Own crawl must resolve Germany from phone calling code +49 and city Weissenhorn');
+    assert.strictEqual(ownData.companyAddress, 'Post Office Box 1264, Weissenhorn', 'Own crawl must expand Box 1264 to Post Office Box 1264');
+    assert.strictEqual(ownData.emailId, 'info@peri.com');
+    assert.strictEqual(ownData.secondaryEmailId, 'data.protection@peri.com');
+    assert.strictEqual(ownData.phoneNumber, '73099500', 'Must strip +49 calling code from phone');
+    assert.strictEqual(ownData.numberOfProducts, '3');
+    assert.strictEqual(ownData.productImages, '3');
+    assert.strictEqual(ownData.numberOfProductDescriptions, '3');
+
+    // Pass through applyStrictInstructions for non-AI path
+    const finalStrictData = ctx.applyStrictInstructions(ownData, fullMockCrawl, { isRestricted: false });
+    assert.strictEqual(finalStrictData.companyName, 'PERI Societas Europaea');
+    assert.strictEqual(finalStrictData.companyAddress, 'Post Office Box 1264, Weissenhorn');
+    assert.strictEqual(finalStrictData.countryName, 'Germany');
+    assert.strictEqual(finalStrictData.phoneNumber, '73099500');
+    assert.strictEqual(finalStrictData.city, 'Available');
+  });
 }
 
 runAsyncTests().then(() => {

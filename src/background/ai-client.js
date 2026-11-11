@@ -745,34 +745,43 @@ function inferBusinessTypeFromEvidence(corpus, html = "") {
  * Deterministic fallback extraction.
  */
 function heuristicExtraction(crawlData, restrictedCheck) {
-  const text = crawlData.combinedText;
+  const text = crawlData.combinedText || "";
 
+  // 1. Company Name: prefer official company candidates with legal suffixes matching domain
   let companyName = "";
-  if (crawlData.copyrightText && (hasCompleteLegalSuffix(crawlData.copyrightText) || /\b(ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|co\.?)\b/i.test(crawlData.copyrightText))) {
-    companyName = crawlData.copyrightText;
+  if (typeof preferOfficialCompanyName === "function") {
+    companyName = preferOfficialCompanyName("", crawlData);
   }
   if (!companyName && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0) {
     const domainStem = cleanDomainStem(crawlData.originalUrl || crawlData.finalUrl);
     for (const cand of crawlData.legalCompanyCandidates) {
-      if (hasCompleteLegalSuffix(cand)) {
-        const cStem = cleanDomainStem(cand.replace(/\b(?:pty|ltd|limited|proprietary|inc|llc|corp|co)\b/gi, ""));
+      const cleaned = cleanCompanyPrefixesAndSuffixes(cand);
+      if (hasCompleteLegalSuffix(cleaned)) {
+        const cStem = cleanDomainStem(cleaned.replace(/\b(?:pty|ltd|limited|proprietary|inc|llc|corp|co|gmbh|se)\b/gi, ""));
         if (cStem && (cStem === domainStem || cStem.includes(domainStem) || domainStem.includes(cStem))) {
-          companyName = cand;
+          companyName = cleaned;
           break;
         }
       }
     }
   }
+  if (!companyName && crawlData.copyrightText) {
+    const cleanedCopy = cleanCompanyPrefixesAndSuffixes(crawlData.copyrightText);
+    if (cleanedCopy && !hasCompanyProseNoise(cleanedCopy) && (hasCompleteLegalSuffix(cleanedCopy) || /\b(ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|se|co\.?)\b/i.test(cleanedCopy))) {
+      companyName = cleanedCopy;
+    }
+  }
   if (!companyName && crawlData.logoText && !isSeoSloganOrTagline(crawlData.logoText)) {
-    companyName = crawlData.logoText;
+    companyName = cleanCompanyPrefixesAndSuffixes(crawlData.logoText);
   }
   if (!companyName && crawlData.title) {
-    companyName = extractBestBrandFromTitle(crawlData.title, crawlData.originalUrl || crawlData.finalUrl, crawlData.logoText, crawlData.ogSiteName);
+    companyName = cleanCompanyPrefixesAndSuffixes(extractBestBrandFromTitle(crawlData.title, crawlData.originalUrl || crawlData.finalUrl, crawlData.logoText, crawlData.ogSiteName));
   }
   if (!companyName) {
     companyName = "";
   }
 
+  // 2. Company Address: verified candidate from contact page or footer
   let address = "";
   if (crawlData.addressCandidates && crawlData.addressCandidates.length > 0) {
     const verified = typeof verifyAndSelectAddress === "function"
@@ -788,32 +797,63 @@ function heuristicExtraction(crawlData, restrictedCheck) {
       : "";
   }
 
-  let country = typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(address) : "";
+  // 3. Country: resolve using address, candidates, phone calling code, domain ccTLD, and text evidence
+  let country = typeof resolveCountryFromAllEvidence === "function"
+    ? resolveCountryFromAllEvidence("", address, crawlData)
+    : (typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(address) : "");
   if (/^(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)$/i.test((country || "").trim())) {
     country = "United Kingdom";
   }
 
+  // Sanitize Company Address per Rule 6
   if (address) {
     address = typeof sanitizeRule6CompanyAddress === "function"
       ? sanitizeRule6CompanyAddress(address, companyName, country, crawlData)
       : address;
   }
-  const emailId = (crawlData.emails && crawlData.emails.length > 0) ? stripTrailingContactWordsFromEmail(crawlData.emails[0]) : "";
-  let targetDomain = "";
-  try {
-    targetDomain = new URL(crawlData.originalUrl || crawlData.url).hostname.replace(/^www\./i, "").toLowerCase();
-  } catch (e) { }
-  const primHost = emailId ? (emailId.split("@")[1] || "").toLowerCase() : "";
-  const secCandidate = crawlData.emails.map(e => stripTrailingContactWordsFromEmail(e)).find(e => {
-    if (!e || e === emailId || !isValidCorporateEmail(e) || isUnwantedEmail(e)) return false;
-    const h = (e.split("@")[1] || "").toLowerCase();
-    if (!h) return false;
-    if (primHost && (h === primHost || h.endsWith("." + primHost) || primHost.endsWith("." + h))) return true;
-    if (targetDomain && (h === targetDomain || h.endsWith("." + targetDomain))) return true;
-    return false;
-  });
-  const secondaryEmailId = (secCandidate && secCandidate !== emailId) ? secCandidate : "";
-  const phoneNumber = crawlData.phones.length > 0 ? crawlData.phones[0] : "";
+
+  // Expand abbreviations in Company Name per Rule 4
+  if (companyName) {
+    companyName = expandCompanyAbbreviations(companyName, country);
+    companyName = cleanCompanyPrefixesAndSuffixes(companyName);
+    companyName = toTitleCase(companyName);
+    companyName = restoreCommaBeforeCorporateSuffix(companyName, crawlData);
+    companyName = restoreOriginalSymbolsInCompanyName(companyName, crawlData);
+    companyName = stripBoundarySpecialChars(companyName);
+  }
+
+  // 4. Email & Secondary Email: select valid corporate emails
+  const validEmails = (crawlData.emails || []).map(e => stripTrailingContactWordsFromEmail(String(e || "").trim().toLowerCase()))
+    .filter(e => e && isValidCorporateEmail(e) && !isUnwantedEmail(e));
+
+  let emailId = "";
+  if (validEmails.length > 0) {
+    const domainStem = cleanDomainStem(crawlData.originalUrl || crawlData.finalUrl);
+    const domainMatch = validEmails.find(e => {
+      const h = (e.split("@")[1] || "").toLowerCase();
+      const u = (e.split("@")[0] || "").toLowerCase();
+      return (h.includes(domainStem) || domainStem.includes(h.split(".")[0])) && /^(?:info|sales|contact|enquir|office|hello|mail)/.test(u);
+    });
+    emailId = domainMatch || validEmails[0];
+  }
+
+  let secondaryEmailId = "";
+  if (emailId) {
+    const secCandidate = validEmails.find(e => e !== emailId && e !== ("mailto" + emailId));
+    secondaryEmailId = secCandidate || "";
+  }
+
+  // 5. Phone Number: Country-specific cleaned phone number
+  let phoneNumber = "";
+  if (crawlData.phones && crawlData.phones.length > 0) {
+    for (const p of crawlData.phones) {
+      const cleaned = cleanPhoneNumber(p, country);
+      if (cleaned) {
+        phoneNumber = cleaned;
+        break;
+      }
+    }
+  }
 
   // Own-crawl product count (never uses Gemini; all 3 product fields stay identical)
   const ownProdCount = computeOwnCrawlProductCount(crawlData);
@@ -824,9 +864,16 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   const hasState = address && hasStateInAddress(address, country);
   const hasCity = address && hasCityInAddress(address, country);
 
-  const inferredBusiness = restrictedCheck.isRestricted
+  let inferredBusiness = restrictedCheck.isRestricted
     ? "Restricted Site"
     : inferBusinessTypeFromEvidence(text, crawlData.mainHtml || "");
+  if (!inferredBusiness && !restrictedCheck.isRestricted) {
+    if (typeof checkPhysicalProductSupplier === "function" && checkPhysicalProductSupplier(crawlData, { companyAddress: address })) {
+      inferredBusiness = "Supplier";
+    } else if (prodCount !== "0" || (address && (emailId || phoneNumber))) {
+      inferredBusiness = "Manufacturer";
+    }
+  }
 
   const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
   let websiteStatus = (shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working");

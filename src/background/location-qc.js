@@ -31,6 +31,112 @@ function resolveUkCountryName(currentCountry, addrStr, crawlData) {
 }
 
 /**
+ * Robust country resolution using all available evidence:
+ * Address, address candidates, phone calling codes, domain ccTLD, and page text.
+ */
+function resolveCountryFromAllEvidence(currentCountry, addrStr, crawlData) {
+  let country = (typeof normalizeCountryName === "function" ? normalizeCountryName(currentCountry || "") : currentCountry) || "";
+  if (!country && addrStr && typeof detectCountryFromAddress === "function") {
+    country = detectCountryFromAddress(addrStr);
+  }
+  // Check all discovered address candidates
+  if (!country && crawlData && Array.isArray(crawlData.addressCandidates)) {
+    for (const cand of crawlData.addressCandidates) {
+      const raw = typeof cand === "object" ? cand.raw : cand;
+      const c = typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(raw) : "";
+      if (c) {
+        country = c;
+        break;
+      }
+    }
+  }
+  // Check international phone calling codes
+  if (!country && crawlData && Array.isArray(crawlData.phones)) {
+    const callingCodeMap = {
+      "49": "Germany", "44": "United Kingdom", "1": "United States Of America",
+      "61": "Australia", "64": "New Zealand", "886": "Taiwan", "86": "China",
+      "81": "Japan", "82": "South Korea", "91": "India", "60": "Malaysia",
+      "62": "Indonesia", "65": "Singapore", "33": "France", "39": "Italy",
+      "34": "Spain", "31": "Netherlands", "41": "Switzerland", "43": "Austria",
+      "48": "Poland", "27": "South Africa", "55": "Brazil", "52": "Mexico",
+      "90": "Türkiye", "971": "United Arab Emirates", "966": "Saudi Arabia",
+      "974": "Qatar", "965": "Kuwait", "32": "Belgium", "46": "Sweden",
+      "47": "Norway", "45": "Denmark", "358": "Finland", "420": "Czech Republic",
+      "351": "Portugal", "30": "Greece", "353": "Ireland", "385": "Croatia"
+    };
+    for (const p of crawlData.phones) {
+      const pStr = String(p || "").trim();
+      const codeMatch = pStr.match(/^\+?(\d{1,4})\b/);
+      if (codeMatch && callingCodeMap[codeMatch[1]]) {
+        country = callingCodeMap[codeMatch[1]];
+        break;
+      }
+    }
+  }
+  // Check website domain ccTLD
+  if (!country && crawlData) {
+    const urlStr = (((crawlData.originalUrl || "") + " " + (crawlData.finalUrl || "")).split("?")[0] || "").toLowerCase();
+    const tldMap = [
+      [/\.de(?:\/|$)/, "Germany"],
+      [/\.(?:co\.uk|org\.uk|gov\.uk|me\.uk|uk)(?:\/|$)/, "United Kingdom"],
+      [/\.(?:com\.au|net\.au|org\.au|au)(?:\/|$)/, "Australia"],
+      [/\.(?:co\.nz|net\.nz|org\.nz|nz)(?:\/|$)/, "New Zealand"],
+      [/\.(?:com\.tw|idv\.tw|tw)(?:\/|$)/, "Taiwan"],
+      [/\.(?:com\.cn|net\.cn|cn)(?:\/|$)/, "China"],
+      [/\.(?:co\.jp|jp)(?:\/|$)/, "Japan"],
+      [/\.(?:co\.kr|kr)(?:\/|$)/, "South Korea"],
+      [/\.(?:co\.in|in)(?:\/|$)/, "India"],
+      [/\.(?:com\.my|org\.my|net\.my|my)(?:\/|$)/, "Malaysia"],
+      [/\.(?:co\.id|web\.id|or\.id|id)(?:\/|$)/, "Indonesia"],
+      [/\.(?:com\.sg|sg)(?:\/|$)/, "Singapore"],
+      [/\.ca(?:\/|$)/, "Canada"],
+      [/\.fr(?:\/|$)/, "France"],
+      [/\.it(?:\/|$)/, "Italy"],
+      [/\.es(?:\/|$)/, "Spain"],
+      [/\.nl(?:\/|$)/, "Netherlands"],
+      [/\.ch(?:\/|$)/, "Switzerland"],
+      [/\.at(?:\/|$)/, "Austria"],
+      [/\.pl(?:\/|$)/, "Poland"],
+      [/\.(?:co\.za|za)(?:\/|$)/, "South Africa"],
+      [/\.(?:com\.br|br)(?:\/|$)/, "Brazil"],
+      [/\.(?:com\.mx|mx)(?:\/|$)/, "Mexico"],
+      [/\.(?:com\.tr|tr)(?:\/|$)/, "Türkiye"],
+      [/\.ae(?:\/|$)/, "United Arab Emirates"],
+      [/\.be(?:\/|$)/, "Belgium"],
+      [/\.se(?:\/|$)/, "Sweden"],
+      [/\.no(?:\/|$)/, "Norway"],
+      [/\.dk(?:\/|$)/, "Denmark"],
+      [/\.fi(?:\/|$)/, "Finland"],
+      [/\.cz(?:\/|$)/, "Czech Republic"],
+      [/\.ie(?:\/|$)/, "Ireland"],
+      [/\.pt(?:\/|$)/, "Portugal"]
+    ];
+    for (const [re, cName] of tldMap) {
+      if (re.test(urlStr)) {
+        country = cName;
+        break;
+      }
+    }
+  }
+  // Check contact page / footer text
+  if (!country && crawlData && typeof detectCountryFromAddress === "function") {
+    const textCorpus = ((crawlData.contactPageText || "") + " " + (crawlData.footerText || "") + " " + (crawlData.copyrightText || "")).slice(0, 5000);
+    const textCountry = detectCountryFromAddress(textCorpus);
+    if (textCountry) {
+      country = textCountry;
+    }
+  }
+
+  if (typeof toTitleCase === "function" && typeof normalizeCountryName === "function") {
+    country = toTitleCase(normalizeCountryName(country));
+  }
+  if (typeof resolveUkCountryName === "function") {
+    country = resolveUkCountryName(country, addrStr, crawlData);
+  }
+  return country;
+}
+
+/**
  * Computes the unified product item count ("0", "1", "2", or "3") exclusively from own-crawl data.
  * Never uses Gemini values; ensures numberOfProducts, productImages, and numberOfProductDescriptions always match.
  */
@@ -1041,7 +1147,7 @@ function detectCountryFromAddress(address) {
   if (/\b(?:new\s*south\s*wales|victoria|queensland|western\s*australia|south\s*australia|tasmania|northern\s*territory|australian\s*capital\s*territory|sydney|melbourne|brisbane|perth|adelaide|canberra|hobart|darwin|gold\s*coast|newcastle|wollongong|geelong|cairns|townsville)\b/i.test(unaccented) ||
     /\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(unaccented) ||
     /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(unaccented)) return "Australia";
-  if (/\b(bavaria|bayern|baden-wurttemberg|nordrhein-westfalen|hessen|sachsen)\b/i.test(unaccented)) return "Germany";
+  if (/\b(bavaria|bayern|baden-wurttemberg|nordrhein-westfalen|hessen|sachsen|weissenhorn|munich|munchen|berlin|frankfurt|hamburg|stuttgart|cologne|koln|dusseldorf|dortmund|essen|leipzig|bremen|dresden|hannover|nurnberg|nuremberg|ulm|neu-ulm|augsburg|wiesbaden|karlsruhe|mannheim|bonn|munster|bielefeld|aachen|freiburg|heidelberg|wolfsburg|ingolstadt|regensburg)\b/i.test(unaccented)) return "Germany";
   if (/\b(andalucia|cataluna|galicia|pais\s*vasco|aragon|asturias|baleares|canarias|cantabria|castilla|extremadura|navarra|rioja|barcelona|valencia|sevilla|zaragoza|malaga|murcia|alicante|cordoba|valladolid|vigo|gijon|coruna|toledo|vizcaya|bizkaia)\b/i.test(unaccented)) return "Spain";
   if (/\b(maharashtra|karnataka|tamil\s*nadu|gujarat|uttar\s*pradesh|telangana|delhi)\b/i.test(unaccented)) return "India";
   if (/\b(taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung)\s*(hsien|county)\b/i.test(unaccented)) return "Taiwan";

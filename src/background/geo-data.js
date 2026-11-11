@@ -172,8 +172,9 @@ const RECOGNIZED_TOWNS = [
   "taichung", "tainan", "kaohsiung", "keelung", "hsinchu", "chiayi", "hualien", "yilan",
   "hsi-hu", "hsihu", "lu-kang", "lukang", "yuan-lin", "yuanlin",
   // Germany
-  "berlin", "munich", "hamburg", "frankfurt", "cologne", "stuttgart", "dusseldorf", "dortmund",
-  "essen", "leipzig", "bremen", "dresden", "hanover", "nuremberg", "duisburg",
+  "berlin", "munich", "munchen", "hamburg", "frankfurt", "cologne", "koln", "stuttgart", "dusseldorf", "dortmund",
+  "essen", "leipzig", "bremen", "dresden", "hanover", "hannover", "nuremberg", "nurnberg", "duisburg",
+  "weissenhorn", "ulm", "neu-ulm", "augsburg", "bonn", "karlsruhe", "mannheim", "wiesbaden", "munster", "bielefeld", "aachen", "freiburg", "heidelberg",
   // France
   "paris", "marseille", "lyon", "toulouse", "nice", "nantes", "strasbourg", "montpellier",
   "bordeaux", "lille", "rennes", "reims", "saint-etienne", "le havre", "toulon", "rixheim", "mulhouse", "colmar", "grenoble", "dijon", "angers", "tours",
