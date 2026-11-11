@@ -1614,6 +1614,88 @@ async function runAsyncTests() {
     const resOwn = ctx.applyStrictInstructions(mockOwnData, mockCrawlData, {});
     assert.strictEqual(resOwn.companyAddress, 'Unit 4, 12 Industrie Road, Penrose, Auckland', 'applyStrictInstructions Own Crawl path must strictly sanitize address');
   });
+
+  // 35. AI Priority, Fallback, and Extraction Modes (AI First, AI Only, Own Crawl)
+  runTest('AI Priority, Fallback, and Extraction Modes (AI First, AI Only, Own Crawl)', () => {
+    // 1. Config definitions & normalization
+    const configPath = path.join(rootDir, 'src/background/config.js');
+    const configModule = require(configPath);
+    assert.ok(configModule.EXTRACTION_MODES, 'EXTRACTION_MODES must be defined in config.js');
+    assert.strictEqual(configModule.EXTRACTION_MODES.AI_FIRST, 'ai_first');
+    assert.strictEqual(configModule.EXTRACTION_MODES.AI_ONLY, 'ai_only');
+    assert.strictEqual(configModule.EXTRACTION_MODES.OWN_CRAWL, 'own_crawl');
+    assert.strictEqual(configModule.DEFAULT_EXTRACTION_MODE, 'ai_first', 'AI First must be default extraction mode');
+
+    assert.strictEqual(configModule.normalizeExtractionMode('ai_first'), 'ai_first');
+    assert.strictEqual(configModule.normalizeExtractionMode('ai_only'), 'ai_only');
+    assert.strictEqual(configModule.normalizeExtractionMode('AI-ONLY'), 'ai_only');
+    assert.strictEqual(configModule.normalizeExtractionMode('own_crawl'), 'own_crawl');
+    assert.strictEqual(configModule.normalizeExtractionMode('heuristic'), 'own_crawl');
+    assert.strictEqual(configModule.normalizeExtractionMode('unknown_mode'), 'ai_first', 'Unrecognized mode must default to ai_first');
+
+    // 2. Popup UI inspection
+    const popupHtml = fs.readFileSync(path.join(rootDir, 'popup.html'), 'utf8');
+    const popupJs = fs.readFileSync(path.join(rootDir, 'popup.js'), 'utf8');
+    assert.ok(popupHtml.includes('id="extraction-mode-select"'), 'popup.html must have extraction mode selector');
+    assert.ok(popupHtml.includes('value="ai_first"') && popupHtml.includes('value="ai_only"') && popupHtml.includes('value="own_crawl"'), 'popup.html must expose all 3 modes');
+    assert.ok(popupJs.includes('extractionModeSelect') && popupJs.includes('extractionMode'), 'popup.js must load and save extractionMode');
+
+    // 3. Overlay widget & content scripts inspection
+    const overlayJs = fs.readFileSync(path.join(rootDir, 'src/content/overlay-ui.js'), 'utf8');
+    const stateJs = fs.readFileSync(path.join(rootDir, 'src/content/state.js'), 'utf8');
+    const contentJs = fs.readFileSync(path.join(rootDir, 'content.js'), 'utf8');
+
+    assert.ok(overlayJs.includes('id="ai-widget-extraction-mode"'), 'overlay widget must have in-page extraction mode select');
+    assert.ok(overlayJs.includes('_extractionSource === "ai"') && overlayJs.includes('_extractionSource === "own_crawl_fallback"'), 'overlay preview must show data source badge');
+    assert.ok(stateJs.includes('extractionMode: "ai_first"'), 'state.js must track extractionMode with ai_first default');
+    assert.ok(contentJs.includes('extractionMode: state.extractionMode'), 'content.js must forward extractionMode to service worker');
+    assert.ok(contentJs.includes('_aiFailed') && contentJs.includes('ai_only'), 'content.js must block form prefill when AI fails in ai_only mode');
+
+    // 4. Strict-qc extraction mode source code validation
+    const strictQcJs = fs.readFileSync(path.join(rootDir, 'src/background/strict-qc.js'), 'utf8');
+    assert.ok(strictQcJs.includes('extractionMode === "own_crawl"'), 'strict-qc.js must support explicit own_crawl mode');
+    assert.ok(strictQcJs.includes('extractionMode === "ai_only"'), 'strict-qc.js must support strict ai_only mode');
+    assert.ok(strictQcJs.includes('_extractionSource = "own_crawl_fallback"'), 'strict-qc.js must flag own crawl fallback when AI fails');
+    assert.ok(strictQcJs.includes('_extractionSource = "ai"'), 'strict-qc.js must flag AI extraction source');
+  });
+
+  // 36. AI extracted values are strictly preserved without own-crawl overwrite (Peri SE & Post Office Box)
+  runTest('AI extracted values are strictly preserved without own-crawl overwrite (Peri SE & Post Office Box)', () => {
+    // 1. Post Office Box address sanitization
+    const poBoxInput = 'Post Office Box 1264, Weissenhorn';
+    const cleanedAddr = ctx.sanitizeRule6CompanyAddress(poBoxInput, 'Peri Se', 'Germany');
+    assert.strictEqual(cleanedAddr, 'Post Office Box 1264, Weissenhorn', 'Must preserve Post Office Box without stripping Post Office');
+
+    // 2. AI Path must preserve AI company name and address without adopting crawl candidates
+    const mockAiData = {
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Peri Se',
+      countryName: 'Germany',
+      companyAddress: 'Post Office Box 1264, Weissenhorn',
+      state: 'Not Available',
+      city: 'Available',
+      emailId: 'info@peri.com',
+      secondaryEmailId: 'data.protection@peri.com',
+      phoneNumber: '73099500',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3',
+      _isFromAi: true
+    };
+    const mockCrawlData = {
+      addressCandidates: [{ raw: 'Box 1264, Weissenhorn', source: 'contact' }],
+      legalCompanyCandidates: ['PERI Societas Europaea'],
+      emails: ['info@peri.com'],
+      phones: ['73099500'],
+      mainHtml: '<html><body>PERI Societas Europaea</body></html>'
+    };
+
+    const result = ctx.applyStrictInstructions(mockAiData, mockCrawlData, {});
+    assert.strictEqual(result.companyName, 'Peri Se', 'AI company name must not be replaced by own-crawl legal candidate');
+    assert.strictEqual(result.companyAddress, 'Post Office Box 1264, Weissenhorn', 'AI address must not be replaced or stripped by own crawl');
+  });
 }
 
 runAsyncTests().then(() => {

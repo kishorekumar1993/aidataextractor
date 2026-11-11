@@ -952,8 +952,8 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\bcic(?:\.|\b)/gi, "Community Interest Company");
   n = n.replace(/\bdac(?:\.|\b)/gi, "Designated Activity Company");
 
-  // 17. Pan-European
-  n = n.replace(/\b(?:s[\.\s]*e|se)\b\.?$/gi, "Societas Europaea");
+  // 17. Pan-European (SE -> Societas Europaea mandatory expansion per Rule 4)
+  n = n.replace(/\b(?:s[\.\s]*e|se)\b\.?(?=\s*[,)]?\s*$)/gi, "Societas Europaea");
 
   // 18. Common Business, Technical, and Industry Word Abbreviations in Company Names
   // Manufacturing / Makers

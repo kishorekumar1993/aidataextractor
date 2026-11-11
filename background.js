@@ -75,7 +75,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     }, 28000);
 
-    handleCrawlAndExtract(request.url)
+    handleCrawlAndExtract(request.url, request.extractionMode)
       .then(result => {
         if (finished) return;
         finished = true;

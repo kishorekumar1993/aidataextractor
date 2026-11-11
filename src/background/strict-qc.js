@@ -1,6 +1,6 @@
 // Main crawl orchestration (handleCrawlAndExtract), evidence link mapping, and strict QC enforcement.
 
-async function handleCrawlAndExtract(rawUrl) {
+async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   const crawlStartTime = Date.now();
   if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim() || rawUrl.trim() === "http://" || rawUrl.trim() === "https://") {
     return {
@@ -63,11 +63,21 @@ async function handleCrawlAndExtract(rawUrl) {
     };
   }
 
-  const settings = await chrome.storage.sync.get([
-    "aiProvider", "apiKey", "groqApiKey", "grokApiKey",
-    "model", "groqModel"
-  ]);
+  let settings = {};
+  try {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+      settings = await chrome.storage.sync.get([
+        "aiProvider", "apiKey", "groqApiKey", "grokApiKey",
+        "model", "groqModel", "extractionMode"
+      ]);
+    }
+  } catch (e) {
+    settings = {};
+  }
   const aiConfig = resolveAiProviderConfig(settings);
+  const extractionMode = typeof normalizeExtractionMode === "function"
+    ? normalizeExtractionMode(requestedExtractionMode || settings.extractionMode || (typeof DEFAULT_EXTRACTION_MODE !== "undefined" ? DEFAULT_EXTRACTION_MODE : "ai_first"))
+    : "ai_first";
 
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
   const crawlResult = await crawlWebsite(targetUrl);
@@ -266,25 +276,122 @@ async function handleCrawlAndExtract(rawUrl) {
 
   let extractedData;
   const elapsedBeforeAi = Date.now() - crawlStartTime;
-  if (!aiConfig.apiKey) {
+
+  if (extractionMode === "own_crawl") {
+    // Mode: Explicit user choice to use Own Crawl only (bypass AI)
+    console.log("[AI Assistant] Mode: Own Crawl Only. Skipping AI and executing local heuristic rule engine.");
     extractedData = heuristicExtraction(crawlResult, restrictedCheck);
-    extractedData._note = `Analyzed via Local Rule Engine (No ${aiConfig.label} API key configured)`;
-  } else if (elapsedBeforeAi > 18000) {
-    // If crawling took more than 18 seconds, fast-path using local rule engine so response returns immediately without timing out!
-    console.warn(`[AI Assistant] Crawl took ${elapsedBeforeAi}ms. Fast-pathing with local rule engine to prevent timeout.`);
-    extractedData = heuristicExtraction(crawlResult, restrictedCheck);
-    extractedData._note = "Analyzed via Local Rule Engine (Fast-path to prevent timeout)";
-  } else {
+    extractedData._note = "Analyzed via Own Crawl (User Mode: Own Crawl Only)";
+    extractedData._extractionSource = "own_crawl";
+    extractedData._extractionMode = "own_crawl";
+    extractedData._isFromAi = false;
+  } else if (extractionMode === "ai_only") {
+    // Mode: AI Only (Strict - No Own Crawl fallback allowed)
+    if (!aiConfig.apiKey) {
+      console.warn(`[AI Assistant] AI Only mode active, but no ${aiConfig.label} API key configured.`);
+      return {
+        websiteStatus: "Not Working",
+        businessType: "",
+        companyProfile: "",
+        companyName: "",
+        countryName: "",
+        companyAddress: "",
+        state: "",
+        city: "",
+        emailId: "",
+        secondaryEmailId: "",
+        phoneNumber: "",
+        numberOfProducts: "",
+        productImages: "",
+        numberOfProductDescriptions: "",
+        errorCategory: "AI Configuration Required",
+        errorKeyword: "Missing API Key",
+        errorSourceUrl: targetUrl,
+        errorSnippet: `AI Only mode active: Please configure your ${aiConfig.label} API key in settings. Own crawl fallback is disabled.`,
+        notWorkingReason: `AI Only mode active: No ${aiConfig.label} API key configured.`,
+        _finalUrl: targetUrl,
+        _originalUrl: targetUrl,
+        _aiFailed: true,
+        _extractionSource: "ai_failed",
+        _extractionMode: "ai_only",
+        _isFromAi: false,
+        _note: `AI Only mode: No ${aiConfig.label} API key configured (Own crawl prefill prevented)`
+      };
+    }
+
     try {
       extractedData = await analyzeWithAi(crawlResult, aiConfig, restrictedCheck, crawlStartTime);
       const usedModel = extractedData._aiModel || aiConfig.model;
       const usedLabel = extractedData._aiProvider || aiConfig.label;
       extractedData._note = `AI Powered by ${usedLabel} (${usedModel})`;
       extractedData._isFromAi = true;
+      extractedData._extractionSource = "ai";
+      extractedData._extractionMode = "ai_only";
     } catch (aiErr) {
-      console.warn(`${aiConfig.label} API error, falling back to local deterministic rule engine:`, aiErr);
+      console.warn(`[AI Assistant] AI Only mode: ${aiConfig.label} API call failed:`, aiErr.message);
+      return {
+        websiteStatus: "Not Working",
+        businessType: "",
+        companyProfile: "",
+        companyName: "",
+        countryName: "",
+        companyAddress: "",
+        state: "",
+        city: "",
+        emailId: "",
+        secondaryEmailId: "",
+        phoneNumber: "",
+        numberOfProducts: "",
+        productImages: "",
+        numberOfProductDescriptions: "",
+        errorCategory: "AI Extraction Failed",
+        errorKeyword: "AI Error",
+        errorSourceUrl: targetUrl,
+        errorSnippet: `AI Only mode active: ${aiConfig.label} request failed (${aiErr.message}). Own crawl fallback is disabled.`,
+        notWorkingReason: `AI extraction failed: ${aiErr.message}`,
+        _finalUrl: targetUrl,
+        _originalUrl: targetUrl,
+        _aiFailed: true,
+        _extractionSource: "ai_failed",
+        _extractionMode: "ai_only",
+        _isFromAi: false,
+        _note: `AI Only mode: ${aiConfig.label} failed (${aiErr.message}) - Own crawl prefill prevented`
+      };
+    }
+  } else {
+    // Mode: AI First (Default) - AI is ALWAYS first priority; Own Crawl ONLY if AI fails
+    if (!aiConfig.apiKey) {
+      console.warn(`[AI Assistant] AI First mode: No ${aiConfig.label} API key configured. Falling back to Own Crawl.`);
       extractedData = heuristicExtraction(crawlResult, restrictedCheck);
-      extractedData._note = `Analyzed via Local Rule Engine (${aiConfig.label} error: ${aiErr.message})`;
+      extractedData._note = `Own Crawl (AI Fallback: No ${aiConfig.label} API key configured)`;
+      extractedData._extractionSource = "own_crawl_fallback";
+      extractedData._extractionMode = "ai_first";
+      extractedData._isFromAi = false;
+    } else if (elapsedBeforeAi > 23000) {
+      // Crawl took longer than 23s (approaching Chrome SW 28s limit) - fast-path to own crawl to avoid channel timeout
+      console.warn(`[AI Assistant] Crawl took ${elapsedBeforeAi}ms. Fast-pathing to Own Crawl fallback to prevent timeout.`);
+      extractedData = heuristicExtraction(crawlResult, restrictedCheck);
+      extractedData._note = "Own Crawl (AI Fallback: Crawl took >23s, fast-path to prevent timeout)";
+      extractedData._extractionSource = "own_crawl_fallback";
+      extractedData._extractionMode = "ai_first";
+      extractedData._isFromAi = false;
+    } else {
+      try {
+        extractedData = await analyzeWithAi(crawlResult, aiConfig, restrictedCheck, crawlStartTime);
+        const usedModel = extractedData._aiModel || aiConfig.model;
+        const usedLabel = extractedData._aiProvider || aiConfig.label;
+        extractedData._note = `AI Powered by ${usedLabel} (${usedModel})`;
+        extractedData._isFromAi = true;
+        extractedData._extractionSource = "ai";
+        extractedData._extractionMode = "ai_first";
+      } catch (aiErr) {
+        console.warn(`[AI Assistant] ${aiConfig.label} API error, falling back to Own Crawl rule engine:`, aiErr.message);
+        extractedData = heuristicExtraction(crawlResult, restrictedCheck);
+        extractedData._note = `Own Crawl (AI Fallback: ${aiErr.message || "AI Error"})`;
+        extractedData._extractionSource = "own_crawl_fallback";
+        extractedData._extractionMode = "ai_first";
+        extractedData._isFromAi = false;
+      }
     }
   }
 
@@ -1006,7 +1113,16 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     (/\bSlash\b/i.test(compName) && companyEvidenceSnippet.includes("/"))
   );
 
-  if (!compName || !hasSuffix || (!compMatchesDomain && hasLegalCandidates) || hasExpandedSymbol) {
+  if (!result._isFromAi) {
+    if (!compName || !hasSuffix || (!compMatchesDomain && hasLegalCandidates) || hasExpandedSymbol) {
+      compName = preferOfficialCompanyName(compName, crawlData);
+      compName = restoreLegalSuffixIfOmitted(compName, crawlData);
+      compName = decodeHtmlEntities(compName);
+      compName = compName.replace(/['’`]\s*s\b/gi, "'s");
+      compName = cleanCompanyPrefixesAndSuffixes(compName);
+    }
+  } else if (!compName || compName.toLowerCase() === "not available") {
+    // Only fall back to crawl data if AI returned empty or not available
     compName = preferOfficialCompanyName(compName, crawlData);
     compName = restoreLegalSuffixIfOmitted(compName, crawlData);
     compName = decodeHtmlEntities(compName);
@@ -1081,8 +1197,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     rawSource = (crawlData.contactPageText || crawlData.bodyText || crawlData.combinedText || crawlData.mainHtml || "").slice(0, 5000);
   }
 
-  // Adopt candidate only if candidate itself is a concise, verified full address (never adopt entire page text)
-  if (selectedCandidate && rawSource && typeof rawSource === "string" && rawSource.length < 350) {
+  // Adopt candidate only if candidate itself is a concise, verified full address (never adopt entire page text, and never overwrite AI address)
+  if (!result._isFromAi && selectedCandidate && rawSource && typeof rawSource === "string" && rawSource.length < 350) {
     if (isFullAddressCandidate(rawSource) && !isFullAddressCandidate(addr)) {
       addr = rawSource;
     }
@@ -1109,10 +1225,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Strip conversational boilerplate from start of address e.g. "If you have any enquiries, require a quote or want to book a survey please feel free to call us or send us a message with your requirements Priory Windows And Conservatories 5 Burnt House Road, Whitley Bay"
       addr = addr.replace(/^(?:if\s+you\s+have\s+any\s+enquiries|require\s+a\s+quote|want\s+to\s+book\s+a\s+survey|please\s+feel\s+free\s+to\s+call\s+us|send\s+us\s+a\s+message|with\s+your\s+requirements|get\s+in\s+touch|contact\s+us\s+at)[\s\S]*?(?=\b\d+\s+[A-Za-z]|\b(?:po\s*box|unit|suite|building|floor|no\.?)\b)/i, "").trim();
 
-      // Strip office, department, branch, or headquarters label prefix at start of address
-      // e.g. "Toronto Corporate Head Office:, 40 Edilcan Drive, Concord, Ontario" -> "40 Edilcan Drive, Concord, Ontario"
-      const officePrefixRegex = /^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|direcci[oó]n|ubicaci[oó]n)\s*[:：\-–,\s]+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|floor)\b)/i;
-      addr = addr.replace(officePrefixRegex, "").trim();
+      // Strip office, department, branch, or headquarters label prefix at start of address (never strip authentic Post Office Box / GPO Box)
+      if (!/^\s*(?:general\s+)?post\s+office\s+box\b/i.test(addr)) {
+        const officePrefixRegex = /^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|(?<!\b(?:post|general\s+post)\s+)office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|direcci[oó]n|ubicaci[oó]n)\s*(?:[:：\-–,]+\s*|\s+(?=\b(?:\d{1,5}|no\.?\s*\d+|unit|suite|building|floor|level|room)\b))/i;
+        addr = addr.replace(officePrefixRegex, "").trim();
+      }
 
       if (compName && addr.toLowerCase().startsWith(compName.toLowerCase())) {
         addr = addr.slice(compName.length).trim();

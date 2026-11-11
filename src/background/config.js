@@ -12,6 +12,20 @@ const DEFAULT_AI_PROVIDER = getEnvVar("AI_PROVIDER", "gemini").toLowerCase();
 const DEFAULT_API_KEY = getEnvVar("GEMINI_API_KEY", "");
 const DEFAULT_GROQ_API_KEY = getEnvVar("GROQ_API_KEY", "");
 
+const EXTRACTION_MODES = {
+  AI_FIRST: "ai_first",
+  AI_ONLY: "ai_only",
+  OWN_CRAWL: "own_crawl"
+};
+const DEFAULT_EXTRACTION_MODE = getEnvVar("EXTRACTION_MODE", EXTRACTION_MODES.AI_FIRST);
+
+function normalizeExtractionMode(rawMode) {
+  const m = String(rawMode || "").trim().toLowerCase();
+  if (m === "ai_only" || m === "ai-only" || m === "aionly") return EXTRACTION_MODES.AI_ONLY;
+  if (m === "own_crawl" || m === "own-crawl" || m === "owncrawl" || m === "heuristic") return EXTRACTION_MODES.OWN_CRAWL;
+  return EXTRACTION_MODES.AI_FIRST;
+}
+
 const GEMINI_MODELS = [
   "gemini-3.8-flash",
   "gemini-3.6-flash",
@@ -189,3 +203,23 @@ const GEMINI_RESPONSE_SCHEMA = {
 /**
  * Prompts Google Gemini with complete, uncorrupted website content and strict QC instructions.
  */
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    DEFAULT_AI_PROVIDER,
+    DEFAULT_API_KEY,
+    DEFAULT_GROQ_API_KEY,
+    GEMINI_MODELS,
+    GROQ_MODELS,
+    DEFAULT_MODEL,
+    DEFAULT_GROQ_MODEL,
+    AI_PROVIDERS,
+    EXTRACTION_MODES,
+    DEFAULT_EXTRACTION_MODE,
+    normalizeExtractionMode,
+    inferProviderByKeyPrefix,
+    normalizeProviderAndModel,
+    resolveAiProviderConfig,
+    GEMINI_RESPONSE_SCHEMA
+  };
+}

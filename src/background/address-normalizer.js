@@ -674,8 +674,8 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   if (!hasIndoHint) {
     a = a.replace(/\bblk\b\.?/gi, "Block");
   }
-  a = a.replace(/\bpob\b\.?/gi, "Post Office Box");
-  a = a.replace(/\bpo\s*box\b\.?/gi, "Post Office Box");
+  a = a.replace(/(^|[,\s])\b(?:p\.?o\.?\s*box|pob)\b\.?/gi, "$1Post Office Box");
+  a = a.replace(/(^|[,\s])\bBox\s*(\d+[A-Za-z]?(?:[-/]\d+)?)\b/gi, "$1Post Office Box $2");
 
   // 6. Expand State & Province abbreviations (Global)
   // Australia
@@ -2033,9 +2033,12 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/^(?:if\s+you\s+have\s+any\s+enquiries|require\s+a\s+quote|want\s+to\s+book\s+a\s+survey|please\s+feel\s+free\s+to\s+call\s+us|send\s+us\s+a\s+message|with\s+your\s+requirements|get\s+in\s+touch|contact\s+us\s+at)[\s\S]*?(?=\b\d+\s+[A-Za-z]|\b(?:po\s*box|unit|suite|building|floor|no\.?)\b)/i, "").trim();
 
   // 5. Strip office, department, branch, or headquarters label prefix at start of address
-  const officePrefixRegex = /^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|direcci[oó]n|ubicaci[oó]n|alamat|kantor|pabrik|廠址|地址)\s*[:：\-–,\s]+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|floor)\b|[A-Za-z])/i;
-  a = a.replace(officePrefixRegex, "").trim();
-  a = a.replace(/^(?:address|add|addr|location|alamat|direcci[oó]n|地址)\s*[:：\-–,\s]+/i, "").trim();
+  // (NEVER match or strip authentic Post Office Box / General Post Office Box)
+  if (!/^\s*(?:general\s+)?post\s+office\s+box\b/i.test(a)) {
+    const officePrefixRegex = /^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|(?<!\b(?:post|general\s+post)\s+)office|plant|factory|warehouse|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|direcci[oó]n|ubicaci[oó]n|alamat|kantor|pabrik|廠址|地址)\s*(?:[:：\-–,]+\s*|\s+(?=\b(?:\d{1,5}|no\.?\s*\d+|unit|suite|building|floor|level|room)\b))/i;
+    a = a.replace(officePrefixRegex, "").trim();
+    a = a.replace(/^(?:address|add|addr|location|alamat|direcci[oó]n|地址)\s*[:：\-–,\s]+/i, "").trim();
+  }
 
   // 6. Strip Company Name from start of address per Rule 6
   const cleanComp = (companyName || "").trim();
@@ -2056,7 +2059,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/^(?:company|co\.?|incorporated|inc\.?|corporation|corp\.?|llc|limited|ltd\.?|equipment|systems|industries|technologies|enterprises|group|products)\b[\s,:\-–]*/i, "").trim();
 
   // 7. Strip trailing contact / communication fields (Phone, Tel, Email, Fax, Hours, Map)
-  a = a.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip|P\.?O\.?\s*Box)\b\s*[:：\-–]?.*)$/i, "").trim();
+  a = a.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip)\b\s*[:：\-–]?.*)$/i, "").trim();
   a = a.replace(/[,;\s]*(?:\b(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[\s\S]*?(?:am|pm).*)$/i, "").trim();
   a = a.replace(/[,;\s]*(?:\b(?:view\s*map|open\s*map|open\s*in\s*maps?|get\s*directions?|see\s*on\s*maps?|google\s*maps?|directions?)\b.*)$/i, "").trim();
 

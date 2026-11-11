@@ -52,6 +52,18 @@
         </div>
 
         <div class="form-group">
+          <label for="extraction-mode-select">Extraction Mode</label>
+          <select id="extraction-mode-select">
+            <option value="ai_first" selected>🤖 AI First (Fallback to Own Crawl on AI failure)</option>
+            <option value="ai_only">🧠 AI Only (Strict - Do not use Own Crawl)</option>
+            <option value="own_crawl">🕷️ Own Crawl Only (Local Rule Engine)</option>
+          </select>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.35;">
+            AI is always first priority. If AI fails, only then is Own Crawl form prefill allowed.
+          </div>
+        </div>
+
+        <div class="form-group">
           <label for="provider-select">AI Provider</label>
           <select id="provider-select">
             <option value="gemini" selected>Google Gemini</option>

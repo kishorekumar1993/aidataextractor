@@ -32,6 +32,7 @@ const PROVIDER_MODELS_UI = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  const extractionModeSelect = document.getElementById("extraction-mode-select");
   const providerSelect = document.getElementById("provider-select");
   const apiKeyInput = document.getElementById("api-key-input");
   const groqApiKeyInput = document.getElementById("groq-api-key-input");
@@ -97,12 +98,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load existing settings or pre-configure defaults
   chrome.storage.sync.get([
     "aiProvider", "apiKey", "groqApiKey", "grokApiKey",
-    "model", "groqModel",
+    "model", "groqModel", "extractionMode",
     "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"
   ], (res) => {
     let rawProv = String(res.aiProvider || DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
     if (rawProv === "grok") rawProv = "groq";
     const activeProvider = PROVIDER_MODELS_UI[rawProv] ? rawProv : "gemini";
+
+    if (extractionModeSelect) {
+      extractionModeSelect.value = res.extractionMode || "ai_first";
+    }
 
     const savedGroqKey = res.groqApiKey || res.grokApiKey || DEFAULT_GROQ_API_KEY;
     if (providerSelect) providerSelect.value = activeProvider;
@@ -159,6 +164,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Save Settings
   btnSaveKey.addEventListener("click", () => {
     const aiProvider = providerSelect ? providerSelect.value : "gemini";
+    const extractionMode = extractionModeSelect ? extractionModeSelect.value : "ai_first";
     const key = apiKeyInput.value.trim();
     const groqApiKey = groqApiKeyInput ? groqApiKeyInput.value.trim() : "";
     savedModelsByProvider[aiProvider] = modelSelect.value;
@@ -170,6 +176,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     chrome.storage.sync.set({
       aiProvider,
+      extractionMode,
       apiKey: key,
       groqApiKey,
       model: savedModelsByProvider.gemini,
@@ -184,6 +191,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Instant toggles without requiring Save button
+  if (extractionModeSelect) {
+    extractionModeSelect.addEventListener("change", () => {
+      chrome.storage.sync.set({ extractionMode: extractionModeSelect.value });
+    });
+  }
   if (toggleAutoQueue) {
     toggleAutoQueue.addEventListener("change", () => {
       chrome.storage.sync.set({ autoQueueEnabled: toggleAutoQueue.checked });

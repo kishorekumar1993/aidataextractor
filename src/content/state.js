@@ -4,6 +4,7 @@
   const state = (AIExt.state = AIExt.state || {
     cachedExtractedData: null,
     lastProcessedUrl: "",
+    extractionMode: "ai_first",
     showFloatingWidget: true,
     showInlineBtn: true,
     autoQueueEnabled: true,
@@ -19,10 +20,11 @@
   });
 
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true, autoQueueEnabled: true, autoSubmitNotWorkingEnabled: false }, (res) => {
+    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true, autoQueueEnabled: true, autoSubmitNotWorkingEnabled: false, extractionMode: "ai_first" }, (res) => {
       if (res) {
         state.showFloatingWidget = res.showFloatingWidget !== false;
         state.showInlineBtn = res.showInlineBtn !== false;
+        state.extractionMode = res.extractionMode || "ai_first";
         if (res.autoQueueEnabled !== undefined) {
           state.autoQueueEnabled = !!res.autoQueueEnabled;
         }
@@ -30,6 +32,8 @@
           state.autoSubmitNotWorkingEnabled = res.autoSubmitNotWorkingEnabled;
         }
       }
+      const widgetMode = document.getElementById("ai-widget-extraction-mode");
+      if (widgetMode) widgetMode.value = state.extractionMode;
       const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
       if (widgetToggle) widgetToggle.checked = state.autoQueueEnabled;
       const notWorkingToggle = document.getElementById("ai-auto-submit-notworking-toggle");
@@ -41,6 +45,11 @@
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === "sync") {
+        if (changes.extractionMode) {
+          state.extractionMode = changes.extractionMode.newValue || "ai_first";
+          const widgetMode = document.getElementById("ai-widget-extraction-mode");
+          if (widgetMode) widgetMode.value = state.extractionMode;
+        }
         if (changes.showFloatingWidget) {
           state.showFloatingWidget = changes.showFloatingWidget.newValue !== false;
         }

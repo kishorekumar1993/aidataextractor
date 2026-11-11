@@ -449,6 +449,15 @@
           <div class="ai-url-value" id="ai-current-target-url">Searching for website URL...</div>
         </div>
 
+        <div class="ai-widget-mode-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; margin-bottom: 8px; font-size: 11.5px; color: #374151;">
+          <span style="font-weight: 600;">Data Source:</span>
+          <select id="ai-widget-extraction-mode" style="flex: 1; padding: 4px 6px; font-size: 11px; border-radius: 4px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-weight: 600; cursor: pointer;">
+            <option value="ai_first" ${(state.extractionMode || "ai_first") === "ai_first" ? "selected" : ""}>🤖 AI First (Fallback to Own Crawl)</option>
+            <option value="ai_only" ${state.extractionMode === "ai_only" ? "selected" : ""}>🧠 AI Only (Strict)</option>
+            <option value="own_crawl" ${state.extractionMode === "own_crawl" ? "selected" : ""}>🕷️ Own Crawl Only</option>
+          </select>
+        </div>
+
         <button type="button" class="ai-action-btn ai-btn-primary" id="ai-crawl-btn">
           <span>⚡ Auto-Crawl & Pre-Fill</span>
         </button>
@@ -641,6 +650,24 @@
     if (batchAllBtn) {
       batchAllBtn.addEventListener("click", () => {
         AIExt.startBatchNotWorking(-1);
+      });
+    }
+
+    const widgetModeSelect = document.getElementById("ai-widget-extraction-mode");
+    if (widgetModeSelect) {
+      widgetModeSelect.value = state.extractionMode || "ai_first";
+      widgetModeSelect.addEventListener("change", (e) => {
+        const newMode = e.target.value;
+        state.extractionMode = newMode;
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+          chrome.storage.sync.set({ extractionMode: newMode });
+        }
+        const modeLabels = {
+          ai_first: "AI First (Fallback to Own Crawl on AI failure)",
+          ai_only: "AI Only (Strict - No Own Crawl)",
+          own_crawl: "Own Crawl Only (Local Rule Engine)"
+        };
+        updateStatus(`Mode: ${modeLabels[newMode] || newMode}`, "idle");
       });
     }
 
@@ -942,7 +969,21 @@
       ? formatClickableUrl(data._finalUrl, siteBaseUrl)
       : "";
 
+    let sourceBadgeHtml = "";
+    if (data._extractionSource === "ai") {
+      const prov = data._aiProvider || "AI";
+      const mod = data._aiModel || "";
+      sourceBadgeHtml = `<span style="background: #dcfce7; color: #15803d; border: 1px solid #86efac; padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px;">🤖 AI Powered (${prov}${mod ? " - " + mod : ""})</span>`;
+    } else if (data._extractionSource === "own_crawl_fallback") {
+      sourceBadgeHtml = `<span style="background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px;" title="${data._note || ''}">⚠️ Own Crawl (AI Fallback)</span>`;
+    } else if (data._extractionSource === "own_crawl") {
+      sourceBadgeHtml = `<span style="background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px;">🕷️ Own Crawl (Local Rule Engine)</span>`;
+    } else if (data._extractionSource === "ai_failed") {
+      sourceBadgeHtml = `<span style="background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px;">❌ AI Failed (Own Crawl Blocked)</span>`;
+    }
+
     const items = [
+      { key: "Data Source", val: sourceBadgeHtml, isRawHtml: true },
       { key: "Status", val: statusVal, isAlert: isRestr || data.websiteStatus === "Not Working", isHighlight: isRedirect },
       { key: "Redirected To", val: redirectDestLink, isLink: true },
       { key: "Error Keyword", val: errKeyword, isAlert: true },
@@ -989,7 +1030,9 @@
       const valStyle = item.isAlert ? 'style="color: #dc2626; font-weight: 700;"' : '';
 
       let valHtml = '';
-      if (item.isLink && item.val) {
+      if (item.isRawHtml && item.val) {
+        valHtml = item.val;
+      } else if (item.isLink && item.val) {
         valHtml = `<a href="${item.val}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; font-weight: 600; text-decoration: underline; font-size: 11px; word-break: break-all;" title="Open source link in new tab: ${item.val}">🔗 ${item.val}</a>`;
       } else if (item.isSnippet && item.val) {
         valHtml = `<span style="color: #4b5563; font-style: italic; font-size: 10.5px; word-break: break-word; line-height: 1.3;">${item.val}</span>`;

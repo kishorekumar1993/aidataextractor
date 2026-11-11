@@ -144,7 +144,11 @@
     const safetyTimer = setTimeout(AIExt.resetCrawlButtons, 30000);
 
     try {
-      const response = await AIExt.sendRuntimeMessage({ action: "CRAWL_AND_EXTRACT", url: targetUrl });
+      const response = await AIExt.sendRuntimeMessage({
+        action: "CRAWL_AND_EXTRACT",
+        url: targetUrl,
+        extractionMode: state.extractionMode || "ai_first"
+      });
       AIExt.resetCrawlButtons();
 
       if (!response || !response.success) {
@@ -190,6 +194,13 @@
 
       const data = response.data;
       state.cachedExtractedData = data;
+
+      // STRICT QC: If AI Only mode was chosen and AI failed, block form prefill
+      if (data && data._aiFailed && data._extractionMode === "ai_only") {
+        AIExt.renderPreview(data);
+        AIExt.updateStatus(`⚠️ AI Only Mode: AI extraction failed (${data._note || "AI Error"}). Form prefill prevented.`, "error");
+        return;
+      }
 
       // STRICT QC: If prohibited or restricted site, show proper error message, clear all fields, and select Not Working
       if (data && (data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site")) {
@@ -266,10 +277,13 @@
         }
 
         const note = data._note || "Gemini AI";
+        const sourceTag = data._extractionSource === "ai"
+          ? "🤖 AI"
+          : (data._extractionSource === "own_crawl_fallback" ? "⚠️ Own Crawl (AI Fallback)" : "🕷️ Own Crawl");
         if (data.websiteStatus === "Redirect Site") {
-          AIExt.updateStatus(`🔄 Redirect Site detected! Pre-filled ${fillReport.filledCount} fields from destination URL (${note}). Stopped at Submit button for manual review.`, "success");
+          AIExt.updateStatus(`🔄 Redirect Site detected! Pre-filled ${fillReport.filledCount} fields [${sourceTag}: ${note}]. Stopped at Submit button for manual review.`, "success");
         } else {
-          AIExt.updateStatus(`✅ Working site found! Pre-filled ${fillReport.filledCount} fields (${note}). Stopped at Submit button for manual review.`, "success");
+          AIExt.updateStatus(`✅ Working site found! Pre-filled ${fillReport.filledCount} fields [${sourceTag}: ${note}]. Stopped at Submit button for manual review.`, "success");
         }
       }
     } catch (err) {
