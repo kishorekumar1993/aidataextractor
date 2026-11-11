@@ -16,9 +16,10 @@ const DEFAULT_GROQ_MODEL = readPopupEnv("GROQ_MODEL", "openai/gpt-oss-120b");
 
 const PROVIDER_MODELS_UI = {
   gemini: [
+    { value: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Latest & High Accuracy)" },
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
     { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (Fast & Accurate - Default)" },
     { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite" },
-    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
     { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" }
   ],

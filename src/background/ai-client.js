@@ -1,14 +1,23 @@
 // Multi-provider AI extraction (Gemini & Groq), key validation, and heuristic fallback extraction.
 
 function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
+  const compactSlice = (text, maxLen) => String(text || "").replace(/\s+/g, " ").trim().slice(0, maxLen);
   const formattedAddressEvidence = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
-    ? crawlData.addressCandidates.map((c, idx) => {
+    ? crawlData.addressCandidates.slice(0, 10).map((c, idx) => {
       const typeLabel = c.isHeadquarters ? "HEADQUARTERS / HEAD OFFICE" : (c.locationType ? c.locationType.toUpperCase() : "LOCATION");
       const langLabel = c.isEnglish ? "English" : "Local Language";
       const romanized = !c.isEnglish && /[\u4e00-\u9fa5]/.test(c.raw) ? ` -> Romanized English: ${romanizeChineseAddress(c.raw)}` : "";
       return `${idx + 1}. [${typeLabel} (${langLabel}, Source: ${c.source})]: ${c.raw}${romanized}`;
     }).join("\n")
-    : ((crawlData.detectedAddresses || []).join("\n") || "(No physical address candidates extracted from static HTML)");
+    : ((crawlData.detectedAddresses || []).slice(0, 10).join("\n") || "(No physical address candidates extracted from static HTML)");
+
+  const contactText = compactSlice(crawlData.dedicatedContactText || crawlData.contactPageText, 2800);
+  const profileRaw = compactSlice(crawlData.profilePageText, 1800);
+  const profileText = (profileRaw && profileRaw !== contactText) ? profileRaw : "";
+  const renderedText = compactSlice(crawlData.renderedText, 1800);
+  const footerText = compactSlice(crawlData.footerText, 800);
+  const bodyRaw = compactSlice(crawlData.bodyText, 2000);
+  const bodyText = (bodyRaw && bodyRaw !== renderedText) ? bodyRaw : "";
 
   const jsonSchemaSection = includeJsonSchemaHint ? `
 
@@ -44,8 +53,8 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "".
 
 2. BUSINESS TYPE:
-- Options: "Manufacturer" | "Distributor" | "Trader" | "Wholesaler" | "Retailer" | "Service Provider" | "Other".
-- If company manufactures, fabricates, molds, or engineers products -> "Manufacturer".
+- Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
+- Note exact spelling "Distributer". If company manufactures, fabricates, molds, or engineers products -> "Manufacturer".
 
 3. COMPANY PROFILE:
 - Options: "Available" | "Not Available".
@@ -93,11 +102,13 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * Address MUST NOT end with a comma or period.
 
 7. STATE & CITY QC RULES (ALL COUNTRIES WORLDWIDE - EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
-- State: Mark "Available" ONLY IF a State, Province, County, Territory, Prefecture, Canton, Oblast, Voivodeship, Governorate, Emirate, Region, or National Capital City word is LITERALLY WRITTEN inside companyAddress across any country! Do NOT guess or infer a state from external geography if no state word appears in companyAddress! (Example: "28 Rue Zuber, Rixheim" has NO state/region written -> State MUST be "Not Available"; "Number 228, Baoshun Road, East District, Chiayi City" has NO state written -> State MUST be "Not Available"; National Capital like Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires -> both State & City are "Available").
+- MANDATORY CAPITAL RULE: If a country's capital city is mentioned in companyAddress (e.g. Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
+- State: (County, Province, Prefecture) MUST be considered as State. Mark "Available" ONLY IF a State, County, Province, Prefecture, Territory, Canton, Oblast, Voivodeship, Governorate, Emirate, Region, or the country's Capital City is LITERALLY WRITTEN inside companyAddress (excluding street labels like "County Road"). Do NOT guess or infer a state if none appears in companyAddress! (Example: "28 Rue Zuber, Rixheim" -> State: "Not Available"; "Number 228, Baoshun Road, East District, Chiayi City" -> State: "Not Available").
 - City:
-  * CRITICAL: A SUBURB IS NOT A CITY! Suburbs/industrial zones alone without a recognized city/town (e.g. Campbellfield, Rowville, Oakleigh South, Sandton, Penrose) -> mark "city": "Not Available"!
-  * Mark "Available" ONLY if an official recognized City, Town, Township, District, Municipality, Commune, or Borough across ANY country worldwide is written in companyAddress (e.g. Melbourne, Sydney, London, Chicago, Austin, Park Hills, Heanor, Rixheim, Jepara, Zurich, Zagreb, Doha, Karachi, Bogota, Nairobi, Bucharest).
+  * (Town, District, Municipality) MUST be considered as City. Mark "Available" ONLY if an official recognized City, Town, District, Municipality, Township, Commune, or Borough across ANY country worldwide is written in companyAddress (e.g. Melbourne, Sydney, London, Chicago, Austin, Park Hills, Heanor, Rixheim, Jepara, Zurich, Zagreb, Doha, Karachi, Bogota, Nairobi, Bucharest).
+  * CRITICAL: A SUBURB IS NOT A CITY! Suburbs/industrial zones alone without a recognized city/town/district/municipality (e.g. Campbellfield, Rowville, Oakleigh South, Sandton, Penrose, Trafford Park, MM2100 Industrial Town) -> mark "city": "Not Available"!
   * GEOGRAPHIC NORMALIZATION: Recognized UK town localities (e.g. "Heanor Gate" -> Heanor, Derbyshire) qualify as City: "Available".
+  * TAIWAN RULE: Only Taipei City (capital) or an explicit County/Hsien/Province (e.g. "Changhua County", "Taoyuan County") has State: "Available". County-administered / provincial cities without "County"/"Hsien" (e.g. "Changhua City", "Chiayi City", "Hsinchu City", "Hualien City", "Taichung City", "Kaohsiung City", "Tainan City", "New Taipei City") MUST be State: "Not Available" and City: "Available".
 
 8. EMAIL ID & SECONDARY EMAIL ID:
 - Primary Email: Official general contact or sales inbox (e.g. sales@, info@, contact@, enquiry@).
@@ -126,22 +137,15 @@ Product Items / Units Detected: ${crawlData.detectedProductCount}
 Product Images Detected: ${crawlData.detectedImageCount}
 Product Descriptions Detected: ${crawlData.detectedDescCount}
 
-${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2), null, 2)}\n\n` : ""}${crawlData.renderedText ? `VISUAL DOM TEXT:\n${crawlData.renderedText.slice(0, 2500)}\n\n` : ""}PRIORITY RULE FOR EXTRACTION: Check the DEDICATED CONTACT US PAGE FIRST for address, emails, phone numbers, and country before checking Footer, About, or Homepage content.
+${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2))}\n\n` : ""}${renderedText ? `VISUAL DOM TEXT:\n${renderedText}\n\n` : ""}PRIORITY RULE FOR EXTRACTION: Check the DEDICATED CONTACT US PAGE FIRST for address, emails, phone numbers, and country before checking Footer, About, or Homepage content.
 
 PHYSICAL ADDRESS EVIDENCE FOUND ON WEBSITE:
 ${formattedAddressEvidence}
 
 DEDICATED CONTACT US PAGE CONTENT (FIRST PRIORITY):
-${(crawlData.dedicatedContactText || crawlData.contactPageText || "").slice(0, 3500)}
+${contactText}
 
-ABOUT / PROFILE & OTHER PAGES CONTENT:
-${(crawlData.profilePageText || crawlData.contactPageText || "").slice(0, 2500)}
-
-FOOTER CONTENT:
-${(crawlData.footerText || "").slice(0, 1000)}
-
-PAGE BODY CONTENT:
-${(crawlData.bodyText || "").slice(0, 2500)}${jsonSchemaSection}
+${profileText ? `ABOUT / PROFILE & OTHER PAGES CONTENT:\n${profileText}\n\n` : ""}${footerText ? `FOOTER CONTENT:\n${footerText}\n\n` : ""}${bodyText ? `PAGE BODY CONTENT:\n${bodyText}` : ""}${jsonSchemaSection}
 `;
 }
 
@@ -226,7 +230,8 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
-              temperature: 0.1,
+              temperature: 0,
+              maxOutputTokens: 1024,
               responseMimeType: "application/json",
               responseSchema: GEMINI_RESPONSE_SCHEMA
             }
@@ -243,6 +248,8 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
           break;
         }
         if (response.status === 400) {
+          const retryCtrl = new AbortController();
+          const retryTimer = setTimeout(() => retryCtrl.abort(), 6000);
           try {
             const fallbackRes = await fetch(url, {
               method: "POST",
@@ -250,10 +257,12 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
                 "Content-Type": "application/json",
                 "x-goog-api-key": apiKey
               },
+              signal: retryCtrl.signal,
               body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt + "\nReturn strictly a valid JSON object matching the requested schema." }] }],
                 generationConfig: {
-                  temperature: 0.1,
+                  temperature: 0,
+                  maxOutputTokens: 1024,
                   responseMimeType: "application/json"
                 }
               })
@@ -264,7 +273,10 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
               const parsed = parseAiJsonPayload(rawText);
               if (parsed) return { parsed, activeModel: modelToTry };
             }
-          } catch (e) { }
+          } catch (e) {
+          } finally {
+            clearTimeout(retryTimer);
+          }
         }
         lastError = new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
         continue;
@@ -424,7 +436,7 @@ async function callOpenAiCompatibleApi({ providerLabel, endpoint, modelsEndpoint
     candidateModels,
     crawlStartTime,
     attemptFn: async (modelToTry, idx) => {
-      const sendChatRequest = async (useJsonFormat) => {
+      const sendChatRequest = async (useOptionalTuning) => {
         const abortCtrl = new AbortController();
         const timeoutPerModel = (idx === 0) ? 10000 : 6000;
         const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
@@ -434,10 +446,16 @@ async function callOpenAiCompatibleApi({ providerLabel, endpoint, modelsEndpoint
             { role: "system", content: "You are a strict QC data-entry extractor. Always reply with a valid JSON object only." },
             { role: "user", content: prompt }
           ],
-          temperature: 0.1
+          temperature: 0,
+          max_tokens: 1024
         };
-        if (useJsonFormat && !/reasoner/i.test(modelToTry)) {
-          bodyPayload.response_format = { type: "json_object" };
+        if (useOptionalTuning) {
+          if (!/reasoner/i.test(modelToTry)) {
+            bodyPayload.response_format = { type: "json_object" };
+          }
+          if (/gpt-oss/i.test(modelToTry)) {
+            bodyPayload.reasoning_effort = "low";
+          }
         }
         try {
           return await fetch(endpoint, {

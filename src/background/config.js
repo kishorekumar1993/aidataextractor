@@ -13,9 +13,10 @@ const DEFAULT_API_KEY = getEnvVar("GEMINI_API_KEY", "");
 const DEFAULT_GROQ_API_KEY = getEnvVar("GROQ_API_KEY", "");
 
 const GEMINI_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
-  "gemini-3.6-flash",
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite"
 ];

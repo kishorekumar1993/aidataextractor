@@ -261,6 +261,7 @@ runTest('Taiwan Google Maps embed merge & village restoration (Yi-Shyang test ca
     phones: ["+886-4-732-2367"],
     detectedImageCount: 133
   }, {});
+  assert.strictEqual(changhuaCityRes.companyAddress, "Number 262 Lane 23, Kuo Sheng Road, Chang Hua City", "Must preserve API address without injecting unwanted comma after Number 262 or altering Chang Hua City");
   assert.strictEqual(changhuaCityRes.state, "Not Available", "Changhua City without Changhua County must be State Not Available");
   assert.strictEqual(changhuaCityRes.city, "Available", "Changhua City must be City Available");
   assert.strictEqual(changhuaCityRes.phoneNumber, "47322367");
@@ -600,6 +601,46 @@ runTest('State and City enforce instruction sheet rules in AI mode (reject subur
     false,
     "Non-US 2-letter code MI must not falsely trigger Michigan state"
   );
+
+  // County, Province, Prefecture -> State; Town, District, Municipality -> City; National Capital -> both Available
+  assert.strictEqual(ctx.hasStateInAddress("10 Main Street, Osaka Prefecture", "Japan"), true, "Prefecture must be State Available");
+  assert.strictEqual(ctx.hasStateInAddress("10 Main Street, Aichi Pref.", "Japan"), true, "Pref. abbreviation must be State Available");
+  assert.strictEqual(ctx.hasStateInAddress("10 Main Street, Kent County", "United Kingdom"), true, "County must be State Available");
+  assert.strictEqual(ctx.hasStateInAddress("10 Main Street, Limpopo Province", "South Africa"), true, "Province must be State Available");
+  assert.strictEqual(ctx.hasStateInAddress("100 County Road 42, Rixheim", "France"), false, "County Road street label must NOT falsely trigger State Available");
+
+  assert.strictEqual(ctx.evaluateCityQC("10 Main Street, Some Town, Kent", "United Kingdom"), "Available", "Town must be City Available");
+  assert.strictEqual(ctx.evaluateCityQC("10 Main Street, Peak District", "United Kingdom"), "Available", "District must be City Available");
+  assert.strictEqual(ctx.evaluateCityQC("10 Main Street, Ekurhuleni Municipality", "South Africa"), "Available", "Municipality must be City Available");
+  assert.strictEqual(ctx.evaluateCityQC("10 District Road, Unknown Suburb", "Australia"), "Not Available", "District Road street label must NOT trigger City Available");
+
+  for (const [capAddr, capCountry] of [
+    ["1-1 Marunouchi, Tokyo", "Japan"],
+    ["100 Wellington Street, Ottawa", "Canada"],
+    ["10 Downing Street, London", "United Kingdom"],
+    ["500 Pennsylvania Avenue, Washington D.C.", "United States Of America"],
+    ["10 Rue de Rivoli, Paris", "France"],
+    ["123 Zhongxiao Road, Taipei City", "Taiwan"]
+  ]) {
+    const capRes = ctx.applyStrictInstructions({
+      _isFromAi: true,
+      websiteStatus: "Working",
+      businessType: "Manufacturer",
+      companyName: "Capital Corp Limited",
+      countryName: capCountry,
+      companyAddress: capAddr,
+      state: "Not Available",
+      city: "Not Available",
+      productImages: "3"
+    }, {}, {});
+    assert.strictEqual(capRes.state, "Available", `Capital in "${capAddr}" must make State Available`);
+    assert.strictEqual(capRes.city, "Available", `Capital in "${capAddr}" must make City Available`);
+  }
+
+  const rule7Prompt = ctx.buildExtractionPrompt({ originalUrl: "https://example.com", title: "Ex", emails: [], phones: [] }, false);
+  assert.ok(/County,\s*Province,\s*Prefecture/i.test(rule7Prompt), "Prompt must state County, Province, Prefecture -> State");
+  assert.ok(/Town,\s*District,\s*Municipality/i.test(rule7Prompt), "Prompt must state Town, District, Municipality -> City");
+  assert.ok(/capital city is mentioned.*BOTH\s*"state":\s*"Available"\s*AND\s*"city":\s*"Available"/i.test(rule7Prompt), "Prompt must state capital makes both State and City Available");
 });
 
 // 20. Global 135-Country Standardization, QC Corrections, Global State/City & Calling Codes
@@ -1442,7 +1483,24 @@ async function runAsyncTests() {
     const testMissing = await ctx.testAiProviderKey({ provider: 'groq', apiKey: '' });
     assert.strictEqual(testMissing.success, false);
 
-    // Verify popup HTML & JS expose Gemini & updated active Groq models only
+    // Verify Gemini 3.8 Flash & 3.6 Flash extraction + prompt deduplication/accuracy
+    calls = [];
+    const gemini38Out = await ctx.analyzeWithAi(mockCrawl, { provider: 'gemini', apiKey: 'AIza_test', model: 'gemini-3.8-flash' }, {}, 0);
+    assert.strictEqual(gemini38Out._aiProvider, 'Gemini');
+    assert.strictEqual(gemini38Out._aiModel, 'gemini-3.8-flash');
+    const promptPreview = ctx.buildExtractionPrompt({
+      originalUrl: 'https://example.com',
+      title: 'Example',
+      contactPageText: 'UNIQUE_CONTACT_TEXT_12345',
+      profilePageText: '',
+      bodyText: 'Body text',
+      emails: [],
+      phones: []
+    }, false);
+    assert.strictEqual(promptPreview.split('UNIQUE_CONTACT_TEXT_12345').length - 1, 1, 'Contact text must not be duplicated in prompt');
+    assert.ok(promptPreview.includes('"Distributer"') && !promptPreview.includes('"Retailer"'), 'Prompt businessType enum must match portal schema');
+
+    // Verify popup HTML & JS expose Gemini (including 3.8 Flash & 3.6 Flash) & updated active Groq models only
     const popupHtml = fs.readFileSync(path.join(rootDir, 'popup.html'), 'utf8');
     const popupJs = fs.readFileSync(path.join(rootDir, 'popup.js'), 'utf8');
     const configJs = fs.readFileSync(path.join(rootDir, 'src/background/config.js'), 'utf8');
@@ -1450,6 +1508,8 @@ async function runAsyncTests() {
     assert.ok(popupHtml.includes('id="groq-api-key-input"'));
     assert.ok(!popupHtml.includes('id="grok-api-key-input"'));
     assert.ok(!/deepseek|api\.x\.ai|llama-3\.3-70b-versatile|llama-4-scout|qwen3-32b|llama-3\.1-8b-instant/i.test(popupHtml + popupJs + configJs), 'Only Gemini and active Groq models should remain');
+    assert.ok(popupHtml.includes('gemini-3.8-flash') && popupHtml.includes('gemini-3.6-flash'));
+    assert.ok(popupJs.includes('gemini-3.8-flash') && configJs.includes('gemini-3.8-flash'));
     assert.ok(popupJs.includes('qwen/qwen3.8-27b') && configJs.includes('allam-2-7b'));
     assert.ok(popupJs.includes('PROVIDER_MODELS_UI') && popupJs.includes('groqApiKey'));
   });

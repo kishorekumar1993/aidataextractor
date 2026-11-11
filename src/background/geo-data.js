@@ -1,25 +1,32 @@
 // Reference geographic lists: capitals, suburbs, recognized towns, states/provinces, and city qualifiers.
 
 const ALL_CAPITALS = [
-  "taipei city", "taipei", "pretoria", "cape town", "bloemfontein", "london", "washington", "paris",
+  "taipei city", "taipei", "pretoria", "cape town", "bloemfontein", "london", "washington d.c.", "washington dc", "washington", "paris",
   "berlin", "tokyo", "beijing", "new delhi", "canberra", "ottawa", "seoul", "bangkok",
   "singapore", "kuala lumpur", "putrajaya", "jakarta", "dki jakarta", "nusantara", "manila", "hanoi", "rome", "madrid", "amsterdam",
-  "brussels", "bern", "vienna", "stockholm", "oslo", "copenhagen", "helsinki", "dublin",
+  "brussels", "bern", "berne", "vienna", "stockholm", "oslo", "copenhagen", "helsinki", "dublin",
   "warsaw", "prague", "budapest", "athens", "lisbon", "ankara", "riyadh", "abu dhabi",
   "doha", "cairo", "nairobi", "buenos aires", "brasilia", "santiago", "bogota", "lima",
   "mexico city", "wellington",
   "kabul", "tirana", "algiers", "andorra la vella", "luanda", "yerevan", "baku", "nassau",
-  "manama", "dhaka", "bridgetown", "minsk", "belmopan", "thimphu", "sucre", "la paz",
-  "gaborone", "bandar seri begawan", "sofia", "phnom penh", "san jose", "zagreb", "nicosia",
-  "santo domingo", "tallinn", "addis ababa", "suva", "accra", "nuuk", "guatemala city",
-  "georgetown", "reykjavik", "tehran", "baghdad", "jerusalem", "kingston", "amman", "astana",
-  "kuwait city", "riga", "beirut", "vaduz", "vilnius", "luxembourg city", "antananarivo",
-  "male", "valletta", "port louis", "chisinau", "ulaanbaatar", "rabat", "maputo", "naypyidaw",
-  "windhoek", "kathmandu", "managua", "abuja", "pyongyang", "skopje", "muscat", "islamabad",
-  "panama city", "port moresby", "asuncion", "bucharest", "moscow", "kigali", "castries",
-  "apia", "belgrade", "freetown", "bratislava", "ljubljana", "colombo", "sri jayawardenepura kotte",
-  "khartoum", "paramaribo", "damascus", "dodoma", "port of spain", "tunis", "kampala",
-  "kyiv", "kiev", "montevideo", "tashkent", "port vila", "lusaka", "harare"
+  "manama", "dhaka", "bridgetown", "minsk", "belmopan", "thimphu", "sucre", "la paz", "sarajevo",
+  "gaborone", "bandar seri begawan", "sofia", "ouagadougou", "bujumbura", "phnom penh", "yaounde",
+  "bangui", "n'djamena", "moroni", "kinshasa", "brazzaville", "san jose", "yamoussoukro", "zagreb",
+  "havana", "nicosia", "djibouti", "roseau", "santo domingo", "dili", "quito", "san salvador",
+  "malabo", "asmara", "tallinn", "mbabane", "addis ababa", "suva", "libreville", "banjul", "tbilisi",
+  "accra", "nuuk", "st. george's", "guatemala city", "conakry", "bissau", "georgetown",
+  "port-au-prince", "tegucigalpa", "reykjavik", "tehran", "baghdad", "jerusalem", "kingston", "amman",
+  "astana", "tarawa", "kuwait city", "bishkek", "vientiane", "riga", "beirut", "maseru", "monrovia",
+  "tripoli", "vaduz", "vilnius", "luxembourg city", "luxembourg", "antananarivo", "lilongwe",
+  "malé", "bamako", "valletta", "majuro", "nouakchott", "port louis", "palikir", "chisinau", "monaco",
+  "ulaanbaatar", "podgorica", "rabat", "maputo", "naypyidaw", "windhoek", "yaren", "kathmandu",
+  "managua", "niamey", "abuja", "pyongyang", "skopje", "muscat", "islamabad", "ngerulmud",
+  "panama city", "port moresby", "asuncion", "pristina", "bucharest", "moscow", "kigali", "basseterre",
+  "castries", "kingstown", "apia", "san marino", "sao tome", "dakar", "belgrade", "freetown",
+  "bratislava", "ljubljana", "honiara", "mogadishu", "juba", "colombo", "sri jayawardenepura kotte",
+  "khartoum", "paramaribo", "damascus", "dushanbe", "dodoma", "lome", "nuku'alofa", "port of spain",
+  "tunis", "ashgabat", "funafuti", "kampala", "kyiv", "kiev", "montevideo", "tashkent", "port vila",
+  "vatican city", "caracas", "sana'a", "lusaka", "harare"
 ];
 
 // High-risk suburbs and localities that MUST NOT be classified as cities (Strict QC Rule)

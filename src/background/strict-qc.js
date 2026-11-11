@@ -571,13 +571,13 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     let compName = decodeHtmlEntities(String(result.companyName || "").trim());
     compName = cleanCompanyPrefixesAndSuffixes(compName);
 
-    // Domain-matching safeguard: If AI returned an unmatching Pinyin or auxiliary name, verify against domain stem
+    // Domain-matching safeguard: Only override AI company name if missing or corrupted with prose noise
     try {
       const targetHost = (crawlData.finalUrl || crawlData.originalUrl || "").replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].split(":")[0];
       const domainParts = targetHost.split(".");
       const domainStem = domainParts[0].toLowerCase().replace(/[^a-z0-9]/g, "");
 
-      if (domainStem && domainStem.length >= 4) {
+      if (domainStem && domainStem.length >= 4 && (!compName || hasCompanyProseNoise(compName))) {
         const compNorm = compName.toLowerCase().replace(/[^a-z0-9]/g, "");
         if (!compNorm.includes(domainStem)) {
           const candidatesToSearch = [
@@ -619,9 +619,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     country = resolveUkCountryName(country, result.companyAddress || "", crawlData);
     result.countryName = country;
 
-    // 3. Company Address: Strict QC sanitization - No Extra Words, expand abbreviations, remove postal codes & country
+    // 3. Company Address: Strict QC sanitization - preserve valid AI extraction, expand abbreviations, remove postal codes & country
     let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
     const aiAddrMatch = resolveBestAddressCandidateAndSource(addr, crawlData);
+    const matchedAiCandidate = !!aiAddrMatch.candidate;
     let selectedAiCandidate = aiAddrMatch.candidate || null;
     if (!selectedAiCandidate && crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates.length > 0) {
       selectedAiCandidate = crawlData.addressCandidates.find(c => c && (c.isHeadquarters || c.source === "contact" || c.source === "headquarters")) || crawlData.addressCandidates[0];
@@ -638,13 +639,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         addr = restoreStreetNumberIfOmitted(addr, bestRaw, crawlData);
         addr = restoreTaiwanVillageIfOmitted(addr, bestRaw, crawlData);
         addr = stripBlindlyAddedNumber(addr, bestRaw, bestRaw);
-        addr = stripExtraWordsFromAddress(addr, bestRaw);
+        if (matchedAiCandidate) {
+          addr = stripExtraWordsFromAddress(addr, bestRaw);
+        }
       }
       addr = removePostalCodesCarefully(addr);
       addr = ensureCommaBeforeState(addr);
       if (bestRaw) {
         addr = stripBlindlyAddedNumber(addr, bestRaw, bestRaw);
-        addr = stripExtraWordsFromAddress(addr, bestRaw);
+        if (matchedAiCandidate) {
+          addr = stripExtraWordsFromAddress(addr, bestRaw);
+        }
       }
       // Unconditionally strip country names from address so country never appears inside the street address field
       addr = addr.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
@@ -663,10 +668,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       if (bestRaw) {
         addr = restoreStreetNumberIfOmitted(addr, bestRaw, crawlData);
         addr = restoreTaiwanVillageIfOmitted(addr, bestRaw, crawlData);
-        addr = stripExtraWordsFromAddress(addr, bestRaw);
+        if (matchedAiCandidate) {
+          addr = stripExtraWordsFromAddress(addr, bestRaw);
+        }
       }
       addr = expandAddressAndStateAbbreviations(addr, country);
-      if (bestRaw) {
+      if (bestRaw && matchedAiCandidate) {
         addr = stripExtraWordsFromAddress(addr, bestRaw);
       }
       addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N})]+$/gu, "").trim();
@@ -1385,15 +1392,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
   }
 
-  // 7. State: Validated based on presence of State / Province / County / Hsien / Region or Capital
+  // 7. State: Validated based on presence of State / County / Province / Prefecture / Hsien / Region or Capital
   if (!addr || addr.length < 8 || addr.toLowerCase() === "not available") {
     result.state = "Not Available";
   } else {
-    if (result.state === "Available") {
-      result.state = "Available";
-    } else {
-      result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
-    }
+    result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
   }
 
   // 8. City: Evaluated STRICTLY per City QC Rule (Only explicit City, Town, Township, District, Municipality)

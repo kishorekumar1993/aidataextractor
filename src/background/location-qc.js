@@ -76,11 +76,23 @@ function isWellingtonCapital(address) {
 function hasCapitalInAddress(addr, country) {
   if (!addr) return false;
   const lower = addr.toLowerCase();
+  const cLower = (country || "").toLowerCase();
+
+  if (/\bmaldives\b/i.test(cLower || lower) && /\bmal[eé]\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "male")) {
+    return true;
+  }
+  if (/scotland/i.test(cLower) && /\bedinburgh\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "edinburgh")) return true;
+  if (/wales/i.test(cLower) && /\bcardiff\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "cardiff")) return true;
+  if (/northern\s*ireland/i.test(cLower) && /\bbelfast\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "belfast")) return true;
+
+  const isExplicitlyNonUs = Boolean(cLower && !/\b(?:united\s*states|usa|u\.s\.a\.|america)\b/i.test(cLower));
 
   const matchCap = (cap) => {
     if (cap === "wellington") return isWellingtonCapital(lower);
+    if (cap === "washington" && isExplicitlyNonUs) return false;
     if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(lower, cap)) return false;
-    return new RegExp(`\\b${cap}\\b`, "i").test(lower);
+    const escaped = cap.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`, "i").test(lower);
   };
 
   // If New Taipei City is present, it does NOT qualify for the Taipei capital exception
@@ -233,16 +245,22 @@ function hasStateInAddress(addr, country) {
     return false;
   }
 
-  // Country official capital city exception
+  // Country official capital city exception (both City and State are considered available)
   if (hasCapitalInAddress(lower, country)) return true;
 
-  // Generic and international administrative markers that confirm State, County, Province, or Prefecture is present
-  if (/\b(province|state|county|prefecture|hsien|region|territory|emirate|canton|department|governorate|oblast|voivodeship)\b/i.test(lower)) return true;
+  // Strip street-label uses like "County Road 42" / "State Highway 1" before checking administrative state keywords
+  const strippedRoadLabels = lower
+    .replace(/\bcounty\s+(?:road|rd\.?|highway|hwy\.?|route|rte\.?|line|ln\.?|street|st\.?|avenue|ave\.?|drive|dr\.?|way)\b/gi, " ")
+    .replace(/\bstate\s+(?:road|rd\.?|highway|hwy\.?|route|rte\.?|line|street|st\.?)\b/gi, " ");
+
+  // Generic and international administrative markers: (County, Province, Prefecture) -> State
+  if (/\b(province|prov\.?|state|county|prefecture|pref\.?|hsien|region|territory|emirate|canton|department|governorate|oblast|voivodeship)\b/i.test(strippedRoadLabels)) return true;
   if (/\b(federal\s+district|district\s+of\s+columbia)\b/i.test(lower)) return true;
   if (/\bregional\s*council\b/i.test(lower)) return true;
 
-  // County abbreviations (e.g. Co. Dublin, Co. Cork, Co. Kildare, Orange Co., Cook Co.)
-  if (/\bco\.?\s+[a-z]{3,}\b/i.test(lower) || /\b[a-z]{3,}\s+co\.?\b(?=[,\s]|$)/i.test(lower)) return true;
+  // County abbreviations (e.g. Co. Dublin, Co. Cork, Co. Kildare, Orange Co., Cook Co.) - exclude company suffixes like Co. Ltd
+  if (/\bco\.?\s+(?!ltd\b|limited\b|inc\b|corp\b|llc\b)[a-z]{3,}\b/i.test(strippedRoadLabels) ||
+      /\b(?!limited\b|ltd\b|inc\b|corp\b|llc\b)[a-z]{3,}\s+co\.?\b(?=[,\s]|$)/i.test(strippedRoadLabels)) return true;
 
   // Australian state abbreviations with postcode or comma (e.g. NSW 2000, VIC 3000, QLD 4000)
   if (/\b(?:vic|nsw|qld|wa|sa|tas|act|nt)\s+\d{4}\b/i.test(lower) || /,\s*(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower) || /\b(?:sydney|melbourne|brisbane|perth|adelaide|gold coast|hobart|canberra)\s+(?:vic|nsw|qld|wa|sa|tas|act|nt)\b/i.test(lower)) return true;
@@ -514,15 +532,20 @@ function hasExplicitCityWord(cleanAddr) {
   return cityPattern.test(cleanAddr);
 }
 
+function stripNonAdministrativeCityTerms(addr) {
+  return String(addr || "")
+    .replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech|trade|trading)\s+(?:district|town|park|estate)\b/gi, " ")
+    .replace(/\b(?:china\s*town|chinatown|down\s*town|downtown)\b/gi, " ")
+    .replace(/\b(cape\s*town|george\s*town)\b/gi, " ")
+    .replace(/\b(?:town|district|municipality|shire|borough)\s+(?:road|rd\.?|street|st\.?|avenue|ave\.?|lane|ln\.?|drive|dr\.?|way|highway|hwy\.?)\b/gi, " ");
+}
+
 function hasCityDesignation(addr) {
   if (!addr) return false;
   // Chinese / East Asian City, Town, Township, District characters: 市 (City), 鎮/镇 (Town), 鄉/乡 (Township), 區/区 (District)
   if (/[\u5e02\u93ae\u9547\u9109\u4e61\u5340\u533a]/.test(addr)) return true;
 
-  const stripped = addr
-    .replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech|trade|trading)\s+(?:district|town|park|estate)\b/gi, " ")
-    .replace(/\b(?:china\s*town|chinatown|down\s*town|downtown)\b/gi, " ")
-    .replace(/\b(cape\s*town|george\s*town)\b/gi, " ");
+  const stripped = stripNonAdministrativeCityTerms(addr);
   if (hasExplicitCityWord(stripped)) return true;
   const qualRegex = new RegExp(`\\b(?:${CITY_QUALIFIERS.join("|")})\\b`, "i");
   return qualRegex.test(stripped);
@@ -695,7 +718,7 @@ function evaluateCityQC(address, country) {
       return "Available";
     }
     // 3. Explicit Town, Township, District:
-    const strippedTW = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+(?:park|zone|district)\b/gi, " ");
+    const strippedTW = stripNonAdministrativeCityTerms(cleanAddr);
     if (/\b(?:township|town|district|municipality)\b/i.test(strippedTW) || /[\u93ae\u9547\u9109\u4e61\u5340\u533a]/.test(strippedTW)) {
       if (!addressLooksLikeSuburbOnly(cleanAddr)) {
         return "Available";
@@ -723,8 +746,8 @@ function evaluateCityQC(address, country) {
       }
     }
     // 3. Explicit City, Town, Township, District, Municipality designation
-    // (excluding industrial/business districts or street names like City Road)
-    const strippedNZ = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech)\s+district\b/gi, " ");
+    // (excluding industrial/business districts or street names like City Road / District Road)
+    const strippedNZ = stripNonAdministrativeCityTerms(cleanAddr);
     if (hasExplicitCityWord(strippedNZ) || /\b(?:town|township|district|municipality|borough|village)\b/i.test(strippedNZ)) {
       return "Available";
     }
@@ -749,8 +772,8 @@ function evaluateCityQC(address, country) {
       }
     }
     // 3. Explicit qualifiers: Bandar, Daerah, Mukim, Pekan, Majlis Perbandaran, City, Town, District, Municipality
-    const strippedMY = cleanAddr.replace(/\b(?:kawasan|taman|zon)?\s*perindustrian(?:\s+[A-Za-z0-9]+)?/gi, " ")
-      .replace(/\b(?:industrial|business|technology)\s+(?:park|estate|area|zone|district)\b/gi, " ");
+    const strippedMY = stripNonAdministrativeCityTerms(cleanAddr)
+      .replace(/\b(?:kawasan|taman|zon)?\s*perindustrian(?:\s+[A-Za-z0-9]+)?/gi, " ");
     if (hasExplicitCityWord(strippedMY) || /\b(?:bandar|daerah|mukim|pekan|majlis\s*perbandaran|town|township|district|municipality)\b/i.test(strippedMY)) {
       return "Available";
     }
@@ -775,8 +798,8 @@ function evaluateCityQC(address, country) {
       }
     }
     // 3. Explicit qualifiers: Kota, Kabupaten, Kecamatan, Kotamadya, City, Regency, Town, District, Municipality
-    const strippedID = cleanAddr.replace(/\bkawasan\s+(?:industri|berikat)(?:\s+[A-Za-z0-9]+)?/gi, " ")
-      .replace(/\b(?:industrial|business|technology|commercial|trade|china|down)\s+(?:park|estate|area|zone|district|town)\b/gi, " ");
+    const strippedID = stripNonAdministrativeCityTerms(cleanAddr)
+      .replace(/\bkawasan\s+(?:industri|berikat)(?:\s+[A-Za-z0-9]+)?/gi, " ");
     if (hasExplicitCityWord(strippedID) || /\b(?:kota|kabupaten|kecamatan|kotamadya|regency|town|township|district|municipality)\b/i.test(strippedID)) {
       return "Available";
     }
@@ -793,7 +816,8 @@ function evaluateCityQC(address, country) {
       return "Available";
     }
     // 2. Explicit City, Town, Township, Borough, Municipality designation
-    if (hasExplicitCityWord(cleanAddr) || /\b(?:town|township|borough|municipality|village)\b/i.test(cleanAddr)) {
+    const strippedUS = stripNonAdministrativeCityTerms(cleanAddr);
+    if (hasExplicitCityWord(strippedUS) || /\b(?:town|township|borough|municipality|village)\b/i.test(strippedUS)) {
       return "Available";
     }
     // 3. Recognized US Cities / Towns
@@ -811,9 +835,9 @@ function evaluateCityQC(address, country) {
     return "Not Available";
   }
 
-  // UK Exception: Official UK cities, towns, and London boroughs evaluate as Available
+  // UK Exception: Official UK cities, towns, boroughs, and explicit Town/District/Municipality designations evaluate as Available
   if (isUkLocation(cleanAddr, country)) {
-    if (hasUkCityOrTown(cleanAddr)) {
+    if (hasUkCityOrTown(cleanAddr) || hasCityDesignation(cleanAddr)) {
       return "Available";
     }
     const structCity = detectCityFromStructure(cleanAddr, country);
@@ -830,7 +854,7 @@ function evaluateCityQC(address, country) {
       return "Available";
     }
     // 2. Explicit City, Town, Township, Shire, District, Municipality designation
-    const strippedAU = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech|trading)\s+(?:district|town|park|estate)\b/gi, " ");
+    const strippedAU = stripNonAdministrativeCityTerms(cleanAddr);
     if (hasExplicitCityWord(strippedAU) || /\b(?:town|township|shire|district|municipality|borough)\b/i.test(strippedAU)) {
       return "Available";
     }
@@ -850,21 +874,22 @@ function evaluateCityQC(address, country) {
     if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
       return "Available";
     }
-    const strippedZA = cleanAddr.replace(/\b(?:industrial|business|commercial|technology|science|enterprise|tech|trading)\s+(?:district|town|park|estate)\b/gi, " ");
+    const strippedZA = stripNonAdministrativeCityTerms(cleanAddr);
     if (hasExplicitCityWord(strippedZA) || /\b(?:town|township|district|municipality|metropolitan\s*municipality|borough)\b/i.test(strippedZA)) {
       return "Available";
     }
     return "Not Available";
   }
 
-  // Suburb-only addresses: If the address only has a suburb and no recognized city/town, MUST evaluate as Not Available!
-  if (addressLooksLikeSuburbOnly(cleanAddr)) {
-    return "Not Available";
-  }
-
   // Explicit qualifying City, Town, Township, District, Municipality, or local language designation
+  // (Non-administrative industrial/business districts/towns & street labels are already excluded inside hasCityDesignation)
   if (hasCityDesignation(cleanAddr)) {
     return "Available";
+  }
+
+  // Suburb-only addresses: If the address only has a suburb and no recognized city/town/district/municipality, MUST evaluate as Not Available!
+  if (addressLooksLikeSuburbOnly(cleanAddr)) {
+    return "Not Available";
   }
 
   // Recognized International Towns/Cities

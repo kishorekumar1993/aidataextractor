@@ -14,11 +14,12 @@
       document.getElementById("nextRecord") ||
       Array.from(document.querySelectorAll("button, a, input[type=button]")).find(b => {
         if (b.closest("#ai-prefill-widget")) return false;
-        const t = (b.textContent || b.value || "").trim().toLowerCase();
-        return t.includes("from queue") || t.includes("load next") || t.includes("next url") || t.includes("next record") || t === "next" || t.includes("get url");
+        const t = (b.textContent || b.value || "").replace(/\s+/g, " ").trim().toLowerCase();
+        const idCls = `${b.id || ""} ${b.className || ""} ${b.title || ""}`.toLowerCase();
+        return t.includes("from queue") || t.includes("load next") || t.includes("next url") || t.includes("next record") || t === "next" || t.includes("get url") || t === "queue" || (/\bqueue\b/.test(idCls) && !t.includes("manual"));
       });
     if (fromQueueBtn) {
-      console.log("[AI Assistant] Triggering 'From Queue' / Next Record button:", fromQueueBtn);
+      console.log("[AI Assistant] Triggering 'From Queue' / Queue button:", fromQueueBtn);
       fromQueueBtn.click();
       return true;
     }
@@ -267,29 +268,20 @@
     if (pauseBtn) pauseBtn.style.display = "inline-flex";
 
     let attempts = 0;
-    const maxAttempts = 60; // 60 * 150ms = 9 seconds
+    const maxAttempts = 80; // 80 * 150ms = 12 seconds
     const normSubmitted = (submittedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
 
     console.log(`[AI Assistant] Auto-queue pipeline listening for next record after "${normSubmitted}"...`);
     AIExt.updateStatus("⏳ Advancing to next queue record...", "loading");
 
-    // Helper to ensure next pending URL is loaded from queue
-    const loadNextFromQueue = () => {
-      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") ||
-        Array.from(document.querySelectorAll("button, a")).find(b => (b.textContent || "").toLowerCase().includes("from queue"));
-      if (fromQueueBtn) {
-        console.log("[AI Assistant] Triggering 'From Queue' to load next pending URL...");
-        fromQueueBtn.click();
-      }
-    };
-
-    // If the input was cleared or in manual URL mode, click 'From Queue' at 350ms
+    // If the input was cleared or still holds the submitted URL, trigger the portal's Queue / From Queue button
     setTimeout(() => {
+      if (!state.isAutoQueuePipelineActive || !state.autoQueueEnabled) return;
       const cur = AIExt.getTargetUrl();
       if (!cur || cur.trim().toLowerCase().replace(/\/+$/, "") === normSubmitted) {
-        loadNextFromQueue();
+        triggerFromQueue();
       }
-    }, 350);
+    }, 450);
 
     state.autoQueuePollTimer = setInterval(() => {
       attempts++;
@@ -301,9 +293,9 @@
 
       let nextUrl = AIExt.getTargetUrl();
 
-      // If still empty after several attempts, trigger 'From Queue'
-      if (!nextUrl && attempts % 5 === 0) {
-        loadNextFromQueue();
+      // If still empty or unchanged after periodic intervals, trigger Queue / From Queue
+      if ((!nextUrl || nextUrl.trim().toLowerCase().replace(/\/+$/, "") === normSubmitted) && attempts % 8 === 0) {
+        triggerFromQueue();
         nextUrl = AIExt.getTargetUrl();
       }
 
@@ -318,7 +310,7 @@
 
         setTimeout(() => {
           if (state.isAutoQueuePipelineActive && state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
-            AIExt.triggerCrawlAndFill();
+            AIExt.triggerCrawlAndFill({ fromAutoQueue: true });
           }
         }, 350);
         return;

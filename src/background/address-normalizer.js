@@ -389,7 +389,7 @@ function normalizeTaiwanDivisions(addr) {
     { regex: /\bKee[-\s,]+[Ll]ung\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Keelung" },
     { regex: /(?<!\bNew\s+)\bTai[-\s,]+[Pp]ei\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Taipei" },
     { regex: /\bNew\s+Tai[-\s,]+[Pp]ei\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "New Taipei" },
-    { regex: /\bChang[-\s,]+[Hh]ua\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Changhua" },
+    { regex: /\bChang(?:\s*,\s*|\s*-\s*)[Hh]ua\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Changhua" },
     { regex: /\bYun[-\s,]+[Ll]in\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Yunlin" },
     { regex: /\bMiao[-\s,]+[Ll]i\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Miaoli" },
     { regex: /\bNan[-\s,]+[Tt]ou\b(?!\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Place|Court|Highway|Close|Terrace))\b/gi, rep: "Nantou" },
@@ -1469,8 +1469,6 @@ function ensureCommaBeforeState(addr) {
   // 2c. Ensure clean comma separation across Taiwanese, East Asian, and multi-component premises:
   // Floor -> Premise Number
   a = a.replace(/\b(\d+(?:st|nd|rd|th)?\s+Floor|Floor\s+\d+)\s*(?!,)\s+(?=(?:Number|No\.?|#)?\s*\d)/gi, "$1, ");
-  // Premise Number -> Lane / Alley / Section
-  a = a.replace(/\b((?:Number|No\.?|#)\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?|\b\d+[A-Za-z]?)\s*(?!,)\s+(?=(?:Lane|Ln\.?|Alley|Aly\.?|Section|Sec\.?)\b)/gi, "$1, ");
   // Lane -> Alley / Section / Road
   a = a.replace(/\b(Lane|Ln\.?)\s+(\d+[A-Za-z]?)\s*(?!,)\s+(?=(?:Alley|Aly\.?|Section|Sec\.?|[A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)*\s+(?:Road|Street|Avenue))\b)/gi, "$1 $2, ");
   // Alley -> Section / Road

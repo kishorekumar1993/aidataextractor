@@ -45,20 +45,35 @@
           chrome.storage.local.remove(["batchNotWorking"]);
         }
 
-        // Resume "Auto-crawl till Working site" pipeline across page reloads
+        // Resume "Auto-crawl till Working site" pipeline across page reloads (sync autoQueueEnabled first)
         const autoPipeline = res?.autoQueuePipeline;
-        if (autoPipeline && autoPipeline.active && state.autoQueueEnabled && (Date.now() - (autoPipeline.updatedAt || 0) < 180000)) {
-          state.isAutoQueuePipelineActive = true;
-          const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
-          if (pauseBtn) pauseBtn.style.display = "inline-flex";
-          console.log(`[AI Assistant] Resumed Auto-Queue Pipeline from storage. Last submitted: "${autoPipeline.lastSubmittedUrl}"`);
-          AIExt.updateStatus("⚡ Auto-Queue: Advancing to next site...", "loading");
-
-          setTimeout(() => {
-            if (state.isAutoQueuePipelineActive && state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
-              AIExt.scheduleNextQueueAutoCrawl(autoPipeline.lastSubmittedUrl);
+        if (autoPipeline && autoPipeline.active && (Date.now() - (autoPipeline.updatedAt || 0) < 180000)) {
+          const resumePipeline = (enabled) => {
+            if (!enabled) {
+              chrome.storage.local.remove(["autoQueuePipeline"]);
+              return;
             }
-          }, 450);
+            state.isAutoQueuePipelineActive = true;
+            const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+            if (pauseBtn) pauseBtn.style.display = "inline-flex";
+            console.log(`[AI Assistant] Resumed Auto-Queue Pipeline from storage. Last submitted: "${autoPipeline.lastSubmittedUrl}"`);
+            AIExt.updateStatus("⚡ Auto-Queue: Advancing to next site...", "loading");
+
+            setTimeout(() => {
+              if (state.isAutoQueuePipelineActive && state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
+                AIExt.scheduleNextQueueAutoCrawl(autoPipeline.lastSubmittedUrl);
+              }
+            }, 450);
+          };
+
+          if (chrome.storage.sync) {
+            chrome.storage.sync.get({ autoQueueEnabled: true }, (syncRes) => {
+              state.autoQueueEnabled = syncRes ? !!syncRes.autoQueueEnabled : state.autoQueueEnabled;
+              resumePipeline(state.autoQueueEnabled);
+            });
+          } else {
+            resumePipeline(state.autoQueueEnabled);
+          }
         } else if (autoPipeline) {
           chrome.storage.local.remove(["autoQueuePipeline"]);
         }
@@ -75,7 +90,8 @@
   }
 
 
-  async function triggerCrawlAndFill() {
+  async function triggerCrawlAndFill(options = {}) {
+    const isFromAutoQueue = !!(options && options.fromAutoQueue === true);
     if (state.isCrawlingInProgress) {
       console.log("[AI Assistant] Crawl already active. Ignoring duplicate request.");
       return;
@@ -88,15 +104,13 @@
 
     state.isCrawlingInProgress = true;
 
-    // Single crawl & fill: ensure auto-queue loop is stopped so API is never called repeatedly
-    AIExt.stopAutoQueuePipeline("Manual crawl initiated");
+    // Single manual crawl & fill: ensure any prior auto-queue loop is stopped so API is never called repeatedly
+    if (!isFromAutoQueue) {
+      AIExt.stopAutoQueuePipeline("Manual crawl initiated");
+    }
     let targetUrl = AIExt.getTargetUrl();
-    if (!targetUrl) {
-      // Try to load pending URL from queue if input is empty
-      const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") ||
-        Array.from(document.querySelectorAll("button, a")).find(b => (b.textContent || "").toLowerCase().includes("from queue"));
-      if (fromQueueBtn) {
-        fromQueueBtn.click();
+    if (!targetUrl && typeof AIExt.triggerFromQueue === "function") {
+      if (AIExt.triggerFromQueue()) {
         targetUrl = AIExt.getTargetUrl();
       }
     }
@@ -214,8 +228,13 @@
           submitBtn.classList.add("ai-submit-ready-highlight");
           submitBtn.scrollIntoView({ behavior: "smooth", block: "center" });
 
-          submitBtn.addEventListener("click", () => {
+          const formEl = submitBtn.closest("form") || document.querySelector("form");
+          let submitHandled = false;
+          const onWorkingSubmit = () => {
+            if (submitHandled) return;
+            submitHandled = true;
             submitBtn.classList.remove("ai-submit-ready-highlight");
+            document.removeEventListener("keydown", onCtrlEnterSubmit);
             if (state.autoQueueEnabled) {
               const currentSubmitted = AIExt.getTargetUrl();
               if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
@@ -231,7 +250,16 @@
                 AIExt.scheduleNextQueueAutoCrawl(currentSubmitted);
               }, 400);
             }
-          }, { once: true });
+          };
+          const onCtrlEnterSubmit = (ev) => {
+            if ((ev.ctrlKey || ev.metaKey) && ev.key === "Enter") {
+              onWorkingSubmit();
+            }
+          };
+
+          submitBtn.addEventListener("click", onWorkingSubmit, { once: true });
+          if (formEl) formEl.addEventListener("submit", onWorkingSubmit, { once: true });
+          document.addEventListener("keydown", onCtrlEnterSubmit);
         }
 
         const note = data._note || "Gemini AI";
