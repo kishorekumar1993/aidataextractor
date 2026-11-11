@@ -63,9 +63,11 @@ async function handleCrawlAndExtract(rawUrl) {
     };
   }
 
-  const settings = await chrome.storage.sync.get(["apiKey", "model"]);
-  const apiKey = (settings.apiKey && settings.apiKey.trim()) ? settings.apiKey.trim() : DEFAULT_API_KEY;
-  let model = (settings.model && settings.model.trim()) ? settings.model.trim() : DEFAULT_MODEL;
+  const settings = await chrome.storage.sync.get([
+    "aiProvider", "apiKey", "groqApiKey", "grokApiKey",
+    "model", "groqModel"
+  ]);
+  const aiConfig = resolveAiProviderConfig(settings);
 
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
   const crawlResult = await crawlWebsite(targetUrl);
@@ -264,9 +266,9 @@ async function handleCrawlAndExtract(rawUrl) {
 
   let extractedData;
   const elapsedBeforeAi = Date.now() - crawlStartTime;
-  if (!apiKey || !apiKey.trim()) {
+  if (!aiConfig.apiKey) {
     extractedData = heuristicExtraction(crawlResult, restrictedCheck);
-    extractedData._note = "Analyzed via Local Rule Engine";
+    extractedData._note = `Analyzed via Local Rule Engine (No ${aiConfig.label} API key configured)`;
   } else if (elapsedBeforeAi > 18000) {
     // If crawling took more than 18 seconds, fast-path using local rule engine so response returns immediately without timing out!
     console.warn(`[AI Assistant] Crawl took ${elapsedBeforeAi}ms. Fast-pathing with local rule engine to prevent timeout.`);
@@ -274,13 +276,15 @@ async function handleCrawlAndExtract(rawUrl) {
     extractedData._note = "Analyzed via Local Rule Engine (Fast-path to prevent timeout)";
   } else {
     try {
-      extractedData = await analyzeWithGemini(crawlResult, apiKey, model, restrictedCheck, crawlStartTime);
-      extractedData._note = `AI Powered by Gemini (${model})`;
+      extractedData = await analyzeWithAi(crawlResult, aiConfig, restrictedCheck, crawlStartTime);
+      const usedModel = extractedData._aiModel || aiConfig.model;
+      const usedLabel = extractedData._aiProvider || aiConfig.label;
+      extractedData._note = `AI Powered by ${usedLabel} (${usedModel})`;
       extractedData._isFromAi = true;
     } catch (aiErr) {
-      console.warn("Gemini API error, falling back to local deterministic rule engine:", aiErr);
+      console.warn(`${aiConfig.label} API error, falling back to local deterministic rule engine:`, aiErr);
       extractedData = heuristicExtraction(crawlResult, restrictedCheck);
-      extractedData._note = "Analyzed via Local Rule Engine (Gemini error: " + aiErr.message + ")";
+      extractedData._note = `Analyzed via Local Rule Engine (${aiConfig.label} error: ${aiErr.message})`;
     }
   }
 

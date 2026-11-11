@@ -45,19 +45,18 @@
         <div id="popup-crawl-status" class="status-msg"></div>
       </div>
 
-      <!-- API Key Section -->
+      <!-- API Key & Provider AI Section -->
       <div class="section-card">
-        <div class="card-title">🤖 AI Intelligence (Google Gemini API)</div>
-        <div class="card-desc">Your Google Gemini API key is pre-configured and active! You can test or change it below.
+        <div class="card-title">🤖 AI Intelligence (Gemini / Groq)</div>
+        <div class="card-desc">Choose Gemini or Groq, enter your API key, and test or save settings below.
         </div>
 
         <div class="form-group">
-          <label for="api-key-input">Gemini API Key</label>
-          <div class="input-with-action">
-            <input type="password" id="api-key-input" placeholder="AIzaSy...">
-            <button type="button" id="btn-toggle-key-visibility" class="btn-icon">👁️</button>
-          </div>
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="helper-link">Google AI Studio ↗</a>
+          <label for="provider-select">AI Provider</label>
+          <select id="provider-select">
+            <option value="gemini" selected>Google Gemini</option>
+            <option value="groq">Groq (gsk_ Fast API)</option>
+          </select>
         </div>
 
         <div class="form-group">
@@ -80,6 +79,25 @@
             </option>
           </select>
         </div>
+
+        <div class="form-group" id="group-gemini-key">
+          <label for="api-key-input">Gemini API Key</label>
+          <div class="input-with-action">
+            <input type="password" id="api-key-input" placeholder="AIzaSy...">
+            <button type="button" id="btn-toggle-key-visibility" class="btn-icon">👁️</button>
+          </div>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="helper-link">Google AI Studio ↗</a>
+        </div>
+
+        <div class="form-group" id="group-groq-key">
+          <label for="groq-api-key-input">Groq API Key (gsk_...)</label>
+          <div class="input-with-action">
+            <input type="password" id="groq-api-key-input" placeholder="gsk_...">
+            <button type="button" id="btn-toggle-groq-key-visibility" class="btn-icon">👁️</button>
+          </div>
+          <a href="https://console.groq.com/keys" target="_blank" class="helper-link">Groq Console ↗</a>
+        </div>
+
         <div class="button-row">
           <button id="btn-test-key" class="btn btn-secondary">Test Connection</button>
           <button id="btn-save-key" class="btn btn-primary">Save Settings</button>

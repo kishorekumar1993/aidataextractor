@@ -1,8 +1,6 @@
-// Gemini API extraction & key validation, domain matching, and heuristic fallback extraction.
+// Multi-provider AI extraction (Gemini & Groq), key validation, and heuristic fallback extraction.
 
-async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, crawlStartTime = 0) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-
+function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
   const formattedAddressEvidence = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
     ? crawlData.addressCandidates.map((c, idx) => {
       const typeLabel = c.isHeadquarters ? "HEADQUARTERS / HEAD OFFICE" : (c.locationType ? c.locationType.toUpperCase() : "LOCATION");
@@ -12,7 +10,28 @@ async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, 
     }).join("\n")
     : ((crawlData.detectedAddresses || []).join("\n") || "(No physical address candidates extracted from static HTML)");
 
-  const prompt = `You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
+  const jsonSchemaSection = includeJsonSchemaHint ? `
+
+OUTPUT FORMAT (STRICT JSON ONLY):
+Return ONLY a single valid JSON object (no markdown fences or commentary) containing ALL 14 keys below:
+{
+  "websiteStatus": "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site",
+  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
+  "companyProfile": "Available" | "Not Available" | "",
+  "companyName": "string",
+  "countryName": "string",
+  "companyAddress": "string",
+  "state": "Available" | "Not Available" | "",
+  "city": "Available" | "Not Available" | "",
+  "emailId": "string",
+  "secondaryEmailId": "string",
+  "phoneNumber": "string",
+  "numberOfProducts": "0" | "1" | "2" | "3" | "",
+  "productImages": "0" | "1" | "2" | "3" | "",
+  "numberOfProductDescriptions": "0" | "1" | "2" | "3" | ""
+}` : "";
+
+  return `You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
 
 1. WEBSITE STATUS QC RULES:
 - Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site".
@@ -122,24 +141,71 @@ FOOTER CONTENT:
 ${(crawlData.footerText || "").slice(0, 1000)}
 
 PAGE BODY CONTENT:
-${(crawlData.bodyText || "").slice(0, 2500)}
+${(crawlData.bodyText || "").slice(0, 2500)}${jsonSchemaSection}
 `;
+}
 
-  const selectedModel = modelName || DEFAULT_MODEL;
-  const accuracyFallbackChain = [
-    selectedModel,
-    ...GEMINI_MODELS
-  ];
-  // Limit to at most 2 candidate models: primary selected model + 1 best fallback
-  const candidateModels = Array.from(new Set(accuracyFallbackChain)).filter(Boolean).slice(0, 2);
+function parseAiJsonPayload(rawText) {
+  if (!rawText || typeof rawText !== "string") return null;
+  let cleaned = rawText
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+    }
+    throw e;
+  }
+}
 
+function finalizeParsedAiResult(parsed, crawlData) {
+  if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
+    parsed.secondaryEmailId = "";
+  }
+  if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
+    parsed.secondaryEmailId = "";
+  }
+
+  const crawlEmails = (crawlData && Array.isArray(crawlData.emails) ? crawlData.emails : []).map(e => String(e).trim().toLowerCase());
+  if ((!parsed.emailId || !parsed.emailId.trim()) && crawlEmails.length > 0) {
+    parsed.emailId = crawlEmails.find(e => isValidCorporateEmail(e)) || crawlEmails[0] || "";
+  }
+  if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) && crawlEmails.length > 1) {
+    const second = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
+    parsed.secondaryEmailId = second || "";
+  }
+  if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
+    parsed.secondaryEmailId = "";
+  }
+  if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
+    parsed.phoneNumber = crawlData.phones[0];
+  }
+
+  const ownCrawlProdCount = computeOwnCrawlProductCount(crawlData);
+  if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {
+    parsed.numberOfProducts = ownCrawlProdCount;
+    parsed.productImages = ownCrawlProdCount;
+    parsed.numberOfProductDescriptions = ownCrawlProdCount;
+  } else {
+    parsed.numberOfProducts = "";
+    parsed.productImages = "";
+    parsed.numberOfProductDescriptions = "";
+  }
+  parsed._isFromAi = true;
+  return parsed;
+}
+
+async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlStartTime = 0 }) {
   let lastError = null;
-  let parsed = null;
-
   for (const modelToTry of candidateModels) {
-    // If overall elapsed time since crawl start is already high (>22s), break immediately to avoid safety timeout
     if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) {
-      console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting AI calls to return promptly.`);
+      console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting AI calls.`);
       break;
     }
 
@@ -150,13 +216,12 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
       const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
       let response;
       try {
-        const reqHeaders = {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        };
         response = await fetch(url, {
           method: "POST",
-          headers: reqHeaders,
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey
+          },
           signal: abortCtrl.signal,
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
@@ -173,22 +238,18 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
 
       if (!response.ok) {
         const errText = await response.text();
-        if (response.status === 401) {
-          console.warn(`[AI Assistant] Gemini API key invalid / unauthenticated (401).`);
-          lastError = new Error(`Gemini authorization error 401: ${errText}`);
-          break; // Stop immediately for invalid API key
+        if (response.status === 401 || response.status === 403) {
+          lastError = new Error(`Gemini authorization error ${response.status}: ${errText}`);
+          break;
         }
-
-        // If 400 Bad Request, model might not support responseSchema; retry once without responseSchema
         if (response.status === 400) {
           try {
-            const reqHeaders = {
-              "Content-Type": "application/json",
-              "x-goog-api-key": apiKey
-            };
             const fallbackRes = await fetch(url, {
               method: "POST",
-              headers: reqHeaders,
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": apiKey
+              },
               body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt + "\nReturn strictly a valid JSON object matching the requested schema." }] }],
                 generationConfig: {
@@ -200,19 +261,11 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
             if (fallbackRes.ok) {
               const resJson = await fallbackRes.json();
               const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (rawText) {
-                const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-                parsed = JSON.parse(cleaned);
-                if (parsed) {
-                  console.log(`[AI Assistant] Successfully extracted data with model ${modelToTry} (standard JSON fallback)!`);
-                  break;
-                }
-              }
+              const parsed = parseAiJsonPayload(rawText);
+              if (parsed) return { parsed, activeModel: modelToTry };
             }
           } catch (e) { }
         }
-
-        console.warn(`[AI Assistant] Model ${modelToTry} failed (${response.status}): ${errText}. Falling back to next model in accuracy chain.`);
         lastError = new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
         continue;
       }
@@ -220,63 +273,213 @@ ${(crawlData.bodyText || "").slice(0, 2500)}
       const resJson = await response.json();
       const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) throw new Error(`Empty response from Gemini model ${modelToTry}`);
-
-      const cleaned = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
-      parsed = JSON.parse(cleaned);
-      if (parsed) {
-        console.log(`[AI Assistant] Successfully extracted data with Gemini model: ${modelToTry}`);
-        if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
-          parsed.secondaryEmailId = "";
-        }
-        break;
-      }
+      const parsed = parseAiJsonPayload(rawText);
+      if (parsed) return { parsed, activeModel: modelToTry };
     } catch (err) {
-      console.warn(`[AI Assistant] Model ${modelToTry} attempt failed:`, err.message, ". Falling back to next candidate.");
       lastError = err;
     }
   }
+  throw lastError || new Error("All Gemini models failed to return structured data");
+}
 
-  if (!parsed) {
-    throw lastError || new Error("All Gemini models failed to return structured data");
+const _providerModelsCache = new Map();
+
+async function fetchActiveChatModels(modelsEndpoint, apiKey, forceRefresh = false) {
+  if (!modelsEndpoint || !apiKey) return { models: [], authError: "" };
+  const cacheKey = `${modelsEndpoint}::${apiKey}`;
+  const cached = !forceRefresh && _providerModelsCache.get(cacheKey);
+  if (cached && (Date.now() - cached.ts) < 600000) {
+    return { models: cached.models, authError: "" };
   }
 
-  // Ensure secondaryEmailId doesn't retain "Not Available" placeholder text
-  if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
-    parsed.secondaryEmailId = "";
+  try {
+    const abortCtrl = new AbortController();
+    const timer = setTimeout(() => abortCtrl.abort(), 4000);
+    let res;
+    try {
+      res = await fetch(modelsEndpoint, {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${apiKey}` },
+        signal: abortCtrl.signal
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (res.status === 401 || res.status === 403) {
+      return { models: [], authError: await res.text() };
+    }
+    if (!res.ok) return { models: [], authError: "" };
+    const data = await res.json();
+    const ids = (data && Array.isArray(data.data) ? data.data : [])
+      .filter(m => m && m.id && m.active !== false)
+      .map(m => m.id)
+      .filter(id => !/(?:whisper|tts|playai|guard|orpheus|safeguard|prompt-guard|compound-beta)/i.test(id));
+    const priorityOrder = [
+      "openai/gpt-oss-120b",
+      "meta-llama/llama-4-scout-17b-16e-instruct",
+      "qwen/qwen3-32b",
+      "openai/gpt-oss-20b",
+      "llama-3.1-8b-instant",
+      "llama-3.3-70b-versatile"
+    ];
+    const ordered = [
+      ...priorityOrder.filter(p => ids.includes(p)),
+      ...ids.filter(id => !priorityOrder.includes(id))
+    ];
+    if (ordered.length > 0) {
+      _providerModelsCache.set(cacheKey, { ts: Date.now(), models: ordered });
+    }
+    return { models: ordered, authError: "" };
+  } catch (e) {
+    return { models: [], authError: "" };
   }
-  // QC Rule: Primary email and secondary email MUST NOT be the same!
-  if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
-    parsed.secondaryEmailId = "";
+}
+
+async function resolveVerifiedChatModels(cfg, apiKey, preferredModel, forceRefresh = false) {
+  const { models: liveModels, authError } = await fetchActiveChatModels(cfg.modelsEndpoint, apiKey, forceRefresh);
+  if (authError) {
+    return { models: [], authError };
+  }
+  if (liveModels.length > 0) {
+    const cleanPref = String(preferredModel || "").trim();
+    const queue = cleanPref && liveModels.includes(cleanPref)
+      ? [cleanPref, ...liveModels.filter(m => m !== cleanPref)]
+      : liveModels;
+    return { models: queue, authError: "" };
+  }
+  return {
+    models: Array.from(new Set([preferredModel, ...(cfg.models || [])])).filter(Boolean),
+    authError: ""
+  };
+}
+
+async function callOpenAiCompatibleApi({ providerLabel, endpoint, modelsEndpoint = "", apiKey, candidateModels, prompt, crawlStartTime = 0 }) {
+  let lastError = null;
+  const { models: verifiedQueue, authError } = modelsEndpoint
+    ? await resolveVerifiedChatModels({ modelsEndpoint, models: candidateModels }, apiKey, candidateModels[0])
+    : { models: Array.from(new Set(candidateModels)).filter(Boolean), authError: "" };
+
+  if (authError) {
+    throw new Error(`${providerLabel} authorization error 401: ${authError}`);
   }
 
-  // Safely fallback to crawled emails/phones only if missing from Gemini
-  const crawlEmails = (crawlData && Array.isArray(crawlData.emails) ? crawlData.emails : []).map(e => String(e).trim().toLowerCase());
-  if ((!parsed.emailId || !parsed.emailId.trim()) && crawlEmails.length > 0) {
-    parsed.emailId = crawlEmails.find(e => isValidCorporateEmail(e)) || crawlEmails[0] || "";
-  }
-  if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) && crawlEmails.length > 1) {
-    const second = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
-    parsed.secondaryEmailId = second || "";
-  }
-  if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
-    parsed.secondaryEmailId = "";
-  }
-  if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
-    parsed.phoneNumber = crawlData.phones[0];
-  }
-  const ownCrawlProdCount = computeOwnCrawlProductCount(crawlData);
-  if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {
-    parsed.numberOfProducts = ownCrawlProdCount;
-    parsed.productImages = ownCrawlProdCount;
-    parsed.numberOfProductDescriptions = ownCrawlProdCount;
-  } else {
-    parsed.numberOfProducts = "";
-    parsed.productImages = "";
-    parsed.numberOfProductDescriptions = "";
-  }
-  parsed._isFromAi = true;
+  const queue = verifiedQueue.slice(0, 3);
+  const tried = new Set();
 
-  return parsed;
+  for (let i = 0; i < queue.length; i++) {
+    const modelToTry = queue[i];
+    if (tried.has(modelToTry)) continue;
+    tried.add(modelToTry);
+
+    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) {
+      console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting ${providerLabel} calls.`);
+      break;
+    }
+
+    const sendChatRequest = async (useJsonFormat) => {
+      const abortCtrl = new AbortController();
+      const timeoutPerModel = (i === 0) ? 10000 : 6000;
+      const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
+      const bodyPayload = {
+        model: modelToTry,
+        messages: [
+          { role: "system", content: "You are a strict QC data-entry extractor. Always reply with a valid JSON object only." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.1
+      };
+      if (useJsonFormat && !/reasoner/i.test(modelToTry)) {
+        bodyPayload.response_format = { type: "json_object" };
+      }
+      try {
+        return await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+          },
+          signal: abortCtrl.signal,
+          body: JSON.stringify(bodyPayload)
+        });
+      } finally {
+        clearTimeout(abortTimer);
+      }
+    };
+
+    try {
+      let response = await sendChatRequest(true);
+      if (!response.ok) {
+        const errText = await response.text();
+        if (response.status === 401 || response.status === 403) {
+          lastError = new Error(`${providerLabel} authorization error ${response.status}: ${errText}`);
+          break;
+        }
+        if (response.status === 400) {
+          const retryRes = await sendChatRequest(false);
+          if (retryRes.ok) {
+            const retryJson = await retryRes.json();
+            const rawRetry = retryJson?.choices?.[0]?.message?.content;
+            const parsed = parseAiJsonPayload(rawRetry);
+            if (parsed) return { parsed, activeModel: modelToTry };
+          }
+        }
+        lastError = new Error(`${providerLabel} API error ${response.status} (${modelToTry}): ${errText}`);
+        continue;
+      }
+
+      const resJson = await response.json();
+      const rawText = resJson?.choices?.[0]?.message?.content;
+      if (!rawText) throw new Error(`Empty response from ${providerLabel} model ${modelToTry}`);
+      const parsed = parseAiJsonPayload(rawText);
+      if (parsed) return { parsed, activeModel: modelToTry };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error(`All ${providerLabel} models failed to return structured data`);
+}
+
+async function analyzeWithAi(crawlData, aiConfig = {}, restrictedCheck = null, crawlStartTime = 0) {
+  const apiKey = String(aiConfig.apiKey || "").trim();
+  const normalized = normalizeProviderAndModel(aiConfig.provider || "gemini", apiKey, aiConfig.model);
+
+  if (normalized.provider === "groq") {
+    const cfg = AI_PROVIDERS.groq;
+    const prompt = buildExtractionPrompt(crawlData, true);
+    const candidateModels = Array.from(new Set([normalized.model, ...cfg.models])).filter(Boolean);
+    const { parsed, activeModel } = await callOpenAiCompatibleApi({
+      providerLabel: cfg.label,
+      endpoint: cfg.endpoint,
+      modelsEndpoint: cfg.modelsEndpoint,
+      apiKey,
+      candidateModels,
+      prompt,
+      crawlStartTime
+    });
+    parsed._aiProvider = cfg.label;
+    parsed._aiModel = activeModel;
+    // Persist active verified Groq model if previously saved one was unavailable
+    if (activeModel && activeModel !== normalized.model && typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+      try { chrome.storage.sync.set({ groqModel: activeModel }); } catch (e) { }
+    }
+    return finalizeParsedAiResult(parsed, crawlData);
+  }
+
+  const prompt = buildExtractionPrompt(crawlData, false);
+  const candidateModels = Array.from(new Set([normalized.model || DEFAULT_MODEL, ...GEMINI_MODELS])).filter(Boolean).slice(0, 2);
+  const { parsed, activeModel } = await callGeminiExtractionApi({
+    apiKey,
+    candidateModels,
+    prompt,
+    crawlStartTime
+  });
+  parsed._aiProvider = "Gemini";
+  parsed._aiModel = activeModel;
+  return finalizeParsedAiResult(parsed, crawlData);
+}
+
+async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, crawlStartTime = 0) {
+  return analyzeWithAi(crawlData, { provider: "gemini", apiKey, model: modelName }, restrictedCheck, crawlStartTime);
 }
 
 function extractRootDomain(urlOrHost) {
@@ -646,29 +849,87 @@ function checkPhysicalProductSupplier(crawlData, result) {
  * over repeating headers/footers or low-quality terms/privacy/policy/faq pages.
  */
 
-async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
-  const selected = modelName || DEFAULT_MODEL;
-  const modelsToTry = Array.from(new Set([
-    selected,
-    ...GEMINI_MODELS
-  ])).filter(Boolean).slice(0, 2);
+async function testAiProviderKey({ provider = "gemini", apiKey = "", modelName = "" } = {}) {
+  const cleanKey = String(apiKey || "").trim();
+  const normalized = normalizeProviderAndModel(provider, cleanKey, modelName);
+  const cleanProvider = normalized.provider;
 
+  if (cleanProvider === "groq") {
+    const cfg = AI_PROVIDERS.groq;
+    if (!cleanKey) {
+      return { success: false, error: `Please enter a valid ${cfg.label} API key (starts with gsk_).` };
+    }
+    const { models: verifiedModels, authError } = await resolveVerifiedChatModels(cfg, cleanKey, normalized.model, true);
+    if (authError) {
+      return { success: false, error: `API HTTP 401: ${authError}` };
+    }
+
+    const queue = verifiedModels.slice(0, 3);
+    let lastError = null;
+
+    for (const model of queue) {
+      try {
+        const abortCtrl = new AbortController();
+        const abortTimer = setTimeout(() => abortCtrl.abort(), 5000);
+        let res;
+        try {
+          res = await fetch(cfg.endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${cleanKey}`
+            },
+            signal: abortCtrl.signal,
+            body: JSON.stringify({
+              model,
+              messages: [{ role: "user", content: "Reply with OK" }],
+              max_tokens: 10,
+              temperature: 0.7
+            })
+          });
+        } finally {
+          clearTimeout(abortTimer);
+        }
+        if (res.ok) {
+          return {
+            success: true,
+            provider: "groq",
+            message: `Connected successfully with Groq (${model})!`,
+            activeModel: model,
+            availableModels: verifiedModels
+          };
+        }
+        const err = await res.text();
+        lastError = `API HTTP ${res.status} (${model}): ${err}`;
+        if (res.status === 401 || res.status === 403) break;
+      } catch (e) {
+        lastError = e.message;
+      }
+    }
+    return { success: false, error: lastError || "Failed to connect with Groq" };
+  }
+
+  const effectiveKey = cleanKey || DEFAULT_API_KEY;
+  if (!effectiveKey) {
+    return { success: false, error: "Please enter a valid Gemini API key." };
+  }
+  const selected = modelName || DEFAULT_MODEL;
+  const modelsToTry = Array.from(new Set([selected, ...GEMINI_MODELS])).filter(Boolean).slice(0, 2);
   let lastError = null;
 
   for (const model of modelsToTry) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-      const reqHeaders = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey
-      };
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(effectiveKey)}`;
       const abortCtrl = new AbortController();
       const abortTimer = setTimeout(() => abortCtrl.abort(), 4000);
       let res;
       try {
         res = await fetch(url, {
           method: "POST",
-          headers: reqHeaders,
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": effectiveKey
+          },
           signal: abortCtrl.signal,
           body: JSON.stringify({
             contents: [{ parts: [{ text: "Hello! Reply with 'OK'" }] }]
@@ -678,18 +939,20 @@ async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
         clearTimeout(abortTimer);
       }
       if (res.ok) {
-        return { success: true, message: `Connected successfully with Gemini (${model})!`, activeModel: model };
+        return { success: true, provider: "gemini", message: `Connected successfully with Gemini (${model})!`, activeModel: model };
       }
       const err = await res.text();
       lastError = `API HTTP ${res.status}: ${err}`;
-      if (res.status === 401) {
-        break; // Key invalid, no other model will succeed
-      }
+      if (res.status === 401 || res.status === 403) break;
     } catch (e) {
       lastError = e.message;
     }
   }
 
   return { success: false, error: lastError || "Failed to connect with any Gemini model" };
+}
+
+async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
+  return testAiProviderKey({ provider: "gemini", apiKey, modelName });
 }
 

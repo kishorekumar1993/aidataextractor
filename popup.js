@@ -1,25 +1,42 @@
 // Popup UI Logic
 // Load defaults from environment configuration (env.js / .env)
-const DEFAULT_API_KEY =
-  (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.GEMINI_API_KEY) ||
-  (typeof window !== "undefined" && window.ENV && window.ENV.GEMINI_API_KEY) ||
-  "";
-const DEFAULT_MODEL =
-  (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
-  (typeof window !== "undefined" && window.ENV && window.ENV.DEFAULT_MODEL) ||
-  "gemini-3.5-flash-lite";
+function readPopupEnv(key, fallback = "") {
+  return (
+    (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV[key]) ||
+    (typeof window !== "undefined" && window.ENV && window.ENV[key]) ||
+    fallback
+  );
+}
 
-const GEMINI_MODELS = [
-  "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite",
-  "gemini-3.6-flash",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite"
-];
+const DEFAULT_AI_PROVIDER = readPopupEnv("AI_PROVIDER", "gemini").toLowerCase();
+const DEFAULT_API_KEY = readPopupEnv("GEMINI_API_KEY", "");
+const DEFAULT_MODEL = readPopupEnv("DEFAULT_MODEL", "gemini-3.5-flash-lite");
+const DEFAULT_GROQ_API_KEY = readPopupEnv("GROQ_API_KEY", "");
+const DEFAULT_GROQ_MODEL = readPopupEnv("GROQ_MODEL", "openai/gpt-oss-120b");
+
+const PROVIDER_MODELS_UI = {
+  gemini: [
+    { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite (Fast & Accurate - Default)" },
+    { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite" },
+    { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" }
+  ],
+  groq: [
+    { value: "openai/gpt-oss-120b", label: "GPT-OSS 120B (Default)" },
+    { value: "openai/gpt-oss-20b", label: "GPT-OSS 20B" },
+    { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B" },
+    { value: "qwen/qwen3-32b", label: "Qwen 3 32B" },
+    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Ultra Fast)" }
+  ]
+};
 
 document.addEventListener("DOMContentLoaded", () => {
+  const providerSelect = document.getElementById("provider-select");
   const apiKeyInput = document.getElementById("api-key-input");
+  const groqApiKeyInput = document.getElementById("groq-api-key-input");
   const toggleKeyVisibilityBtn = document.getElementById("btn-toggle-key-visibility");
+  const toggleGroqKeyVisibilityBtn = document.getElementById("btn-toggle-groq-key-visibility");
   const modelSelect = document.getElementById("model-select");
   const btnSaveKey = document.getElementById("btn-save-key");
   const btnTestKey = document.getElementById("btn-test-key");
@@ -30,11 +47,73 @@ document.addEventListener("DOMContentLoaded", () => {
   const toggleInlineBtn = document.getElementById("toggle-inline-btn");
   const btnOpenTestPortal = document.getElementById("btn-open-test-portal");
 
+  const savedModelsByProvider = {
+    gemini: DEFAULT_MODEL,
+    groq: DEFAULT_GROQ_MODEL
+  };
+
+  function populateModelsForProvider(provider, selectedModel) {
+    const cleanProv = PROVIDER_MODELS_UI[provider] ? provider : "gemini";
+    const options = [...PROVIDER_MODELS_UI[cleanProv]];
+    const desired = selectedModel || savedModelsByProvider[cleanProv] || options[0].value;
+    if (desired && !options.some(o => o.value === desired) && (cleanProv === "groq" ? !/^gemini-|^grok-/i.test(desired) : /^gemini-/i.test(desired))) {
+      options.push({ value: desired, label: desired });
+    }
+    modelSelect.innerHTML = "";
+    for (const opt of options) {
+      const el = document.createElement("option");
+      el.value = opt.value;
+      el.textContent = opt.label;
+      modelSelect.appendChild(el);
+    }
+    modelSelect.value = options.some(o => o.value === desired) ? desired : options[0].value;
+
+    const activeGroupMap = {
+      gemini: document.getElementById("group-gemini-key"),
+      groq: document.getElementById("group-groq-key")
+    };
+    for (const [provKey, groupEl] of Object.entries(activeGroupMap)) {
+      if (!groupEl) continue;
+      groupEl.style.opacity = provKey === cleanProv ? "1" : "0.72";
+    }
+  }
+
+  function wireVisibilityToggle(btn, input) {
+    if (!btn || !input) return;
+    btn.addEventListener("click", () => {
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "🙈";
+      } else {
+        input.type = "password";
+        btn.textContent = "👁️";
+      }
+    });
+  }
+
+  wireVisibilityToggle(toggleKeyVisibilityBtn, apiKeyInput);
+  wireVisibilityToggle(toggleGroqKeyVisibilityBtn, groqApiKeyInput);
+
   // Load existing settings or pre-configure defaults
-  chrome.storage.sync.get(["apiKey", "model", "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"], (res) => {
+  chrome.storage.sync.get([
+    "aiProvider", "apiKey", "groqApiKey", "grokApiKey",
+    "model", "groqModel",
+    "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"
+  ], (res) => {
+    let rawProv = String(res.aiProvider || DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
+    if (rawProv === "grok") rawProv = "groq";
+    const activeProvider = PROVIDER_MODELS_UI[rawProv] ? rawProv : "gemini";
+
+    const savedGroqKey = res.groqApiKey || res.grokApiKey || DEFAULT_GROQ_API_KEY;
+    if (providerSelect) providerSelect.value = activeProvider;
+
     apiKeyInput.value = res.apiKey || DEFAULT_API_KEY;
-    const savedModel = res.model || DEFAULT_MODEL;
-    modelSelect.value = savedModel;
+    if (groqApiKeyInput) groqApiKeyInput.value = savedGroqKey;
+
+    savedModelsByProvider.gemini = res.model || DEFAULT_MODEL;
+    savedModelsByProvider.groq = res.groqModel || DEFAULT_GROQ_MODEL;
+    populateModelsForProvider(activeProvider, savedModelsByProvider[activeProvider]);
+
     toggleStrictFilter.checked = res.strictFilter !== undefined ? res.strictFilter : true;
     if (toggleAutoQueue) {
       toggleAutoQueue.checked = res.autoQueueEnabled !== undefined ? res.autoQueueEnabled : true;
@@ -47,29 +126,54 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Toggle API Key visibility
-  toggleKeyVisibilityBtn.addEventListener("click", () => {
-    if (apiKeyInput.type === "password") {
-      apiKeyInput.type = "text";
-      toggleKeyVisibilityBtn.textContent = "🙈";
-    } else {
-      apiKeyInput.type = "password";
-      toggleKeyVisibilityBtn.textContent = "👁️";
-    }
+  if (providerSelect) {
+    providerSelect.addEventListener("change", () => {
+      const nextProv = providerSelect.value;
+      populateModelsForProvider(nextProv, savedModelsByProvider[nextProv]);
+    });
+  }
+
+  // Auto-select Groq when pasting a gsk_ key or Gemini when pasting AIza key
+  if (groqApiKeyInput) {
+    groqApiKeyInput.addEventListener("input", () => {
+      if (/^gsk_/i.test(groqApiKeyInput.value.trim()) && providerSelect && providerSelect.value !== "groq") {
+        providerSelect.value = "groq";
+        populateModelsForProvider("groq", savedModelsByProvider.groq);
+      }
+    });
+  }
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener("input", () => {
+      if (/^AIza/i.test(apiKeyInput.value.trim()) && providerSelect && providerSelect.value !== "gemini") {
+        providerSelect.value = "gemini";
+        populateModelsForProvider("gemini", savedModelsByProvider.gemini);
+      }
+    });
+  }
+
+  modelSelect.addEventListener("change", () => {
+    const prov = providerSelect ? providerSelect.value : "gemini";
+    savedModelsByProvider[prov] = modelSelect.value;
   });
 
   // Save Settings
   btnSaveKey.addEventListener("click", () => {
+    const aiProvider = providerSelect ? providerSelect.value : "gemini";
     const key = apiKeyInput.value.trim();
-    const model = modelSelect.value;
+    const groqApiKey = groqApiKeyInput ? groqApiKeyInput.value.trim() : "";
+    savedModelsByProvider[aiProvider] = modelSelect.value;
+
     const strict = toggleStrictFilter.checked;
     const autoQueue = toggleAutoQueue ? toggleAutoQueue.checked : true;
     const floating = toggleFloatingWidget ? toggleFloatingWidget.checked : true;
     const inline = toggleInlineBtn ? toggleInlineBtn.checked : true;
 
     chrome.storage.sync.set({
+      aiProvider,
       apiKey: key,
-      model: model,
+      groqApiKey,
+      model: savedModelsByProvider.gemini,
+      groqModel: savedModelsByProvider.groq,
       strictFilter: strict,
       autoQueueEnabled: autoQueue,
       showFloatingWidget: floating,
@@ -96,28 +200,59 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Test Connection
+  // Test Connection for active AI provider
   btnTestKey.addEventListener("click", () => {
-    const key = apiKeyInput.value.trim() || DEFAULT_API_KEY;
-    const model = modelSelect.value || DEFAULT_MODEL;
+    let provider = providerSelect ? providerSelect.value : "gemini";
+    let key = "";
+    let defaultMod = DEFAULT_MODEL;
+    if (provider === "groq") {
+      key = (groqApiKeyInput ? groqApiKeyInput.value.trim() : "") || DEFAULT_GROQ_API_KEY;
+      defaultMod = DEFAULT_GROQ_MODEL;
+    } else {
+      key = apiKeyInput.value.trim() || DEFAULT_API_KEY;
+      defaultMod = DEFAULT_MODEL;
+    }
 
-    showStatus("Testing Gemini API connection...", "loading");
+    if (/^gsk_/i.test(key) && provider !== "groq") {
+      provider = "groq";
+      defaultMod = DEFAULT_GROQ_MODEL;
+      if (providerSelect) providerSelect.value = "groq";
+      populateModelsForProvider("groq", savedModelsByProvider.groq);
+    }
+
+    const model = modelSelect.value || defaultMod;
+    const providerName = provider === "groq" ? "Groq" : "Gemini";
+
+    showStatus(`Testing ${providerName} API connection...`, "loading");
 
     chrome.runtime.sendMessage({
       action: "TEST_API_KEY",
+      provider,
       apiKey: key,
-      model: model
+      model
     }, (res) => {
       if (chrome.runtime.lastError) {
         showStatus(`Error: ${chrome.runtime.lastError.message}`, "error");
         return;
       }
       if (res && res.success) {
-        showStatus(`Connected! Gemini API is active & ready.`, "success");
+        if (Array.isArray(res.availableModels) && res.availableModels.length > 0 && provider === "groq") {
+          PROVIDER_MODELS_UI.groq = res.availableModels.map(m => ({ value: m, label: m }));
+        }
+        if (res.activeModel) {
+          savedModelsByProvider[provider] = res.activeModel;
+          populateModelsForProvider(provider, res.activeModel);
+          chrome.storage.sync.set(provider === "groq" ? { groqModel: res.activeModel } : { model: res.activeModel });
+        }
+        showStatus(res.message || `Connected! ${providerName} API is active & ready.`, "success");
       } else {
         const err = res?.error || "Unknown error";
-        if (/401|unauthorized|unauthenticated/i.test(err)) {
-          showStatus(`Key Unauthorized (401). Valid Google Gemini API keys start with 'AIzaSy...'. Get one from aistudio.google.com/app/apikey`, "error");
+        if (/401|403|unauthorized|unauthenticated/i.test(err)) {
+          const hintMap = {
+            gemini: "Google Gemini keys start with 'AIzaSy...'. Check aistudio.google.com/app/apikey",
+            groq: "Groq keys start with 'gsk_...'. Check console.groq.com/keys"
+          };
+          showStatus(`${providerName} Unauthorized: ${hintMap[provider] || err}`, "error");
         } else {
           showStatus(`Test failed: ${err}`, "error");
         }

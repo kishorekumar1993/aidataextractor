@@ -12,6 +12,10 @@ const rootDir = path.resolve(__dirname, '..');
 const bgCode = fs.readFileSync(path.join(rootDir, 'background.js'), 'utf8');
 const ctx = vm.createContext({
   URL,
+  AbortController,
+  setTimeout,
+  clearTimeout,
+  fetch: async () => { throw new Error('Network fetch not mocked in test'); },
   chrome: {
     runtime: { onMessage: { addListener: () => {} } },
     storage: { sync: { get: async () => ({}) } }
@@ -1261,10 +1265,158 @@ runTest('Named highways (GAR Highway, MLK, FM) and global country abbreviations 
   assert.ok(aiClientSrc.includes('Niederösterreich'), 'Prompt must instruct Austrian/global state expansion');
 });
 
-console.log('\n========================================================');
-console.log(`Results: ${passed} Passed, ${failed} Failed`);
-console.log('========================================================');
+// 33. Multi-provider AI config resolution, popup UI, and Grok / DeepSeek / Gemini execution
+async function runAsyncTests() {
+  async function runAsyncTest(name, fn) {
+    try {
+      await fn();
+      console.log(`✅ [PASS] ${name}`);
+      passed++;
+    } catch (err) {
+      console.error(`❌ [FAIL] ${name}`);
+      console.error(`   Error: ${err.message}\n`);
+      failed++;
+    }
+  }
 
-if (failed > 0) {
-  process.exit(1);
+  await runAsyncTest('Gemini & Groq (console.groq.com) config, legacy migration, and /models-first resolution work end-to-end', async () => {
+    const groqCfg = ctx.resolveAiProviderConfig({
+      aiProvider: 'groq',
+      groqApiKey: 'gsk_test_groq_key',
+      groqModel: 'openai/gpt-oss-120b'
+    });
+    assert.strictEqual(groqCfg.provider, 'groq');
+    assert.strictEqual(groqCfg.apiKey, 'gsk_test_groq_key');
+    assert.strictEqual(groqCfg.model, 'openai/gpt-oss-120b');
+
+    // Verify legacy grok/grokApiKey with gsk_ migrates cleanly to Groq default (openai/gpt-oss-120b)
+    const migratedCfg = ctx.resolveAiProviderConfig({
+      aiProvider: 'grok',
+      grokApiKey: 'gsk_legacy_key',
+      grokModel: 'grok-3-mini'
+    });
+    assert.strictEqual(migratedCfg.provider, 'groq');
+    assert.strictEqual(migratedCfg.apiKey, 'gsk_legacy_key');
+    assert.strictEqual(migratedCfg.model, 'openai/gpt-oss-120b');
+
+    // Even if an old saved config still holds deprecated/unavailable llama-3.3-70b-versatile,
+    // /openai/v1/models pre-flight must skip it so zero 404 chat/completions requests are made.
+    const staleCfg = ctx.resolveAiProviderConfig({
+      aiProvider: 'groq',
+      groqApiKey: 'gsk_stale_key_test',
+      groqModel: 'llama-3.3-70b-versatile'
+    });
+    assert.strictEqual(staleCfg.model, 'llama-3.3-70b-versatile');
+
+    const calls = [];
+    ctx.fetch = async (url, opts) => {
+      const sampleJson = JSON.stringify({
+        websiteStatus: 'Working',
+        businessType: 'Manufacturer',
+        companyProfile: 'Available',
+        companyName: 'Swansea Industrial Co., Ltd.',
+        countryName: 'USA',
+        companyAddress: '1658 GAR Highway, Swansea, Massachusetts',
+        state: 'Available',
+        city: 'Available',
+        emailId: '',
+        secondaryEmailId: '',
+        phoneNumber: '+1 508-555-0199',
+        numberOfProducts: '3',
+        productImages: '3',
+        numberOfProductDescriptions: '3'
+      });
+
+      if (url === 'https://api.groq.com/openai/v1/models') {
+        calls.push({ url, method: opts.method });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [
+              { id: 'whisper-large-v3', active: true },
+              { id: 'openai/gpt-oss-120b', active: true }
+            ]
+          })
+        };
+      }
+
+      const parsedBody = JSON.parse(opts.body);
+      calls.push({ url, model: parsedBody.model });
+
+      if (url === 'https://api.groq.com/openai/v1/chat/completions') {
+        if (parsedBody.model !== 'openai/gpt-oss-120b') {
+          return {
+            ok: false,
+            status: 404,
+            text: async () => JSON.stringify({ error: { message: 'Model not found', type: 'invalid_request_error', code: 'model_not_found' } })
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ choices: [{ message: { content: '```json\n' + sampleJson + '\n```' } }] })
+        };
+      }
+
+      if (url.includes('generativelanguage.googleapis.com')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ candidates: [{ content: { parts: [{ text: sampleJson }] } }] })
+        };
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    };
+
+    const mockCrawl = {
+      originalUrl: 'https://swanseaindustrial.com',
+      title: 'Swansea Industrial',
+      emails: ['sales@swanseaindustrial.com', 'info@swanseaindustrial.com'],
+      phones: ['5085550199'],
+      addressCandidates: [{ raw: '1658 GAR Highway, Swansea, MA 02777', source: 'contact' }],
+      detectedProductCount: 3,
+      detectedImageCount: 3,
+      detectedDescCount: 3
+    };
+
+    const groqOut = await ctx.analyzeWithAi(mockCrawl, staleCfg, {}, 0);
+    assert.strictEqual(groqOut._aiProvider, 'Groq');
+    assert.strictEqual(groqOut._aiModel, 'openai/gpt-oss-120b');
+    assert.strictEqual(groqOut.emailId, 'sales@swanseaindustrial.com');
+    assert.strictEqual(groqOut.secondaryEmailId, 'info@swanseaindustrial.com');
+    assert.ok(calls[0] && calls[0].url === 'https://api.groq.com/openai/v1/models', 'Must query /openai/v1/models BEFORE /chat/completions');
+    const completionCalls = calls.filter(c => c.url === 'https://api.groq.com/openai/v1/chat/completions');
+    assert.strictEqual(completionCalls.length, 1, 'Must succeed on first chat/completions call with 0 404 retries');
+    assert.strictEqual(completionCalls[0].model, 'openai/gpt-oss-120b');
+
+    const testGroq = await ctx.testAiProviderKey({ provider: 'groq', apiKey: 'gsk_stale_key_test', modelName: 'llama-3.3-70b-versatile' });
+    assert.strictEqual(testGroq.success, true);
+    assert.strictEqual(testGroq.provider, 'groq');
+    assert.strictEqual(testGroq.activeModel, 'openai/gpt-oss-120b');
+    assert.deepStrictEqual([...testGroq.availableModels], ['openai/gpt-oss-120b']);
+
+    const testMissing = await ctx.testAiProviderKey({ provider: 'groq', apiKey: '' });
+    assert.strictEqual(testMissing.success, false);
+
+    // Verify popup HTML & JS expose Gemini & Groq only (no xAI / DeepSeek / llama-3.3-70b-versatile default)
+    const popupHtml = fs.readFileSync(path.join(rootDir, 'popup.html'), 'utf8');
+    const popupJs = fs.readFileSync(path.join(rootDir, 'popup.js'), 'utf8');
+    const configJs = fs.readFileSync(path.join(rootDir, 'src/background/config.js'), 'utf8');
+    assert.ok(popupHtml.includes('id="provider-select"'));
+    assert.ok(popupHtml.includes('id="groq-api-key-input"'));
+    assert.ok(!popupHtml.includes('id="grok-api-key-input"'));
+    assert.ok(!/deepseek|api\.x\.ai|llama-3\.3-70b-versatile/i.test(popupHtml + popupJs + configJs), 'Only Gemini and supported Groq models should remain');
+    assert.ok(popupJs.includes('PROVIDER_MODELS_UI') && popupJs.includes('groqApiKey'));
+  });
 }
+
+runAsyncTests().then(() => {
+  console.log('\n========================================================');
+  console.log(`Results: ${passed} Passed, ${failed} Failed`);
+  console.log('========================================================');
+
+  if (failed > 0) {
+    process.exit(1);
+  }
+});

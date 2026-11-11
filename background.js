@@ -116,7 +116,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "TEST_API_KEY") {
-    testGeminiApiKey(request.apiKey || DEFAULT_API_KEY, request.model || DEFAULT_MODEL)
+    const provider = String(request.provider || DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
+    const fallbackCfg = AI_PROVIDERS[provider] || AI_PROVIDERS.gemini;
+    testAiProviderKey({
+      provider,
+      apiKey: request.apiKey || fallbackCfg.defaultKey,
+      modelName: request.model || fallbackCfg.defaultModel
+    })
       .then(res => { try { sendResponse(res); } catch (e) { } })
       .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
     return true;

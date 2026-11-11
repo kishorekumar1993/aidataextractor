@@ -1,9 +1,17 @@
-// Extension configuration constants, Gemini model fallback list, and JSON response schema.
+// Extension configuration constants, multi-provider AI configuration, and JSON response schema.
 
-const DEFAULT_API_KEY =
-  (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.GEMINI_API_KEY) ||
-  (typeof self !== "undefined" && self.ENV && self.ENV.GEMINI_API_KEY) ||
-  "";
+function getEnvVar(name, fallback = "") {
+  return (
+    (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV[name]) ||
+    (typeof self !== "undefined" && self.ENV && self.ENV[name]) ||
+    fallback
+  );
+}
+
+const DEFAULT_AI_PROVIDER = getEnvVar("AI_PROVIDER", "gemini").toLowerCase();
+const DEFAULT_API_KEY = getEnvVar("GEMINI_API_KEY", "");
+const DEFAULT_GROQ_API_KEY = getEnvVar("GROQ_API_KEY", "");
+
 const GEMINI_MODELS = [
   "gemini-3.5-flash-lite",
   "gemini-3.1-flash-lite",
@@ -11,11 +19,71 @@ const GEMINI_MODELS = [
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite"
 ];
+const GROQ_MODELS = [
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+  "qwen/qwen3-32b",
+  "llama-3.1-8b-instant"
+];
 
-const DEFAULT_MODEL =
-  (typeof globalThis !== "undefined" && globalThis.ENV && globalThis.ENV.DEFAULT_MODEL) ||
-  (typeof self !== "undefined" && self.ENV && self.ENV.DEFAULT_MODEL) ||
-  "gemini-3.5-flash-lite";
+const DEFAULT_MODEL = getEnvVar("DEFAULT_MODEL", "gemini-3.5-flash-lite");
+const DEFAULT_GROQ_MODEL = getEnvVar("GROQ_MODEL", "openai/gpt-oss-120b");
+
+const AI_PROVIDERS = {
+  gemini: {
+    id: "gemini",
+    label: "Gemini",
+    models: GEMINI_MODELS,
+    defaultModel: DEFAULT_MODEL,
+    defaultKey: DEFAULT_API_KEY
+  },
+  groq: {
+    id: "groq",
+    label: "Groq",
+    endpoint: "https://api.groq.com/openai/v1/chat/completions",
+    modelsEndpoint: "https://api.groq.com/openai/v1/models",
+    models: GROQ_MODELS,
+    defaultModel: DEFAULT_GROQ_MODEL,
+    defaultKey: DEFAULT_GROQ_API_KEY
+  }
+};
+
+function inferProviderByKeyPrefix(apiKey, fallbackProvider = "gemini") {
+  const k = String(apiKey || "").trim();
+  if (/^gsk_/i.test(k)) return "groq";
+  if (/^AIza/i.test(k)) return "gemini";
+  return AI_PROVIDERS[fallbackProvider] ? fallbackProvider : "gemini";
+}
+
+function normalizeProviderAndModel(rawProvider, apiKey, requestedModel = "") {
+  const reqRaw = String(rawProvider || "").trim().toLowerCase();
+  const cleanRequestedProv = reqRaw === "grok" ? "groq" : (AI_PROVIDERS[reqRaw] ? reqRaw : "gemini");
+  const effectiveProvider = inferProviderByKeyPrefix(apiKey, cleanRequestedProv);
+  const cfg = AI_PROVIDERS[effectiveProvider];
+  const reqMod = String(requestedModel || "").trim();
+  const modelValidForProvider = effectiveProvider === "groq"
+    ? (reqMod && !/^gemini-|^grok-/i.test(reqMod))
+    : (reqMod && /^gemini-/i.test(reqMod));
+  return {
+    provider: effectiveProvider,
+    label: cfg.label,
+    apiKey: String(apiKey || "").trim(),
+    model: modelValidForProvider ? reqMod : cfg.defaultModel
+  };
+}
+
+function resolveAiProviderConfig(settings = {}) {
+  let rawProvider = String(settings.aiProvider || DEFAULT_AI_PROVIDER || "gemini").trim().toLowerCase();
+  if (rawProvider === "grok") rawProvider = "groq";
+  const provider = AI_PROVIDERS[rawProvider] ? rawProvider : "gemini";
+  if (provider === "groq") {
+    const key = String(settings.groqApiKey || settings.grokApiKey || DEFAULT_GROQ_API_KEY || "").trim();
+    return normalizeProviderAndModel("groq", key, settings.groqModel || DEFAULT_GROQ_MODEL);
+  }
+  const key = String(settings.apiKey || DEFAULT_API_KEY || "").trim();
+  return normalizeProviderAndModel("gemini", key, settings.model || DEFAULT_MODEL);
+}
 
 // Primary prohibited core industries per Instruction Sheet Note 2
 // Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
