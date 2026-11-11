@@ -10,6 +10,7 @@ console.log('========================================================\n');
 // Load background.js and its modular importScripts dependencies in VM
 const rootDir = path.resolve(__dirname, '..');
 const bgCode = fs.readFileSync(path.join(rootDir, 'background.js'), 'utf8');
+let mockLocalStorage = {};
 const ctx = vm.createContext({
   URL,
   AbortController,
@@ -18,7 +19,30 @@ const ctx = vm.createContext({
   fetch: async () => { throw new Error('Network fetch not mocked in test'); },
   chrome: {
     runtime: { onMessage: { addListener: () => {} } },
-    storage: { sync: { get: async () => ({}) } }
+    storage: {
+      sync: {
+        get: async () => ({}),
+        set: async () => {}
+      },
+      local: {
+        get: async (keys) => {
+          if (!keys) return { ...mockLocalStorage };
+          const res = {};
+          const arr = Array.isArray(keys) ? keys : [keys];
+          for (const k of arr) {
+            if (k in mockLocalStorage) res[k] = mockLocalStorage[k];
+          }
+          return res;
+        },
+        set: async (obj) => {
+          Object.assign(mockLocalStorage, obj);
+        },
+        remove: async (keys) => {
+          const arr = Array.isArray(keys) ? keys : [keys];
+          for (const k of arr) delete mockLocalStorage[k];
+        }
+      }
+    }
   },
   console: { log: () => {}, warn: () => {}, error: () => {} }
 });
@@ -1796,6 +1820,245 @@ async function runAsyncTests() {
     // 3. Industrial Park / Estate recognition in isFullAddressCandidate
     assert.ok(ctx.isFullAddressCandidate("Plot 45, GIDC Industrial Estate, Makarpura, Vadodara, Gujarat"), "Must recognize industrial estate as valid address structure");
     assert.ok(ctx.isFullAddressCandidate("Unit 3, Riverside Business Park, Olympic Way, Wembley, London HA9 0GU"), "Must recognize business park as valid address structure");
+  });
+
+  // 39. Non-Working Website Records – Normalization, Mandatory Columns, Duplicate Prevention & Multi-Session Excel Append
+  await runAsyncTest('Non-Working Website Records – Normalization, Mandatory Columns, Duplicate Prevention & Multi-Session Excel Append (50 -> 80 -> 125 -> 150)', async () => {
+    // 1. Error Category Normalization: Capture ONLY Not Working, Redirect, Not English
+    assert.strictEqual(ctx.normalizeErrorCategory("Not Working"), "Not Working");
+    assert.strictEqual(ctx.normalizeErrorCategory("Domain Expired"), "Not Working");
+    assert.strictEqual(ctx.normalizeErrorCategory("Flash"), "Not Working");
+    assert.strictEqual(ctx.normalizeErrorCategory("Redirect Site"), "Redirect");
+    assert.strictEqual(ctx.normalizeErrorCategory("Redirect"), "Redirect");
+    assert.strictEqual(ctx.normalizeErrorCategory("Non English"), "Not English");
+    assert.strictEqual(ctx.normalizeErrorCategory("Not English"), "Not English");
+
+    // Successfully working and eligible websites must NOT be included in this separate error dataset
+    assert.strictEqual(ctx.normalizeErrorCategory("Working"), null, "Working websites must be strictly excluded");
+
+    // 2. Mandatory Columns in exact order
+    const sampleRecord = ctx.createErrorRecord({
+      url: "https://down-site-example.com/shop",
+      websiteStatus: "Not Working",
+      reason: "Connection timeout after 28 seconds (Rule 1)",
+      errorUrl: "https://down-site-example.com/shop/checkout",
+      date: "2026-11-11",
+      time: "14:30:00",
+      userName: "Kishore"
+    });
+
+    assert.ok(sampleRecord, "Record must be created");
+    assert.deepStrictEqual(Object.keys(sampleRecord), [
+      "URL",
+      "Website Status",
+      "Reason",
+      "Error URL",
+      "Date",
+      "Time",
+      "User Name"
+    ], "Record must strictly have the 7 mandatory columns in order");
+    assert.strictEqual(sampleRecord.URL, "https://down-site-example.com/shop");
+    assert.strictEqual(sampleRecord["Website Status"], "Not Working");
+    assert.strictEqual(sampleRecord.Reason, "Connection timeout after 28 seconds (Rule 1)");
+    assert.strictEqual(sampleRecord["Error URL"], "https://down-site-example.com/shop/checkout");
+    assert.strictEqual(sampleRecord.Date, "2026-11-11");
+    assert.strictEqual(sampleRecord.Time, "14:30:00");
+    assert.strictEqual(sampleRecord["User Name"], "Kishore");
+
+    // 3. Multi-Session Persistent Append Simulation (Session 1: 50 -> Session 2: 80 -> Session 3: 125 -> Session 4: 150)
+    let persistentDataset = [];
+
+    // Session 1: 0 existing + 50 new = 50 records
+    const session1New = [];
+    for (let i = 1; i <= 50; i++) {
+      session1New.push({
+        url: `https://site-${i}.com`,
+        websiteStatus: i % 3 === 0 ? "Redirect Site" : (i % 5 === 0 ? "Non English" : "Not Working"),
+        reason: `Error reason ${i}`,
+        errorUrl: `https://site-${i}.com/failed`,
+        date: "2026-11-11",
+        time: "10:00:00",
+        userName: "Operator1"
+      });
+    }
+    const res1 = ctx.mergeErrorRecords(persistentDataset, session1New, "Operator1");
+    persistentDataset = res1.merged;
+    assert.strictEqual(res1.addedCount, 50);
+    assert.strictEqual(persistentDataset.length, 50, "Session 1 must have 50 total records");
+
+    // Session 2: 50 existing + 30 new (+ 10 duplicates from session 1) = 80 final
+    const session2Candidates = [];
+    // 10 duplicate attempts from session 1 (same URL, same status, same date)
+    for (let i = 1; i <= 10; i++) {
+      session2Candidates.push({
+        url: `https://site-${i}.com`,
+        websiteStatus: i % 3 === 0 ? "Redirect Site" : (i % 5 === 0 ? "Non English" : "Not Working"),
+        reason: `Error reason duplicate ${i}`,
+        errorUrl: `https://site-${i}.com/failed`,
+        date: "2026-11-11",
+        time: "10:00:00",
+        userName: "Operator1"
+      });
+    }
+    // 30 brand new sites
+    for (let i = 51; i <= 80; i++) {
+      session2Candidates.push({
+        url: `https://site-${i}.com`,
+        websiteStatus: "Not Working",
+        reason: `Connection error ${i}`,
+        errorUrl: `https://site-${i}.com`,
+        date: "2026-11-11",
+        time: "11:00:00",
+        userName: "Operator2"
+      });
+    }
+    const res2 = ctx.mergeErrorRecords(persistentDataset, session2Candidates, "Operator2");
+    persistentDataset = res2.merged;
+    assert.strictEqual(res2.addedCount, 30, "Must skip 10 duplicates and add only 30 new records");
+    assert.strictEqual(persistentDataset.length, 80, "Session 2 must contain exactly 80 records");
+
+    // Session 3: 80 existing + 45 new = 125 final
+    const session3New = [];
+    for (let i = 81; i <= 125; i++) {
+      session3New.push({
+        url: `https://site-${i}.com`,
+        websiteStatus: i % 2 === 0 ? "Redirect" : "Not Working",
+        reason: `DNS failed ${i}`,
+        errorUrl: `https://site-${i}.com`,
+        date: "2026-11-11",
+        time: "12:00:00",
+        userName: "Operator3"
+      });
+    }
+    const res3 = ctx.mergeErrorRecords(persistentDataset, session3New, "Operator3");
+    persistentDataset = res3.merged;
+    assert.strictEqual(res3.addedCount, 45);
+    assert.strictEqual(persistentDataset.length, 125, "Session 3 must contain exactly 125 records");
+
+    // Session 4: 125 existing + 25 new = 150 final
+    const session4New = [];
+    for (let i = 126; i <= 150; i++) {
+      session4New.push({
+        url: `https://site-${i}.com`,
+        websiteStatus: "Not English",
+        reason: `Foreign language content ${i}`,
+        errorUrl: `https://site-${i}.com`,
+        date: "2026-11-11",
+        time: "13:00:00",
+        userName: "Operator4"
+      });
+    }
+    const res4 = ctx.mergeErrorRecords(persistentDataset, session4New, "Operator4");
+    persistentDataset = res4.merged;
+    assert.strictEqual(res4.addedCount, 25);
+    assert.strictEqual(persistentDataset.length, 150, "Session 4 must contain all 150 cumulative records in the single dataset");
+
+    // Duplicate Prevention on Different Dates:
+    // If a site fails again on a different date, retain as a separate historical record
+    const reoccurrenceDifferentDate = {
+      url: "https://site-1.com",
+      websiteStatus: "Not Working",
+      reason: "Failed again on day 2",
+      errorUrl: "https://site-1.com",
+      date: "2026-11-12",
+      time: "09:00:00",
+      userName: "Operator1"
+    };
+    const resReoccur = ctx.mergeErrorRecords(persistentDataset, [reoccurrenceDifferentDate]);
+    assert.strictEqual(resReoccur.addedCount, 1, "Same URL on a different date must be retained as a new separate record");
+    assert.strictEqual(resReoccur.merged.length, 151);
+
+    // 4. Excel Generation & Parsing with SheetJS (XLSX)
+    const wb = ctx.generateNonWorkingExcel(persistentDataset, ctx.XLSX);
+    assert.strictEqual(wb.SheetNames[0], "Non-Working Websites", "Permanent Excel sheet name must be Non-Working Websites");
+
+    const xlsxBuffer = ctx.XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    assert.ok(xlsxBuffer.length > 5000, "Must generate valid non-empty Excel binary");
+
+    // Parse back the generated Excel file to verify 100% round-trip fidelity
+    const parsedRows = ctx.parseNonWorkingExcel(xlsxBuffer, ctx.XLSX);
+    assert.strictEqual(parsedRows.length, 150, "Read-back Excel rows must preserve all 150 records");
+    assert.strictEqual(parsedRows[0].URL, "https://site-1.com");
+    assert.strictEqual(parsedRows[149].URL, "https://site-150.com");
+    assert.strictEqual(parsedRows[149]["Website Status"], "Not English");
+  });
+
+  // 40. Non-Working Website Records – Dashboard Metrics, Filtering & Storage Persistence
+  await runAsyncTest('Non-Working Website Records – Dashboard Metrics, Filtering & Storage Persistence', async () => {
+    mockLocalStorage = {}; // Reset storage
+
+    // Test background recording service
+    const rec1 = await ctx.recordNonWorkingWebsite({
+      url: "https://inaccessible-server-example.org",
+      websiteStatus: "Not Working",
+      reason: "DNS NXDOMAIN server unreachable",
+      errorUrl: "https://inaccessible-server-example.org"
+    }, "Alice");
+    assert.strictEqual(rec1.success, true);
+    assert.strictEqual(rec1.added, true);
+    assert.strictEqual(rec1.totalRecords, 1);
+
+    // Recording working site must be strictly ignored
+    const recWorking = await ctx.recordNonWorkingWebsite({
+      url: "https://working-manufacturer.com",
+      websiteStatus: "Working"
+    });
+    assert.strictEqual(recWorking.success, false);
+    assert.strictEqual(recWorking.ignored, true);
+
+    // Record redirect site
+    const rec2 = await ctx.recordNonWorkingWebsite({
+      url: "https://redirect-source.com",
+      websiteStatus: "Redirect Site",
+      reason: "Redirected to destination-domain.com",
+      errorUrl: "https://destination-domain.com"
+    }, "Bob");
+    assert.strictEqual(rec2.success, true);
+    assert.strictEqual(rec2.record["Website Status"], "Redirect");
+
+    // Record Not English site
+    const rec3 = await ctx.recordNonWorkingWebsite({
+      url: "https://chinese-supplier.cn",
+      websiteStatus: "Non English",
+      reason: "Chinese content without English translation (Rule 12)",
+      errorUrl: "https://chinese-supplier.cn"
+    }, "Charlie");
+    assert.strictEqual(rec3.success, true);
+    assert.strictEqual(rec3.record["Website Status"], "Not English");
+
+    // Retrieve stats
+    const statsRes = await ctx.getNonWorkingRecordsAndStats();
+    assert.strictEqual(statsRes.success, true);
+    assert.strictEqual(statsRes.records.length, 3);
+    assert.strictEqual(statsRes.stats.totalNotWorking, 1);
+    assert.strictEqual(statsRes.stats.totalRedirect, 1);
+    assert.strictEqual(statsRes.stats.totalNotEnglish, 1);
+    assert.strictEqual(statsRes.stats.totalHistorical, 3);
+
+    // Filtering test
+    const allRecords = statsRes.records;
+    const onlyRedirects = ctx.filterErrorRecords(allRecords, { status: "Redirect" });
+    assert.strictEqual(onlyRedirects.length, 1);
+    assert.strictEqual(onlyRedirects[0].URL, "https://redirect-source.com");
+
+    const onlyNotEnglish = ctx.filterErrorRecords(allRecords, { status: "Not English" });
+    assert.strictEqual(onlyNotEnglish.length, 1);
+    assert.strictEqual(onlyNotEnglish[0].URL, "https://chinese-supplier.cn");
+
+    const searchResult = ctx.filterErrorRecords(allRecords, { search: "NXDOMAIN" });
+    assert.strictEqual(searchResult.length, 1);
+    assert.strictEqual(searchResult[0].URL, "https://inaccessible-server-example.org");
+
+    // Update last sync time
+    await ctx.updateLastExcelSync(1773000000000);
+    const updatedStats = await ctx.getNonWorkingRecordsAndStats();
+    assert.ok(updatedStats.stats.lastSyncTime !== "Never", "Last sync time must be updated from Never");
+
+    // Clear records test
+    await ctx.clearNonWorkingRecords();
+    const cleared = await ctx.getNonWorkingRecordsAndStats();
+    assert.strictEqual(cleared.records.length, 0);
+    assert.strictEqual(cleared.stats.totalHistorical, 0);
   });
 }
 

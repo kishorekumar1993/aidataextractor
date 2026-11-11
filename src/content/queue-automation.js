@@ -131,6 +131,18 @@
 
     AIExt.fillFormFields(notWorkingData);
 
+    try {
+      if (typeof AIExt !== "undefined" && typeof AIExt.sendRuntimeMessage === "function") {
+        AIExt.sendRuntimeMessage({
+          action: "RECORD_NON_WORKING_SITE",
+          url: currentUrl,
+          websiteStatus: "Not Working",
+          reason: "Batch auto-submit as Not Working",
+          errorUrl: currentUrl
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
     const nextRemaining = state.batchNotWorkingRemaining > 0 ? state.batchNotWorkingRemaining - 1 : -1;
     state.batchNotWorkingRemaining = nextRemaining;
     updateBatchButtonsState();
@@ -219,6 +231,18 @@
       _note: reason
     };
     AIExt.fillFormFields(notWorkingData);
+
+    try {
+      if (typeof AIExt !== "undefined" && typeof AIExt.sendRuntimeMessage === "function") {
+        AIExt.sendRuntimeMessage({
+          action: "RECORD_NON_WORKING_SITE",
+          url: currentUrl,
+          websiteStatus: "Not Working",
+          reason: "Batch auto-submit as Not Working",
+          errorUrl: currentUrl
+        }).catch(() => {});
+      }
+    } catch (e) {}
     AIExt.renderPreview(notWorkingData);
     AIExt.updateStatus(`🚫 Marked as Not Working (${reason}) - Submitting...`, "warning");
   }

@@ -2,8 +2,36 @@
 
 async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   const crawlStartTime = Date.now();
+  let targetUrl = (rawUrl && typeof rawUrl === "string") ? rawUrl.trim() : "";
+  let crawlResult = null;
+
+  const finishAndRecord = (data) => {
+    if (data && data.websiteStatus && data.websiteStatus !== "Working") {
+      try {
+        if (typeof recordNonWorkingWebsite === "function") {
+          recordNonWorkingWebsite({
+            URL: rawUrl || data._originalUrl || targetUrl,
+            websiteStatus: data.websiteStatus,
+            reason: data.notWorkingReason ||
+              data.restrictedReason ||
+              data.shopCartReason ||
+              data.disallowedReason ||
+              data.fetchError ||
+              data.errorSnippet ||
+              data._note ||
+              "Website is not working or unavailable",
+            errorUrl: data._finalUrl || data.errorSourceUrl || (crawlResult && crawlResult.finalUrl) || targetUrl
+          }).catch(() => {});
+        }
+      } catch (e) {
+        console.warn("[Background] Error recording non-working website:", e.message);
+      }
+    }
+    return data;
+  };
+
   if (!rawUrl || typeof rawUrl !== "string" || !rawUrl.trim() || rawUrl.trim() === "http://" || rawUrl.trim() === "https://") {
-    return {
+    return finishAndRecord({
       websiteStatus: "Not Working",
       businessType: "",
       companyProfile: "",
@@ -19,10 +47,10 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       productImages: "",
       numberOfProductDescriptions: "",
       _note: "No URL provided or empty URL - Marked as Not Working"
-    };
+    });
   }
 
-  let targetUrl = rawUrl.trim();
+  targetUrl = rawUrl.trim();
   if (!/^https?:\/\//i.test(targetUrl)) {
     targetUrl = "http://" + targetUrl;
   }
@@ -37,7 +65,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   // If URL hostname is missing, incomplete (e.g. "ww", "www", "http://www.larsenlumber."), has trailing dot, or lacks valid TLD
   if (!hostname || !hostname.includes(".") || hostname.length < 4 || hostname === "ww" || hostname === "www" || /\.$/.test(hostname) || !/\.[a-z]{2,}$/i.test(hostname)) {
     console.warn(`[Background] Invalid/incomplete URL provided: "${rawUrl}". Marking as Not Working.`);
-    return {
+    return finishAndRecord({
       websiteStatus: "Not Working",
       businessType: "",
       companyProfile: "",
@@ -60,7 +88,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       _finalUrl: targetUrl,
       _originalUrl: targetUrl,
       _note: `Invalid/incomplete URL (${rawUrl}) - Marked as Not Working`
-    };
+    });
   }
 
   let settings = {};
@@ -80,13 +108,13 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
     : "ai_first";
 
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
-  const crawlResult = await crawlWebsite(targetUrl);
+  crawlResult = await crawlWebsite(targetUrl);
 
   // If website fetch failed (network timeout, connection error, DNS failure, empty response):
   // INSTRUCTION: "IF FAILED TO FETCH MEANS MAKE IT NOTWORKING"
   if (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0) {
     if (crawlResult.status === "Domain Expired" || crawlResult.httpStatus === 404) {
-      return {
+      return finishAndRecord({
         websiteStatus: "Domain Expired",
         businessType: "",
         companyProfile: "",
@@ -107,7 +135,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         _finalUrl: targetUrl,
         _originalUrl: targetUrl,
         _note: "Domain Expired or Server returned HTTP 404 Not Found (Rule 1)"
-      };
+      });
     }
 
     let reason = crawlResult.fetchError || "Site unreachable or returned empty HTML";
@@ -115,7 +143,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       reason = "Connection timed out while loading the website server. The site took too long to respond or is offline.";
     }
     console.warn(`[AI Assistant] Failed to fetch ${targetUrl}: ${reason}. Marking as Not Working.`);
-    return {
+    return finishAndRecord({
       websiteStatus: "Not Working",
       businessType: "",
       companyProfile: "",
@@ -138,7 +166,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       _finalUrl: targetUrl,
       _originalUrl: targetUrl,
       _note: `Website Unreachable (${reason}) - Marked as Not Working (Rule 1)`
-    };
+    });
   }
 
   // Step 2: PRE-AI STRICT CHECKS (Prohibited Categories, Free Platforms, Subdomains, Flash & Non-English)
@@ -150,7 +178,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   // Rule Note 2: "Do not work on that site... make these rule strictly if any word appear make it notwroking" & "Notworking means all empty"
   if (restrictedCheck.isRestricted) {
     const errorUrl = restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl;
-    return {
+    return finishAndRecord({
       websiteStatus: "Not Working",
       businessType: "",
       companyProfile: "",
@@ -178,14 +206,14 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       _finalUrl: crawlResult.finalUrl || targetUrl,
       _originalUrl: targetUrl,
       _note: `Prohibited Category / Word Detected (${restrictedCheck.reason}) - Marked as Not Working`
-    };
+    });
   }
 
   // PRE-AI CHECK 2: Rule 9 (Free platforms) & Rule 10 (Subdomains / Streaming platforms) & Rule 8 (Personal blogs)
   const platformCheck = detectDisallowedWebsitePlatformOrDomain(targetUrl, crawlResult.mainHtml || "", crawlResult.bodyText || "");
   if (platformCheck.isDisallowed) {
     const errorUrl = crawlResult.finalUrl || targetUrl;
-    return {
+    return finishAndRecord({
       websiteStatus: "Not Working",
       businessType: "",
       companyProfile: "",
@@ -212,13 +240,13 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       _finalUrl: errorUrl,
       _originalUrl: targetUrl,
       _note: platformCheck.reason
-    };
+    });
   }
 
   // PRE-AI CHECK 3: Rule 14: Flash format websites without copyable text
   if (detectFlashFormatSite(crawlResult.mainHtml || "")) {
     const errorUrl = crawlResult.finalUrl || targetUrl;
-    return {
+    return finishAndRecord({
       websiteStatus: "Flash",
       businessType: "",
       companyProfile: "",
@@ -239,13 +267,13 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       _finalUrl: errorUrl,
       _originalUrl: targetUrl,
       _note: "Flash Format Website - Not copyable (Rule 14)"
-    };
+    });
   }
 
   // PRE-AI CHECK 4: Rule 12: Non-English websites without a translation option
   if (detectNonEnglishWithoutTranslation(crawlResult.mainHtml || "", crawlResult.bodyText || "")) {
     const errorUrl = crawlResult.finalUrl || targetUrl;
-    return {
+    return finishAndRecord({
       websiteStatus: "Non English",
       businessType: "",
       companyProfile: "",
@@ -266,7 +294,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       _finalUrl: errorUrl,
       _originalUrl: targetUrl,
       _note: "Non-English Language Without Translation Option (Rule 12)"
-    };
+    });
   }
 
   // Online Shopping Cart Check (Rules 11 & 16: "except for manufacturers")
@@ -289,7 +317,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
     // Mode: AI Only (Strict - No Own Crawl fallback allowed)
     if (!aiConfig.apiKey) {
       console.warn(`[AI Assistant] AI Only mode active, but no ${aiConfig.label} API key configured.`);
-      return {
+      return finishAndRecord({
         websiteStatus: "Not Working",
         businessType: "",
         companyProfile: "",
@@ -316,7 +344,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         _extractionMode: "ai_only",
         _isFromAi: false,
         _note: `AI Only mode: No ${aiConfig.label} API key configured (Own crawl prefill prevented)`
-      };
+      });
     }
 
     try {
@@ -329,7 +357,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       extractedData._extractionMode = "ai_only";
     } catch (aiErr) {
       console.warn(`[AI Assistant] AI Only mode: ${aiConfig.label} API call failed:`, aiErr.message);
-      return {
+      return finishAndRecord({
         websiteStatus: "Not Working",
         businessType: "",
         companyProfile: "",
@@ -356,7 +384,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         _extractionMode: "ai_only",
         _isFromAi: false,
         _note: `AI Only mode: ${aiConfig.label} failed (${aiErr.message}) - Own crawl prefill prevented`
-      };
+      });
     }
   } else {
     // Mode: AI First (Default) - AI is ALWAYS first priority; Own Crawl ONLY if AI fails
@@ -397,7 +425,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
 
   // Step 3: Strictly enforce State, City, Country, and Products based on instructions
   const cleanedData = applyStrictInstructions(extractedData, crawlResult, restrictedCheck);
-  return cleanedData;
+  return finishAndRecord(cleanedData);
 }
 
 /**

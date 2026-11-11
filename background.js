@@ -6,9 +6,12 @@ try { importScripts("env.js"); } catch (e) { }
 
 // Load shared pure helpers & background modules in dependency order
 importScripts(
+  "src/lib/xlsx.full.min.js",
   "src/shared/text-utils.js",
   "src/shared/country-normalizer.js",
   "src/shared/phone-normalizer.js",
+  "src/shared/non-working-records.js",
+  "src/background/error-recorder.js",
   "src/background/config.js",
   "src/background/geo-data.js",
   "src/background/restricted-rules.js",
@@ -69,6 +72,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           _originalUrl: request.url,
           _note: "Crawl timeout reached safety boundary - Marked as Not Working (Rule 1)"
         };
+        if (typeof recordNonWorkingWebsite === "function") {
+          recordNonWorkingWebsite(timeoutNotWorking).catch(() => {});
+        }
         sendResponse({ success: true, data: timeoutNotWorking });
       } catch (err) {
         try { sendResponse({ success: false, error: "Crawl timeout" }); } catch (e) { }
@@ -90,25 +96,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         clearInterval(keepAlive);
         console.warn("[Background] handleCrawlAndExtract caught error:", error.message);
         try {
+          const fetchErrData = {
+            websiteStatus: "Not Working",
+            businessType: "",
+            companyProfile: "",
+            companyName: "",
+            countryName: "",
+            companyAddress: "",
+            state: "",
+            city: "",
+            emailId: "",
+            secondaryEmailId: "",
+            phoneNumber: "",
+            numberOfProducts: "",
+            productImages: "",
+            numberOfProductDescriptions: "",
+            errorSourceUrl: request.url,
+            notWorkingReason: `Unreachable / Failed to Fetch (${error.message || "Site error"})`,
+            _note: `Unreachable / Failed to Fetch (${error.message || "Site error"}) - Marked as Not Working`
+          };
+          if (typeof recordNonWorkingWebsite === "function") {
+            recordNonWorkingWebsite(fetchErrData).catch(() => {});
+          }
           sendResponse({
             success: true,
-            data: {
-              websiteStatus: "Not Working",
-              businessType: "",
-              companyProfile: "",
-              companyName: "",
-              countryName: "",
-              companyAddress: "",
-              state: "",
-              city: "",
-              emailId: "",
-              secondaryEmailId: "",
-              phoneNumber: "",
-              numberOfProducts: "",
-              productImages: "",
-              numberOfProductDescriptions: "",
-              _note: `Unreachable / Failed to Fetch (${error.message || "Site error"}) - Marked as Not Working`
-            }
+            data: fetchErrData
           });
         } catch (e) { }
       });
@@ -123,6 +135,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       apiKey: request.apiKey || fallbackCfg.defaultKey,
       modelName: request.model || fallbackCfg.defaultModel
     })
+      .then(res => { try { sendResponse(res); } catch (e) { } })
+      .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
+    return true;
+  }
+
+  // Non-Working Website Records Actions
+  if (request.action === "RECORD_NON_WORKING_SITE") {
+    recordNonWorkingWebsite(request.data || request)
+      .then(res => { try { sendResponse(res); } catch (e) { } })
+      .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
+    return true;
+  }
+
+  if (request.action === "GET_NON_WORKING_RECORDS") {
+    getNonWorkingRecordsAndStats()
+      .then(res => { try { sendResponse(res); } catch (e) { } })
+      .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
+    return true;
+  }
+
+  if (request.action === "APPEND_EXTERNAL_EXCEL_RECORDS") {
+    appendExternalExcelRecords(request.rows || [])
+      .then(res => { try { sendResponse(res); } catch (e) { } })
+      .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
+    return true;
+  }
+
+  if (request.action === "CLEAR_NON_WORKING_RECORDS") {
+    clearNonWorkingRecords()
+      .then(res => { try { sendResponse(res); } catch (e) { } })
+      .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
+    return true;
+  }
+
+  if (request.action === "UPDATE_LAST_SYNC_TIME") {
+    updateLastExcelSync(request.timestamp || Date.now())
       .then(res => { try { sendResponse(res); } catch (e) { } })
       .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
     return true;

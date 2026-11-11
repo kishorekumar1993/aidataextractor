@@ -27,6 +27,7 @@
         "src/shared/text-utils.js",
         "src/shared/country-normalizer.js",
         "src/shared/phone-normalizer.js",
+        "src/shared/non-working-records.js",
         "src/content/state.js",
         "src/content/messaging.js",
         "src/content/form-detector.js",

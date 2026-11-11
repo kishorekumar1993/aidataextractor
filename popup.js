@@ -47,6 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const toggleFloatingWidget = document.getElementById("toggle-floating-widget");
   const toggleInlineBtn = document.getElementById("toggle-inline-btn");
   const btnOpenTestPortal = document.getElementById("btn-open-test-portal");
+  const operatorUsernameInput = document.getElementById("operator-username-input");
 
   const savedModelsByProvider = {
     gemini: DEFAULT_MODEL,
@@ -99,11 +100,15 @@ document.addEventListener("DOMContentLoaded", () => {
   chrome.storage.sync.get([
     "aiProvider", "apiKey", "groqApiKey", "grokApiKey",
     "model", "groqModel", "extractionMode",
-    "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"
+    "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled", "userName"
   ], (res) => {
     let rawProv = String(res.aiProvider || DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
     if (rawProv === "grok") rawProv = "groq";
     const activeProvider = PROVIDER_MODELS_UI[rawProv] ? rawProv : "gemini";
+
+    if (operatorUsernameInput) {
+      operatorUsernameInput.value = res.userName || "Operator";
+    }
 
     if (extractionModeSelect) {
       extractionModeSelect.value = res.extractionMode || "ai_first";
@@ -184,7 +189,8 @@ document.addEventListener("DOMContentLoaded", () => {
       strictFilter: strict,
       autoQueueEnabled: autoQueue,
       showFloatingWidget: floating,
-      showInlineBtn: inline
+      showInlineBtn: inline,
+      userName: operatorUsernameInput ? operatorUsernameInput.value.trim() : "Operator"
     }, () => {
       showStatus("Settings saved successfully!", "success");
     });
@@ -373,4 +379,329 @@ document.addEventListener("DOMContentLoaded", () => {
       }, 3500);
     }
   }
+
+  // =========================================================================
+  // NON-WORKING WEBSITE RECORDS DASHBOARD LOGIC
+  // =========================================================================
+  const statNotWorking = document.getElementById("stat-not-working");
+  const statRedirect = document.getElementById("stat-redirect");
+  const statNotEnglish = document.getElementById("stat-not-english");
+  const statTotalHistorical = document.getElementById("stat-total-historical");
+  const statLastSync = document.getElementById("stat-last-sync");
+  const badgeTotalRecords = document.getElementById("badge-total-records");
+  const btnViewCount = document.getElementById("btn-view-count");
+  const excelSyncStatus = document.getElementById("excel-sync-status");
+
+  const btnSyncExcel = document.getElementById("btn-sync-excel");
+  const btnDownloadExcel = document.getElementById("btn-download-excel");
+  const btnViewRecords = document.getElementById("btn-view-records");
+  const btnClearRecords = document.getElementById("btn-clear-records");
+  const inputExcelFile = document.getElementById("input-excel-file");
+
+  const recordsViewerPanel = document.getElementById("records-viewer-panel");
+  const btnCloseRecordsPanel = document.getElementById("btn-close-records-panel");
+  const filterStatusSelect = document.getElementById("filter-status-select");
+  const filterDateInput = document.getElementById("filter-date-input");
+  const filterSearchInput = document.getElementById("filter-search-input");
+  const recordsTableBody = document.getElementById("records-table-body");
+  const filteredCountDisplay = document.getElementById("filtered-count-display");
+
+  let currentRecords = [];
+
+  function showExcelSyncStatus(msg, type = "idle") {
+    if (!excelSyncStatus) return;
+    excelSyncStatus.className = `status-msg ${type}`;
+    excelSyncStatus.textContent = msg;
+    excelSyncStatus.style.display = "block";
+    if (type === "success") {
+      setTimeout(() => {
+        excelSyncStatus.style.display = "none";
+      }, 4000);
+    }
+  }
+
+  function getActiveUserName() {
+    return (operatorUsernameInput && operatorUsernameInput.value.trim()) || "Operator";
+  }
+
+  if (operatorUsernameInput) {
+    operatorUsernameInput.addEventListener("change", () => {
+      chrome.storage.sync.set({ userName: getActiveUserName() });
+    });
+  }
+
+  async function refreshDashboardData() {
+    chrome.runtime.sendMessage({ action: "GET_NON_WORKING_RECORDS" }, (res) => {
+      if (chrome.runtime.lastError) {
+        console.warn("Could not fetch records:", chrome.runtime.lastError.message);
+        return;
+      }
+      if (res && res.success) {
+        currentRecords = Array.isArray(res.records) ? res.records : [];
+        const stats = res.stats || {};
+        if (statNotWorking) statNotWorking.textContent = stats.totalNotWorking || 0;
+        if (statRedirect) statRedirect.textContent = stats.totalRedirect || 0;
+        if (statNotEnglish) statNotEnglish.textContent = stats.totalNotEnglish || 0;
+        if (statTotalHistorical) statTotalHistorical.textContent = stats.totalHistorical || 0;
+        if (badgeTotalRecords) badgeTotalRecords.textContent = `${stats.totalHistorical || 0} Records`;
+        if (btnViewCount) btnViewCount.textContent = stats.totalHistorical || 0;
+        if (statLastSync) statLastSync.textContent = stats.lastSyncTime || "Never";
+
+        if (recordsViewerPanel && recordsViewerPanel.style.display !== "none") {
+          renderRecordsTable();
+        }
+      }
+    });
+  }
+
+  function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function truncate(str, max = 35) {
+    if (!str) return "";
+    return str.length > max ? str.slice(0, max - 3) + "..." : str;
+  }
+
+  function renderRecordsTable() {
+    if (!recordsTableBody) return;
+    const statusVal = filterStatusSelect ? filterStatusSelect.value : "All";
+    const dateVal = filterDateInput ? filterDateInput.value : "";
+    const searchVal = filterSearchInput ? filterSearchInput.value : "";
+
+    const filtered = (typeof filterErrorRecords === "function")
+      ? filterErrorRecords(currentRecords, { status: statusVal, date: dateVal, search: searchVal })
+      : currentRecords;
+
+    if (filteredCountDisplay) {
+      filteredCountDisplay.textContent = `Showing ${filtered.length} of ${currentRecords.length} records`;
+    }
+
+    if (!filtered || filtered.length === 0) {
+      recordsTableBody.innerHTML = `<tr><td colspan="7" class="empty-state">No matching error records found.</td></tr>`;
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    for (const r of filtered) {
+      const tr = document.createElement("tr");
+
+      const statusCls = r["Website Status"] === "Not Working"
+        ? "status-not-working"
+        : (r["Website Status"] === "Redirect" ? "status-redirect" : "status-not-english");
+
+      tr.innerHTML = `
+        <td title="${escapeHtml(r.URL)}">
+          <a href="${escapeHtml(r.URL)}" target="_blank" style="color: #4f46e5; text-decoration: none;">
+            ${escapeHtml(truncate(r.URL, 30))}
+          </a>
+        </td>
+        <td class="${statusCls}"><strong>${escapeHtml(r["Website Status"])}</strong></td>
+        <td title="${escapeHtml(r.Reason)}">${escapeHtml(truncate(r.Reason, 38))}</td>
+        <td title="${escapeHtml(r["Error URL"])}">${escapeHtml(truncate(r["Error URL"] || "-", 26))}</td>
+        <td>${escapeHtml(r.Date)}</td>
+        <td>${escapeHtml(r.Time)}</td>
+        <td>${escapeHtml(r["User Name"] || "Operator")}</td>
+      `;
+      fragment.appendChild(tr);
+    }
+    recordsTableBody.innerHTML = "";
+    recordsTableBody.appendChild(fragment);
+  }
+
+  // Toggle View Records Panel
+  if (btnViewRecords) {
+    btnViewRecords.addEventListener("click", () => {
+      if (!recordsViewerPanel) return;
+      const isOpen = recordsViewerPanel.style.display !== "none";
+      recordsViewerPanel.style.display = isOpen ? "none" : "block";
+      if (!isOpen) {
+        renderRecordsTable();
+        recordsViewerPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
+  }
+
+  if (btnCloseRecordsPanel) {
+    btnCloseRecordsPanel.addEventListener("click", () => {
+      if (recordsViewerPanel) recordsViewerPanel.style.display = "none";
+    });
+  }
+
+  // Filters & Search
+  if (filterStatusSelect) filterStatusSelect.addEventListener("change", renderRecordsTable);
+  if (filterDateInput) filterDateInput.addEventListener("input", renderRecordsTable);
+  if (filterSearchInput) filterSearchInput.addEventListener("input", renderRecordsTable);
+
+  // Download Excel (Non_Working_Websites.xlsx)
+  if (btnDownloadExcel) {
+    btnDownloadExcel.addEventListener("click", () => {
+      if (!currentRecords || currentRecords.length === 0) {
+        showExcelSyncStatus("No error records to download yet. (Records are captured when Not Working sites are crawled)", "error");
+        return;
+      }
+
+      try {
+        if (typeof XLSX === "undefined") {
+          showExcelSyncStatus("Excel library not loaded.", "error");
+          return;
+        }
+
+        const wb = generateNonWorkingExcel(currentRecords, XLSX);
+        XLSX.writeFile(wb, NON_WORKING_EXCEL_FILENAME);
+
+        const now = Date.now();
+        chrome.runtime.sendMessage({ action: "UPDATE_LAST_SYNC_TIME", timestamp: now }, () => {
+          refreshDashboardData();
+        });
+
+        showExcelSyncStatus(`✅ Downloaded cumulative ${NON_WORKING_EXCEL_FILENAME} (${currentRecords.length} records)!`, "success");
+      } catch (err) {
+        showExcelSyncStatus(`Download failed: ${err.message}`, "error");
+      }
+    });
+  }
+
+  // Append / Sync to Existing Excel
+  if (btnSyncExcel) {
+    btnSyncExcel.addEventListener("click", async () => {
+      // Path A: File System Access API (Direct disk file read/write)
+      if (typeof window.showOpenFilePicker === "function") {
+        try {
+          const [fileHandle] = await window.showOpenFilePicker({
+            types: [{
+              description: "Excel Files",
+              accept: { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] }
+            }],
+            multiple: false
+          });
+
+          showExcelSyncStatus("Reading existing Excel file...", "loading");
+          const file = await fileHandle.getFile();
+          const arrayBuffer = await file.arrayBuffer();
+          const parsedRows = parseNonWorkingExcel(arrayBuffer, XLSX);
+
+          const userName = getActiveUserName();
+          const { merged } = mergeErrorRecords(currentRecords, parsedRows, userName);
+
+          // Write updated dataset back to the same file
+          const wb = generateNonWorkingExcel(merged, XLSX);
+          const wbBuffer = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+
+          const writable = await fileHandle.createWritable();
+          await writable.write(wbBuffer);
+          await writable.close();
+
+          const now = Date.now();
+          await new Promise((resolve) => {
+            chrome.runtime.sendMessage({
+              action: "APPEND_EXTERNAL_EXCEL_RECORDS",
+              rows: parsedRows
+            }, () => {
+              chrome.runtime.sendMessage({ action: "UPDATE_LAST_SYNC_TIME", timestamp: now }, resolve);
+            });
+          });
+
+          await refreshDashboardData();
+          showExcelSyncStatus(`✅ Synced & appended to ${file.name}! Total: ${merged.length} records.`, "success");
+          return;
+        } catch (err) {
+          if (err.name === "AbortError") {
+            // User cancelled file picker
+            return;
+          }
+          console.warn("File System Access failed, falling back to file input upload:", err.message);
+        }
+      }
+
+      // Path B: Fallback file upload input
+      if (inputExcelFile) {
+        inputExcelFile.value = "";
+        inputExcelFile.click();
+      }
+    });
+  }
+
+  // Handle uploaded Excel file via input fallback
+  if (inputExcelFile) {
+    inputExcelFile.addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      showExcelSyncStatus(`Reading ${file.name}...`, "loading");
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const arrayBuffer = evt.target.result;
+          const parsedRows = parseNonWorkingExcel(arrayBuffer, XLSX);
+
+          const userName = getActiveUserName();
+          const { merged, addedCount } = mergeErrorRecords(currentRecords, parsedRows, userName);
+
+          // Save merged records into persistent storage
+          await new Promise((resolve) => {
+            chrome.runtime.sendMessage({
+              action: "APPEND_EXTERNAL_EXCEL_RECORDS",
+              rows: parsedRows
+            }, resolve);
+          });
+
+          // Generate updated workbook and auto-download
+          const wb = generateNonWorkingExcel(merged, XLSX);
+          XLSX.writeFile(wb, NON_WORKING_EXCEL_FILENAME);
+
+          const now = Date.now();
+          chrome.runtime.sendMessage({ action: "UPDATE_LAST_SYNC_TIME", timestamp: now }, () => {
+            refreshDashboardData();
+          });
+
+          showExcelSyncStatus(`✅ Appended ${addedCount} records from ${file.name}. Total: ${merged.length} records!`, "success");
+        } catch (err) {
+          showExcelSyncStatus(`Failed to read Excel: ${err.message}`, "error");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  // Clear Records (Confirmation Required)
+  if (btnClearRecords) {
+    btnClearRecords.addEventListener("click", () => {
+      const total = currentRecords.length;
+      if (total === 0) {
+        showExcelSyncStatus("There are no records to clear.", "idle");
+        return;
+      }
+
+      const confirmed = window.confirm(`⚠️ Are you sure you want to clear all ${total} historical non-working website records?\n\nThis will remove them from local storage. Download your Excel file first if you wish to preserve a copy.`);
+      if (!confirmed) return;
+
+      chrome.runtime.sendMessage({ action: "CLEAR_NON_WORKING_RECORDS" }, (res) => {
+        if (res && res.success) {
+          refreshDashboardData();
+          showExcelSyncStatus("🗑️ All historical error records cleared.", "success");
+        } else {
+          showExcelSyncStatus(`Failed to clear records: ${res?.error || "Unknown error"}`, "error");
+        }
+      });
+    });
+  }
+
+  // Real-time storage listener to refresh counts when extraction runs
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && (changes.nonWorkingRecords || changes.nonWorkingLastExcelSyncTime)) {
+        refreshDashboardData();
+      }
+    });
+  }
+
+  // Initial load of dashboard data
+  refreshDashboardData();
 });

@@ -188,6 +188,15 @@
         };
         AIExt.fillFormFields(notWorkingData);
         AIExt.renderPreview(notWorkingData);
+        try {
+          AIExt.sendRuntimeMessage({
+            action: "RECORD_NON_WORKING_SITE",
+            url: targetUrl,
+            websiteStatus: "Not Working",
+            reason: errorMsg,
+            errorUrl: targetUrl
+          }).catch(() => {});
+        } catch (e) {}
         AIExt.updateStatus(`⚠️ Website unreachable (${errorMsg}). Status set to Not Working.`, "warning");
         return;
       }
