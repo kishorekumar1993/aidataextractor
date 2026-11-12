@@ -2465,6 +2465,138 @@ async function runAsyncTests() {
     assert.strictEqual(chinaQc.city, "Available", "Huizhou is a recognized city in Guangdong (City: Available)");
     assert.strictEqual(chinaQc.phoneNumber, "7523891234", "China phone must strip +86 calling code");
   });
+
+  // 46. Tactile Button Interaction, Live Progress States, and Floating Toast Feedback
+  runTest('Tactile button feedback, live states (crawling, extracting, success, not-working, restricted), and floating toast notifications', () => {
+    // 1. Verify content.css contains interactive, ripple, shake, and floating toast styles
+    const cssContent = fs.readFileSync(path.join(rootDir, 'content.css'), 'utf8');
+    assert.ok(cssContent.includes('.ai-btn-pressed'), 'content.css must define .ai-btn-pressed for tactile depression');
+    assert.ok(cssContent.includes('.ai-btn-ripple'), 'content.css must define .ai-btn-ripple material animation');
+    assert.ok(cssContent.includes('@keyframes ai-ripple-animation'), 'content.css must include @keyframes ai-ripple-animation');
+    assert.ok(cssContent.includes('@keyframes ai-btn-shake'), 'content.css must include @keyframes ai-btn-shake for empty URL warnings');
+    assert.ok(cssContent.includes('#ai-floating-toast'), 'content.css must style #ai-floating-toast notification');
+    assert.ok(cssContent.includes('.ai-toast-show'), 'content.css must include .ai-toast-show state');
+    assert.ok(cssContent.includes('.ai-btn-not-working'), 'content.css must style .ai-btn-not-working state');
+    assert.ok(cssContent.includes('.ai-btn-restricted'), 'content.css must style .ai-btn-restricted state');
+    assert.ok(cssContent.includes('.ai-btn-extracting'), 'content.css must style .ai-btn-extracting state');
+
+    // 2. Mock DOM element simulating button and toast behaviors
+    class MockElement {
+      constructor(id = '', tagName = 'div') {
+        this.id = id;
+        this.tagName = tagName;
+        this.classes = new Set();
+        this.classList = {
+          add: (...cls) => cls.forEach(c => this.classes.add(c)),
+          remove: (...cls) => cls.forEach(c => this.classes.delete(c)),
+          contains: (c) => this.classes.has(c)
+        };
+        this.innerHTML = '';
+        this.disabled = false;
+        this.style = {};
+        this.children = [];
+      }
+      get className() {
+        return Array.from(this.classes).join(' ');
+      }
+      set className(val) {
+        this.classes.clear();
+        (val || '').split(/\s+/).filter(Boolean).forEach(c => this.classes.add(c));
+      }
+      appendChild(child) {
+        this.children.push(child);
+      }
+      querySelector(selector) {
+        if (selector.startsWith('.')) {
+          const c = selector.slice(1);
+          return this.children.find(ch => ch.classList && ch.classList.contains(c)) || null;
+        }
+        return null;
+      }
+    }
+
+    const mockBody = new MockElement('body', 'body');
+    const mockQuickBtn = new MockElement('ai-quick-btn', 'button');
+    const mockCrawlBtn = new MockElement('ai-crawl-btn', 'button');
+    const mockHeaderBtn = new MockElement('ai-header-crawl-btn', 'button');
+    mockBody.appendChild(mockQuickBtn);
+    mockBody.appendChild(mockCrawlBtn);
+    mockBody.appendChild(mockHeaderBtn);
+
+    const elementsById = {
+      'ai-quick-btn': mockQuickBtn,
+      'ai-crawl-btn': mockCrawlBtn,
+      'ai-header-crawl-btn': mockHeaderBtn
+    };
+
+    const mockDoc = {
+      body: mockBody,
+      createElement: (tag) => new MockElement('', tag),
+      getElementById: (id) => elementsById[id] || null
+    };
+
+    const overlayContext = vm.createContext({
+      document: mockDoc,
+      globalThis: {},
+      setTimeout: () => 1,
+      clearTimeout: () => {},
+      console: { log: () => {}, warn: () => {} }
+    });
+    overlayContext.globalThis = overlayContext;
+
+    const overlayCode = fs.readFileSync(path.join(rootDir, 'src/content/overlay-ui.js'), 'utf8');
+    vm.runInContext(overlayCode, overlayContext);
+
+    const AIExt = overlayContext.__AI_EXTENSION__;
+    assert.ok(typeof AIExt.setQuickBtnState === 'function', 'setQuickBtnState must be exported on AIExt');
+    assert.ok(typeof AIExt.showFloatingToast === 'function', 'showFloatingToast must be exported on AIExt');
+
+    // Test crawling state
+    AIExt.setQuickBtnState('crawling', 'Crawling Site...');
+    assert.strictEqual(mockQuickBtn.disabled, true, 'Quick button must be disabled during crawl');
+    assert.ok(mockQuickBtn.classList.contains('ai-btn-crawling'), 'Quick button must have ai-btn-crawling class');
+    assert.ok(mockQuickBtn.innerHTML.includes('Crawling Site...'), 'Quick button must show crawling label');
+
+    // Test extracting state
+    AIExt.setQuickBtnState('extracting', 'AI Extracting...');
+    assert.ok(mockQuickBtn.classList.contains('ai-btn-extracting'), 'Quick button must have ai-btn-extracting class');
+    assert.ok(mockQuickBtn.innerHTML.includes('AI Extracting...'), 'Quick button must show extracting label');
+
+    // Test success working state
+    AIExt.setQuickBtnState('success_working', '✅ Pre-Filled (Working)!');
+    assert.strictEqual(mockQuickBtn.disabled, false, 'Quick button must be re-enabled on success');
+    assert.ok(mockQuickBtn.classList.contains('ai-btn-success'), 'Quick button must have ai-btn-success class');
+    assert.ok(mockQuickBtn.innerHTML.includes('Pre-Filled (Working)'), 'Quick button must show Working prefill success label');
+
+    // Test marked not working state
+    AIExt.setQuickBtnState('marked_not_working', '🚫 Not Working (Shopping Cart)');
+    assert.ok(mockQuickBtn.classList.contains('ai-btn-not-working'), 'Quick button must have ai-btn-not-working class');
+    assert.ok(mockQuickBtn.innerHTML.includes('Not Working (Shopping Cart)'), 'Quick button must show Not Working badge');
+
+    // Test restricted site state
+    AIExt.setQuickBtnState('restricted', '⛔ Restricted Site!');
+    assert.ok(mockQuickBtn.classList.contains('ai-btn-restricted'), 'Quick button must have ai-btn-restricted class');
+    assert.ok(mockQuickBtn.innerHTML.includes('Restricted Site!'), 'Quick button must show Restricted Site badge');
+
+    // Test empty URL / warning state
+    AIExt.setQuickBtnState('no_url', '⚠️ Enter URL First!');
+    assert.ok(mockQuickBtn.classList.contains('ai-btn-warning'), 'Quick button must have ai-btn-warning class');
+    assert.ok(mockQuickBtn.innerHTML.includes('Enter URL First!'), 'Quick button must show warning text');
+
+    // Test reset to idle
+    AIExt.resetCrawlButtons();
+    assert.strictEqual(mockQuickBtn.disabled, false);
+    assert.strictEqual(mockQuickBtn.innerHTML, '🤖 AI Crawl & Fill');
+    assert.strictEqual(mockQuickBtn.classList.contains('ai-btn-crawling'), false);
+
+    // Test showFloatingToast creates toast element in body with correct classes
+    AIExt.showFloatingToast('🚀 Crawling https://example.com...', 'loading', 0);
+    const toast = mockBody.children.find(c => c.id === 'ai-floating-toast');
+    assert.ok(toast, 'Floating toast element must be injected into document.body');
+    assert.ok(toast.classList.contains('ai-toast-show'), 'Floating toast must have ai-toast-show class');
+    assert.ok(toast.classList.contains('ai-toast-loading'), 'Floating toast must have ai-toast-loading class');
+    assert.ok(toast.innerHTML.includes('https://example.com'), 'Floating toast must contain target URL message');
+  });
 }
 
 runAsyncTests().then(() => {

@@ -112,6 +112,8 @@
 
 /* Inline Quick Button injected next to Website Name or Click Here */
 #ai-quick-btn {
+  position: relative !important;
+  overflow: hidden !important;
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #ffffff !important;
   border: 1px solid #047857 !important;
@@ -145,9 +147,44 @@
   background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
 }
 
-#ai-quick-btn:active {
-  transform: translateY(1px) scale(0.97) !important;
-  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.4) !important;
+#ai-quick-btn:active,
+#ai-quick-btn.ai-btn-pressed {
+  transform: translateY(2px) scale(0.93) !important;
+  box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+  filter: brightness(0.92) !important;
+}
+
+/* Material ripple effect on click */
+.ai-btn-ripple {
+  position: absolute !important;
+  border-radius: 50% !important;
+  transform: scale(0) !important;
+  background: rgba(255, 255, 255, 0.6) !important;
+  pointer-events: none !important;
+  animation: ai-ripple-animation 0.55s ease-out !important;
+}
+
+@keyframes ai-ripple-animation {
+  to {
+    transform: scale(4) !important;
+    opacity: 0 !important;
+  }
+}
+
+/* Shake Animation for Warnings / No URL */
+#ai-quick-btn.ai-btn-warning,
+.ai-btn-warning {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+  border-color: #b45309 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.4) !important;
+  animation: ai-btn-shake 0.45s ease-in-out !important;
+}
+
+@keyframes ai-btn-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
 }
 
 /* Active Crawling Live Pulsing State */
@@ -158,7 +195,19 @@
   border-color: #1e40af !important;
   color: #ffffff !important;
   cursor: wait !important;
-  animation: ai-crawling-pulse 1.4s infinite !important;
+  animation: ai-crawling-pulse 1.3s infinite !important;
+  pointer-events: none !important;
+}
+
+/* Live Extracting with AI State */
+#ai-quick-btn.ai-btn-extracting,
+.ai-btn-primary.ai-btn-extracting,
+.ai-btn-quick-crawl.ai-btn-extracting {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
+  border-color: #5b21b6 !important;
+  color: #ffffff !important;
+  cursor: wait !important;
+  animation: ai-crawling-pulse 1.3s infinite !important;
   pointer-events: none !important;
 }
 
@@ -182,8 +231,86 @@
 .ai-btn-primary.ai-btn-success,
 .ai-btn-quick-crawl.ai-btn-success {
   background: linear-gradient(135deg, #10b981 0%, #047857 100%) !important;
-  box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.35) !important;
+  box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.4), 0 4px 12px rgba(16, 185, 129, 0.6) !important;
   color: #ffffff !important;
+  animation: ai-btn-pop 0.35s ease-out !important;
+}
+
+/* Not Working State Badge */
+#ai-quick-btn.ai-btn-not-working,
+.ai-btn-primary.ai-btn-not-working,
+.ai-btn-quick-crawl.ai-btn-not-working {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%) !important;
+  border-color: #9a3412 !important;
+  box-shadow: 0 0 0 6px rgba(234, 88, 12, 0.4), 0 4px 12px rgba(234, 88, 12, 0.6) !important;
+  color: #ffffff !important;
+  animation: ai-btn-pop 0.35s ease-out !important;
+}
+
+/* Restricted Site State Badge */
+#ai-quick-btn.ai-btn-restricted,
+.ai-btn-primary.ai-btn-restricted,
+.ai-btn-quick-crawl.ai-btn-restricted {
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%) !important;
+  border-color: #7f1d1d !important;
+  box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.4), 0 4px 12px rgba(220, 38, 38, 0.6) !important;
+  color: #ffffff !important;
+  animation: ai-btn-pop 0.35s ease-out !important;
+}
+
+@keyframes ai-btn-pop {
+  0% { transform: scale(0.92); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* Floating Toast Notification Banner across the entire viewport */
+#ai-floating-toast {
+  position: fixed !important;
+  top: 18px !important;
+  left: 50% !important;
+  transform: translateX(-50%) translateY(-25px) !important;
+  background: #1e293b !important;
+  color: #ffffff !important;
+  padding: 10px 22px !important;
+  border-radius: 9999px !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  z-index: 99999999 !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28) !important;
+}
+
+#ai-floating-toast.ai-toast-show {
+  opacity: 1 !important;
+  transform: translateX(-50%) translateY(0) !important;
+  pointer-events: auto !important;
+}
+
+#ai-floating-toast.ai-toast-loading {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%) !important;
+  border: 1px solid #3b82f6 !important;
+}
+
+#ai-floating-toast.ai-toast-success {
+  background: linear-gradient(135deg, #065f46 0%, #047857 100%) !important;
+  border: 1px solid #10b981 !important;
+}
+
+#ai-floating-toast.ai-toast-warning {
+  background: linear-gradient(135deg, #9a3412 0%, #c2410c 100%) !important;
+  border: 1px solid #f97316 !important;
+}
+
+#ai-floating-toast.ai-toast-error {
+  background: linear-gradient(135deg, #991b1b 0%, #b91c1c 100%) !important;
+  border: 1px solid #ef4444 !important;
 }
 
 /* Spinner icon */
@@ -198,7 +325,7 @@
   vertical-align: middle;
 }
 
-#ai-quick-btn:disabled:not(.ai-btn-crawling):not(.ai-btn-success) {
+#ai-quick-btn:disabled:not(.ai-btn-crawling):not(.ai-btn-extracting):not(.ai-btn-success):not(.ai-btn-not-working):not(.ai-btn-restricted) {
   background: #9ca3af !important;
   border-color: #6b7280 !important;
   cursor: not-allowed !important;

@@ -109,6 +109,12 @@
       return;
     }
     if (!AIExt.isExtensionAlive()) {
+      if (typeof AIExt.setQuickBtnState === "function") {
+        AIExt.setQuickBtnState("warning", "⚠️ Refresh Page (F5)!");
+      }
+      if (typeof AIExt.showFloatingToast === "function") {
+        AIExt.showFloatingToast("🔄 Extension updated. Please refresh page (F5) to reconnect!", "warning", 4000);
+      }
       AIExt.showReloadBanner();
       AIExt.updateStatus("Please refresh page (F5) to reconnect", "warning");
       return;
@@ -136,34 +142,38 @@
       if (inputEl) {
         inputEl.style.outline = "2px solid #ef4444";
         inputEl.focus();
-        setTimeout(() => { inputEl.style.outline = ""; }, 2000);
+        setTimeout(() => { inputEl.style.outline = ""; }, 2200);
+      }
+      if (typeof AIExt.setQuickBtnState === "function") {
+        AIExt.setQuickBtnState("no_url", "⚠️ Enter URL First!");
+      }
+      if (typeof AIExt.showFloatingToast === "function") {
+        AIExt.showFloatingToast("⚠️ Website Name is empty! Click 'click here' or enter URL first.", "warning", 3000);
       }
       AIExt.updateStatus("⚠️ Website Name URL not found. Click 'click here' or enter a URL.", "error");
-      AIExt.resetCrawlButtons();
       return;
     }
 
     state.lastProcessedUrl = targetUrl;
+    if (typeof AIExt.setQuickBtnState === "function") {
+      AIExt.setQuickBtnState("crawling", "🔄 Crawling Site...");
+    }
+    if (typeof AIExt.showFloatingToast === "function") {
+      AIExt.showFloatingToast(`🚀 Crawling ${targetUrl}...`, "loading", 0);
+    }
     AIExt.updateStatus(`Crawling ${targetUrl} (Contact Page / Footer address)...`, "loading");
 
-    const crawlBtn = document.getElementById("ai-crawl-btn");
-    const headerCrawlBtn = document.getElementById("ai-header-crawl-btn");
-    const quickBtn = document.getElementById("ai-quick-btn");
-    if (crawlBtn) {
-      crawlBtn.disabled = true;
-      crawlBtn.classList.add("ai-btn-crawling");
-      crawlBtn.innerHTML = '<span class="ai-spinner-icon"></span> <span>Crawling Site...</span>';
-    }
-    if (headerCrawlBtn) {
-      headerCrawlBtn.disabled = true;
-      headerCrawlBtn.classList.add("ai-btn-crawling");
-      headerCrawlBtn.innerHTML = '<span class="ai-spinner-icon"></span> <span>Crawling...</span>';
-    }
-    if (quickBtn) {
-      quickBtn.disabled = true;
-      quickBtn.classList.add("ai-btn-crawling");
-      quickBtn.innerHTML = '<span class="ai-spinner-icon"></span> <span>Crawling Site...</span>';
-    }
+    // Progress to AI extracting phase if background is processing deep AI extraction
+    let progressTimer = setTimeout(() => {
+      if (state.isCrawlingInProgress) {
+        if (typeof AIExt.setQuickBtnState === "function") {
+          AIExt.setQuickBtnState("extracting", "🤖 AI Extracting...");
+        }
+        if (typeof AIExt.showFloatingToast === "function") {
+          AIExt.showFloatingToast(`🤖 AI Extracting business data from ${targetUrl}...`, "loading", 0);
+        }
+      }
+    }, 2500);
 
     // Safety timeout: ensure buttons are NEVER permanently disabled (30s)
     const safetyTimer = setTimeout(AIExt.resetCrawlButtons, 30000);
@@ -174,7 +184,10 @@
         url: targetUrl,
         extractionMode: state.extractionMode || "ai_first"
       });
-      AIExt.resetCrawlButtons();
+      if (progressTimer) {
+        clearTimeout(progressTimer);
+        progressTimer = null;
+      }
 
       if (!response || !response.success) {
         const errorMsg = response?.error || "Unable to fetch or crawl website";
@@ -183,11 +196,23 @@
         if (isExtError) {
           // Internal Chrome extension communication glitch: DO NOT mark the site as Not Working!
           console.log("[AI Assistant] Extension service worker communication issue:", errorMsg);
+          if (typeof AIExt.setQuickBtnState === "function") {
+            AIExt.setQuickBtnState("warning", "⚠️ Retry Click!");
+          }
+          if (typeof AIExt.showFloatingToast === "function") {
+            AIExt.showFloatingToast(`⚠️ Extension background busy (${errorMsg}). Please click AI Crawl again.`, "warning", 3500);
+          }
           AIExt.updateStatus(`⚠️ Extension background busy (${errorMsg}). Please click AI Crawl & Fill again.`, "warning");
           return;
         }
 
         console.warn("[AI Assistant] Website unreachable / failed to fetch. Marking as Not Working as instructed:", errorMsg);
+        if (typeof AIExt.setQuickBtnState === "function") {
+          AIExt.setQuickBtnState("marked_not_working", "🚫 Not Working (Unreachable)");
+        }
+        if (typeof AIExt.showFloatingToast === "function") {
+          AIExt.showFloatingToast(`🚫 Website Unreachable -> Status set to Not Working`, "not_working", 3500);
+        }
         const notWorkingData = {
           websiteStatus: "Not Working",
           businessType: "",
@@ -241,6 +266,12 @@
 
       // STRICT QC: If AI Only mode was chosen and AI failed, block form prefill
       if (data && data._aiFailed && data._extractionMode === "ai_only") {
+        if (typeof AIExt.setQuickBtnState === "function") {
+          AIExt.setQuickBtnState("error", "⚠️ AI Failed");
+        }
+        if (typeof AIExt.showFloatingToast === "function") {
+          AIExt.showFloatingToast(`⚠️ AI Only Mode: AI failed (${data._note || "AI Error"}).`, "warning", 3500);
+        }
         AIExt.renderPreview(data);
         AIExt.updateStatus(`⚠️ AI Only Mode: AI extraction failed (${data._note || "AI Error"}). Form prefill prevented.`, "error");
         return;
@@ -249,6 +280,12 @@
       // STRICT QC: If prohibited or restricted site, show proper error message, clear all fields, and select Not Working
       if (data && (data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site")) {
         const reason = data.restrictedReason || "Prohibited Category Detected";
+        if (typeof AIExt.setQuickBtnState === "function") {
+          AIExt.setQuickBtnState("restricted", "⛔ Restricted Site!");
+        }
+        if (typeof AIExt.showFloatingToast === "function") {
+          AIExt.showFloatingToast(`⛔ Restricted Category (${reason}) -> Marked Not Working`, "restricted", 4000);
+        }
         AIExt.fillFormFields(data);
         AIExt.renderPreview(data);
         AIExt.showRestrictedBanner(reason);
@@ -268,6 +305,13 @@
       AIExt.renderPreview(data);
       const fillReport = AIExt.fillFormFields(data);
       if (data.websiteStatus === "Not Working") {
+        const notWorkingShort = data.isShopCartSite ? "Shopping Cart" : (data.isDisallowedBusinessType ? "Disallowed Type" : "Not Working");
+        if (typeof AIExt.setQuickBtnState === "function") {
+          AIExt.setQuickBtnState("marked_not_working", `🚫 Not Working (${notWorkingShort})`);
+        }
+        if (typeof AIExt.showFloatingToast === "function") {
+          AIExt.showFloatingToast(`🚫 Not Working (${data.notWorkingReason || notWorkingShort}) -> All fields cleared`, "not_working", 3500);
+        }
         const msg = data.isShopCartSite
           ? `⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Status set to Not Working.`
           : (data.isDisallowedBusinessType
@@ -351,14 +395,11 @@
         const sourceTag = data._extractionSource === "ai"
           ? "🤖 AI"
           : (data._extractionSource === "own_crawl_fallback" ? "⚠️ Own Crawl (AI Fallback)" : "🕷️ Own Crawl");
-        if (quickBtn) {
-          quickBtn.classList.remove("ai-btn-crawling");
-          quickBtn.classList.add("ai-btn-success");
-          quickBtn.innerHTML = '<span>✅ Pre-Filled!</span>';
-          setTimeout(() => {
-            quickBtn.classList.remove("ai-btn-success");
-            quickBtn.innerHTML = '🤖 AI Crawl & Fill';
-          }, 1500);
+        if (typeof AIExt.setQuickBtnState === "function") {
+          AIExt.setQuickBtnState("success_working", "✅ Pre-Filled (Working)!");
+        }
+        if (typeof AIExt.showFloatingToast === "function") {
+          AIExt.showFloatingToast(`✅ Working Site Pre-Filled (${fillReport.filledCount} fields)! Review and click Submit.`, "success", 4000);
         }
         if (data.websiteStatus === "Redirect Site") {
           AIExt.updateStatus(`🔄 Redirect Site detected! Pre-filled ${fillReport.filledCount} fields [${sourceTag}: ${note}]. Stopped at Submit button for manual review.`, "success");
@@ -367,12 +408,27 @@
         }
       }
     } catch (err) {
-      AIExt.resetCrawlButtons();
+      if (progressTimer) {
+        clearTimeout(progressTimer);
+        progressTimer = null;
+      }
       if (err.message && err.message.includes("Extension context invalidated")) {
+        if (typeof AIExt.setQuickBtnState === "function") {
+          AIExt.setQuickBtnState("warning", "⚠️ Refresh Page (F5)!");
+        }
+        if (typeof AIExt.showFloatingToast === "function") {
+          AIExt.showFloatingToast("🔄 Extension context invalidated. Please press F5 to refresh page!", "warning", 4000);
+        }
         AIExt.showReloadBanner();
         AIExt.updateStatus("Please refresh page (F5)", "warning");
       } else {
         console.warn("[AI Assistant] Crawl exception occurred. Marking as Not Working as instructed:", err.message);
+        if (typeof AIExt.setQuickBtnState === "function") {
+          AIExt.setQuickBtnState("marked_not_working", "🚫 Not Working (Error)");
+        }
+        if (typeof AIExt.showFloatingToast === "function") {
+          AIExt.showFloatingToast(`⚠️ Crawl Error: ${err.message}. Status set to Not Working.`, "warning", 3500);
+        }
         const notWorkingData = {
           websiteStatus: "Not Working",
           businessType: "",

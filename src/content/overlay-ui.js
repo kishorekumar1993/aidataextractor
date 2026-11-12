@@ -34,28 +34,231 @@
   }
 
 
-  function resetCrawlButtons() {
-    state.isCrawlingInProgress = false;
+  let toastTimeout = null;
+  /**
+   * High-visibility Floating Toast Notification Banner across the entire viewport.
+   * Informs the user of live crawling, extraction, errors, warnings, and completions
+   * even if the sidebar is closed or scrolled out of view.
+   */
+  function showFloatingToast(message, type = "info", duration = 3000) {
+    if (typeof document === "undefined" || !document.body) return;
+    let toast = document.getElementById("ai-floating-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "ai-floating-toast";
+      document.body.appendChild(toast);
+    }
+    if (toastTimeout) {
+      clearTimeout(toastTimeout);
+      toastTimeout = null;
+    }
+    toast.className = `ai-toast-show ai-toast-${type}`;
+    let icon = "🤖";
+    if (type === "loading") icon = '<span class="ai-spinner-icon"></span>';
+    else if (type === "success") icon = "✅";
+    else if (type === "warning") icon = "⚠️";
+    else if (type === "error" || type === "restricted") icon = "⛔";
+    else if (type === "not_working") icon = "🚫";
+
+    toast.innerHTML = `<span class="ai-toast-icon">${icon}</span> <span class="ai-toast-msg">${message}</span>`;
+
+    if (duration > 0) {
+      toastTimeout = setTimeout(() => {
+        if (toast) {
+          toast.classList.remove("ai-toast-show");
+        }
+      }, duration);
+    }
+  }
+
+  let quickBtnResetTimer = null;
+  /**
+   * Central tactile state manager for all AI crawl buttons (inline quick button,
+   * header button, and sidebar button). Provides unmistakable interactive feedback
+   * on click, active depression, progress animations, and colored status badges.
+   */
+  function setQuickBtnState(stateName, customText = "", autoResetDuration = 0) {
+    const quickBtn = document.getElementById("ai-quick-btn");
     const crawlBtn = document.getElementById("ai-crawl-btn");
     const headerCrawlBtn = document.getElementById("ai-header-crawl-btn");
-    const quickBtn = document.getElementById("ai-quick-btn");
-    if (crawlBtn) {
-      crawlBtn.disabled = false;
-      crawlBtn.classList.remove("ai-btn-crawling", "ai-btn-success");
-      crawlBtn.innerHTML = "<span>⚡ Auto-Crawl & Pre-Fill</span>";
+
+    if (quickBtnResetTimer) {
+      clearTimeout(quickBtnResetTimer);
+      quickBtnResetTimer = null;
     }
-    if (headerCrawlBtn) {
-      headerCrawlBtn.disabled = false;
-      headerCrawlBtn.classList.remove("ai-btn-crawling", "ai-btn-success");
-      headerCrawlBtn.innerHTML = "⚡ AI Crawl";
+
+    const allBtns = [quickBtn, crawlBtn, headerCrawlBtn].filter(Boolean);
+
+    allBtns.forEach(btn => {
+      btn.classList.remove(
+        "ai-btn-crawling",
+        "ai-btn-extracting",
+        "ai-btn-success",
+        "ai-btn-warning",
+        "ai-btn-not-working",
+        "ai-btn-restricted",
+        "ai-btn-pressed"
+      );
+    });
+
+    if (stateName === "idle") {
+      state.isCrawlingInProgress = false;
+      if (quickBtn) {
+        quickBtn.disabled = false;
+        quickBtn.innerHTML = "🤖 AI Crawl & Fill";
+      }
+      if (crawlBtn) {
+        crawlBtn.disabled = false;
+        crawlBtn.innerHTML = "<span>⚡ Auto-Crawl & Pre-Fill</span>";
+      }
+      if (headerCrawlBtn) {
+        headerCrawlBtn.disabled = false;
+        headerCrawlBtn.innerHTML = "⚡ AI Crawl";
+      }
+      return;
     }
-    if (quickBtn) {
-      quickBtn.disabled = false;
-      quickBtn.classList.remove("ai-btn-crawling", "ai-btn-success");
-      quickBtn.style.backgroundColor = "";
-      quickBtn.style.borderColor = "";
-      quickBtn.innerHTML = "🤖 AI Crawl & Fill";
+
+    if (stateName === "pressed") {
+      if (quickBtn) quickBtn.classList.add("ai-btn-pressed");
+      return;
     }
+
+    if (stateName === "warning" || stateName === "no_url") {
+      if (quickBtn) {
+        quickBtn.disabled = false;
+        quickBtn.classList.add("ai-btn-warning");
+        quickBtn.innerHTML = customText || "⚠️ Enter URL First!";
+      }
+      quickBtnResetTimer = setTimeout(() => {
+        setQuickBtnState("idle");
+      }, autoResetDuration || 2200);
+      return;
+    }
+
+    if (stateName === "starting" || stateName === "crawling") {
+      state.isCrawlingInProgress = true;
+      const label = customText || "Crawling Site...";
+      if (quickBtn) {
+        quickBtn.disabled = true;
+        quickBtn.classList.add("ai-btn-crawling");
+        quickBtn.innerHTML = `<span class="ai-spinner-icon"></span> <span>${label}</span>`;
+      }
+      if (crawlBtn) {
+        crawlBtn.disabled = true;
+        crawlBtn.classList.add("ai-btn-crawling");
+        crawlBtn.innerHTML = `<span class="ai-spinner-icon"></span> <span>${label}</span>`;
+      }
+      if (headerCrawlBtn) {
+        headerCrawlBtn.disabled = true;
+        headerCrawlBtn.classList.add("ai-btn-crawling");
+        headerCrawlBtn.innerHTML = '<span class="ai-spinner-icon"></span> <span>Crawling...</span>';
+      }
+      return;
+    }
+
+    if (stateName === "extracting") {
+      const label = customText || "AI Extracting...";
+      if (quickBtn) {
+        quickBtn.disabled = true;
+        quickBtn.classList.add("ai-btn-extracting");
+        quickBtn.innerHTML = `<span class="ai-spinner-icon"></span> <span>${label}</span>`;
+      }
+      if (crawlBtn) {
+        crawlBtn.disabled = true;
+        crawlBtn.classList.add("ai-btn-extracting");
+        crawlBtn.innerHTML = `<span class="ai-spinner-icon"></span> <span>${label}</span>`;
+      }
+      return;
+    }
+
+    if (stateName === "success_working") {
+      state.isCrawlingInProgress = false;
+      const label = customText || "✅ Pre-Filled (Working)!";
+      if (quickBtn) {
+        quickBtn.disabled = false;
+        quickBtn.classList.add("ai-btn-success");
+        quickBtn.innerHTML = `<span>${label}</span>`;
+      }
+      if (crawlBtn) {
+        crawlBtn.disabled = false;
+        crawlBtn.classList.add("ai-btn-success");
+        crawlBtn.innerHTML = "<span>✅ Pre-Filled!</span>";
+      }
+      if (headerCrawlBtn) {
+        headerCrawlBtn.disabled = false;
+        headerCrawlBtn.classList.add("ai-btn-success");
+        headerCrawlBtn.innerHTML = "✅ Pre-Filled!";
+      }
+      quickBtnResetTimer = setTimeout(() => {
+        setQuickBtnState("idle");
+      }, autoResetDuration || 2800);
+      return;
+    }
+
+    if (stateName === "marked_not_working") {
+      state.isCrawlingInProgress = false;
+      const label = customText || "🚫 Not Working!";
+      if (quickBtn) {
+        quickBtn.disabled = false;
+        quickBtn.classList.add("ai-btn-not-working");
+        quickBtn.innerHTML = `<span>${label}</span>`;
+      }
+      if (crawlBtn) {
+        crawlBtn.disabled = false;
+        crawlBtn.classList.add("ai-btn-not-working");
+        crawlBtn.innerHTML = "<span>🚫 Not Working</span>";
+      }
+      if (headerCrawlBtn) {
+        headerCrawlBtn.disabled = false;
+        headerCrawlBtn.classList.add("ai-btn-not-working");
+        headerCrawlBtn.innerHTML = "🚫 Not Working";
+      }
+      quickBtnResetTimer = setTimeout(() => {
+        setQuickBtnState("idle");
+      }, autoResetDuration || 2800);
+      return;
+    }
+
+    if (stateName === "restricted") {
+      state.isCrawlingInProgress = false;
+      const label = customText || "⛔ Restricted Site!";
+      if (quickBtn) {
+        quickBtn.disabled = false;
+        quickBtn.classList.add("ai-btn-restricted");
+        quickBtn.innerHTML = `<span>${label}</span>`;
+      }
+      if (crawlBtn) {
+        crawlBtn.disabled = false;
+        crawlBtn.classList.add("ai-btn-restricted");
+        crawlBtn.innerHTML = "<span>⛔ Restricted Site</span>";
+      }
+      if (headerCrawlBtn) {
+        headerCrawlBtn.disabled = false;
+        headerCrawlBtn.classList.add("ai-btn-restricted");
+        headerCrawlBtn.innerHTML = "⛔ Restricted Site";
+      }
+      quickBtnResetTimer = setTimeout(() => {
+        setQuickBtnState("idle");
+      }, autoResetDuration || 3000);
+      return;
+    }
+
+    if (stateName === "error") {
+      state.isCrawlingInProgress = false;
+      const label = customText || "⚠️ Error";
+      if (quickBtn) {
+        quickBtn.disabled = false;
+        quickBtn.classList.add("ai-btn-warning");
+        quickBtn.innerHTML = `<span>${label}</span>`;
+      }
+      quickBtnResetTimer = setTimeout(() => {
+        setQuickBtnState("idle");
+      }, autoResetDuration || 2500);
+    }
+  }
+
+  function resetCrawlButtons() {
+    setQuickBtnState("idle");
   }
 
 
@@ -815,8 +1018,45 @@
     quickBtn.id = "ai-quick-btn";
     quickBtn.type = "button";
     quickBtn.className = "ai-quick-btn";
-    quickBtn.innerHTML = "⚡ AI Crawl & Fill";
+    quickBtn.innerHTML = "🤖 AI Crawl & Fill";
     quickBtn.title = "Click to automatically crawl website and pre-fill form";
+
+    function createRipple(e) {
+      try {
+        const circle = document.createElement("span");
+        const diameter = Math.max(quickBtn.clientWidth, quickBtn.clientHeight);
+        const radius = diameter / 2;
+        const rect = quickBtn.getBoundingClientRect();
+        circle.style.width = circle.style.height = `${diameter}px`;
+        const clientX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || (rect.left + radius);
+        const clientY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || (rect.top + radius);
+        circle.style.left = `${clientX - rect.left - radius}px`;
+        circle.style.top = `${clientY - rect.top - radius}px`;
+        circle.className = "ai-btn-ripple";
+        const oldRipple = quickBtn.querySelector(".ai-btn-ripple");
+        if (oldRipple) oldRipple.remove();
+        quickBtn.appendChild(circle);
+        setTimeout(() => { try { circle.remove(); } catch (err) { } }, 600);
+      } catch (err) { }
+    }
+
+    quickBtn.addEventListener("mousedown", (e) => {
+      createRipple(e);
+      quickBtn.classList.add("ai-btn-pressed");
+    });
+    quickBtn.addEventListener("mouseup", () => {
+      quickBtn.classList.remove("ai-btn-pressed");
+    });
+    quickBtn.addEventListener("mouseleave", () => {
+      quickBtn.classList.remove("ai-btn-pressed");
+    });
+    quickBtn.addEventListener("touchstart", (e) => {
+      createRipple(e);
+      quickBtn.classList.add("ai-btn-pressed");
+    }, { passive: true });
+    quickBtn.addEventListener("touchend", () => {
+      quickBtn.classList.remove("ai-btn-pressed");
+    });
 
     quickBtn.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1033,6 +1273,8 @@
     });
   }
   Object.assign(AIExt, {
+    setQuickBtnState,
+    showFloatingToast,
     resetCrawlButtons,
     ensureAiCrawlButtonsVisible,
     showReloadBanner,
