@@ -969,18 +969,14 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:s[\.\s]*e|se)\b\.?(?=\s*[,)]?\s*$)/gi, "Societas Europaea");
 
   // 18. Common Business, Technical, and Industry Word Abbreviations in Company Names
-  // Manufacturing / Makers
-  n = n.replace(/\b(?:mfg|manuf|mnfg)[\.\s]*co[\.\s]*(,)?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, (match, comma) => {
-    return comma ? "Manufacturing Company, Limited" : "Manufacturing Company Limited";
-  });
+  // Manufacturing / Makers (always expand Co., Ltd. variants to Company, Limited with comma)
+  n = n.replace(/\b(?:mfg|manuf|mnfg)[\.\s]*co[\.\s]*,?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, "Manufacturing Company, Limited");
   n = n.replace(/\b(?:mfg|manuf|mnfg)\b\.?/gi, "Manufacturing");
   n = n.replace(/\bmfrs\b\.?/gi, "Manufacturers");
   n = n.replace(/\bmfr\b\.?/gi, "Manufacturer");
 
-  // Industries / Industrial
-  n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*(,)?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, (match, comma) => {
-    return comma ? "Industries Company, Limited" : "Industries Company Limited";
-  });
+  // Industries / Industrial (always expand Co., Ltd. variants to Company, Limited with comma)
+  n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*,?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, "Industries Company, Limited");
   n = n.replace(/\b(?:ind['’]?l|indl)\b\.?/gi, "Industrial");
   n = n.replace(/\binds\b\.?/gi, "Industries");
   n = n.replace(/\bindust\b\.?/gi, "Industries");
@@ -1076,11 +1072,9 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\bl[\.\s]*p\b\.?/gi, "Limited Partnership");
   n = n.replace(/\bp[\.\s]*l[\.\s]*c\b\.?/gi, "Public Limited Company");
 
-  // "Co., Ltd." vs "Co. Ltd"
-  // If comma is present between Co and Ltd (e.g. "Co., Ltd." or "Co.,Ltd") -> "Company, Limited"
-  // If WITHOUT comma (e.g. "Co. Ltd" or "Co Ltd") -> "Company Limited"
-  n = n.replace(/\bco[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Company, Limited");
-  n = n.replace(/\bco[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Company Limited");
+  // "Co., Ltd." / "Co. Ltd." / "Co Ltd" / "Company Limited" -> always "Company, Limited" (mandatory comma per Rule 4)
+  n = n.replace(/\bco[\.\s]*,?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, "Company, Limited");
+  n = n.replace(/\bCompany\s*,?\s*Limited\b/gi, "Company, Limited");
 
   // Private, Proprietary Limited with/without comma
   n = n.replace(/\bp[\.\s]*t[\.\s]*e[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Private, Limited");

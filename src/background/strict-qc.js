@@ -840,12 +840,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         compName = cleanCompanyPrefixesAndSuffixes(fallbackCand);
         compName = expandCompanyAbbreviations(compName, result.countryName || "");
         compName = toTitleCase(compName);
+        compName = compName.replace(/\bCompany\s*,?\s*Limited\b/gi, "Company, Limited");
         compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
       }
     } else {
       compName = expandCompanyAbbreviations(compName, result.countryName || "");
       compName = cleanCompanyPrefixesAndSuffixes(compName);
       compName = toTitleCase(compName);
+      compName = compName.replace(/\bCompany\s*,?\s*Limited\b/gi, "Company, Limited");
       compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
       compName = restoreOriginalSymbolsInCompanyName(compName, crawlData);
     }
@@ -1269,6 +1271,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // Rule: Special character should not start and should not end
   compName = stripBoundarySpecialChars(compName);
   compName = toTitleCase(compName);
+  compName = compName.replace(/\bCompany\s*,?\s*Limited\b/gi, "Company, Limited");
   compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
   compName = restoreOriginalSymbolsInCompanyName(compName, crawlData);
   compName = stripBoundarySpecialChars(compName);
