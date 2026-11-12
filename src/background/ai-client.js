@@ -93,7 +93,13 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * NEVER DROP PREMISE / BUILDING / UNIT / SUITE / FLOOR / LEVEL / ESTATE: Retain Unit, Suite, Floor, Level, Building, Block, Plot, Industrial Estate / Park, Business Park at the beginning or middle.
   * NEVER DROP INTERMEDIATE DIVISIONS: Retain Section, Lane, Alley, Village, Suburb, Town, District.
   * ONLY STRIP: Postal codes (ZIP codes), Country name, and Telephone/Fax numbers.
-- STRICT NO EXTRA WORDS RULE: Retain authentic address words from the website. Never invent words not present (e.g. do not add "City" or "Number" if not written).
+- CRITICAL HIGH PRIORITY RULE - NEVER INVENT OR ADD THE UNWANTED EXTRA WORD "Number":
+  * ABSOLUTELY NEVER INSERT "Number" IN FRONT OF BARE STREET NUMBERS!
+  * If the website says "Via Del Gregge, 220, Lonate Pozzolo, Varese" -> output "Via Del Gregge, 220, Lonate Pozzolo, Varese" (STRICTLY NEVER write "Via Del Gregge, Number 220"!).
+  * If the website says "40 Sarah Street" -> output "40 Sarah Street" (STRICTLY NEVER write "Number 40 Sarah Street"!).
+  * If the website says "604 Progress Drive" -> output "604 Progress Drive" (STRICTLY NEVER write "Number 604 Progress Drive"!).
+  * ONLY expand to "Number" when "No.", "No", "Nos.", or "#" was EXPLICITLY AND LITERALLY WRITTEN on the website (e.g. "No. 159, Yongke East Road" -> "Number 159, Yongke East Road"; "Plot No. 45" -> "Plot Number 45"). If "No." is NOT written on the website, NEVER add "Number"!
+- STRICT NO EXTRA WORDS RULE: Retain authentic address words from the website. Absolutely NEVER invent, insert, or add extra words not present on the website (e.g. NEVER add "Number", "City", "District", "Township", or "County" if not written).
 - STRICT PRESERVATION: NEVER drop leading street/building numbers (e.g. "12110 Best Place" -> keep 12110; "40 Sarah Street" -> keep 40).
 - EXPAND ALL ABBREVIATIONS GLOBALLY (MANDATORY FOR ALL 135+ COUNTRIES):
   * Named & Memorial Highways / Boulevards / Routes: GAR Highway / G.A.R. Hwy -> Grand Army Of The Republic Highway, MLK Jr Blvd -> Martin Luther King Junior Boulevard, JFK Blvd/Expy -> John F Kennedy Boulevard/Expressway, FDR Dr -> Franklin D Roosevelt Drive, PCH -> Pacific Coast Highway, Co. Rd. -> County Road, State Rte. -> State Route, FM 1960 -> Farm To Market Road 1960, RM -> Ranch To Market Road (Texas), MG Road -> Mahatma Gandhi Road, GT Road -> Grand Trunk Road.
@@ -205,6 +211,13 @@ function finalizeParsedAiResult(parsed, crawlData) {
   if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
     parsed.secondaryEmailId = "";
   }
+  if (parsed.companyAddress && typeof parsed.companyAddress === "string" && typeof stripBlindlyAddedNumber === "function") {
+    const rawCands = (crawlData && Array.isArray(crawlData.addressCandidates))
+      ? crawlData.addressCandidates.map(c => typeof c === "object" ? c.raw : c).join(" ")
+      : "";
+    parsed.companyAddress = stripBlindlyAddedNumber(parsed.companyAddress, rawCands, rawCands);
+  }
+
   if (parsed.phoneNumber) {
     if (typeof cleanPhoneNumber === "function") {
       parsed.phoneNumber = cleanPhoneNumber(parsed.phoneNumber, parsed.countryName);

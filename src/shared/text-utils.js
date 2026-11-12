@@ -6,6 +6,24 @@ function stripBoundarySpecialChars(str) {
 }
 
 /**
+ * Ensures "Number" is ONLY present if "No.", "No", "NO.", "Nos.", "Nº", "#", or "號" was in the original raw address evidence.
+ * Rule: "if No come only expand and do with out coming dont put blankly number"
+ */
+function stripBlindlyAddedNumber(addr, rawEvidence = "", rawSource = "") {
+  if (!addr || !/\bNumber\s+\d+/i.test(addr)) return addr;
+  return addr.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
+    const rawHasNoRegex = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+    if (rawSource && typeof rawSource === "string" && rawHasNoRegex.test(rawSource)) {
+      return match;
+    }
+    if (rawEvidence && typeof rawEvidence === "string" && rawHasNoRegex.test(rawEvidence)) {
+      return match;
+    }
+    return digits;
+  });
+}
+
+/**
  * Strips navigational, CTA, and page-context prefixes and marketing taglines from company names.
  * Ensures official registered names are clean, complete, and free of extraneous artifacts.
  */

@@ -2213,6 +2213,52 @@ async function runAsyncTests() {
     // 8. Verify PERI is properly uppercased
     const periNormalized = ctx.restoreOriginalSymbolsInCompanyName("Peri Societas Europaea", { mainHtml: "<html><body>PERI SE</body></html>" });
     assert.strictEqual(periNormalized, "PERI Societas Europaea", "PERI acronym must be uppercased");
+
+    // 9. Extra word "Number" must NOT be injected if "No." was not on website (Via Del Gregge testcase)
+    const rawItalianCand = "Via del Gregge, 220, 21015 Lonate Pozzolo (VA)";
+    const mockAiItalian = {
+      websiteStatus: "Working",
+      companyName: "Negri Bossi",
+      countryName: "Italy",
+      companyAddress: "Via Del Gregge, Number 220, Lonate Pozzolo, Varese",
+      state: "Available",
+      city: "Available",
+      _isFromAi: true
+    };
+    const mockItalianCrawl = {
+      finalUrl: "https://www.negribossi.com",
+      addressCandidates: [{ raw: rawItalianCand, isHeadquarters: true }],
+      contactPageText: rawItalianCand
+    };
+    const italianResult = ctx.applyStrictInstructions(mockAiItalian, mockItalianCrawl, {});
+    assert.strictEqual(
+      italianResult.companyAddress,
+      "Via Del Gregge, 220, Lonate Pozzolo, Varese",
+      "Must strip extra word 'Number' when bare street number 220 had no 'No.' on website"
+    );
+
+    // 10. When 'No.' IS in raw evidence, 'Number' MUST be kept/expanded
+    const rawTaiwanCand = "No. 159, Yongke East Road, Yongkang District, Tainan City 710, Taiwan";
+    const mockAiTaiwan = {
+      websiteStatus: "Working",
+      companyName: "Charng Guey",
+      countryName: "Taiwan",
+      companyAddress: "Number 159, Yongke East Road, Yongkang District, Tainan City",
+      state: "Not Available",
+      city: "Available",
+      _isFromAi: true
+    };
+    const mockTaiwanCrawl = {
+      finalUrl: "http://www.cg-machinery.com.tw",
+      addressCandidates: [{ raw: rawTaiwanCand, isHeadquarters: true }],
+      contactPageText: rawTaiwanCand
+    };
+    const taiwanResult = ctx.applyStrictInstructions(mockAiTaiwan, mockTaiwanCrawl, {});
+    assert.strictEqual(
+      taiwanResult.companyAddress,
+      "Number 159, Yongke East Road, Yongkang District, Tainan City",
+      "Must expand and keep 'Number' when 'No.' was present on website"
+    );
   });
 }
 

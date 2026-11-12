@@ -250,27 +250,22 @@ function romanizeChineseAddress(addr) {
 }
 
 /**
- * Ensures "Number" is ONLY present if "No.", "No", "NO.", "Nos.", "Nº", or "#" was in the original raw address evidence.
+ * Ensures "Number" is ONLY present if "No.", "No", "NO.", "Nos.", "Nº", "#", or "號" was in the original raw address evidence.
  * Rule: "if No come only expand and do with out coming dont put blankly number"
  */
 function stripBlindlyAddedNumber(addr, rawEvidence = "", rawSource = "") {
   if (!addr || !/\bNumber\s+\d+/i.test(addr)) return addr;
   return addr.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    // If rawSource is available (the actual selected candidate), prioritize it
-    if (rawSource && typeof rawSource === "string") {
-      const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
-      if (rawHasNo.test(rawSource)) {
-        return match;
-      }
-      const rawHasBare = new RegExp('(?:^|[^a-zA-Z0-9#])' + digits.replace('-', '[-/]') + '(?:[^a-zA-Z0-9号號]|$)', 'i');
-      if (rawHasBare.test(rawSource)) {
-        return digits; // strip "Number "
-      }
-    }
-    const rawRegex = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
-    if (rawEvidence && rawRegex.test(rawEvidence)) {
+    const rawHasNoRegex = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+    // If rawSource explicitly had No./Number/#/號, preserve it
+    if (rawSource && typeof rawSource === "string" && rawHasNoRegex.test(rawSource)) {
       return match;
     }
+    // If rawEvidence explicitly had No./Number/#/號, preserve it
+    if (rawEvidence && typeof rawEvidence === "string" && rawHasNoRegex.test(rawEvidence)) {
+      return match;
+    }
+    // Neither rawSource nor rawEvidence had explicit No./Number/#/號 -> STRIP "Number "
     return digits;
   });
 }
@@ -286,17 +281,13 @@ function stripExtraWordsFromAddress(addr, rawSource = "") {
 
   let a = addr;
 
-  // 1. "Number": If addr has "Number <digits>" but rawSource has bare digits without "no", "number", "#"
+  // 1. "Number": If addr has "Number <digits>" but rawSource does NOT have "no", "number", "#", "號"
   a = a.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
     const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
     if (rawHasNo.test(rawSource)) {
       return match;
     }
-    const rawHasBare = new RegExp('(?:^|[^a-zA-Z0-9#])' + digits.replace('-', '[-/]') + '(?:[^a-zA-Z0-9号號]|$)', 'i');
-    if (rawHasBare.test(rawSource)) {
-      return digits; // strip "Number "
-    }
-    return match;
+    return digits; // strip "Number "
   });
 
   // 2. "City": If addr has "<CityName> City" but rawSource has "<CityName>" without "City"

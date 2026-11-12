@@ -828,9 +828,13 @@
 
     // 6. Company Address (Trust background.js final QC-sanitized address directly)
     try {
-      const addrVal = (data.companyAddress && data.companyAddress !== "Not Available")
+      let addrVal = (data.companyAddress && data.companyAddress !== "Not Available")
         ? String(data.companyAddress).trim()
         : "";
+      if (addrVal && typeof stripBlindlyAddedNumber === "function") {
+        const rawCand = data.selectedAddressCandidateRaw || "";
+        addrVal = stripBlindlyAddedNumber(addrVal, rawCand, rawCand);
+      }
       if (elements.companyAddress && addrVal) {
         if (setInputValue(elements.companyAddress, addrVal)) {
           highlightField(elements.companyAddress);

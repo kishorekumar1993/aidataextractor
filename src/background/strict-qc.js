@@ -901,6 +901,15 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = typeof sanitizeRule6CompanyAddress === "function"
         ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData)
         : toTitleCase(addr);
+
+      // Strip extra word "Number" if "No." / "No" / "#" / "號" was not in authentic raw evidence
+      const allAiEvidence = (bestRaw || "") + " " + (crawlData && Array.isArray(crawlData.addressCandidates) ? crawlData.addressCandidates.map(c => typeof c === "object" ? c.raw : c).join(" ") : "") + " " + (crawlData && crawlData.contactPageText ? crawlData.contactPageText.slice(0, 1500) : "");
+      if (typeof stripBlindlyAddedNumber === "function") {
+        addr = stripBlindlyAddedNumber(addr, allAiEvidence, bestRaw);
+      }
+      if (bestRaw && typeof stripExtraWordsFromAddress === "function") {
+        addr = stripExtraWordsFromAddress(addr, bestRaw);
+      }
     }
     result.companyAddress = addr || "Not Available";
 
@@ -1451,9 +1460,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Ensure comma separates city/suburb from state/province
       addr = ensureCommaBeforeState(addr);
 
-      // Ensure "Number" is ONLY present if "No." / "No" / "#" / "Nº" was in the original raw address evidence
+      // Ensure "Number" is ONLY present if "No." / "No" / "#" / "Nº" / "號" was in the original raw address evidence
       // Rule: "if No come only expand and do with out coming dont put blankly number"
-      const allAddressEvidence = (rawSource || "") + " " + (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ") + " " + (crawlData.bodyText || "");
+      const allAddressEvidence = (rawSource || "") + " " + (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" ") + " " + (crawlData.contactPageText ? crawlData.contactPageText.slice(0, 1500) : "");
       addr = stripBlindlyAddedNumber(addr, allAddressEvidence, rawSource);
       if (rawSource) {
         addr = stripExtraWordsFromAddress(addr, rawSource);
@@ -1521,6 +1530,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       if (rawSource) {
         addr = stripExtraWordsFromAddress(addr, rawSource);
       }
+      addr = stripBlindlyAddedNumber(addr, allAddressEvidence, rawSource);
       addr = addr.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
       addr = addr.replace(/[^\p{L}\p{N})]+$/gu, "").trim();
       addr = addr.replace(/\s+/g, " ");
