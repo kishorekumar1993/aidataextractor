@@ -528,22 +528,74 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function refreshDashboardData() {
-    chrome.runtime.sendMessage({ action: "GET_NON_WORKING_RECORDS", dateFilter: todayIsoDate }, (res) => {
-      if (chrome.runtime.lastError) {
-        console.warn("Could not fetch records:", chrome.runtime.lastError.message);
-        return;
-      }
-      if (res && res.success) {
-        currentRecords = Array.isArray(res.records) ? res.records : [];
-        currentWorkingRecords = Array.isArray(res.workingRecords) ? res.workingRecords : [];
-        lastFetchedStats = res.stats || {};
+    // 1. Direct local storage read - provides 0ms instant display without depending on service worker
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      try {
+        const recordsKey = typeof NON_WORKING_STORAGE_KEY !== "undefined" ? NON_WORKING_STORAGE_KEY : "nonWorkingRecords";
+        const workingKey = typeof WORKING_STORAGE_KEY !== "undefined" ? WORKING_STORAGE_KEY : "workingRecords";
+        const syncKey = typeof NON_WORKING_SYNC_TIME_KEY !== "undefined" ? NON_WORKING_SYNC_TIME_KEY : "nonWorkingLastExcelSyncTime";
+
+        const data = await chrome.storage.local.get([recordsKey, workingKey, syncKey]);
+        if (Array.isArray(data[recordsKey])) {
+          currentRecords = data[recordsKey];
+        }
+        if (Array.isArray(data[workingKey])) {
+          currentWorkingRecords = data[workingKey];
+        }
+        const lastSyncTime = data[syncKey] || null;
+
+        if (typeof calculateErrorStats === "function") {
+          lastFetchedStats = calculateErrorStats(currentRecords, lastSyncTime, currentWorkingRecords, todayIsoDate);
+        } else {
+          lastFetchedStats = {
+            totalWorking: currentWorkingRecords.length,
+            totalNotWorking: currentRecords.filter(r => (r["Website Status"] || r.websiteStatus) === "Not Working").length,
+            totalRedirect: currentRecords.filter(r => (r["Website Status"] || r.websiteStatus) === "Redirect").length,
+            totalNotEnglish: currentRecords.filter(r => (r["Website Status"] || r.websiteStatus) === "Not English").length,
+            totalHistorical: currentRecords.length,
+            workingToday: 0,
+            notWorkingToday: 0,
+            redirectToday: 0,
+            notEnglishToday: 0,
+            totalToday: 0,
+            lastSyncTime: lastSyncTime ? String(lastSyncTime) : "Never"
+          };
+        }
         updateMetricsDisplay();
 
         if (recordsViewerPanel && recordsViewerPanel.style.display !== "none") {
           renderRecordsTable();
         }
+      } catch (e) {
+        // Silent fallback if storage read is interrupted
       }
-    });
+    }
+
+    // 2. Synchronize with background service worker if active, silently handling sleeping worker
+    try {
+      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ action: "GET_NON_WORKING_RECORDS", dateFilter: todayIsoDate }, (res) => {
+          if (chrome.runtime.lastError) {
+            // Service worker is sleeping or inactive; local storage already populated the UI
+            return;
+          }
+          if (res && res.success) {
+            currentRecords = Array.isArray(res.records) ? res.records : currentRecords;
+            currentWorkingRecords = Array.isArray(res.workingRecords) ? res.workingRecords : currentWorkingRecords;
+            if (res.stats) {
+              lastFetchedStats = res.stats;
+            }
+            updateMetricsDisplay();
+
+            if (recordsViewerPanel && recordsViewerPanel.style.display !== "none") {
+              renderRecordsTable();
+            }
+          }
+        });
+      }
+    } catch (e) {
+      // Worker unavailable, already handled by storage.local
+    }
   }
 
   function escapeHtml(str) {
@@ -693,9 +745,18 @@ document.addEventListener("DOMContentLoaded", () => {
         XLSX.writeFile(wb, NON_WORKING_EXCEL_FILENAME);
 
         const now = Date.now();
-        chrome.runtime.sendMessage({ action: "UPDATE_LAST_SYNC_TIME", timestamp: now }, () => {
+        const syncKey = typeof NON_WORKING_SYNC_TIME_KEY !== "undefined" ? NON_WORKING_SYNC_TIME_KEY : "nonWorkingLastExcelSyncTime";
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({ [syncKey]: now }).catch(() => {});
+        }
+        try {
+          chrome.runtime.sendMessage({ action: "UPDATE_LAST_SYNC_TIME", timestamp: now }, () => {
+            if (chrome.runtime.lastError) { /* ignore */ }
+            refreshDashboardData();
+          });
+        } catch (e) {
           refreshDashboardData();
-        });
+        }
 
         showExcelSyncStatus(`✅ Downloaded cumulative ${NON_WORKING_EXCEL_FILENAME} (${currentRecords.length} records)!`, "success");
       } catch (err) {
@@ -816,14 +877,35 @@ document.addEventListener("DOMContentLoaded", () => {
       const confirmed = window.confirm(`⚠️ Are you sure you want to clear all ${total} historical non-working website records?\n\nThis will remove them from local storage. Download your Excel file first if you wish to preserve a copy.`);
       if (!confirmed) return;
 
-      chrome.runtime.sendMessage({ action: "CLEAR_NON_WORKING_RECORDS" }, (res) => {
-        if (res && res.success) {
-          refreshDashboardData();
-          showExcelSyncStatus("🗑️ All historical error records cleared.", "success");
-        } else {
-          showExcelSyncStatus(`Failed to clear records: ${res?.error || "Unknown error"}`, "error");
+      const clearLocally = () => {
+        const recordsKey = typeof NON_WORKING_STORAGE_KEY !== "undefined" ? NON_WORKING_STORAGE_KEY : "nonWorkingRecords";
+        const workingKey = typeof WORKING_STORAGE_KEY !== "undefined" ? WORKING_STORAGE_KEY : "workingRecords";
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({ [recordsKey]: [], [workingKey]: [] }, () => {
+            currentRecords = [];
+            currentWorkingRecords = [];
+            refreshDashboardData();
+            showExcelSyncStatus("🗑️ All historical error records cleared.", "success");
+          });
         }
-      });
+      };
+
+      try {
+        chrome.runtime.sendMessage({ action: "CLEAR_NON_WORKING_RECORDS" }, (res) => {
+          if (chrome.runtime.lastError) {
+            clearLocally();
+            return;
+          }
+          if (res && res.success) {
+            refreshDashboardData();
+            showExcelSyncStatus("🗑️ All historical error records cleared.", "success");
+          } else {
+            clearLocally();
+          }
+        });
+      } catch (e) {
+        clearLocally();
+      }
     });
   }
 
