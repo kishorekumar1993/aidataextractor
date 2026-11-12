@@ -2259,6 +2259,58 @@ async function runAsyncTests() {
       "Number 159, Yongke East Road, Yongkang District, Tainan City",
       "Must expand and keep 'Number' when 'No.' was present on website"
     );
+
+    // 11. Test 44: Restricted Prohibited Categories: Marine Industry / Subpage Detection (Total Hoists & Cranes case)
+    const mockCraneIndustriesText = "Find out how we can help with your project. Marine Industry We offer overhead gantries, jib cranes for marine operations.";
+    const marineCheck = ctx.detectRestrictedKeywordsSingle(mockCraneIndustriesText, "<h4>Marine Industry</h4>");
+    assert.strictEqual(marineCheck.isRestricted, true, "Must detect 'Marine Industry' as restricted");
+    assert.strictEqual(marineCheck.category, "Marine", "Category must be Marine");
+    assert.strictEqual(marineCheck.matchedKeyword, "Marine", "Matched keyword must be Marine");
+
+    // Discover contact links prioritizes industries / applications page
+    const mockCraneHomeHtml = `
+      <html><body>
+        <a href="/contact-us">Contact Us</a>
+        <a href="/about-us/why-choose-us">Why Choose Us</a>
+        <a href="/about-us/faq">FAQ</a>
+        <a href="/about-us/industries">Industries</a>
+        <a href="/about-us/vacancies">Vacancies</a>
+      </body></html>
+    `;
+    const craneDiscovered = ctx.discoverContactLinks(mockCraneHomeHtml, "https://www.totalhoistsandcranes.com.au/");
+    assert.ok(craneDiscovered.includes("https://www.totalhoistsandcranes.com.au/about-us/industries"), "Must discover /about-us/industries");
+    const indIndex = craneDiscovered.indexOf("https://www.totalhoistsandcranes.com.au/about-us/industries");
+    const faqIndex = craneDiscovered.indexOf("https://www.totalhoistsandcranes.com.au/about-us/faq");
+    assert.ok(indIndex < faqIndex, "Industries link must be prioritized above FAQ");
+
+    // End-to-end multi-page restricted detection
+    const multiPageCraneCheck = ctx.detectRestrictedKeywords(
+      "Total Hoists & Cranes Overhead Cranes Manufacturer",
+      "<html><body>Total Hoists & Cranes</body></html>",
+      [
+        { url: "https://www.totalhoistsandcranes.com.au/", text: "Total Hoists & Cranes" },
+        { url: "https://www.totalhoistsandcranes.com.au/about-us/industries", text: mockCraneIndustriesText, html: "<h4>Marine Industry</h4>" }
+      ]
+    );
+    assert.strictEqual(multiPageCraneCheck.isRestricted, true);
+    assert.strictEqual(multiPageCraneCheck.sourceUrl, "https://www.totalhoistsandcranes.com.au/about-us/industries");
+    assert.strictEqual(multiPageCraneCheck.category, "Marine");
+
+    // QC compliance: If site is restricted, all 13 fields MUST be empty
+    const restrictedQcResult = ctx.applyStrictInstructions({
+      websiteStatus: "Working",
+      companyName: "Total Hoists and Cranes Pty Ltd",
+      countryName: "Australia",
+      companyAddress: "10 Industrial Drive, Melbourne, Victoria"
+    }, {
+      originalUrl: "http://www.totalhoistsandcranes.com.au",
+      finalUrl: "https://www.totalhoistsandcranes.com.au/"
+    }, multiPageCraneCheck);
+    assert.strictEqual(restrictedQcResult.websiteStatus, "Not Working");
+    assert.strictEqual(restrictedQcResult.companyName, "");
+    assert.strictEqual(restrictedQcResult.companyAddress, "");
+    assert.strictEqual(restrictedQcResult.state, "");
+    assert.strictEqual(restrictedQcResult.city, "");
   });
 }
 

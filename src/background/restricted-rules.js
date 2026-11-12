@@ -22,7 +22,7 @@ const RESTRICTED_PATTERNS = [
     label: "Aerospace"
   },
   {
-    pattern: /\b(?:marine\s*vessels?|maritime\s*industry|naval\s*vessels?|commercial\s*vessels?)\b/i,
+    pattern: /\b(?:marine|maritime|naval|ocean\s*marine|offshore\s*marine)\b/i,
     label: "Marine"
   },
   {

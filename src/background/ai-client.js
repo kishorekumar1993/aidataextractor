@@ -51,7 +51,15 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Rule 12 (Non-English): No English translation option -> mark "Non English" (all other fields empty "").
 - Rule 14 (Flash): Designed in Flash format where text is uncopyable -> mark "Flash" (all other fields empty "").
 - Rule 13 (Redirect Site): Redirected to a completely DIFFERENT domain (companyA.com -> companyB.com) -> mark "Redirect Site", evaluate details from destination site. Same-domain redirects (http to https, www vs non-www, language path /en/) are NOT Redirect Sites -> mark "Working".
-- If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason (e.g. "Website has 0 products and no verifiable catalog or physical address", "Prohibited category: medicine/medical", "Online shopping cart without manufacturing facility", "Domain expired / 404"). If "Working", set "notWorkingReason" to "".
+- If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason (e.g. "Website has 0 products and no verifiable catalog or physical address", "Prohibited category: Marine", "Online shopping cart without manufacturing facility", "Domain expired / 404"). If "Working", set "notWorkingReason" to "".
+- CRITICAL RULE NOTE 2 - PROHIBITED / RESTRICTED CATEGORIES (HIGHEST PRIORITY):
+  * Do NOT work on websites related to: Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals.
+  * Even if these words or industries appear ANYWHERE on the website (including in industries served, markets, applications, equipment, about us, or subpages, e.g. "Marine", "Marine Industry", "Aerospace", "Defence", "Medical", "Chemicals") -> do NOT work on that site!
+  * You MUST immediately set:
+    "websiteStatus": "Not Working",
+    "businessType": "Restricted Site",
+    "notWorkingReason": "Prohibited Category Detected: Marine" (or whichever prohibited word was detected),
+    and ALL other 12 fields MUST be empty strings ""!
 
 2. BUSINESS TYPE:
 - Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".

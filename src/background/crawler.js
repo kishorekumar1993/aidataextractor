@@ -372,6 +372,22 @@ async function crawlWebsite(targetUrl) {
         } catch (e) { }
       }
 
+      // (a2) High Priority: Dedicated Industries / Markets / Applications page (max 1)
+      for (const link of contactLinks) {
+        if (fetchedUrls.has(link)) continue;
+        if (/(?:industr|market|application|sector)/i.test(link)) {
+          try {
+            const uPath = new URL(link).pathname.toLowerCase().replace(/\/$/, "");
+            if (!seenPaths.has(uPath)) {
+              seenPaths.add(uPath);
+              otherTopLinks.push(link);
+              fetchedUrls.add(link);
+              break;
+            }
+          } catch (e) { }
+        }
+      }
+
       // (b) Next: non-contact About / Profile / Support links (max 2)
       let otherContactCount = 0;
       for (const link of contactLinks) {
@@ -773,18 +789,21 @@ function discoverContactLinks(html, baseUrl) {
 
     let score = 0;
     if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us|kontakt|contacto|contactenos|contáctenos|contatti|contattaci|contactez-nous|nous-contacter|contato|fale-conosco|hubungi|hubungi-kami|kontak|kontak-kami|impressum|imprint)\b/i.test(rawLower)) score += 100;
+    if (/\b(industries|industry|markets|market|applications|sectors|sector|industries-served|markets-served)\b/i.test(rawLower)) score += 50;
     if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile|quienes-somos|sobre-nosotros|nosotros|empresa|nuestra-empresa|chi-siamo|azienda|uber-uns|ueber-uns|unternehmen|wir-ueber-uns|a-propos|qui-sommes-nous|sobre-nos|quem-somos|tentang-kami|profil-perusahaan)\b/i.test(rawLower)) score += 25;
     if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|mentions-legales|aviso-legal|note-legali|datenschutz|politica-de-privacidad|confidentialite|warranty|warranties|guarantee|returns)\b/i.test(rawLower)) score += 7;
-    if (/\b(support|customer-support|service|customer-service|help|help-desk|faq)\b/i.test(rawLower)) score += 12;
+    if (/\b(support|customer-support|service|customer-service|help|help-desk)\b/i.test(rawLower)) score += 10;
+    if (/\b(faq)\b/i.test(rawLower)) score += 2;
     if (/\b(sales|inquiry|enquiry|inquiries|enquiries|quote|request-quote|request-a-quote|order|orders)\b/i.test(rawLower)) score += 12;
     if (/\b(shop|store|online-store|cart|basket)\b/i.test(rawLower)) score += 8;
     if (/\b(team|our-team|staff|management|people|leadership)\b/i.test(rawLower)) score += 6;
     if (/\b(locations|branches|branch|offices|stores)\b/i.test(rawLower)) score += 8;
     if (/\b(dealers|distributors|stockists|resellers|partners)\b/i.test(rawLower) || /\b(dealers|distributors|stockists|resellers|partners)\b/i.test(innerText)) score -= 50;
-    if (/\b(careers|career|jobs|job|employment|work-with-us|join-our-team)\b/i.test(rawLower)) score += 9;
-    if (/\b(careers|career|jobs|employment|work\s*with\s*us|join\s*our\s*team)\b/i.test(innerText)) score += 9;
+    if (/\b(careers|career|jobs|job|employment|work-with-us|join-our-team)\b/i.test(rawLower)) score += 3;
+    if (/\b(careers|career|jobs|employment|work\s*with\s*us|join\s*our\s*team)\b/i.test(innerText)) score += 3;
     if (/\b(feedback|complaints|directory)\b/i.test(rawLower)) score += 5;
     if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us|kontakt|contacto|contáctenos|contatti|contattaci|contactez[-\s]*nous|nous\s*contacter|contato|fale\s*conosco|hubungi\s*kami|kontak\s*kami|kontak)\b/i.test(innerText)) score += 120;
+    if (/\b(industries|our\s*industries|industries\s*served|markets|markets\s*served|applications|sectors)\b/i.test(innerText)) score += 50;
     if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile|quienes\s*somos|quiénes\s*somos|sobre\s*nosotros|nuestra\s*empresa|chi\s*siamo|la\s*azienda|über\s*uns|ueber\s*uns|das\s*unternehmen|à\s*propos|qui\s*sommes[-\s]*nous|quem\s*somos|sobre\s*nós|tentang\s*kami)\b/i.test(innerText)) score += 20;
     if (/\b(shop|store|online\s*store|cart|basket|buy\s*online)\b/i.test(innerText)) score += 9;
     if (/\b(terms|terms\s*and\s*conditions|terms\s*of\s*(?:service|use)|privacy\s*policy|legal\s*notice|company\s*info|imprint|impressum|mentions\s*légales|aviso\s*legal|note\s*legali|datenschutz|warranty|warranties|guarantee)\b/i.test(innerText)) score += 8;
@@ -837,9 +856,9 @@ function discoverProductAndCatalogLinks(html, baseUrl) {
       isRestrictedHint = true;
     }
 
-    // Product & Catalog pages
-    if (/\b(?:products?|catalog(?:ue)?|categories|category|collection|collections|items?|goods|solutions?|services?|what-we-do|offerings|range|machinery|equipment)\b/i.test(rawLower)) score += 20;
-    if (/\b(?:products?|our\s*products?|catalog(?:ue)?|categories|category|all\s*products?|view\s*all\s*products?|services?|what\s*we\s*do|solutions?|our\s*services?|product\s*range|catalogues?)\b/i.test(innerText)) score += 25;
+    // Product, Catalog & Industry Capability pages
+    if (/\b(?:products?|catalog(?:ue)?|categories|category|collection|collections|items?|goods|solutions?|services?|what-we-do|offerings|range|machinery|equipment|industries|industry|markets?|applications?|sectors?)\b/i.test(rawLower)) score += 25;
+    if (/\b(?:products?|our\s*products?|catalog(?:ue)?|categories|category|all\s*products?|view\s*all\s*products?|services?|what\s*we\s*do|solutions?|our\s*services?|product\s*range|catalogues?|industries|our\s*industries|industries\s*served|markets|markets\s*served|applications|sectors)\b/i.test(innerText)) score += 30;
 
     // Demote pagination / query params / sorting links
     if (/[?&](?:page|p|sort|order|dir|limit|view)=/i.test(rawLower)) score -= 10;
