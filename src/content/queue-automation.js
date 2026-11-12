@@ -8,8 +8,9 @@
   // =========================================================================
 
   function triggerFromQueue() {
-    const fromQueueBtn = document.getElementById("btnClickHere") ||
-      document.getElementById("btnLoadNextQueueUrl") ||
+    // Strictly find ONLY genuine queue navigation buttons.
+    // NEVER click "click here" buttons, external link buttons, or buttons that open new windows/tabs!
+    const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") ||
       document.getElementById("btnNextQueue") ||
       document.getElementById("loadNext") ||
       document.getElementById("nextRecord") ||
@@ -17,10 +18,16 @@
         if (b.closest("#ai-prefill-widget")) return false;
         const t = (b.textContent || b.value || "").replace(/\s+/g, " ").trim().toLowerCase();
         const idCls = `${b.id || ""} ${b.className || ""} ${b.title || ""}`.toLowerCase();
-        return t === "click here" || t.includes("click here") || t.includes("from queue") || t.includes("load next") || t.includes("next url") || t.includes("next record") || t === "next" || t.includes("get url") || t === "queue" || (/\bqueue\b/.test(idCls) && !t.includes("manual"));
+
+        // Strictly reject any "click here", "open", "visit", or external link buttons
+        if (t.includes("click here") || idCls.includes("clickhere") || idCls.includes("click-here")) return false;
+        if (b.getAttribute("target") === "_blank" || (b.getAttribute("href") && b.getAttribute("href").startsWith("http"))) return false;
+        if (idCls.includes("external") || idCls.includes("preview") || t.includes("preview") || t.includes("visit")) return false;
+
+        return t.includes("from queue") || t.includes("load next") || t.includes("next url") || t.includes("next record") || t === "next" || t.includes("get url") || (/\bqueue\b/.test(idCls) && !t.includes("manual"));
       });
     if (fromQueueBtn) {
-      console.log("[AI Assistant] Triggering 'From Queue' / 'Click Here' button:", fromQueueBtn);
+      console.log("[AI Assistant] Triggering 'From Queue' button:", fromQueueBtn);
       fromQueueBtn.click();
       return true;
     }
@@ -403,13 +410,6 @@
         const pageText = (document.body ? document.body.innerText || "" : "").toLowerCase();
         if (pageText.includes("website data saved successfully") || pageText.includes("data saved successfully")) {
           state.isWaitingForUserWorkingReview = false;
-          const currentUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
-          const normCurrent = (currentUrl || "").trim().toLowerCase().replace(/\/+$/, "");
-          const normLast = (state.lastProcessedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
-          // If input still contains the previous submitted URL, trigger "click here" button to advance!
-          if (!normCurrent || normCurrent === normLast) {
-            triggerFromQueue();
-          }
         }
         checkAndAutoTriggerQueueCrawl();
       }

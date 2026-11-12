@@ -75,79 +75,8 @@ async function fetchDecodedHtml(url, options = {}) {
  * Keeps legal suffixes such as Co., Ltd — previous parsers stopped at the first comma.
  */
 
-async function fetchViaSilentBackgroundTab(targetUrl, timeoutMs = 5000) {
-  if (typeof chrome === "undefined" || !chrome.tabs || !chrome.tabs.create || !chrome.tabs.remove || !chrome.scripting || !chrome.scripting.executeScript) {
-    return null;
-  }
-  let createdTabId = null;
-  try {
-    const tab = await chrome.tabs.create({ url: targetUrl, active: false });
-    if (!tab || !tab.id) return null;
-    createdTabId = tab.id;
-
-    // Wait for page load completion up to timeoutMs
-    await new Promise((resolve) => {
-      let settled = false;
-      const done = () => {
-        if (settled) return;
-        settled = true;
-        try { chrome.tabs.onUpdated.removeListener(onUpdated); } catch (e) { }
-        clearTimeout(timer);
-        resolve();
-      };
-      const onUpdated = (tabId, changeInfo) => {
-        if (tabId === createdTabId && changeInfo.status === "complete") {
-          done();
-        }
-      };
-      try { chrome.tabs.onUpdated.addListener(onUpdated); } catch (e) { }
-      const timer = setTimeout(done, Math.min(timeoutMs, 4000));
-    });
-
-    // Brief hydration window for React/Next/Vue/Wix/Cloudflare JS
-    await new Promise(r => setTimeout(r, 1200));
-
-    let injected = await chrome.scripting.executeScript({
-      target: { tabId: createdTabId },
-      func: () => ({
-        html: document.documentElement ? document.documentElement.outerHTML : "",
-        url: window.location.href,
-        title: document.title || "",
-        textLen: document.body && document.body.innerText ? document.body.innerText.trim().length : 0
-      })
-    });
-
-    let tabData = injected && injected[0] && injected[0].result;
-    // If Cloudflare/bot screen is still transitioning, allow one extra short wait
-    if (tabData && tabData.textLen < 200 && /just a moment|checking your browser|cloudflare/i.test(tabData.title + " " + tabData.html.slice(0, 1500))) {
-      await new Promise(r => setTimeout(r, 1800));
-      injected = await chrome.scripting.executeScript({
-        target: { tabId: createdTabId },
-        func: () => ({
-          html: document.documentElement ? document.documentElement.outerHTML : "",
-          url: window.location.href,
-          title: document.title || "",
-          textLen: document.body && document.body.innerText ? document.body.innerText.trim().length : 0
-        })
-      });
-      tabData = injected && injected[0] && injected[0].result;
-    }
-
-    if (tabData && tabData.html && tabData.html.length > 500 && !isAntiBotChallenge(tabData.html, 200)) {
-      return {
-        ok: true,
-        status: 200,
-        url: tabData.url || targetUrl,
-        html: tabData.html
-      };
-    }
-  } catch (e) {
-    console.warn("[AI Assistant] Background tab fallback failed:", e);
-  } finally {
-    if (createdTabId !== null) {
-      try { await chrome.tabs.remove(createdTabId); } catch (e) { }
-    }
-  }
+// Background web crawling is 100% pure HTTP fetch; tabs are never opened programmatically in the user's browser.
+async function fetchViaSilentBackgroundTab() {
   return null;
 }
 
@@ -274,24 +203,7 @@ async function crawlWebsite(targetUrl) {
       }
     }
 
-    // Silent background browser tab fallback when raw HTTP fetch hit a JS SPA shell (<500 chars),
-    // a Cloudflare / anti-bot 401/403/503 challenge, or a background fetch timeout/network quirk (excluding 404/DNS errors).
-    const rawVisibleLen = (mainRes && mainRes.html) ? stripHtml(mainRes.html).length : 0;
-    const looksLikeSpaShell = mainRes && mainRes.ok && rawVisibleLen < 500 &&
-      (/<div[^>]+id=["'](?:app|root|__next|__nuxt|main-content)["'][^>]*>\s*<\/div>/i.test(mainRes.html) || /<script\b/i.test(mainRes.html));
-    const looksBlockedOrFetchFailed = isMainFailed && mainRes && (
-      mainRes.status === 403 || mainRes.status === 401 || mainRes.status === 503 ||
-      isAntiBotChallenge(mainRes.html, mainRes.status) ||
-      (mainRes.status === 0 && !/ERR_NAME_NOT_RESOLVED/i.test(mainRes.error || ""))
-    );
-    if (looksLikeSpaShell || looksBlockedOrFetchFailed) {
-      const tabRes = await fetchViaSilentBackgroundTab((mainRes && mainRes.url) || targetUrl, 6500);
-      if (tabRes && tabRes.ok && stripHtml(tabRes.html).length > rawVisibleLen) {
-        mainRes = tabRes;
-        isMainFailed = false;
-        console.log(`[AI Assistant] Rescued ${looksBlockedOrFetchFailed ? "protected/slow" : "SPA"} page via silent background tab (${stripHtml(tabRes.html).length} chars)`);
-      }
-    }
+
 
     httpStatus = (mainRes && mainRes.status) || 0;
     if (mainRes.url && mainRes.url.trim().length > 0) {
