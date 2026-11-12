@@ -969,14 +969,18 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:s[\.\s]*e|se)\b\.?(?=\s*[,)]?\s*$)/gi, "Societas Europaea");
 
   // 18. Common Business, Technical, and Industry Word Abbreviations in Company Names
-  // Manufacturing / Makers (always expand Co., Ltd. variants to Company, Limited with comma)
-  n = n.replace(/\b(?:mfg|manuf|mnfg)[\.\s]*co[\.\s]*,?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, "Manufacturing Company, Limited");
+  // Manufacturing / Makers: Comma preserved only if present in raw text
+  n = n.replace(/\b(?:mfg|manuf|mnfg)[\.\s]*co[\.\s]*(,)?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, (match, comma) => {
+    return comma ? "Manufacturing Company, Limited" : "Manufacturing Company Limited";
+  });
   n = n.replace(/\b(?:mfg|manuf|mnfg)\b\.?/gi, "Manufacturing");
   n = n.replace(/\bmfrs\b\.?/gi, "Manufacturers");
   n = n.replace(/\bmfr\b\.?/gi, "Manufacturer");
 
-  // Industries / Industrial (always expand Co., Ltd. variants to Company, Limited with comma)
-  n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*,?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, "Industries Company, Limited");
+  // Industries / Industrial: Comma preserved only if present in raw text
+  n = n.replace(/\bind(?:ust)?[\.\s]*co[\.\s]*(,)?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, (match, comma) => {
+    return comma ? "Industries Company, Limited" : "Industries Company Limited";
+  });
   n = n.replace(/\b(?:ind['’]?l|indl)\b\.?/gi, "Industrial");
   n = n.replace(/\binds\b\.?/gi, "Industries");
   n = n.replace(/\bindust\b\.?/gi, "Industries");
@@ -1072,9 +1076,11 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\bl[\.\s]*p\b\.?/gi, "Limited Partnership");
   n = n.replace(/\bp[\.\s]*l[\.\s]*c\b\.?/gi, "Public Limited Company");
 
-  // "Co., Ltd." / "Co. Ltd." / "Co Ltd" / "Company Limited" -> always "Company, Limited" (mandatory comma per Rule 4)
-  n = n.replace(/\bco[\.\s]*,?[\.\s]*l[\.\s]*t[\.\s]*d\b\.?/gi, "Company, Limited");
-  n = n.replace(/\bCompany\s*,?\s*Limited\b/gi, "Company, Limited");
+  // "Co., Ltd." vs "Co. Ltd."
+  // If comma is present between Co and Ltd (e.g. "Co., Ltd." or "Co.,Ltd") -> "Company, Limited"
+  // If WITHOUT comma (e.g. "Co. Ltd" or "Co Ltd") -> "Company Limited"
+  n = n.replace(/\bco[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Company, Limited");
+  n = n.replace(/\bco[\.\s]+l[\.\s]*t[\.\s]*d\b\.?/gi, "Company Limited");
 
   // Private, Proprietary Limited with/without comma
   n = n.replace(/\bp[\.\s]*t[\.\s]*e[\.\s]*(,)\s*l[\.\s]*t[\.\s]*d\b\.?/gi, "Private, Limited");
@@ -1106,6 +1112,35 @@ function expandCompanyAbbreviations(name, country = "") {
  */
 function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
   if (!compName || typeof compName !== "string") return compName;
+
+  const corpus = [
+    crawlData && crawlData.copyrightText,
+    crawlData && crawlData.title,
+    crawlData && (crawlData.legalCompanyCandidates || []).join(" "),
+    crawlData && crawlData.mainHtml,
+    crawlData && crawlData.contactHtml,
+    crawlData && crawlData.contactPageText,
+    crawlData && crawlData.bodyText,
+    crawlData && crawlData.combinedText
+  ].filter(Boolean).join(" ");
+
+  // Rule: Co., Ltd. -> Company, Limited vs Co. Ltd. -> Company Limited
+  // "if comma come only we put else we dont put"
+  if (/\bCompany\s+Limited\b/i.test(compName) && !/\bCompany,\s*Limited\b/i.test(compName)) {
+    if (corpus && /\b(?:co[\.\s]*,|company,)\s*(?:l[\.\s]*t[\.\s]*d|limited)\b/i.test(corpus)) {
+      return compName.replace(/\bCompany\s+Limited\b/gi, "Company, Limited");
+    }
+    return compName;
+  }
+
+  if (/\bCompany,\s*Limited\b/i.test(compName)) {
+    // If on-site evidence explicitly writes "Co. Ltd" / "Co Ltd" without comma, AND never has "Co.," / "Company,"
+    if (corpus && /\bco[\.\s]+l[\.\s]*t[\.\s]*d\b/i.test(corpus) && !/\b(?:co[\.\s]*,|company,)\s*(?:l[\.\s]*t[\.\s]*d|limited)\b/i.test(corpus)) {
+      return compName.replace(/\bCompany,\s*Limited\b/gi, "Company Limited");
+    }
+    return compName;
+  }
+
   // If already has a comma before corporate legal designations, keep it intact
   if (/,\s*(?:Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Corporation|Public\s*Limited\s*Company|Proprietary\s*Limited|Private\s*Limited|Limited)\b/i.test(compName)) {
     return compName;
@@ -1115,16 +1150,6 @@ function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
     const base = m[1].trim();
     const suffix = m[2].trim();
     const rest = m[3] || "";
-    const corpus = [
-      crawlData && crawlData.copyrightText,
-      crawlData && crawlData.title,
-      crawlData && (crawlData.legalCompanyCandidates || []).join(" "),
-      crawlData && crawlData.mainHtml,
-      crawlData && crawlData.contactHtml,
-      crawlData && crawlData.contactPageText,
-      crawlData && crawlData.bodyText,
-      crawlData && crawlData.combinedText
-    ].filter(Boolean).join(" ");
 
     const baseTokens = base.split(/\s+/).filter(Boolean);
     const flexibleBasePattern = baseTokens.map(t => t.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")).join("\\s*");

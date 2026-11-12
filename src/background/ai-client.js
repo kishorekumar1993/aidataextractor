@@ -887,7 +887,6 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     companyName = expandCompanyAbbreviations(companyName, country);
     companyName = cleanCompanyPrefixesAndSuffixes(companyName);
     companyName = toTitleCase(companyName);
-    companyName = companyName.replace(/\bCompany\s*,?\s*Limited\b/gi, "Company, Limited");
     companyName = restoreCommaBeforeCorporateSuffix(companyName, crawlData);
     companyName = restoreOriginalSymbolsInCompanyName(companyName, crawlData);
     companyName = stripBoundarySpecialChars(companyName);
