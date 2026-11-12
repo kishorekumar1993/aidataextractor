@@ -48,30 +48,49 @@
       <!-- Non-Working Website Records Dashboard -->
       <div class="section-card non-working-card">
         <div class="card-header-row">
-          <div class="card-title">📊 Non-Working Website Records</div>
+          <div class="card-title">📊 Website Records & Quality Tracker</div>
           <span class="badge-record-count" id="badge-total-records">0 Records</span>
         </div>
         <div class="card-desc">
-          Persistent Excel dataset (<code>Non_Working_Websites.xlsx</code>) & local storage for Not Working, Redirect, and Not English websites.
+          Persistent Excel dataset (<code>Non_Working_Websites.xlsx</code>) & local storage for Working, Not Working, Redirect, and Not English websites.
         </div>
 
-        <!-- 4 Metric Counter Tiles -->
+        <!-- Date Filter Toolbar (Today / All Time / Custom Date Picker) -->
+        <div class="date-filter-bar">
+          <div class="date-filter-pills">
+            <button type="button" class="date-pill active" id="btn-filter-today" title="Filter metrics and records for Today">
+              ⚡ Today (<span id="today-date-text">Today</span>)
+            </button>
+            <button type="button" class="date-pill" id="btn-filter-all" title="View cumulative all-time metrics">
+              📅 All Time
+            </button>
+          </div>
+          <div class="date-picker-wrap">
+            <input type="date" id="filter-metric-date" class="metric-date-picker" title="Filter by specific date">
+          </div>
+        </div>
+
+        <!-- 5 Metric Counter Tiles: Working, Not Working, Redirect, Not English, Total -->
         <div class="metric-tiles-grid">
-          <div class="metric-tile tile-not-working">
+          <div class="metric-tile tile-working" title="Working Websites">
+            <div class="metric-num" id="stat-working">0</div>
+            <div class="metric-label">Working</div>
+          </div>
+          <div class="metric-tile tile-not-working" title="Not Working Websites">
             <div class="metric-num" id="stat-not-working">0</div>
             <div class="metric-label">Not Working</div>
           </div>
-          <div class="metric-tile tile-redirect">
+          <div class="metric-tile tile-redirect" title="Redirect Websites">
             <div class="metric-num" id="stat-redirect">0</div>
             <div class="metric-label">Redirect</div>
           </div>
-          <div class="metric-tile tile-not-english">
+          <div class="metric-tile tile-not-english" title="Not English Websites">
             <div class="metric-num" id="stat-not-english">0</div>
             <div class="metric-label">Not English</div>
           </div>
-          <div class="metric-tile tile-total">
+          <div class="metric-tile tile-total" title="Total Websites Processed">
             <div class="metric-num" id="stat-total-historical">0</div>
-            <div class="metric-label">Total Historical</div>
+            <div class="metric-label" id="label-stat-total">Total</div>
           </div>
         </div>
 
@@ -116,6 +135,7 @@
               <label for="filter-status-select">Status:</label>
               <select id="filter-status-select">
                 <option value="All">All Statuses</option>
+                <option value="Working">Working</option>
                 <option value="Not Working">Not Working</option>
                 <option value="Redirect">Redirect</option>
                 <option value="Not English">Not English</option>

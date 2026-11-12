@@ -140,7 +140,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  // Non-Working Website Records Actions
+  // Website Records Actions
+  if (request.action === "RECORD_WORKING_SITE") {
+    recordWorkingWebsite(request.data || request)
+      .then(res => { try { sendResponse(res); } catch (e) { } })
+      .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
+    return true;
+  }
+
   if (request.action === "RECORD_NON_WORKING_SITE") {
     recordNonWorkingWebsite(request.data || request)
       .then(res => { try { sendResponse(res); } catch (e) { } })
@@ -149,7 +156,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === "GET_NON_WORKING_RECORDS") {
-    getNonWorkingRecordsAndStats()
+    getNonWorkingRecordsAndStats(request.dateFilter || "")
       .then(res => { try { sendResponse(res); } catch (e) { } })
       .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
     return true;

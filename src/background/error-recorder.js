@@ -90,15 +90,66 @@
   }
 
   /**
-   * Retrieves all error records and summary statistics.
+   * Records a Working website event into local persistent storage.
    */
-  async function getNonWorkingRecordsAndStats() {
+  async function recordWorkingWebsite(input) {
+    if (!input) return { success: false, reason: "No input provided" };
+    const rawUrl = input.URL || input.url || input.rawUrl || "";
+    if (!rawUrl) return { success: false, reason: "Missing URL" };
+
+    const newRecord = typeof createWorkingRecord === "function"
+      ? createWorkingRecord(input)
+      : {
+        URL: rawUrl,
+        "Website Status": "Working",
+        "Company Name": input.companyName || "",
+        "Country Name": input.countryName || "",
+        "Business Type": input.businessType || "",
+        Date: (typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0]),
+        Time: (typeof getLocalTimeString === "function" ? getLocalTimeString() : new Date().toTimeString().split(" ")[0]),
+        timestamp: Date.now()
+      };
+
+    try {
+      let existingWorking = [];
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        const data = await chrome.storage.local.get([WORKING_STORAGE_KEY]);
+        existingWorking = Array.isArray(data[WORKING_STORAGE_KEY]) ? data[WORKING_STORAGE_KEY] : [];
+      }
+
+      const { merged, addedCount } = typeof mergeWorkingRecords === "function"
+        ? mergeWorkingRecords(existingWorking, [newRecord])
+        : { merged: [...existingWorking, newRecord], addedCount: 1 };
+
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({ [WORKING_STORAGE_KEY]: merged });
+      }
+
+      console.log(`[ErrorRecorder] Recorded Working site for ${rawUrl} (Added: ${addedCount > 0}, Total Working: ${merged.length})`);
+      return {
+        success: true,
+        added: addedCount > 0,
+        record: newRecord,
+        totalWorking: merged.length
+      };
+    } catch (err) {
+      console.warn("[ErrorRecorder] Failed to persist working record:", err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Retrieves all error and working records and summary statistics.
+   */
+  async function getNonWorkingRecordsAndStats(targetDate = "") {
     try {
       let records = [];
+      let workingRecords = [];
       let lastSyncTime = null;
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-        const data = await chrome.storage.local.get([NON_WORKING_STORAGE_KEY, NON_WORKING_SYNC_TIME_KEY]);
+        const data = await chrome.storage.local.get([NON_WORKING_STORAGE_KEY, WORKING_STORAGE_KEY, NON_WORKING_SYNC_TIME_KEY]);
         records = Array.isArray(data[NON_WORKING_STORAGE_KEY]) ? data[NON_WORKING_STORAGE_KEY] : [];
+        workingRecords = Array.isArray(data[WORKING_STORAGE_KEY]) ? data[WORKING_STORAGE_KEY] : [];
         lastSyncTime = data[NON_WORKING_SYNC_TIME_KEY] || null;
       }
 
@@ -118,12 +169,12 @@
         chrome.storage.local.set({ [NON_WORKING_STORAGE_KEY]: records }).catch(() => {});
       }
       const stats = typeof calculateErrorStats === "function"
-        ? calculateErrorStats(records, lastSyncTime)
-        : { totalNotWorking: 0, totalRedirect: 0, totalNotEnglish: 0, totalHistorical: records.length, lastSyncTime: "Never" };
+        ? calculateErrorStats(records, lastSyncTime, workingRecords, targetDate)
+        : { totalWorking: workingRecords.length, totalNotWorking: 0, totalRedirect: 0, totalNotEnglish: 0, totalHistorical: records.length, lastSyncTime: "Never" };
 
-      return { success: true, records, stats };
+      return { success: true, records, workingRecords, stats };
     } catch (err) {
-      return { success: false, records: [], stats: {}, error: err.message };
+      return { success: false, records: [], workingRecords: [], stats: {}, error: err.message };
     }
   }
 
@@ -189,6 +240,7 @@
 
   return {
     recordNonWorkingWebsite,
+    recordWorkingWebsite,
     getNonWorkingRecordsAndStats,
     appendExternalExcelRecords,
     clearNonWorkingRecords,

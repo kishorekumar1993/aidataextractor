@@ -375,16 +375,24 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================================
-  // NON-WORKING WEBSITE RECORDS DASHBOARD LOGIC
+  // WEBSITE RECORDS & QUALITY DASHBOARD LOGIC (WORKING + NON-WORKING + TODAY FILTER)
   // =========================================================================
+  const statWorking = document.getElementById("stat-working");
   const statNotWorking = document.getElementById("stat-not-working");
   const statRedirect = document.getElementById("stat-redirect");
   const statNotEnglish = document.getElementById("stat-not-english");
   const statTotalHistorical = document.getElementById("stat-total-historical");
+  const labelStatTotal = document.getElementById("label-stat-total");
   const statLastSync = document.getElementById("stat-last-sync");
   const badgeTotalRecords = document.getElementById("badge-total-records");
   const btnViewCount = document.getElementById("btn-view-count");
   const excelSyncStatus = document.getElementById("excel-sync-status");
+
+  // Date Filter Elements
+  const btnFilterToday = document.getElementById("btn-filter-today");
+  const btnFilterAll = document.getElementById("btn-filter-all");
+  const todayDateText = document.getElementById("today-date-text");
+  const filterMetricDate = document.getElementById("filter-metric-date");
 
   const btnSyncExcel = document.getElementById("btn-sync-excel");
   const btnDownloadExcel = document.getElementById("btn-download-excel");
@@ -401,6 +409,20 @@ document.addEventListener("DOMContentLoaded", () => {
   const filteredCountDisplay = document.getElementById("filtered-count-display");
 
   let currentRecords = [];
+  let currentWorkingRecords = [];
+  let lastFetchedStats = {};
+  let activeDateFilter = "today"; // Default to Today as requested
+  const todayIsoDate = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
+
+  if (todayDateText) {
+    todayDateText.textContent = todayIsoDate;
+  }
+  if (filterMetricDate) {
+    filterMetricDate.value = todayIsoDate;
+  }
+  if (filterDateInput) {
+    filterDateInput.value = todayIsoDate;
+  }
 
   function showExcelSyncStatus(msg, type = "idle") {
     if (!excelSyncStatus) return;
@@ -414,22 +436,108 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function updateMetricsDisplay() {
+    if (!lastFetchedStats) return;
+
+    if (activeDateFilter === "today" || (activeDateFilter && activeDateFilter === todayIsoDate)) {
+      if (statWorking) statWorking.textContent = lastFetchedStats.workingToday || 0;
+      if (statNotWorking) statNotWorking.textContent = lastFetchedStats.notWorkingToday || 0;
+      if (statRedirect) statRedirect.textContent = lastFetchedStats.redirectToday || 0;
+      if (statNotEnglish) statNotEnglish.textContent = lastFetchedStats.notEnglishToday || 0;
+      if (statTotalHistorical) statTotalHistorical.textContent = lastFetchedStats.totalToday || 0;
+      if (labelStatTotal) labelStatTotal.textContent = "Today Total";
+      const totalAll = (lastFetchedStats.totalWorking || 0) + (lastFetchedStats.totalHistorical || 0);
+      if (badgeTotalRecords) badgeTotalRecords.textContent = `${lastFetchedStats.totalToday || 0} Today (${totalAll} Total)`;
+      if (btnViewCount) btnViewCount.textContent = lastFetchedStats.totalToday || 0;
+    } else if (activeDateFilter === "all") {
+      if (statWorking) statWorking.textContent = lastFetchedStats.totalWorking || 0;
+      if (statNotWorking) statNotWorking.textContent = lastFetchedStats.totalNotWorking || 0;
+      if (statRedirect) statRedirect.textContent = lastFetchedStats.totalRedirect || 0;
+      if (statNotEnglish) statNotEnglish.textContent = lastFetchedStats.totalNotEnglish || 0;
+      const totalAll = (lastFetchedStats.totalWorking || 0) + (lastFetchedStats.totalHistorical || 0);
+      if (statTotalHistorical) statTotalHistorical.textContent = totalAll;
+      if (labelStatTotal) labelStatTotal.textContent = "Total All";
+      if (badgeTotalRecords) badgeTotalRecords.textContent = `${totalAll} Records`;
+      if (btnViewCount) btnViewCount.textContent = totalAll;
+    } else {
+      // Specific custom date filter
+      const targetDate = activeDateFilter;
+      const wCount = (currentWorkingRecords || []).filter(r => (r.Date || r.date) === targetDate).length;
+      const nwCount = (currentRecords || []).filter(r => (r["Website Status"] === "Not Working") && ((r.Date || r.date) === targetDate)).length;
+      const redCount = (currentRecords || []).filter(r => (r["Website Status"] === "Redirect") && ((r.Date || r.date) === targetDate)).length;
+      const neCount = (currentRecords || []).filter(r => (r["Website Status"] === "Not English") && ((r.Date || r.date) === targetDate)).length;
+      const totalCust = wCount + nwCount + redCount + neCount;
+
+      if (statWorking) statWorking.textContent = wCount;
+      if (statNotWorking) statNotWorking.textContent = nwCount;
+      if (statRedirect) statRedirect.textContent = redCount;
+      if (statNotEnglish) statNotEnglish.textContent = neCount;
+      if (statTotalHistorical) statTotalHistorical.textContent = totalCust;
+      if (labelStatTotal) labelStatTotal.textContent = "Date Total";
+      if (badgeTotalRecords) badgeTotalRecords.textContent = `${totalCust} Records (${targetDate})`;
+      if (btnViewCount) btnViewCount.textContent = totalCust;
+    }
+    if (statLastSync) statLastSync.textContent = lastFetchedStats.lastSyncTime || "Never";
+  }
+
+  // Date Filter Pill Button Listeners
+  if (btnFilterToday) {
+    btnFilterToday.addEventListener("click", () => {
+      activeDateFilter = "today";
+      btnFilterToday.classList.add("active");
+      if (btnFilterAll) btnFilterAll.classList.remove("active");
+      if (filterDateInput) filterDateInput.value = todayIsoDate;
+      if (filterMetricDate) filterMetricDate.value = todayIsoDate;
+      updateMetricsDisplay();
+      renderRecordsTable();
+    });
+  }
+
+  if (btnFilterAll) {
+    btnFilterAll.addEventListener("click", () => {
+      activeDateFilter = "all";
+      btnFilterAll.classList.add("active");
+      if (btnFilterToday) btnFilterToday.classList.remove("active");
+      if (filterDateInput) filterDateInput.value = "";
+      if (filterMetricDate) filterMetricDate.value = "";
+      updateMetricsDisplay();
+      renderRecordsTable();
+    });
+  }
+
+  if (filterMetricDate) {
+    filterMetricDate.addEventListener("change", (e) => {
+      const val = e.target.value;
+      if (!val) {
+        activeDateFilter = "all";
+        if (btnFilterAll) btnFilterAll.classList.add("active");
+        if (btnFilterToday) btnFilterToday.classList.remove("active");
+      } else if (val === todayIsoDate) {
+        activeDateFilter = "today";
+        if (btnFilterToday) btnFilterToday.classList.add("active");
+        if (btnFilterAll) btnFilterAll.classList.remove("active");
+      } else {
+        activeDateFilter = val;
+        if (btnFilterToday) btnFilterToday.classList.remove("active");
+        if (btnFilterAll) btnFilterAll.classList.remove("active");
+      }
+      if (filterDateInput) filterDateInput.value = val;
+      updateMetricsDisplay();
+      renderRecordsTable();
+    });
+  }
+
   async function refreshDashboardData() {
-    chrome.runtime.sendMessage({ action: "GET_NON_WORKING_RECORDS" }, (res) => {
+    chrome.runtime.sendMessage({ action: "GET_NON_WORKING_RECORDS", dateFilter: todayIsoDate }, (res) => {
       if (chrome.runtime.lastError) {
         console.warn("Could not fetch records:", chrome.runtime.lastError.message);
         return;
       }
       if (res && res.success) {
         currentRecords = Array.isArray(res.records) ? res.records : [];
-        const stats = res.stats || {};
-        if (statNotWorking) statNotWorking.textContent = stats.totalNotWorking || 0;
-        if (statRedirect) statRedirect.textContent = stats.totalRedirect || 0;
-        if (statNotEnglish) statNotEnglish.textContent = stats.totalNotEnglish || 0;
-        if (statTotalHistorical) statTotalHistorical.textContent = stats.totalHistorical || 0;
-        if (badgeTotalRecords) badgeTotalRecords.textContent = `${stats.totalHistorical || 0} Records`;
-        if (btnViewCount) btnViewCount.textContent = stats.totalHistorical || 0;
-        if (statLastSync) statLastSync.textContent = stats.lastSyncTime || "Never";
+        currentWorkingRecords = Array.isArray(res.workingRecords) ? res.workingRecords : [];
+        lastFetchedStats = res.stats || {};
+        updateMetricsDisplay();
 
         if (recordsViewerPanel && recordsViewerPanel.style.display !== "none") {
           renderRecordsTable();
@@ -456,19 +564,39 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderRecordsTable() {
     if (!recordsTableBody) return;
     const statusVal = filterStatusSelect ? filterStatusSelect.value : "All";
-    const dateVal = filterDateInput ? filterDateInput.value : "";
+    const dateVal = filterDateInput ? filterDateInput.value : (activeDateFilter === "today" ? todayIsoDate : (activeDateFilter === "all" ? "" : activeDateFilter));
     const searchVal = filterSearchInput ? filterSearchInput.value : "";
 
+    let combinedList = [];
+    const workingMapped = (currentWorkingRecords || []).map(w => ({
+      URL: w.URL || w.url || "",
+      "Website Status": "Working",
+      Reason: `Eligible Working Site (${w["Business Type"] || w.businessType || "Verified"})`,
+      "Error Keyword": w["Business Type"] || w.businessType || "-",
+      "Error Source Link": w.URL || w.url || "",
+      "Error Context": `${w["Company Name"] || w.companyName || ""}${w["Country Name"] ? " - " + w["Country Name"] : ""}`,
+      Date: w.Date || w.date || "",
+      Time: w.Time || w.time || ""
+    }));
+
+    if (statusVal === "Working") {
+      combinedList = workingMapped;
+    } else if (statusVal === "All") {
+      combinedList = [...currentRecords, ...workingMapped];
+    } else {
+      combinedList = currentRecords;
+    }
+
     const filtered = (typeof filterErrorRecords === "function")
-      ? filterErrorRecords(currentRecords, { status: statusVal, date: dateVal, search: searchVal })
-      : currentRecords;
+      ? filterErrorRecords(combinedList, { status: statusVal, date: dateVal, search: searchVal })
+      : combinedList;
 
     if (filteredCountDisplay) {
-      filteredCountDisplay.textContent = `Showing ${filtered.length} of ${currentRecords.length} records`;
+      filteredCountDisplay.textContent = `Showing ${filtered.length} of ${combinedList.length} records`;
     }
 
     if (!filtered || filtered.length === 0) {
-      recordsTableBody.innerHTML = `<tr><td colspan="8" class="empty-state">No matching error records found.</td></tr>`;
+      recordsTableBody.innerHTML = `<tr><td colspan="8" class="empty-state">No matching records found.</td></tr>`;
       return;
     }
 
@@ -476,13 +604,20 @@ document.addEventListener("DOMContentLoaded", () => {
     for (const r of filtered) {
       const tr = document.createElement("tr");
 
-      const statusCls = r["Website Status"] === "Not Working"
-        ? "status-not-working"
-        : (r["Website Status"] === "Redirect" ? "status-redirect" : "status-not-english");
+      const statusCls = r["Website Status"] === "Working"
+        ? "status-working"
+        : (r["Website Status"] === "Not Working"
+          ? "status-not-working"
+          : (r["Website Status"] === "Redirect" ? "status-redirect" : "status-not-english"));
 
       const keyword = r["Error Keyword"] || r.errorKeyword || "-";
       const srcLink = r["Error Source Link"] || r.errorSourceLink || r["Error URL"] || r.errorUrl || "-";
       const errCtx = r["Error Context"] || r.errorContext || r.errorSnippet || "-";
+
+      const isWorking = r["Website Status"] === "Working";
+      const badgeStyle = isWorking
+        ? "background: #dcfce7; color: #166534; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 600;"
+        : "background: #fee2e2; color: #991b1b; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 600;";
 
       tr.innerHTML = `
         <td title="${escapeHtml(r.URL)}">
@@ -493,7 +628,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td class="${statusCls}"><strong>${escapeHtml(r["Website Status"])}</strong></td>
         <td title="${escapeHtml(r.Reason)}">${escapeHtml(truncate(r.Reason, 34))}</td>
         <td title="${escapeHtml(keyword)}">
-          <span style="background: #fee2e2; color: #991b1b; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+          <span style="${badgeStyle}">
             ${escapeHtml(truncate(keyword, 20))}
           </span>
         </td>
@@ -695,7 +830,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Real-time storage listener to refresh counts when extraction runs
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === "local" && (changes.nonWorkingRecords || changes.nonWorkingLastExcelSyncTime)) {
+      if (area === "local" && (changes.nonWorkingRecords || changes.workingRecords || changes.nonWorkingLastExcelSyncTime)) {
         refreshDashboardData();
       }
     });

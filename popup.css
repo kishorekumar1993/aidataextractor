@@ -300,18 +300,83 @@ body {
   border-radius: 12px;
 }
 
+/* Date Filter Toolbar */
+.date-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 6px 0 8px 0;
+  padding: 4px 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.date-filter-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.date-pill {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.date-pill:hover {
+  border-color: #4f46e5;
+  color: #4f46e5;
+}
+
+.date-pill.active {
+  background: #4f46e5 !important;
+  border-color: #4338ca !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.35);
+}
+
+.metric-date-picker {
+  padding: 2px 4px;
+  font-size: 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #334155;
+  background: #ffffff;
+  cursor: pointer;
+  width: 105px;
+}
+
 .metric-tiles-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
   margin: 8px 0;
 }
 
 .metric-tile {
   border-radius: 6px;
-  padding: 7px 4px;
+  padding: 7px 2px;
   text-align: center;
   border: 1px solid transparent;
+  transition: transform 0.1s ease;
+}
+
+.metric-tile:hover {
+  transform: translateY(-1px);
+}
+
+.tile-working {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #15803d;
 }
 
 .tile-not-working {
@@ -469,6 +534,11 @@ body {
 
 .records-table tr:hover td {
   background-color: #f8fafc;
+}
+
+.records-table td.status-working {
+  color: #16a34a;
+  font-weight: 600;
 }
 
 .records-table td.status-not-working {

@@ -391,6 +391,20 @@
           document.addEventListener("keydown", onCtrlEnterSubmit);
         }
 
+        // Record Working website event into local storage
+        try {
+          AIExt.sendRuntimeMessage({
+            action: "RECORD_WORKING_SITE",
+            data: {
+              url: targetUrl,
+              websiteStatus: "Working",
+              companyName: data.companyName || "",
+              countryName: data.countryName || "",
+              businessType: data.businessType || ""
+            }
+          }).catch(() => {});
+        } catch (e) { }
+
         const note = data._note || "Gemini AI";
         const sourceTag = data._extractionSource === "ai"
           ? "🤖 AI"

@@ -17,6 +17,7 @@
   const NON_WORKING_EXCEL_FILENAME = "Non_Working_Websites.xlsx";
   const NON_WORKING_EXCEL_SHEET = "Non-Working Websites";
   const NON_WORKING_STORAGE_KEY = "nonWorkingRecords";
+  const WORKING_STORAGE_KEY = "workingRecords";
   const NON_WORKING_SYNC_TIME_KEY = "nonWorkingLastExcelSyncTime";
 
   const NON_WORKING_COLUMNS = [
@@ -290,6 +291,70 @@
   }
 
   /**
+   * Creates a normalized Working website record.
+   */
+  function createWorkingRecord(input = {}) {
+    if (!input) return null;
+    const rawUrl = String(input.URL || input.url || input.rawUrl || input._originalUrl || "").trim();
+    if (!rawUrl) return null;
+
+    const dateStr = String(input.Date || input.date || getLocalDateString()).trim();
+    const timeStr = String(input.Time || input.time || getLocalTimeString()).trim();
+
+    return {
+      URL: rawUrl,
+      "Website Status": "Working",
+      "Company Name": String(input.companyName || input.CompanyName || input["Company Name"] || "").trim(),
+      "Country Name": String(input.countryName || input.CountryName || input["Country Name"] || input.country || "").trim(),
+      "Business Type": String(input.businessType || input.BusinessType || input["Business Type"] || "").trim(),
+      Date: dateStr,
+      Time: timeStr,
+      timestamp: Date.now()
+    };
+  }
+
+  /**
+   * Deduplication check for Working website records.
+   */
+  function isDuplicateWorkingRecord(existingRecords = [], candidate) {
+    if (!Array.isArray(existingRecords) || existingRecords.length === 0 || !candidate) {
+      return false;
+    }
+    const candUrl = normalizeUrlForDedup(candidate.URL || candidate.url);
+    if (!candUrl) return false;
+    const candDate = String(candidate.Date || candidate.date || "").trim();
+
+    return existingRecords.some(r => {
+      if (!r) return false;
+      const exUrl = normalizeUrlForDedup(r.URL || r.url);
+      const exDate = String(r.Date || r.date || "").trim();
+      return exUrl === candUrl && exDate === candDate;
+    });
+  }
+
+  /**
+   * Merges candidate Working records into existing list, preventing duplicates.
+   */
+  function mergeWorkingRecords(existingList = [], candidateList = []) {
+    const merged = Array.isArray(existingList) ? [...existingList] : [];
+    let addedCount = 0;
+    const candidates = Array.isArray(candidateList) ? candidateList : [candidateList];
+
+    for (const item of candidates) {
+      if (!item) continue;
+      const record = createWorkingRecord(item);
+      if (!record) continue;
+
+      if (!isDuplicateWorkingRecord(merged, record)) {
+        merged.push(record);
+        addedCount++;
+      }
+    }
+
+    return { merged, addedCount };
+  }
+
+  /**
    * Generates a SheetJS XLSX workbook containing all cumulative historical error records.
    * Maintains one permanent filename: Non_Working_Websites.xlsx
    */
@@ -366,27 +431,51 @@
   }
 
   /**
-   * Calculates dashboard metrics:
+   * Calculates dashboard metrics across all historical error and working records:
+   * - Total Working Websites
    * - Total Not Working Websites
    * - Total Redirect Websites
    * - Total Not English Websites
    * - Total Historical Error Records
+   * - Total Processed Sites
+   * - Today counts (Working, Not Working, Redirect, Not English, Total)
    * - Last Excel Sync Date and Time
    */
-  function calculateErrorStats(records = [], lastSyncTime = null) {
+  function calculateErrorStats(records = [], lastSyncTime = null, workingRecords = [], targetDate = "") {
     let totalNotWorking = 0;
     let totalRedirect = 0;
     let totalNotEnglish = 0;
+    let totalWorking = Array.isArray(workingRecords) ? workingRecords.length : 0;
+
+    const todayDate = targetDate || getLocalDateString();
+    let workingToday = 0;
+    let notWorkingToday = 0;
+    let redirectToday = 0;
+    let notEnglishToday = 0;
 
     for (const r of (records || [])) {
       if (!r) continue;
       const status = String(r["Website Status"] || r.websiteStatus || "").trim();
+      const rDate = String(r.Date || r.date || "").trim();
+      const isToday = (rDate === todayDate);
+
       if (status === "Not Working") {
         totalNotWorking++;
+        if (isToday) notWorkingToday++;
       } else if (status === "Redirect") {
         totalRedirect++;
+        if (isToday) redirectToday++;
       } else if (status === "Not English") {
         totalNotEnglish++;
+        if (isToday) notEnglishToday++;
+      }
+    }
+
+    for (const w of (workingRecords || [])) {
+      if (!w) continue;
+      const wDate = String(w.Date || w.date || "").trim();
+      if (wDate === todayDate) {
+        workingToday++;
       }
     }
 
@@ -405,10 +494,18 @@
     }
 
     return {
+      totalWorking,
       totalNotWorking,
       totalRedirect,
       totalNotEnglish,
       totalHistorical: (records || []).length,
+      totalProcessed: totalWorking + (records || []).length,
+      todayDate,
+      workingToday,
+      notWorkingToday,
+      redirectToday,
+      notEnglishToday,
+      totalToday: workingToday + notWorkingToday + redirectToday + notEnglishToday,
       lastSyncTime: lastSyncFormatted,
       lastSyncTimestamp: lastSyncTime || null
     };
@@ -511,6 +608,7 @@
     NON_WORKING_EXCEL_FILENAME,
     NON_WORKING_EXCEL_SHEET,
     NON_WORKING_STORAGE_KEY,
+    WORKING_STORAGE_KEY,
     NON_WORKING_SYNC_TIME_KEY,
     NON_WORKING_COLUMNS,
     VALID_ERROR_STATUSES,
@@ -524,9 +622,12 @@
     extractErrorContext,
     extractErrorUrl,
     createErrorRecord,
+    createWorkingRecord,
     normalizeUrlForDedup,
     isDuplicateErrorRecord,
+    isDuplicateWorkingRecord,
     mergeErrorRecords,
+    mergeWorkingRecords,
     generateNonWorkingExcel,
     parseNonWorkingExcel,
     calculateErrorStats,

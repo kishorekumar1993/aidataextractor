@@ -2,7 +2,7 @@
 
 const RESTRICTED_PATTERNS = [
   {
-    pattern: /\b(?:porn(?:o|ography|ographic)?|xxx|erotic|adult|sex\s*shop|escort\s*service|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|sex\s*worker|sensual\s*massage|nude|nudity|onlyfans)\b/i,
+    pattern: /\b(?:porn(?:o|ography|ographic)?|erotic|adult|sex\s*shop|escort\s*service|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|sex\s*worker|sensual\s*massage|nude|nudity|onlyfans)\b/i,
     label: "Adult & Porn"
   },
   {

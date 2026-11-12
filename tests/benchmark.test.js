@@ -2597,6 +2597,67 @@ async function runAsyncTests() {
     assert.ok(toast.classList.contains('ai-toast-loading'), 'Floating toast must have ai-toast-loading class');
     assert.ok(toast.innerHTML.includes('https://example.com'), 'Floating toast must contain target URL message');
   });
+
+  // 47. Total Working Items Tracking, Today Date Filter, and Quality Metrics Dashboard
+  await runAsyncTest('Total Working items tracking, Today date filter metrics, and UI sync', async () => {
+    // 1. Verify working website recording into persistent storage
+    const wRec1 = await ctx.recordWorkingWebsite({
+      url: "https://www.campap.com",
+      websiteStatus: "Working",
+      companyName: "CHEE WAH Corporation Berhad",
+      countryName: "Malaysia",
+      businessType: "Manufacturer"
+    });
+    assert.strictEqual(wRec1.success, true, "recordWorkingWebsite must succeed");
+    assert.strictEqual(wRec1.added, true, "Initial working website must be added");
+    assert.strictEqual(wRec1.record["Website Status"], "Working");
+    assert.strictEqual(wRec1.record["Company Name"], "CHEE WAH Corporation Berhad");
+    assert.strictEqual(wRec1.record["Country Name"], "Malaysia");
+    assert.strictEqual(wRec1.record["Business Type"], "Manufacturer");
+
+    // 2. Duplicate prevention on the same date
+    const wRecDup = await ctx.recordWorkingWebsite({
+      url: "https://www.campap.com/",
+      websiteStatus: "Working"
+    });
+    assert.strictEqual(wRecDup.added, false, "Duplicate working website URL on same date must be ignored");
+
+    // 3. Record a non-working website for today
+    await ctx.recordNonWorkingWebsite({
+      url: "https://dead-example-site.com",
+      websiteStatus: "Not Working",
+      reason: "Website unreachable or empty response"
+    });
+
+    // 4. Test stats calculation with today's date filter
+    const todayStr = ctx.getLocalDateString();
+    const statsResult = await ctx.getNonWorkingRecordsAndStats(todayStr);
+    assert.strictEqual(statsResult.success, true);
+    assert.ok(statsResult.stats.totalWorking >= 1, "Stats must include totalWorking >= 1");
+    assert.ok(statsResult.stats.workingToday >= 1, "Stats must include workingToday >= 1");
+    assert.strictEqual(statsResult.stats.todayDate, todayStr, "Stats must report correct todayDate");
+    assert.ok(statsResult.stats.totalToday >= 1, "Stats must include totalToday count");
+    assert.ok(statsResult.stats.totalProcessed >= statsResult.stats.totalHistorical + statsResult.stats.totalWorking, "totalProcessed must include both working and non-working items");
+
+    // 5. Test UI elements presence in popup.html
+    const popupHtml = fs.readFileSync(path.join(rootDir, 'popup.html'), 'utf8');
+    assert.ok(popupHtml.includes('id="stat-working"'), 'popup.html must contain #stat-working metric tile');
+    assert.ok(popupHtml.includes('id="btn-filter-today"'), 'popup.html must contain #btn-filter-today button');
+    assert.ok(popupHtml.includes('id="btn-filter-all"'), 'popup.html must contain #btn-filter-all button');
+    assert.ok(popupHtml.includes('id="filter-metric-date"'), 'popup.html must contain #filter-metric-date picker');
+    assert.ok(popupHtml.includes('id="label-stat-total"'), 'popup.html must contain #label-stat-total');
+
+    // 6. Test styles presence in popup.css
+    const popupCss = fs.readFileSync(path.join(rootDir, 'popup.css'), 'utf8');
+    assert.ok(popupCss.includes('.tile-working'), 'popup.css must style .tile-working');
+    assert.ok(popupCss.includes('.date-filter-bar'), 'popup.css must style .date-filter-bar');
+    assert.ok(popupCss.includes('.date-pill'), 'popup.css must style .date-pill');
+    assert.ok(popupCss.includes('.metric-date-picker'), 'popup.css must style .metric-date-picker');
+
+    // 7. Verify content.js dispatches RECORD_WORKING_SITE when a Working site is detected
+    const contentJs = fs.readFileSync(path.join(rootDir, 'content.js'), 'utf8');
+    assert.ok(contentJs.includes('RECORD_WORKING_SITE'), 'content.js must dispatch RECORD_WORKING_SITE action for working sites');
+  });
 }
 
 runAsyncTests().then(() => {
