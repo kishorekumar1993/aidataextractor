@@ -55,11 +55,6 @@
           Persistent Excel dataset (<code>Non_Working_Websites.xlsx</code>) & local storage for Not Working, Redirect, and Not English websites.
         </div>
 
-        <div class="form-group" style="margin-bottom: 8px;">
-          <label for="operator-username-input">Operator / User Name</label>
-          <input type="text" id="operator-username-input" placeholder="Operator name (e.g. John)" value="Operator">
-        </div>
-
         <!-- 4 Metric Counter Tiles -->
         <div class="metric-tiles-grid">
           <div class="metric-tile tile-not-working">
@@ -133,7 +128,7 @@
           </div>
 
           <div class="search-row">
-            <input type="text" id="filter-search-input" placeholder="Search URL, Reason, Error URL...">
+            <input type="text" id="filter-search-input" placeholder="Search URL, Reason, Keyword, Context...">
           </div>
 
           <div class="records-table-wrapper">
@@ -143,14 +138,15 @@
                   <th>URL</th>
                   <th>Website Status</th>
                   <th>Reason</th>
-                  <th>Error URL</th>
+                  <th>Error Keyword</th>
+                  <th>Error Source Link</th>
+                  <th>Error Context</th>
                   <th>Date</th>
                   <th>Time</th>
-                  <th>User Name</th>
                 </tr>
               </thead>
               <tbody id="records-table-body">
-                <tr><td colspan="7" class="empty-state">No error records recorded yet.</td></tr>
+                <tr><td colspan="8" class="empty-state">No error records recorded yet.</td></tr>
               </tbody>
             </table>
           </div>

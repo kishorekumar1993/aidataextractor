@@ -23,10 +23,11 @@
     "URL",
     "Website Status",
     "Reason",
-    "Error URL",
+    "Error Keyword",
+    "Error Source Link",
+    "Error Context",
     "Date",
-    "Time",
-    "User Name"
+    "Time"
   ];
 
   const VALID_ERROR_STATUSES = ["Not Working", "Redirect", "Not English"];
@@ -82,30 +83,50 @@
   function extractErrorReason(data = {}, defaultReason = "") {
     if (typeof data === "string") return data.trim() || defaultReason || "Website is not working or unavailable";
     return (
+      data.reason ||
+      data.Reason ||
       data.notWorkingReason ||
       data.restrictedReason ||
       data.shopCartReason ||
       data.disallowedReason ||
       data.fetchError ||
+      data._note ||
       data.errorSnippet ||
       data.errorKeyword ||
-      data.reason ||
-      data.Reason ||
-      data._note ||
       defaultReason ||
       "Website is not working or unavailable"
     ).toString().trim();
   }
 
   /**
-   * Extracts the failed URL or final redirected URL.
+   * Extracts the Error Keyword (e.g. Military, Weapons, Shopping Cart, Connection Timeout).
    */
-  function extractErrorUrl(data = {}, fallbackUrl = "") {
+  function extractErrorKeyword(data = {}) {
+    if (!data || typeof data !== "object") return "";
+    return (
+      data["Error Keyword"] ||
+      data.errorKeyword ||
+      data.restrictedKeyword ||
+      data.disallowedKeyword ||
+      data.shopCartKeyword ||
+      (data.websiteStatus === "Redirect Site" ? "Redirect Domain" : (data.websiteStatus === "Non English" ? "Non English Language" : (data.websiteStatus === "Flash" ? "Flash Content" : "")))
+    ).toString().trim();
+  }
+
+  /**
+   * Extracts the Error Source Link (e.g. https://traceygear.com/military-defense-suppliers/).
+   */
+  function extractErrorSourceLink(data = {}, fallbackUrl = "") {
     if (!data || typeof data !== "object") return String(fallbackUrl || "").trim();
     return (
+      data["Error Source Link"] ||
+      data.errorSourceLink ||
+      data.errorSourceUrl ||
       data["Error URL"] ||
       data.errorUrl ||
-      data.errorSourceUrl ||
+      data.restrictedSourceUrl ||
+      data.disallowedSourceUrl ||
+      data.shopCartSourceUrl ||
       data._finalUrl ||
       data.finalUrl ||
       data._originalUrl ||
@@ -114,10 +135,29 @@
     ).toString().trim();
   }
 
+  const extractErrorUrl = extractErrorSourceLink;
+
   /**
-   * Creates a normalized error record object adhering to the 7 mandatory columns.
+   * Extracts the Error Context / snippet (e.g. "...Military & Defense Suppliers...").
    */
-  function createErrorRecord(input = {}, defaultUserName = "Operator") {
+  function extractErrorContext(data = {}) {
+    if (!data || typeof data !== "object") return "";
+    return (
+      data["Error Context"] ||
+      data.errorContext ||
+      data.errorSnippet ||
+      data.restrictedSnippet ||
+      data.disallowedSnippet ||
+      data.shopCartSnippet ||
+      ""
+    ).toString().trim();
+  }
+
+  /**
+   * Creates a normalized error record object adhering to the mandatory columns:
+   * URL, Website Status, Reason, Error Keyword, Error Source Link, Error Context, Date, Time.
+   */
+  function createErrorRecord(input = {}) {
     if (!input) return null;
     const rawUrl = String(input.URL || input.url || input.rawUrl || input._originalUrl || "").trim();
     if (!rawUrl) return null;
@@ -130,19 +170,21 @@
     }
 
     const reason = extractErrorReason(input, input.reason || input.Reason);
-    const errorUrl = extractErrorUrl(input, rawUrl);
+    const errorKeyword = extractErrorKeyword(input);
+    const errorSourceLink = extractErrorSourceLink(input, rawUrl);
+    const errorContext = extractErrorContext(input);
     const dateStr = String(input.Date || input.date || getLocalDateString()).trim();
     const timeStr = String(input.Time || input.time || getLocalTimeString()).trim();
-    const userName = String(input["User Name"] || input.userName || input.username || defaultUserName || "Operator").trim();
 
     return {
       URL: rawUrl,
       "Website Status": category,
       Reason: reason,
-      "Error URL": errorUrl || rawUrl,
+      "Error Keyword": errorKeyword,
+      "Error Source Link": errorSourceLink || rawUrl,
+      "Error Context": errorContext,
       Date: dateStr,
-      Time: timeStr,
-      "User Name": userName
+      Time: timeStr
     };
   }
 
@@ -189,14 +231,14 @@
    * Appends candidate records to existing records, preserving all historical rows
    * and preventing duplicate occurrences.
    */
-  function mergeErrorRecords(existingList = [], candidateList = [], defaultUserName = "Operator") {
+  function mergeErrorRecords(existingList = [], candidateList = []) {
     const merged = Array.isArray(existingList) ? [...existingList] : [];
     let addedCount = 0;
     const candidates = Array.isArray(candidateList) ? candidateList : [candidateList];
 
     for (const item of candidates) {
       if (!item) continue;
-      const record = createErrorRecord(item, defaultUserName);
+      const record = createErrorRecord(item);
       if (!record) continue;
 
       if (!isDuplicateErrorRecord(merged, record)) {
@@ -222,23 +264,25 @@
       "URL": String(r.URL || r.url || "").trim(),
       "Website Status": String(r["Website Status"] || r.websiteStatus || "").trim(),
       "Reason": String(r.Reason || r.reason || "").trim(),
-      "Error URL": String(r["Error URL"] || r.errorUrl || "").trim(),
+      "Error Keyword": String(r["Error Keyword"] || r.errorKeyword || "").trim(),
+      "Error Source Link": String(r["Error Source Link"] || r.errorSourceLink || r["Error URL"] || r.errorUrl || "").trim(),
+      "Error Context": String(r["Error Context"] || r.errorContext || r.errorSnippet || "").trim(),
       "Date": String(r.Date || r.date || "").trim(),
-      "Time": String(r.Time || r.time || "").trim(),
-      "User Name": String(r["User Name"] || r.userName || "").trim()
+      "Time": String(r.Time || r.time || "").trim()
     }));
 
     const ws = lib.utils.json_to_sheet(rows, { header: NON_WORKING_COLUMNS });
 
     // Explicit professional column widths
     ws["!cols"] = [
-      { wch: 38 }, // URL
-      { wch: 18 }, // Website Status
-      { wch: 52 }, // Reason
-      { wch: 38 }, // Error URL
+      { wch: 36 }, // URL
+      { wch: 16 }, // Website Status
+      { wch: 48 }, // Reason
+      { wch: 22 }, // Error Keyword
+      { wch: 42 }, // Error Source Link
+      { wch: 60 }, // Error Context
       { wch: 14 }, // Date
-      { wch: 12 }, // Time
-      { wch: 18 }  // User Name
+      { wch: 12 }  // Time
     ];
 
     const wb = lib.utils.book_new();
@@ -351,13 +395,15 @@
       if (normSearch) {
         const urlStr = String(r.URL || "").toLowerCase();
         const reasonStr = String(r.Reason || "").toLowerCase();
-        const errUrlStr = String(r["Error URL"] || "").toLowerCase();
-        const userStr = String(r["User Name"] || "").toLowerCase();
+        const kwStr = String(r["Error Keyword"] || r.errorKeyword || "").toLowerCase();
+        const srcStr = String(r["Error Source Link"] || r.errorSourceLink || r["Error URL"] || r.errorUrl || "").toLowerCase();
+        const ctxStr = String(r["Error Context"] || r.errorContext || r.errorSnippet || "").toLowerCase();
         if (
           !urlStr.includes(normSearch) &&
           !reasonStr.includes(normSearch) &&
-          !errUrlStr.includes(normSearch) &&
-          !userStr.includes(normSearch)
+          !kwStr.includes(normSearch) &&
+          !srcStr.includes(normSearch) &&
+          !ctxStr.includes(normSearch)
         ) {
           return false;
         }
@@ -414,6 +460,9 @@
     getLocalTimeString,
     normalizeErrorCategory,
     extractErrorReason,
+    extractErrorKeyword,
+    extractErrorSourceLink,
+    extractErrorContext,
     extractErrorUrl,
     createErrorRecord,
     normalizeUrlForDedup,

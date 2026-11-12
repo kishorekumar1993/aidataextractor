@@ -47,7 +47,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const toggleFloatingWidget = document.getElementById("toggle-floating-widget");
   const toggleInlineBtn = document.getElementById("toggle-inline-btn");
   const btnOpenTestPortal = document.getElementById("btn-open-test-portal");
-  const operatorUsernameInput = document.getElementById("operator-username-input");
 
   const savedModelsByProvider = {
     gemini: DEFAULT_MODEL,
@@ -100,15 +99,11 @@ document.addEventListener("DOMContentLoaded", () => {
   chrome.storage.sync.get([
     "aiProvider", "apiKey", "groqApiKey", "grokApiKey",
     "model", "groqModel", "extractionMode",
-    "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled", "userName"
+    "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"
   ], (res) => {
     let rawProv = String(res.aiProvider || DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
     if (rawProv === "grok") rawProv = "groq";
     const activeProvider = PROVIDER_MODELS_UI[rawProv] ? rawProv : "gemini";
-
-    if (operatorUsernameInput) {
-      operatorUsernameInput.value = res.userName || "Operator";
-    }
 
     if (extractionModeSelect) {
       extractionModeSelect.value = res.extractionMode || "ai_first";
@@ -189,8 +184,7 @@ document.addEventListener("DOMContentLoaded", () => {
       strictFilter: strict,
       autoQueueEnabled: autoQueue,
       showFloatingWidget: floating,
-      showInlineBtn: inline,
-      userName: operatorUsernameInput ? operatorUsernameInput.value.trim() : "Operator"
+      showInlineBtn: inline
     }, () => {
       showStatus("Settings saved successfully!", "success");
     });
@@ -420,16 +414,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function getActiveUserName() {
-    return (operatorUsernameInput && operatorUsernameInput.value.trim()) || "Operator";
-  }
-
-  if (operatorUsernameInput) {
-    operatorUsernameInput.addEventListener("change", () => {
-      chrome.storage.sync.set({ userName: getActiveUserName() });
-    });
-  }
-
   async function refreshDashboardData() {
     chrome.runtime.sendMessage({ action: "GET_NON_WORKING_RECORDS" }, (res) => {
       if (chrome.runtime.lastError) {
@@ -484,7 +468,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (!filtered || filtered.length === 0) {
-      recordsTableBody.innerHTML = `<tr><td colspan="7" class="empty-state">No matching error records found.</td></tr>`;
+      recordsTableBody.innerHTML = `<tr><td colspan="8" class="empty-state">No matching error records found.</td></tr>`;
       return;
     }
 
@@ -496,18 +480,35 @@ document.addEventListener("DOMContentLoaded", () => {
         ? "status-not-working"
         : (r["Website Status"] === "Redirect" ? "status-redirect" : "status-not-english");
 
+      const keyword = r["Error Keyword"] || r.errorKeyword || "-";
+      const srcLink = r["Error Source Link"] || r.errorSourceLink || r["Error URL"] || r.errorUrl || "-";
+      const errCtx = r["Error Context"] || r.errorContext || r.errorSnippet || "-";
+
       tr.innerHTML = `
         <td title="${escapeHtml(r.URL)}">
           <a href="${escapeHtml(r.URL)}" target="_blank" style="color: #4f46e5; text-decoration: none;">
-            ${escapeHtml(truncate(r.URL, 30))}
+            ${escapeHtml(truncate(r.URL, 28))}
           </a>
         </td>
         <td class="${statusCls}"><strong>${escapeHtml(r["Website Status"])}</strong></td>
-        <td title="${escapeHtml(r.Reason)}">${escapeHtml(truncate(r.Reason, 38))}</td>
-        <td title="${escapeHtml(r["Error URL"])}">${escapeHtml(truncate(r["Error URL"] || "-", 26))}</td>
+        <td title="${escapeHtml(r.Reason)}">${escapeHtml(truncate(r.Reason, 34))}</td>
+        <td title="${escapeHtml(keyword)}">
+          <span style="background: #fee2e2; color: #991b1b; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 600;">
+            ${escapeHtml(truncate(keyword, 20))}
+          </span>
+        </td>
+        <td title="${escapeHtml(srcLink)}">
+          ${/^https?:\/\//i.test(srcLink) ? `
+            <a href="${escapeHtml(srcLink)}" target="_blank" style="color: #0284c7; text-decoration: none;">
+              🔗 ${escapeHtml(truncate(srcLink, 28))}
+            </a>
+          ` : escapeHtml(truncate(srcLink, 28))}
+        </td>
+        <td title="${escapeHtml(errCtx)}" style="font-family: monospace; font-size: 10px; color: #334155;">
+          ${escapeHtml(truncate(errCtx, 36))}
+        </td>
         <td>${escapeHtml(r.Date)}</td>
         <td>${escapeHtml(r.Time)}</td>
-        <td>${escapeHtml(r["User Name"] || "Operator")}</td>
       `;
       fragment.appendChild(tr);
     }
@@ -587,8 +588,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const arrayBuffer = await file.arrayBuffer();
           const parsedRows = parseNonWorkingExcel(arrayBuffer, XLSX);
 
-          const userName = getActiveUserName();
-          const { merged } = mergeErrorRecords(currentRecords, parsedRows, userName);
+          const { merged } = mergeErrorRecords(currentRecords, parsedRows);
 
           // Write updated dataset back to the same file
           const wb = generateNonWorkingExcel(merged, XLSX);
@@ -641,8 +641,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const arrayBuffer = evt.target.result;
           const parsedRows = parseNonWorkingExcel(arrayBuffer, XLSX);
 
-          const userName = getActiveUserName();
-          const { merged, addedCount } = mergeErrorRecords(currentRecords, parsedRows, userName);
+          const { merged, addedCount } = mergeErrorRecords(currentRecords, parsedRows);
 
           // Save merged records into persistent storage
           await new Promise((resolve) => {

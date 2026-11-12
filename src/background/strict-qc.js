@@ -9,6 +9,10 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
     if (data && data.websiteStatus && data.websiteStatus !== "Working") {
       try {
         if (typeof recordNonWorkingWebsite === "function") {
+          const errSourceLink = data.errorSourceUrl || data.restrictedSourceUrl || data.disallowedSourceUrl || data.shopCartSourceUrl || data._finalUrl || (crawlResult && crawlResult.finalUrl) || targetUrl;
+          const errKeyword = data.errorKeyword || data.restrictedKeyword || data.disallowedKeyword || data.shopCartKeyword || (data.websiteStatus === "Non English" ? "Non English Language" : (data.websiteStatus === "Flash" ? "Flash Content" : ""));
+          const errContext = data.errorSnippet || data.restrictedSnippet || data.disallowedSnippet || data.shopCartSnippet || "";
+
           recordNonWorkingWebsite({
             URL: rawUrl || data._originalUrl || targetUrl,
             websiteStatus: data.websiteStatus,
@@ -20,7 +24,10 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
               data.errorSnippet ||
               data._note ||
               "Website is not working or unavailable",
-            errorUrl: data._finalUrl || data.errorSourceUrl || (crawlResult && crawlResult.finalUrl) || targetUrl
+            errorKeyword: errKeyword,
+            errorSourceLink: errSourceLink,
+            errorContext: errContext,
+            errorUrl: errSourceLink
           }).catch(() => {});
         }
       } catch (e) {

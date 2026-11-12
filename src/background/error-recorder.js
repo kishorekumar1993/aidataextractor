@@ -24,7 +24,7 @@
    * Records a website error event into local persistent storage.
    * If the site is working, it is strictly ignored and not recorded.
    */
-  async function recordNonWorkingWebsite(input, explicitUserName = "") {
+  async function recordNonWorkingWebsite(input) {
     if (!input) return { success: false, reason: "No input provided" };
 
     const rawStatus = input["Website Status"] || input.websiteStatus || input.status;
@@ -37,17 +37,17 @@
       return { success: false, ignored: true, reason: "Working websites are not recorded in error dataset" };
     }
 
-    const userName = explicitUserName || (await getStoredUserName()) || "Operator";
     const newRecord = typeof createErrorRecord === "function"
-      ? createErrorRecord(input, userName)
+      ? createErrorRecord(input)
       : {
         URL: input.URL || input.url || "",
         "Website Status": category,
         Reason: input.Reason || input.reason || "Website is not working or unavailable",
-        "Error URL": input["Error URL"] || input.errorUrl || input.URL || input.url || "",
+        "Error Keyword": input["Error Keyword"] || input.errorKeyword || "",
+        "Error Source Link": input["Error Source Link"] || input.errorSourceLink || input["Error URL"] || input.errorUrl || input.URL || input.url || "",
+        "Error Context": input["Error Context"] || input.errorContext || input.errorSnippet || "",
         Date: (typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0]),
-        Time: (typeof getLocalTimeString === "function" ? getLocalTimeString() : new Date().toTimeString().split(" ")[0]),
-        "User Name": userName
+        Time: (typeof getLocalTimeString === "function" ? getLocalTimeString() : new Date().toTimeString().split(" ")[0])
       };
 
     if (!newRecord || !newRecord.URL) {
@@ -64,7 +64,7 @@
       }
 
       const { merged, addedCount } = typeof mergeErrorRecords === "function"
-        ? mergeErrorRecords(existingRecords, [newRecord], userName)
+        ? mergeErrorRecords(existingRecords, [newRecord])
         : {
           merged: [...existingRecords, newRecord],
           addedCount: 1
@@ -118,7 +118,6 @@
     if (!Array.isArray(parsedRows) || parsedRows.length === 0) {
       return { success: false, reason: "No rows provided" };
     }
-    const userName = await getStoredUserName();
     try {
       let existingRecords = [];
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
@@ -127,7 +126,7 @@
       }
 
       const { merged, addedCount } = typeof mergeErrorRecords === "function"
-        ? mergeErrorRecords(existingRecords, parsedRows, userName)
+        ? mergeErrorRecords(existingRecords, parsedRows)
         : { merged: [...existingRecords, ...parsedRows], addedCount: parsedRows.length };
 
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {

@@ -1836,34 +1836,38 @@ async function runAsyncTests() {
     // Successfully working and eligible websites must NOT be included in this separate error dataset
     assert.strictEqual(ctx.normalizeErrorCategory("Working"), null, "Working websites must be strictly excluded");
 
-    // 2. Mandatory Columns in exact order
-    const sampleRecord = ctx.createErrorRecord({
-      url: "https://down-site-example.com/shop",
+    // 2. Mandatory Columns in exact order with Error Keyword, Error Source Link, Error Context (User Name removed)
+    const traceyRecord = ctx.createErrorRecord({
+      url: "https://traceygear.com/military-defense-suppliers/",
       websiteStatus: "Not Working",
-      reason: "Connection timeout after 28 seconds (Rule 1)",
-      errorUrl: "https://down-site-example.com/shop/checkout",
+      reason: "Prohibited Category / Word Detected (Weapons / Military / Defense)",
+      errorKeyword: "Military",
+      errorSourceLink: "https://traceygear.com/military-defense-suppliers/",
+      errorContext: "...nery Builders Marine Equipment Manufacturers Military & Defense Suppliers Pump & Valve M...",
       date: "2026-11-11",
-      time: "14:30:00",
-      userName: "Kishore"
+      time: "14:30:00"
     });
 
-    assert.ok(sampleRecord, "Record must be created");
-    assert.deepStrictEqual(Object.keys(sampleRecord), [
+    assert.ok(traceyRecord, "Tracey Gear record must be created");
+    assert.deepStrictEqual(Object.keys(traceyRecord), [
       "URL",
       "Website Status",
       "Reason",
-      "Error URL",
+      "Error Keyword",
+      "Error Source Link",
+      "Error Context",
       "Date",
-      "Time",
-      "User Name"
-    ], "Record must strictly have the 7 mandatory columns in order");
-    assert.strictEqual(sampleRecord.URL, "https://down-site-example.com/shop");
-    assert.strictEqual(sampleRecord["Website Status"], "Not Working");
-    assert.strictEqual(sampleRecord.Reason, "Connection timeout after 28 seconds (Rule 1)");
-    assert.strictEqual(sampleRecord["Error URL"], "https://down-site-example.com/shop/checkout");
-    assert.strictEqual(sampleRecord.Date, "2026-11-11");
-    assert.strictEqual(sampleRecord.Time, "14:30:00");
-    assert.strictEqual(sampleRecord["User Name"], "Kishore");
+      "Time"
+    ], "Record must strictly have the 8 mandatory columns in order (without User Name)");
+    assert.strictEqual(traceyRecord.URL, "https://traceygear.com/military-defense-suppliers/");
+    assert.strictEqual(traceyRecord["Website Status"], "Not Working");
+    assert.strictEqual(traceyRecord.Reason, "Prohibited Category / Word Detected (Weapons / Military / Defense)");
+    assert.strictEqual(traceyRecord["Error Keyword"], "Military");
+    assert.strictEqual(traceyRecord["Error Source Link"], "https://traceygear.com/military-defense-suppliers/");
+    assert.strictEqual(traceyRecord["Error Context"], "...nery Builders Marine Equipment Manufacturers Military & Defense Suppliers Pump & Valve M...");
+    assert.strictEqual(traceyRecord.Date, "2026-11-11");
+    assert.strictEqual(traceyRecord.Time, "14:30:00");
+    assert.strictEqual(traceyRecord["User Name"], undefined, "User Name must be completely removed");
 
     // 3. Multi-Session Persistent Append Simulation (Session 1: 50 -> Session 2: 80 -> Session 3: 125 -> Session 4: 150)
     let persistentDataset = [];
@@ -1875,13 +1879,14 @@ async function runAsyncTests() {
         url: `https://site-${i}.com`,
         websiteStatus: i % 3 === 0 ? "Redirect Site" : (i % 5 === 0 ? "Non English" : "Not Working"),
         reason: `Error reason ${i}`,
-        errorUrl: `https://site-${i}.com/failed`,
+        errorKeyword: i % 3 === 0 ? "Redirect Domain" : (i % 5 === 0 ? "Non English" : "Server Error"),
+        errorSourceLink: `https://site-${i}.com/failed`,
+        errorContext: `Context snippet for site ${i}`,
         date: "2026-11-11",
-        time: "10:00:00",
-        userName: "Operator1"
+        time: "10:00:00"
       });
     }
-    const res1 = ctx.mergeErrorRecords(persistentDataset, session1New, "Operator1");
+    const res1 = ctx.mergeErrorRecords(persistentDataset, session1New);
     persistentDataset = res1.merged;
     assert.strictEqual(res1.addedCount, 50);
     assert.strictEqual(persistentDataset.length, 50, "Session 1 must have 50 total records");
@@ -1894,10 +1899,11 @@ async function runAsyncTests() {
         url: `https://site-${i}.com`,
         websiteStatus: i % 3 === 0 ? "Redirect Site" : (i % 5 === 0 ? "Non English" : "Not Working"),
         reason: `Error reason duplicate ${i}`,
-        errorUrl: `https://site-${i}.com/failed`,
+        errorKeyword: "Duplicate",
+        errorSourceLink: `https://site-${i}.com/failed`,
+        errorContext: `Duplicate context ${i}`,
         date: "2026-11-11",
-        time: "10:00:00",
-        userName: "Operator1"
+        time: "10:00:00"
       });
     }
     // 30 brand new sites
@@ -1906,13 +1912,14 @@ async function runAsyncTests() {
         url: `https://site-${i}.com`,
         websiteStatus: "Not Working",
         reason: `Connection error ${i}`,
-        errorUrl: `https://site-${i}.com`,
+        errorKeyword: "Connection Timeout",
+        errorSourceLink: `https://site-${i}.com`,
+        errorContext: `Timeout snippet ${i}`,
         date: "2026-11-11",
-        time: "11:00:00",
-        userName: "Operator2"
+        time: "11:00:00"
       });
     }
-    const res2 = ctx.mergeErrorRecords(persistentDataset, session2Candidates, "Operator2");
+    const res2 = ctx.mergeErrorRecords(persistentDataset, session2Candidates);
     persistentDataset = res2.merged;
     assert.strictEqual(res2.addedCount, 30, "Must skip 10 duplicates and add only 30 new records");
     assert.strictEqual(persistentDataset.length, 80, "Session 2 must contain exactly 80 records");
@@ -1924,13 +1931,14 @@ async function runAsyncTests() {
         url: `https://site-${i}.com`,
         websiteStatus: i % 2 === 0 ? "Redirect" : "Not Working",
         reason: `DNS failed ${i}`,
-        errorUrl: `https://site-${i}.com`,
+        errorKeyword: "DNS Failure",
+        errorSourceLink: `https://site-${i}.com`,
+        errorContext: `DNS error context ${i}`,
         date: "2026-11-11",
-        time: "12:00:00",
-        userName: "Operator3"
+        time: "12:00:00"
       });
     }
-    const res3 = ctx.mergeErrorRecords(persistentDataset, session3New, "Operator3");
+    const res3 = ctx.mergeErrorRecords(persistentDataset, session3New);
     persistentDataset = res3.merged;
     assert.strictEqual(res3.addedCount, 45);
     assert.strictEqual(persistentDataset.length, 125, "Session 3 must contain exactly 125 records");
@@ -1942,13 +1950,14 @@ async function runAsyncTests() {
         url: `https://site-${i}.com`,
         websiteStatus: "Not English",
         reason: `Foreign language content ${i}`,
-        errorUrl: `https://site-${i}.com`,
+        errorKeyword: "Non English Language",
+        errorSourceLink: `https://site-${i}.com`,
+        errorContext: `Non English snippet ${i}`,
         date: "2026-11-11",
-        time: "13:00:00",
-        userName: "Operator4"
+        time: "13:00:00"
       });
     }
-    const res4 = ctx.mergeErrorRecords(persistentDataset, session4New, "Operator4");
+    const res4 = ctx.mergeErrorRecords(persistentDataset, session4New);
     persistentDataset = res4.merged;
     assert.strictEqual(res4.addedCount, 25);
     assert.strictEqual(persistentDataset.length, 150, "Session 4 must contain all 150 cumulative records in the single dataset");
@@ -1959,10 +1968,11 @@ async function runAsyncTests() {
       url: "https://site-1.com",
       websiteStatus: "Not Working",
       reason: "Failed again on day 2",
-      errorUrl: "https://site-1.com",
+      errorKeyword: "Day 2 Failure",
+      errorSourceLink: "https://site-1.com",
+      errorContext: "Day 2 context",
       date: "2026-11-12",
-      time: "09:00:00",
-      userName: "Operator1"
+      time: "09:00:00"
     };
     const resReoccur = ctx.mergeErrorRecords(persistentDataset, [reoccurrenceDifferentDate]);
     assert.strictEqual(resReoccur.addedCount, 1, "Same URL on a different date must be retained as a new separate record");
@@ -1981,22 +1991,30 @@ async function runAsyncTests() {
     assert.strictEqual(parsedRows[0].URL, "https://site-1.com");
     assert.strictEqual(parsedRows[149].URL, "https://site-150.com");
     assert.strictEqual(parsedRows[149]["Website Status"], "Not English");
+    assert.strictEqual(parsedRows[149]["Error Keyword"], "Non English Language");
+    assert.strictEqual(parsedRows[149]["Error Source Link"], "https://site-150.com");
+    assert.strictEqual(parsedRows[149]["Error Context"], "Non English snippet 150");
   });
 
   // 40. Non-Working Website Records – Dashboard Metrics, Filtering & Storage Persistence
   await runAsyncTest('Non-Working Website Records – Dashboard Metrics, Filtering & Storage Persistence', async () => {
     mockLocalStorage = {}; // Reset storage
 
-    // Test background recording service
+    // Test background recording service with Tracey Gear example items
     const rec1 = await ctx.recordNonWorkingWebsite({
-      url: "https://inaccessible-server-example.org",
+      url: "https://traceygear.com/military-defense-suppliers/",
       websiteStatus: "Not Working",
-      reason: "DNS NXDOMAIN server unreachable",
-      errorUrl: "https://inaccessible-server-example.org"
-    }, "Alice");
+      reason: "Prohibited Category / Word Detected (Military & Defense Suppliers)",
+      errorKeyword: "Military",
+      errorSourceLink: "https://traceygear.com/military-defense-suppliers/",
+      errorContext: "...nery Builders Marine Equipment Manufacturers Military & Defense Suppliers Pump & Valve M..."
+    });
     assert.strictEqual(rec1.success, true);
     assert.strictEqual(rec1.added, true);
     assert.strictEqual(rec1.totalRecords, 1);
+    assert.strictEqual(rec1.record["Error Keyword"], "Military");
+    assert.strictEqual(rec1.record["Error Source Link"], "https://traceygear.com/military-defense-suppliers/");
+    assert.strictEqual(rec1.record["Error Context"], "...nery Builders Marine Equipment Manufacturers Military & Defense Suppliers Pump & Valve M...");
 
     // Recording working site must be strictly ignored
     const recWorking = await ctx.recordNonWorkingWebsite({
@@ -2011,8 +2029,10 @@ async function runAsyncTests() {
       url: "https://redirect-source.com",
       websiteStatus: "Redirect Site",
       reason: "Redirected to destination-domain.com",
-      errorUrl: "https://destination-domain.com"
-    }, "Bob");
+      errorKeyword: "Redirect Domain",
+      errorSourceLink: "https://destination-domain.com",
+      errorContext: "Redirect from redirect-source.com to destination-domain.com"
+    });
     assert.strictEqual(rec2.success, true);
     assert.strictEqual(rec2.record["Website Status"], "Redirect");
 
@@ -2021,8 +2041,10 @@ async function runAsyncTests() {
       url: "https://chinese-supplier.cn",
       websiteStatus: "Non English",
       reason: "Chinese content without English translation (Rule 12)",
-      errorUrl: "https://chinese-supplier.cn"
-    }, "Charlie");
+      errorKeyword: "Non English Language",
+      errorSourceLink: "https://chinese-supplier.cn",
+      errorContext: "仅限中国国内销售 (Domestic sales only)"
+    });
     assert.strictEqual(rec3.success, true);
     assert.strictEqual(rec3.record["Website Status"], "Not English");
 
@@ -2045,9 +2067,13 @@ async function runAsyncTests() {
     assert.strictEqual(onlyNotEnglish.length, 1);
     assert.strictEqual(onlyNotEnglish[0].URL, "https://chinese-supplier.cn");
 
-    const searchResult = ctx.filterErrorRecords(allRecords, { search: "NXDOMAIN" });
-    assert.strictEqual(searchResult.length, 1);
-    assert.strictEqual(searchResult[0].URL, "https://inaccessible-server-example.org");
+    const searchKeywordResult = ctx.filterErrorRecords(allRecords, { search: "Military" });
+    assert.strictEqual(searchKeywordResult.length, 1);
+    assert.strictEqual(searchKeywordResult[0].URL, "https://traceygear.com/military-defense-suppliers/");
+
+    const searchContextResult = ctx.filterErrorRecords(allRecords, { search: "Builders Marine" });
+    assert.strictEqual(searchContextResult.length, 1);
+    assert.strictEqual(searchContextResult[0].URL, "https://traceygear.com/military-defense-suppliers/");
 
     // Update last sync time
     await ctx.updateLastExcelSync(1773000000000);
