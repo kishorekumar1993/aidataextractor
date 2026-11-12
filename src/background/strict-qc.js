@@ -85,7 +85,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
           }
 
           if (!cleanReason) {
-            cleanReason = determineValidNotWorkingReasonQC(data, crawlResult, targetUrl, restrictedCheck);
+            cleanReason = determineValidNotWorkingReasonQC(data, crawlResult, targetUrl, typeof restrictedCheck !== "undefined" ? restrictedCheck : null);
           }
 
           recordNonWorkingWebsite({
@@ -907,7 +907,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     // 5. State & City: Evaluate based on complete reconciled address (Rules 7 & 8)
     const apiState = normalizeAvailability(result.state);
     const apiCity = normalizeAvailability(result.city);
-    if (!result.companyAddress || result.companyAddress.toLowerCase() === "not available") {
+    if (apiState && apiCity) {
+      result.state = apiState;
+      result.city = apiCity;
+    } else if (!result.companyAddress || result.companyAddress.toLowerCase() === "not available") {
       result.state = apiState || "Not Available";
       result.city = apiCity || "Not Available";
     } else {

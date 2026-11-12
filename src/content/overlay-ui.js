@@ -35,19 +35,23 @@
 
 
   function resetCrawlButtons() {
+    state.isCrawlingInProgress = false;
     const crawlBtn = document.getElementById("ai-crawl-btn");
     const headerCrawlBtn = document.getElementById("ai-header-crawl-btn");
     const quickBtn = document.getElementById("ai-quick-btn");
     if (crawlBtn) {
       crawlBtn.disabled = false;
+      crawlBtn.classList.remove("ai-btn-crawling", "ai-btn-success");
       crawlBtn.innerHTML = "<span>⚡ Auto-Crawl & Pre-Fill</span>";
     }
     if (headerCrawlBtn) {
       headerCrawlBtn.disabled = false;
+      headerCrawlBtn.classList.remove("ai-btn-crawling", "ai-btn-success");
       headerCrawlBtn.innerHTML = "⚡ AI Crawl";
     }
     if (quickBtn) {
       quickBtn.disabled = false;
+      quickBtn.classList.remove("ai-btn-crawling", "ai-btn-success");
       quickBtn.style.backgroundColor = "";
       quickBtn.style.borderColor = "";
       quickBtn.innerHTML = "🤖 AI Crawl & Fill";
@@ -683,20 +687,18 @@
           chrome.storage.sync.set({ autoQueueEnabled: widgetAutoToggle.checked });
         }
         if (!state.autoQueueEnabled) {
+          state.isWaitingForUserWorkingReview = false;
           AIExt.stopAutoQueuePipeline("User disabled auto-queue in widget");
           updateStatus("Auto-Queue turned OFF", "idle");
         } else {
           state.isAutoQueuePipelineActive = true;
+          state.isWaitingForUserWorkingReview = false;
+          state.lastProcessedUrl = ""; // Reset so current URL is crawled immediately
           const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
           if (pauseBtn) pauseBtn.style.display = "inline-flex";
           updateStatus("⚡ Auto-Queue enabled: Crawling till Working site...", "loading");
-          const curUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
-          if (curUrl && !state.isCrawlingInProgress) {
-            setTimeout(() => {
-              if (state.autoQueueEnabled && state.isAutoQueuePipelineActive) {
-                AIExt.triggerCrawlAndFill({ fromAutoQueue: true });
-              }
-            }, 300);
+          if (typeof AIExt.checkAndAutoTriggerQueueCrawl === "function") {
+            AIExt.checkAndAutoTriggerQueueCrawl();
           }
         }
       });
@@ -812,42 +814,9 @@
     const quickBtn = document.createElement("button");
     quickBtn.id = "ai-quick-btn";
     quickBtn.type = "button";
+    quickBtn.className = "ai-quick-btn";
     quickBtn.innerHTML = "⚡ AI Crawl & Fill";
     quickBtn.title = "Click to automatically crawl website and pre-fill form";
-    quickBtn.style.cssText = `
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-      color: #ffffff !important;
-      border: 1px solid #047857 !important;
-      padding: 6px 14px !important;
-      border-radius: 6px !important;
-      font-size: 13px !important;
-      font-weight: 700 !important;
-      cursor: pointer !important;
-      margin-left: 8px !important;
-      margin-right: 4px !important;
-      display: inline-flex !important;
-      align-items: center !important;
-      gap: 6px !important;
-      vertical-align: middle !important;
-      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4) !important;
-      transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease !important;
-      white-space: nowrap !important;
-      flex-shrink: 0 !important;
-      visibility: visible !important;
-      opacity: 1 !important;
-      z-index: 999999 !important;
-      height: 38px !important;
-      line-height: 1 !important;
-    `;
-
-    quickBtn.addEventListener("mouseenter", () => {
-      quickBtn.style.transform = "scale(1.04)";
-      quickBtn.style.boxShadow = "0 4px 14px rgba(16, 185, 129, 0.6)";
-    });
-    quickBtn.addEventListener("mouseleave", () => {
-      quickBtn.style.transform = "scale(1)";
-      quickBtn.style.boxShadow = "0 2px 8px rgba(16, 185, 129, 0.4)";
-    });
 
     quickBtn.addEventListener("click", (e) => {
       e.preventDefault();

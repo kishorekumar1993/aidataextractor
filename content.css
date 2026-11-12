@@ -112,10 +112,10 @@
 
 /* Inline Quick Button injected next to Website Name or Click Here */
 #ai-quick-btn {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #ffffff !important;
   border: 1px solid #047857 !important;
-  padding: 6px 14px !important;
+  padding: 7px 16px !important;
   border-radius: 6px !important;
   font-size: 13px !important;
   font-weight: 700 !important;
@@ -124,10 +124,11 @@
   margin-right: 4px !important;
   display: inline-flex !important;
   align-items: center !important;
-  gap: 6px !important;
+  justify-content: center !important;
+  gap: 7px !important;
   vertical-align: middle !important;
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4) !important;
-  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease !important;
+  transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease !important;
   white-space: nowrap !important;
   flex-shrink: 0 !important;
   visibility: visible !important;
@@ -135,14 +136,69 @@
   z-index: 999999 !important;
   height: 38px !important;
   line-height: 1 !important;
+  user-select: none !important;
 }
 
 #ai-quick-btn:hover {
-  transform: scale(1.04) !important;
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.6) !important;
+  transform: translateY(-1px) scale(1.03) !important;
+  box-shadow: 0 5px 15px rgba(16, 185, 129, 0.55) !important;
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
 }
 
-#ai-quick-btn:disabled {
+#ai-quick-btn:active {
+  transform: translateY(1px) scale(0.97) !important;
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.4) !important;
+}
+
+/* Active Crawling Live Pulsing State */
+#ai-quick-btn.ai-btn-crawling,
+.ai-btn-primary.ai-btn-crawling,
+.ai-btn-quick-crawl.ai-btn-crawling {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+  border-color: #1e40af !important;
+  color: #ffffff !important;
+  cursor: wait !important;
+  animation: ai-crawling-pulse 1.4s infinite !important;
+  pointer-events: none !important;
+}
+
+@keyframes ai-crawling-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+    transform: scale(1.02);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+    transform: scale(1);
+  }
+}
+
+/* Success Pre-Filled Flash */
+#ai-quick-btn.ai-btn-success,
+.ai-btn-primary.ai-btn-success,
+.ai-btn-quick-crawl.ai-btn-success {
+  background: linear-gradient(135deg, #10b981 0%, #047857 100%) !important;
+  box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.35) !important;
+  color: #ffffff !important;
+}
+
+/* Spinner icon */
+.ai-spinner-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  border-top-color: #ffffff;
+  animation: ai-spin 0.65s linear infinite;
+  vertical-align: middle;
+}
+
+#ai-quick-btn:disabled:not(.ai-btn-crawling):not(.ai-btn-success) {
   background: #9ca3af !important;
   border-color: #6b7280 !important;
   cursor: not-allowed !important;

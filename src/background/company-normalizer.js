@@ -663,19 +663,24 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
     }
   }
 
-  // 3. Restore all-caps brand acronyms (e.g. "Pem Fountain" -> "PEM Fountain", "Aks Lining" -> "AKS Lining")
+  // 3. Restore all-caps brand acronyms (e.g. "Pem Fountain" -> "PEM Fountain", "Aks Lining" -> "AKS Lining", "Peri" -> "PERI")
   const upperAcronyms = new Set([
     "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
     "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA",
-    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC", "ECU"
+    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC", "ECU", "PERI"
   ]);
   const titleAndLogo = ((crawlData && crawlData.title) || "") + " " + ((crawlData && crawlData.logoText) || "");
   n = n.replace(/\b[A-Za-z0-9]{2,4}\b/g, (word) => {
     const up = word.toUpperCase();
     if (upperAcronyms.has(up)) return up;
-    const exactUpperRegex = new RegExp(`(^|[^A-Za-z0-9])${up}([^A-Za-z0-9]|$)`);
-    if ((exactUpperRegex.test(titleAndLogo) || exactUpperRegex.test(combinedEvidence)) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO|PAGE|VIEW|HOME|MENU|NEWS|SITE)$/i.test(up)) {
-      return up;
+    // Do NOT uppercase normal dictionary / name words with vowels (e.g. Chee, Wah, John, East)
+    // Only uppercase genuine consonant acronyms (e.g. THK, FRP, SMT, 3D) that appear in title/logo
+    const hasVowels = /[aeiou]/i.test(word);
+    if (!hasVowels) {
+      const exactUpperRegex = new RegExp(`(^|[^A-Za-z0-9])${up}([^A-Za-z0-9]|$)`);
+      if ((exactUpperRegex.test(titleAndLogo) || exactUpperRegex.test(combinedEvidence)) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO|PAGE|VIEW|HOME|MENU|NEWS|SITE)$/i.test(up)) {
+        return up;
+      }
     }
     return word;
   });

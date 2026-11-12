@@ -8,7 +8,8 @@
   // =========================================================================
 
   function triggerFromQueue() {
-    const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") ||
+    const fromQueueBtn = document.getElementById("btnClickHere") ||
+      document.getElementById("btnLoadNextQueueUrl") ||
       document.getElementById("btnNextQueue") ||
       document.getElementById("loadNext") ||
       document.getElementById("nextRecord") ||
@@ -16,10 +17,10 @@
         if (b.closest("#ai-prefill-widget")) return false;
         const t = (b.textContent || b.value || "").replace(/\s+/g, " ").trim().toLowerCase();
         const idCls = `${b.id || ""} ${b.className || ""} ${b.title || ""}`.toLowerCase();
-        return t.includes("from queue") || t.includes("load next") || t.includes("next url") || t.includes("next record") || t === "next" || t.includes("get url") || t === "queue" || (/\bqueue\b/.test(idCls) && !t.includes("manual"));
+        return t === "click here" || t.includes("click here") || t.includes("from queue") || t.includes("load next") || t.includes("next url") || t.includes("next record") || t === "next" || t.includes("get url") || t === "queue" || (/\bqueue\b/.test(idCls) && !t.includes("manual"));
       });
     if (fromQueueBtn) {
-      console.log("[AI Assistant] Triggering 'From Queue' / Queue button:", fromQueueBtn);
+      console.log("[AI Assistant] Triggering 'From Queue' / 'Click Here' button:", fromQueueBtn);
       fromQueueBtn.click();
       return true;
     }
@@ -261,6 +262,48 @@
     console.log("[AI Assistant] Auto-queue pipeline stopped" + (reason ? `: ${reason}` : "."));
   }
 
+  /**
+   * Continuous Auto-Queue Engine:
+   * Whenever '⚡ Auto-crawl till Working site' is active, continuously detects
+   * when a new URL is loaded into the portal (via AJAX, page load, or queue advance)
+   * and AUTOMATICALLY starts crawling immediately without requiring manual clicks.
+   */
+  function checkAndAutoTriggerQueueCrawl() {
+    if (!state.autoQueueEnabled) return false;
+    if (state.isCrawlingInProgress) return false;
+    if (state.isBatchNotWorkingActive) return false;
+    if (state.pendingAutoSubmitTimer) return false; // in 2s countdown before auto-submitting Not Working
+
+    const currentUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
+    if (!currentUrl || currentUrl.trim().length < 4) {
+      return false;
+    }
+
+    const normCurrent = currentUrl.trim().toLowerCase().replace(/\/+$/, "");
+    const normLast = (state.lastProcessedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+
+    // If identical to last processed URL, don't duplicate
+    if (normCurrent === normLast) {
+      return false;
+    }
+
+    // If waiting for manual review on a working site, but user loaded a DIFFERENT URL:
+    // This proves the previous site was completed and portal advanced! Clear review wait state!
+    state.isWaitingForUserWorkingReview = false;
+    state.isAutoQueuePipelineActive = true;
+    const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+    if (pauseBtn) pauseBtn.style.display = "inline-flex";
+
+    console.log(`[AI Assistant] ⚡ Auto-crawl till Working site: New URL detected ("${currentUrl}"). Automatically crawling...`);
+    AIExt.updateStatus(`⚡ Auto-Queue: Crawling site (${currentUrl})...`, "loading");
+
+    if (typeof AIExt.triggerCrawlAndFill === "function") {
+      AIExt.triggerCrawlAndFill({ fromAutoQueue: true });
+      return true;
+    }
+    return false;
+  }
+
   function scheduleNextQueueAutoCrawl(submittedUrl) {
     if (state.isBatchNotWorkingActive) {
       console.log("[AI Assistant] Batch Not Working is active; skipping normal auto-crawl scheduling.");
@@ -278,7 +321,12 @@
       return;
     }
 
+    state.isWaitingForUserWorkingReview = false;
     state.isAutoQueuePipelineActive = true;
+    if (submittedUrl) {
+      state.lastProcessedUrl = submittedUrl;
+    }
+
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
       chrome.storage.local.set({
         autoQueuePipeline: {
@@ -291,98 +339,99 @@
     const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
     if (pauseBtn) pauseBtn.style.display = "inline-flex";
 
-    let attempts = 0;
-    const maxAttempts = 160; // 160 * 150ms = 24 seconds (sufficient for slow portal AJAX / database save)
     const normSubmitted = (submittedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
-
     console.log(`[AI Assistant] Auto-queue pipeline listening for next record after "${normSubmitted}"...`);
     AIExt.updateStatus("⏳ Advancing to next queue record...", "loading");
 
-    // Immediate reactive listener on website input if portal updates via events
-    const websiteInput = typeof AIExt.findWebsiteNameInput === "function" ? AIExt.findWebsiteNameInput() : null;
-    const triggerIfValidNext = (candidateUrl) => {
-      const normCand = (candidateUrl || "").trim().toLowerCase().replace(/\/+$/, "");
-      if (normCand && normCand !== normSubmitted && normCand.length > 3) {
-        if (state.autoQueuePollTimer) {
-          clearInterval(state.autoQueuePollTimer);
-          state.autoQueuePollTimer = null;
-        }
-        console.log(`[AI Assistant] Next queue URL detected immediately: ${candidateUrl}. Auto-crawling in 350ms...`);
-        AIExt.updateStatus(`⚡ Auto-Queue: Next site detected (${candidateUrl}). Crawling...`, "loading");
-        setTimeout(() => {
-          if (state.isAutoQueuePipelineActive && state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
-            AIExt.triggerCrawlAndFill({ fromAutoQueue: true });
-          }
-        }, 350);
-        return true;
-      }
-      return false;
-    };
-
-    if (websiteInput) {
-      const onInputChanged = () => {
-        const cur = AIExt.getTargetUrl();
-        if (triggerIfValidNext(cur)) {
-          websiteInput.removeEventListener("input", onInputChanged);
-          websiteInput.removeEventListener("change", onInputChanged);
-        }
-      };
-      websiteInput.addEventListener("input", onInputChanged, { once: true });
-      websiteInput.addEventListener("change", onInputChanged, { once: true });
+    // Check immediately in case portal already updated the input
+    if (checkAndAutoTriggerQueueCrawl()) {
+      return;
     }
 
-    // If the input was cleared or still holds the submitted URL, trigger the portal's Queue / From Queue button
-    setTimeout(() => {
-      if (!state.isAutoQueuePipelineActive || !state.autoQueueEnabled) return;
-      const cur = AIExt.getTargetUrl();
-      if (!cur || cur.trim().toLowerCase().replace(/\/+$/, "") === normSubmitted) {
-        triggerFromQueue();
-      }
-    }, 450);
+    let attempts = 0;
+    const maxAttempts = 160; // 24 seconds polling window
 
     state.autoQueuePollTimer = setInterval(() => {
       attempts++;
-      if (!state.isAutoQueuePipelineActive || !state.autoQueueEnabled) {
+      if (!state.autoQueueEnabled) {
+        clearInterval(state.autoQueuePollTimer);
+        state.autoQueuePollTimer = null;
+        return;
+      }
+
+      // Check if new URL has been loaded
+      if (checkAndAutoTriggerQueueCrawl()) {
         clearInterval(state.autoQueuePollTimer);
         state.autoQueuePollTimer = null;
         return;
       }
 
       let nextUrl = AIExt.getTargetUrl();
-
-      // If still empty or unchanged after periodic intervals, trigger Queue / From Queue
+      // If still empty or unchanged after 1.2s intervals, trigger Queue / From Queue
       if ((!nextUrl || nextUrl.trim().toLowerCase().replace(/\/+$/, "") === normSubmitted) && attempts % 8 === 0) {
         triggerFromQueue();
-        nextUrl = AIExt.getTargetUrl();
-      }
-
-      const normNext = (nextUrl || "").trim().toLowerCase().replace(/\/+$/, "");
-
-      // Check if a new valid URL has been loaded into the input
-      if (normNext && normNext !== normSubmitted && normNext.length > 3) {
-        clearInterval(state.autoQueuePollTimer);
-        state.autoQueuePollTimer = null;
-        console.log(`[AI Assistant] Next queue URL detected: ${nextUrl}. Auto-crawling in 350ms...`);
-        AIExt.updateStatus(`⚡ Auto-Queue: Next site detected (${nextUrl}). Crawling...`, "loading");
-
-        setTimeout(() => {
-          if (state.isAutoQueuePipelineActive && state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
-            AIExt.triggerCrawlAndFill({ fromAutoQueue: true });
-          }
-        }, 350);
-        return;
+        if (checkAndAutoTriggerQueueCrawl()) {
+          clearInterval(state.autoQueuePollTimer);
+          state.autoQueuePollTimer = null;
+          return;
+        }
       }
 
       if (attempts >= maxAttempts) {
         clearInterval(state.autoQueuePollTimer);
         state.autoQueuePollTimer = null;
-        state.isAutoQueuePipelineActive = false;
-        if (pauseBtn) pauseBtn.style.display = "none";
-        console.log("[AI Assistant] Queue advance polling completed.");
-        AIExt.updateStatus("Ready (Queue idle)", "idle");
+        console.log("[AI Assistant] Queue advance polling completed. Continuous watcher remains active.");
       }
     }, 150);
   }
+
+  // Immediate capture listener: user clicking submit or "click here" unblocks review state
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("button, input[type=submit], input[type=button], a");
+    if (!btn) return;
+    const txt = (btn.textContent || btn.value || "").trim().toLowerCase();
+    if (txt === "submit" || txt.includes("submit") || txt === "click here" || txt.includes("click here")) {
+      state.isWaitingForUserWorkingReview = false;
+    }
+  }, true);
+
+  // Continuous Auto-Watcher: guarantees user NEVER has to manually click crawl when auto-queue is enabled!
+  setInterval(() => {
+    try {
+      if (state.autoQueueEnabled && !state.isCrawlingInProgress) {
+        // Check if portal has "Website data saved successfully" banner (as shown in user portal screenshot)
+        const pageText = (document.body ? document.body.innerText || "" : "").toLowerCase();
+        if (pageText.includes("website data saved successfully") || pageText.includes("data saved successfully")) {
+          state.isWaitingForUserWorkingReview = false;
+          const currentUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
+          const normCurrent = (currentUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+          const normLast = (state.lastProcessedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+          // If input still contains the previous submitted URL, trigger "click here" button to advance!
+          if (!normCurrent || normCurrent === normLast) {
+            triggerFromQueue();
+          }
+        }
+        checkAndAutoTriggerQueueCrawl();
+      }
+    } catch (e) { }
+  }, 300);
+
+  // DOM MutationObserver for immediate reaction when AJAX injects new URL
+  try {
+    const queueDomObserver = new MutationObserver(() => {
+      if (state.autoQueueEnabled && !state.isCrawlingInProgress) {
+        checkAndAutoTriggerQueueCrawl();
+      }
+    });
+    if (typeof document !== "undefined" && (document.documentElement || document.body)) {
+      queueDomObserver.observe(document.documentElement || document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["value"]
+      });
+    }
+  } catch (e) { }
 
   /**
    * Automatically confirms custom confirmation popups/modals and submits the form
@@ -561,22 +610,43 @@
     if (!btn || btn.closest("#ai-prefill-widget")) return;
     const txt = (btn.textContent || btn.value || "").trim().toLowerCase();
     const isSubmit = btn.type === "submit" || (btn.id && btn.id.toLowerCase().includes("submit")) || (btn.className && typeof btn.className === "string" && btn.className.toLowerCase().includes("submit")) || txt === "submit" || (txt.includes("submit") && !txt.includes("reset") && !txt.includes("cancel"));
-    if (isSubmit && state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
+    if (isSubmit) {
+      state.isWaitingForUserWorkingReview = false;
       const curUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
-      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({
-          autoQueuePipeline: {
-            active: true,
-            lastSubmittedUrl: curUrl || "",
-            updatedAt: Date.now()
+      if (curUrl) state.lastProcessedUrl = curUrl;
+      if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
+        state.isAutoQueuePipelineActive = true;
+        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({
+            autoQueuePipeline: {
+              active: true,
+              lastSubmittedUrl: curUrl || "",
+              updatedAt: Date.now()
+            }
+          });
+        }
+        setTimeout(() => {
+          if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
+            scheduleNextQueueAutoCrawl(curUrl);
           }
-        });
+        }, 300);
       }
+    }
+  }, true);
+
+  // Form submit listener for keyboard / programmatic form submits
+  document.addEventListener("submit", (e) => {
+    if (e.target && e.target.closest && e.target.closest("#ai-prefill-widget")) return;
+    state.isWaitingForUserWorkingReview = false;
+    const curUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
+    if (curUrl) state.lastProcessedUrl = curUrl;
+    if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
+      state.isAutoQueuePipelineActive = true;
       setTimeout(() => {
         if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
           scheduleNextQueueAutoCrawl(curUrl);
         }
-      }, 450);
+      }, 300);
     }
   }, true);
 
@@ -588,6 +658,7 @@
     processNextBatchNotWorkingItem,
     markAndSubmitCurrentAsNotWorking,
     stopAutoQueuePipeline,
+    checkAndAutoTriggerQueueCrawl,
     scheduleNextQueueAutoCrawl,
     autoSubmitNotWorking,
     extractLiveDomPayload

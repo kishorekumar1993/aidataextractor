@@ -299,16 +299,20 @@
       throw new Error("XLSX library not available for Excel generation.");
     }
 
-    const rows = (records || []).map(r => ({
-      "URL": String(r.URL || r.url || "").trim(),
-      "Website Status": String(r["Website Status"] || r.websiteStatus || "").trim(),
-      "Reason": String(r.Reason || r.reason || "").trim(),
-      "Error Keyword": String(r["Error Keyword"] || r.errorKeyword || "").trim(),
-      "Error Source Link": String(r["Error Source Link"] || r.errorSourceLink || r["Error URL"] || r.errorUrl || "").trim(),
-      "Error Context": String(r["Error Context"] || r.errorContext || r.errorSnippet || "").trim(),
-      "Date": String(r.Date || r.date || "").trim(),
-      "Time": String(r.Time || r.time || "").trim()
-    }));
+    const rows = (records || []).map(r => {
+      const rawReason = String(r.Reason || r.reason || "").trim();
+      const cleanReason = isValidNonWorkingReason(rawReason) ? rawReason : extractErrorReason(r);
+      return {
+        "URL": String(r.URL || r.url || "").trim(),
+        "Website Status": String(r["Website Status"] || r.websiteStatus || "").trim(),
+        "Reason": cleanReason,
+        "Error Keyword": String(r["Error Keyword"] || r.errorKeyword || "").trim(),
+        "Error Source Link": String(r["Error Source Link"] || r.errorSourceLink || r["Error URL"] || r.errorUrl || "").trim(),
+        "Error Context": String(r["Error Context"] || r.errorContext || r.errorSnippet || "").trim(),
+        "Date": String(r.Date || r.date || "").trim(),
+        "Time": String(r.Time || r.time || "").trim()
+      };
+    });
 
     const ws = lib.utils.json_to_sheet(rows, { header: NON_WORKING_COLUMNS });
 
@@ -460,7 +464,22 @@
     if (!storage) return [];
     try {
       const data = await storage.get([NON_WORKING_STORAGE_KEY]);
-      return Array.isArray(data[NON_WORKING_STORAGE_KEY]) ? data[NON_WORKING_STORAGE_KEY] : [];
+      const rawRecords = Array.isArray(data[NON_WORKING_STORAGE_KEY]) ? data[NON_WORKING_STORAGE_KEY] : [];
+      let hadInvalid = false;
+      const records = rawRecords.map(r => {
+        if (!r) return r;
+        const curReason = String(r.Reason || r.reason || "").trim();
+        if (!isValidNonWorkingReason(curReason)) {
+          hadInvalid = true;
+          const clean = extractErrorReason(r);
+          return { ...r, Reason: clean, reason: clean };
+        }
+        return r;
+      });
+      if (hadInvalid && typeof storage.set === "function") {
+        storage.set({ [NON_WORKING_STORAGE_KEY]: records }).catch(() => {});
+      }
+      return records;
     } catch (e) {
       console.warn("[NonWorkingRecords] Error reading storage:", e.message);
       return [];

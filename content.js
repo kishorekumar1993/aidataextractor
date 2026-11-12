@@ -85,15 +85,27 @@
       if (initialUrl) {
         AIExt.updateDetectedUrlDisplay();
         console.log("Detected Website Name URL on load:", initialUrl);
+        if (state.autoQueueEnabled && !state.isCrawlingInProgress && !state.isBatchNotWorkingActive) {
+          console.log("[AI Assistant] ⚡ Auto-crawl enabled on load. Auto-starting crawl...");
+          if (typeof AIExt.checkAndAutoTriggerQueueCrawl === "function") {
+            AIExt.checkAndAutoTriggerQueueCrawl();
+          }
+        }
       }
-    }, 500);
+    }, 600);
   }
 
 
   async function triggerCrawlAndFill(options = {}) {
     const isFromAutoQueue = !!(options && options.fromAutoQueue === true);
     if (state.isCrawlingInProgress) {
-      console.log("[AI Assistant] Crawl already active. Ignoring duplicate request.");
+      console.log("[AI Assistant] Crawl already active. Providing user visual feedback.");
+      const quickBtn = document.getElementById("ai-quick-btn");
+      if (quickBtn) {
+        quickBtn.style.transform = "scale(0.96)";
+        setTimeout(() => { quickBtn.style.transform = ""; }, 150);
+      }
+      AIExt.updateStatus("⏳ Crawl already in progress... please wait", "loading");
       return;
     }
     if (!AIExt.isExtensionAlive()) {
@@ -114,13 +126,19 @@
     }
     let targetUrl = AIExt.getTargetUrl();
     if (!targetUrl && typeof AIExt.triggerFromQueue === "function") {
-      if (AIExt.triggerFromQueue()) {
-        targetUrl = AIExt.getTargetUrl();
-      }
+      AIExt.triggerFromQueue();
+      targetUrl = AIExt.getTargetUrl();
     }
 
     if (!targetUrl) {
-      AIExt.updateStatus("⚠️ Website Name URL not found. Click 'From Queue' or enter a URL.", "error");
+      state.isCrawlingInProgress = false;
+      const inputEl = typeof AIExt.findWebsiteNameInput === "function" ? AIExt.findWebsiteNameInput() : null;
+      if (inputEl) {
+        inputEl.style.outline = "2px solid #ef4444";
+        inputEl.focus();
+        setTimeout(() => { inputEl.style.outline = ""; }, 2000);
+      }
+      AIExt.updateStatus("⚠️ Website Name URL not found. Click 'click here' or enter a URL.", "error");
       AIExt.resetCrawlButtons();
       return;
     }
@@ -133,15 +151,18 @@
     const quickBtn = document.getElementById("ai-quick-btn");
     if (crawlBtn) {
       crawlBtn.disabled = true;
-      crawlBtn.innerHTML = "<span>⏳ Crawling...</span>";
+      crawlBtn.classList.add("ai-btn-crawling");
+      crawlBtn.innerHTML = '<span class="ai-spinner-icon"></span> <span>Crawling Site...</span>';
     }
     if (headerCrawlBtn) {
       headerCrawlBtn.disabled = true;
-      headerCrawlBtn.innerHTML = "⏳ Crawling...";
+      headerCrawlBtn.classList.add("ai-btn-crawling");
+      headerCrawlBtn.innerHTML = '<span class="ai-spinner-icon"></span> <span>Crawling...</span>';
     }
     if (quickBtn) {
       quickBtn.disabled = true;
-      quickBtn.innerHTML = "⏳ Crawling...";
+      quickBtn.classList.add("ai-btn-crawling");
+      quickBtn.innerHTML = '<span class="ai-spinner-icon"></span> <span>Crawling Site...</span>';
     }
 
     // Safety timeout: ensure buttons are NEVER permanently disabled (30s)
@@ -265,8 +286,12 @@
         }
       } else {
         // CRITICAL INSTRUCTION: "if working site stop to submit button"
-        // STOP auto-pipeline immediately! DO NOT auto-submit working sites.
-        AIExt.stopAutoQueuePipeline(data.websiteStatus === "Redirect Site" ? "Redirect Site found" : "Working site found");
+        // STOP auto-pipeline and pause at submit button for manual user review
+        state.isWaitingForUserWorkingReview = true;
+        state.lastProcessedUrl = targetUrl;
+        state.isAutoQueuePipelineActive = false;
+        const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+        if (pauseBtn) pauseBtn.style.display = "none";
 
         // Highlight Submit button and scroll into view for user's manual review
         const submitBtn = document.getElementById("btnSubmitForm") ||
@@ -289,10 +314,13 @@
           const onWorkingSubmit = () => {
             if (submitHandled) return;
             submitHandled = true;
+            state.isWaitingForUserWorkingReview = false;
             submitBtn.classList.remove("ai-submit-ready-highlight");
             document.removeEventListener("keydown", onCtrlEnterSubmit);
+            const currentSubmitted = AIExt.getTargetUrl() || targetUrl;
+            state.lastProcessedUrl = currentSubmitted;
             if (state.autoQueueEnabled) {
-              const currentSubmitted = AIExt.getTargetUrl();
+              state.isAutoQueuePipelineActive = true;
               if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
                 chrome.storage.local.set({
                   autoQueuePipeline: {
@@ -302,9 +330,10 @@
                   }
                 });
               }
+              AIExt.updateStatus("⏳ Website saved! Loading next URL...", "loading");
               setTimeout(() => {
                 AIExt.scheduleNextQueueAutoCrawl(currentSubmitted);
-              }, 400);
+              }, 300);
             }
           };
           const onCtrlEnterSubmit = (ev) => {
@@ -322,6 +351,15 @@
         const sourceTag = data._extractionSource === "ai"
           ? "🤖 AI"
           : (data._extractionSource === "own_crawl_fallback" ? "⚠️ Own Crawl (AI Fallback)" : "🕷️ Own Crawl");
+        if (quickBtn) {
+          quickBtn.classList.remove("ai-btn-crawling");
+          quickBtn.classList.add("ai-btn-success");
+          quickBtn.innerHTML = '<span>✅ Pre-Filled!</span>';
+          setTimeout(() => {
+            quickBtn.classList.remove("ai-btn-success");
+            quickBtn.innerHTML = '🤖 AI Crawl & Fill';
+          }, 1500);
+        }
         if (data.websiteStatus === "Redirect Site") {
           AIExt.updateStatus(`🔄 Redirect Site detected! Pre-filled ${fillReport.filledCount} fields [${sourceTag}: ${note}]. Stopped at Submit button for manual review.`, "success");
         } else {

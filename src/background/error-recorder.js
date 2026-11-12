@@ -101,6 +101,22 @@
         records = Array.isArray(data[NON_WORKING_STORAGE_KEY]) ? data[NON_WORKING_STORAGE_KEY] : [];
         lastSyncTime = data[NON_WORKING_SYNC_TIME_KEY] || null;
       }
+
+      // Auto-clean any legacy records that had engine taglines (e.g. "AI Powered by Gemini")
+      let hadInvalid = false;
+      records = records.map(r => {
+        if (!r) return r;
+        const curReason = String(r.Reason || r.reason || "").trim();
+        if (typeof isValidNonWorkingReason === "function" && !isValidNonWorkingReason(curReason)) {
+          hadInvalid = true;
+          const clean = typeof extractErrorReason === "function" ? extractErrorReason(r) : "Website has 0 products and no verifiable catalog or physical address (Rule 1)";
+          return { ...r, Reason: clean, reason: clean };
+        }
+        return r;
+      });
+      if (hadInvalid && typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ [NON_WORKING_STORAGE_KEY]: records }).catch(() => {});
+      }
       const stats = typeof calculateErrorStats === "function"
         ? calculateErrorStats(records, lastSyncTime)
         : { totalNotWorking: 0, totalRedirect: 0, totalNotEnglish: 0, totalHistorical: records.length, lastSyncTime: "Never" };

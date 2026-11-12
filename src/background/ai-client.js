@@ -122,7 +122,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Must NOT be identical. Reject privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix). Empty string "" if none found.
 
 9. PHONE NUMBER (CRITICAL QC RULE):
-- Complete telephone number with ONLY the international calling code (+1, +33, +44, +61, +62, +886) and optional trunk "(0)" removed. Keep ALL remaining national/area digits intact (Example: "+33 (0) 3 89 44 13 88" -> strip +33 and (0) -> "389441388", NEVER drop the area digit '3'; "+6282136903270" -> strip +62 -> "82136903270").
+- Complete telephone number with ONLY the international calling code (+1, +33, +44, +60, +61, +62, +886) and optional trunk "(0)" removed. Keep ALL remaining national/area digits intact (Example: "+33 (0) 3 89 44 13 88" -> strip +33 and (0) -> "389441388", NEVER drop the area digit '3'; "+6043329299" -> strip +60 -> "43329299"; "+6282136903270" -> strip +62 -> "82136903270").
 - Digits only (no spaces, hyphens, brackets, or dots).
 - Strip leading zeroes. MUST NEVER start with zero.
 - STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). If only toll-free is available, return empty string "".

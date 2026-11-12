@@ -2165,6 +2165,24 @@ async function runAsyncTests() {
     };
     const recWithReason = ctx.createErrorRecord(validProhibitedRecord);
     assert.strictEqual(recWithReason.Reason, 'Defence & Military ("military")');
+
+    // 6. Test generateNonWorkingExcel sanitizes dirty Reason fields
+    const dirtyRecords = [
+      { URL: "http://www.ewt.com.my", websiteStatus: "Not Working", Reason: "AI Powered by Gemini (gemini-3.5-flash-lite)" }
+    ];
+    const wb = ctx.generateNonWorkingExcel(dirtyRecords, ctx.XLSX);
+    const generatedRows = ctx.XLSX.utils.sheet_to_json(wb.Sheets[ctx.NON_WORKING_EXCEL_SHEET]);
+    assert.strictEqual(generatedRows[0].Reason, "Website has 0 products and no verifiable catalog or physical address (Rule 1)");
+    assert.ok(!generatedRows[0].Reason.includes("Gemini"));
+
+    // 7. Verify Chee Wah Corporation Berhad is preserved without all-caps mutation
+    const cheeWahHtml = "<html><title>CHEE WAH CORPORATION BERHAD</title><body>WELCOME TO CHEE WAH</body></html>";
+    const cheeWahNormalized = ctx.restoreOriginalSymbolsInCompanyName("Chee Wah Corporation Berhad", { mainHtml: cheeWahHtml, title: "CHEE WAH CORPORATION BERHAD" });
+    assert.strictEqual(cheeWahNormalized, "Chee Wah Corporation Berhad", "Normal name with vowels must not be uppercased");
+
+    // 8. Verify PERI is properly uppercased
+    const periNormalized = ctx.restoreOriginalSymbolsInCompanyName("Peri Societas Europaea", { mainHtml: "<html><body>PERI SE</body></html>" });
+    assert.strictEqual(periNormalized, "PERI Societas Europaea", "PERI acronym must be uppercased");
   });
 }
 

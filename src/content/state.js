@@ -16,6 +16,7 @@
     isBatchNotWorkingActive: false,
     batchNotWorkingRemaining: 0,
     isCrawlingInProgress: false,
+    isWaitingForUserWorkingReview: false,
     debounceTimer: null
   });
 
