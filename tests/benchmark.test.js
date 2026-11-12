@@ -2303,6 +2303,12 @@ async function runAsyncTests() {
     assert.strictEqual(multiPageCraneCheck.sourceUrl, "https://www.totalhoistsandcranes.com.au/about-us/industries");
     assert.strictEqual(multiPageCraneCheck.category, "Marine");
 
+    // 12. Parked Domain / GoDaddy Parking Lander Detection (e.g. negribossi.co.uk/lander)
+    const godaddyLanderHtml = `<!doctype html><html lang="en"><head><script>window.LANDER_SYSTEM="PW"</script><script>window._trfd=window._trfd||[],window._trfd.push({ap:"parking"})</script><script defer="defer" src="https://img1.wsimg.com/parking-lander/static/js/main.1cc9fa89.js"></script></head><body><div id="root"></div></body></html>`;
+    const parkedCheck = ctx.detectDisallowedWebsitePlatformOrDomain("https://negribossi.co.uk/lander", godaddyLanderHtml, "");
+    assert.strictEqual(parkedCheck.isDisallowed, true, "Must detect GoDaddy parking lander as disallowed");
+    assert.ok(parkedCheck.reason.includes("Parked Domain"), "Reason must identify Parked Domain");
+
     // QC compliance: If site is restricted, all 13 fields MUST be empty
     const restrictedQcResult = ctx.applyStrictInstructions({
       websiteStatus: "Working",

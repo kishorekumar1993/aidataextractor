@@ -246,7 +246,9 @@ async function crawlWebsite(targetUrl) {
       if (clientRedirectHref && !clientRedirectHref.startsWith("#")) {
         try {
           const resolvedClientUrl = new URL(clientRedirectHref, finalUrl).href;
-          if (isRedirectDomain(targetUrl, resolvedClientUrl) || isRedirectDomain(finalUrl, resolvedClientUrl)) {
+          const isCrossDomain = isRedirectDomain(targetUrl, resolvedClientUrl) || isRedirectDomain(finalUrl, resolvedClientUrl);
+          const isThinShell = stripHtml(mainHtml).trim().length < 200;
+          if (isCrossDomain || isThinShell) {
             console.log(`[AI Assistant] Detected client-side HTML/JS redirect from ${finalUrl} to ${resolvedClientUrl}`);
             const clientRes = await fetchDecodedHtml(resolvedClientUrl, {
               timeoutMs: 3500,
@@ -258,9 +260,11 @@ async function crawlWebsite(targetUrl) {
             if (clientRes.ok && clientRes.html && clientRes.html.trim().length > 0) {
               mainRes = clientRes;
               finalUrl = clientRes.url || resolvedClientUrl;
-              redirected = true;
               mainHtml = clientRes.html;
-              status = "Redirect Site";
+              if (isCrossDomain) {
+                redirected = true;
+                status = "Redirect Site";
+              }
             }
           }
         } catch (e) { }

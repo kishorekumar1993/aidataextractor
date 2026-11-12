@@ -299,10 +299,12 @@ function detectDisallowedWebsitePlatformOrDomain(url, html = "", text = "") {
     /\b(?:buy\s+this\s+domain|domain\s+(?:is\s+)?for\s+sale|this\s+domain\s+(?:may\s+be\s+)?for\s+sale|inquire\s+about\s+this\s+domain|purchase\s+this\s+domain)\b/i,
     /\b(?:hugedomains\.com|sedo(?:\.com)?|godaddy\s*parked|dan\.com|afternic\.com|parked\s+domain|domain\s+parking)\b/i,
     /\b(?:website\s+under\s+construction|site\s+under\s+construction|under\s+construction|page\s+under\s+development|default\s+web\s+site\s+page|apache2\s+(?:ubuntu|debian)\s+default\s+page)\b/i,
-    /\b(?:this\s+site\s+is\s+currently\s+unavailable|account\s+suspended|this\s+account\s+has\s+been\s+suspended)\b/i
+    /\b(?:this\s+site\s+is\s+currently\s+unavailable|account\s+suspended|this\s+account\s+has\s+been\s+suspended)\b/i,
+    /(?:parking-lander|\bap:\s*["']parking["']|LANDER_SYSTEM\s*=|location(?:\.href)?\s*=\s*["']\/lander["']|sedoparking|bodis\.com)/i
   ];
+  const checkCorpus = pageTitle + " " + plainText + " " + (html || "").slice(0, 5000);
   for (const pp of parkedPatterns) {
-    if (pp.test(pageTitle + " " + plainText)) {
+    if (pp.test(checkCorpus)) {
       return {
         isDisallowed: true,
         reason: "Parked Domain / Under Construction (Rule 1)"
