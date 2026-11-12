@@ -53,6 +53,13 @@ function determineValidErrorKeywordQC(data, reason) {
   return "0 Products / No Catalog";
 }
 
+function determineValidErrorCategoryQC(reason) {
+  if (/prohibited|restricted/i.test(reason || "")) return "Prohibited Category";
+  if (/shopping cart|cart|checkout/i.test(reason || "")) return "Online Shopping Cart";
+  if (/timeout|connection|unreachable|fetch/i.test(reason || "")) return "Unreachable / Timeout";
+  return "No Business Products / 0 Products";
+}
+
 async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   const crawlStartTime = Date.now();
   let targetUrl = (rawUrl && typeof rawUrl === "string") ? rawUrl.trim() : "";
@@ -432,28 +439,15 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       extractedData._extractionMode = "ai_only";
 
       if (extractedData.websiteStatus === "Not Working") {
-        const ownCheck = heuristicExtraction(crawlResult, restrictedCheck);
-        const hasGenuineOwnWorkingEvidence = ownCheck.websiteStatus === "Working" &&
-          ownCheck.companyName &&
-          (ownCheck.companyAddress || ownCheck.emailId || ownCheck.phoneNumber) &&
-          !restrictedCheck.isRestricted &&
-          !(crawlResult.shopCartCheck && crawlResult.shopCartCheck.detected);
-
-        if (hasGenuineOwnWorkingEvidence) {
-          extractedData = ownCheck;
-          extractedData._note = `Own Crawl (AI False-Negative Verification: ${usedLabel})`;
-          extractedData._extractionSource = "own_crawl_fallback";
-          extractedData._extractionMode = "ai_only";
-          extractedData._isFromAi = false;
-        } else {
-          const validReason = (extractedData.notWorkingReason && isValidNonWorkingReasonQC(extractedData.notWorkingReason))
-            ? extractedData.notWorkingReason
-            : (ownCheck.notWorkingReason || "Website has 0 products and no verifiable catalog or physical address (Rule 1).");
-          extractedData.notWorkingReason = validReason;
-          extractedData.errorSnippet = validReason;
-          extractedData.errorKeyword = ownCheck.errorKeyword || "0 Products / No Catalog";
-          extractedData.errorCategory = ownCheck.errorCategory || "No Business Products / 0 Products";
-        }
+        const validReason = (extractedData.notWorkingReason && isValidNonWorkingReasonQC(extractedData.notWorkingReason))
+          ? extractedData.notWorkingReason
+          : (extractedData.reason && isValidNonWorkingReasonQC(extractedData.reason))
+          ? extractedData.reason
+          : "Website has 0 products and no verifiable catalog or physical address (Rule 1).";
+        extractedData.notWorkingReason = validReason;
+        extractedData.errorSnippet = validReason;
+        extractedData.errorKeyword = determineValidErrorKeywordQC(extractedData, validReason);
+        extractedData.errorCategory = determineValidErrorCategoryQC(validReason);
       }
     } catch (aiErr) {
       console.warn(`[AI Assistant] AI Only mode: ${aiConfig.label} API call failed, falling back to Own Crawl:`, aiErr.message);
@@ -491,29 +485,15 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         extractedData._extractionMode = "ai_first";
 
         if (extractedData.websiteStatus === "Not Working") {
-          const ownCheck = heuristicExtraction(crawlResult, restrictedCheck);
-          const hasGenuineOwnWorkingEvidence = ownCheck.websiteStatus === "Working" &&
-            ownCheck.companyName &&
-            (ownCheck.companyAddress || ownCheck.emailId || ownCheck.phoneNumber) &&
-            !restrictedCheck.isRestricted &&
-            !(crawlResult.shopCartCheck && crawlResult.shopCartCheck.detected);
-
-          if (hasGenuineOwnWorkingEvidence) {
-            console.log(`[AI Assistant] AI marked site as Not Working, but Own Crawl detected verified working business (${ownCheck.companyName}). Utilizing verified Own Crawl data.`);
-            extractedData = ownCheck;
-            extractedData._note = `Own Crawl (AI False-Negative Verification: ${usedLabel})`;
-            extractedData._extractionSource = "own_crawl_fallback";
-            extractedData._extractionMode = "ai_first";
-            extractedData._isFromAi = false;
-          } else {
-            const validReason = (extractedData.notWorkingReason && isValidNonWorkingReasonQC(extractedData.notWorkingReason))
-              ? extractedData.notWorkingReason
-              : (ownCheck.notWorkingReason || "Website has 0 products and no verifiable catalog or physical address (Rule 1).");
-            extractedData.notWorkingReason = validReason;
-            extractedData.errorSnippet = validReason;
-            extractedData.errorKeyword = ownCheck.errorKeyword || "0 Products / No Catalog";
-            extractedData.errorCategory = ownCheck.errorCategory || "No Business Products / 0 Products";
-          }
+          const validReason = (extractedData.notWorkingReason && isValidNonWorkingReasonQC(extractedData.notWorkingReason))
+            ? extractedData.notWorkingReason
+            : (extractedData.reason && isValidNonWorkingReasonQC(extractedData.reason))
+            ? extractedData.reason
+            : "Website has 0 products and no verifiable catalog or physical address (Rule 1).";
+          extractedData.notWorkingReason = validReason;
+          extractedData.errorSnippet = validReason;
+          extractedData.errorKeyword = determineValidErrorKeywordQC(extractedData, validReason);
+          extractedData.errorCategory = determineValidErrorCategoryQC(validReason);
         }
       } catch (aiErr) {
         console.warn(`[AI Assistant] ${aiConfig.label} API error, falling back to Own Crawl rule engine:`, aiErr.message);
@@ -880,12 +860,13 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.countryName = country;
 
-    // 4. Company Address: Take directly from API with safe Rule 6 cleanup; reconcile with authentic raw candidates to prevent missing items
+    // 4. Company Address: Take directly from API with safe Rule 6 cleanup. Strictly preserve AI address; NEVER overwrite with local crawl raw candidates!
     let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
     const aiAddrMatch = resolveBestAddressCandidateAndSource(addr, crawlData);
     const selectedAiCandidate = aiAddrMatch.candidate || (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates[0]) || null;
     const bestRaw = selectedAiCandidate ? (typeof selectedAiCandidate === "object" ? selectedAiCandidate.raw : selectedAiCandidate) : "";
 
+    // Fall back to local raw crawl ONLY if AI returned empty or Not Available
     if (!addr || addr.toLowerCase() === "not available" || addr.length < 5) {
       if (bestRaw) {
         addr = bestRaw;
@@ -895,9 +876,6 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     if (addr && addr !== "Not Available") {
-      if (bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
-        addr = reconcileAddressWithRawEvidence(addr, bestRaw, result.companyName, country, crawlData);
-      }
       addr = typeof sanitizeRule6CompanyAddress === "function"
         ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData)
         : toTitleCase(addr);
