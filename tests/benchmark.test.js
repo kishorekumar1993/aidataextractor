@@ -122,6 +122,36 @@ runTest('Phone number cleaning (UK leading zero stripped)', () => {
   assert.strictEqual(cleaned, "1773535638", "Should strip leading zero");
 });
 
+runTest('Phone number country calling code stripping (High Priority across global countries)', () => {
+  // Malaysia: +60 and raw 60
+  assert.strictEqual(ctx.cleanPhoneNumber("+6043329299", "Malaysia"), "43329299", "Malaysia +60 must be stripped");
+  assert.strictEqual(ctx.cleanPhoneNumber("6043329299", "Malaysia"), "43329299", "Malaysia raw 60 must be stripped");
+
+  // China: +86 and raw 86
+  assert.strictEqual(ctx.cleanPhoneNumber("+86 21 6888 8888", "China"), "2168888888", "China +86 must be stripped");
+  assert.strictEqual(ctx.cleanPhoneNumber("862168888888", "China"), "2168888888", "China raw 86 must be stripped");
+
+  // Taiwan: +886 and raw 886
+  assert.strictEqual(ctx.cleanPhoneNumber("+886 4 7322367", "Taiwan"), "47322367", "Taiwan +886 must be stripped");
+  assert.strictEqual(ctx.cleanPhoneNumber("88647322367", "Taiwan"), "47322367", "Taiwan raw 886 must be stripped");
+  assert.strictEqual(ctx.cleanPhoneNumber("+886-6-2318800", "Taiwan"), "62318800", "Taiwan +886-6-2318800 must yield 62318800");
+
+  // India: +91 and raw 91
+  assert.strictEqual(ctx.cleanPhoneNumber("+91 98401 23456", "India"), "9840123456", "India +91 must be stripped");
+  assert.strictEqual(ctx.cleanPhoneNumber("919840123456", "India"), "9840123456", "India raw 91 must be stripped");
+
+  // USA: +1 and raw 1
+  assert.strictEqual(ctx.cleanPhoneNumber("+1 (212) 555-1234", "United States"), "2125551234", "US +1 must be stripped");
+  assert.strictEqual(ctx.cleanPhoneNumber("12125551234", "United States"), "2125551234", "US raw 1 must be stripped");
+
+  // Germany: +49 and raw 49
+  assert.strictEqual(ctx.cleanPhoneNumber("+49 89 1234567", "Germany"), "891234567", "Germany +49 must be stripped");
+  assert.strictEqual(ctx.cleanPhoneNumber("49891234567", "Germany"), "891234567", "Germany raw 49 must be stripped");
+
+  // France: +33 with trunk (0)
+  assert.strictEqual(ctx.cleanPhoneNumber("+33 (0) 3 89 44 13 88", "France"), "389441388", "France +33 and trunk (0) must be stripped");
+});
+
 // 6. Toll-free phone rejection
 runTest('Toll-free numbers rejected', () => {
   const tf1 = ctx.cleanPhoneNumber("1-800-633-6775", "United States");

@@ -159,9 +159,9 @@ function cleanPhoneNumber(rawPhone, country) {
   let codeRemoved = false;
   const matchedCountryCc = countryCodes.find(cc => cc.match.some(m => cLower.includes(m)));
 
-  // 1. Match by detected country strictly: ONLY strip this specific country's calling code
+  // 1. Match by detected country strictly: ALWAYS strip this specific country's calling code
   if (matchedCountryCc) {
-    if (digits.startsWith(matchedCountryCc.code) && (hasPlus || has00 || digits.length >= (matchedCountryCc.minLen - 1))) {
+    if (digits.startsWith(matchedCountryCc.code) && (hasPlus || has00 || (digits.length - matchedCountryCc.code.length) >= 6)) {
       digits = digits.slice(matchedCountryCc.code.length);
       codeRemoved = true;
     }
@@ -170,8 +170,10 @@ function cleanPhoneNumber(rawPhone, country) {
   // 2. Fallback ONLY when country is unknown OR explicit international prefix (+ or 00) was present
   // NEVER strip foreign country codes (e.g. South Korea +82) from an already-stripped domestic number (e.g. Indonesia 82136903270)
   if (!codeRemoved && (!matchedCountryCc || hasPlus || has00)) {
-    for (const cc of countryCodes) {
-      if (digits.startsWith(cc.code) && digits.length >= ((hasPlus || has00) ? cc.minLen - 1 : cc.minLen)) {
+    // Sort descending by code length so 3-digit codes match before 2-digit, before 1-digit
+    const sortedCountryCodes = [...countryCodes].sort((a, b) => b.code.length - a.code.length);
+    for (const cc of sortedCountryCodes) {
+      if (digits.startsWith(cc.code) && (digits.length - cc.code.length) >= 7 && (digits.length - cc.code.length) <= 12) {
         digits = digits.slice(cc.code.length);
         codeRemoved = true;
         break;
@@ -233,5 +235,9 @@ function cleanPhoneNumber(rawPhone, country) {
   }
 
   return digits;
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { cleanPhoneNumber };
 }
 

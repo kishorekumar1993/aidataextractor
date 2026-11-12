@@ -892,6 +892,10 @@
     try {
       if (elements.phoneNumber) {
         let phoneVal = (data.phoneNumber && data.phoneNumber !== "Not Available") ? String(data.phoneNumber).trim() : "";
+        if (phoneVal && typeof cleanPhoneNumber === "function") {
+          const cleaned = cleanPhoneNumber(phoneVal, data.countryName || data.Country || "");
+          if (cleaned) phoneVal = cleaned;
+        }
         setInputValue(elements.phoneNumber, phoneVal);
         if (phoneVal) {
           highlightField(elements.phoneNumber);

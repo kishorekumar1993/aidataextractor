@@ -35,7 +35,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   "city": "Available" | "Not Available" | "",
   "emailId": "string",
   "secondaryEmailId": "string",
-  "phoneNumber": "string",
+  "phoneNumber": "string (domestic digits ONLY with country calling code and leading zero ALWAYS stripped, e.g. 43329299, 2168888888, 9840123456, 2125551234)",
   "numberOfProducts": "0" | "1" | "2" | "3" | "",
   "productImages": "0" | "1" | "2" | "3" | "",
   "numberOfProductDescriptions": "0" | "1" | "2" | "3" | ""
@@ -121,12 +121,24 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Secondary Email: Distinct secondary corporate email (e.g. support@, jobs@, service@).
 - Must NOT be identical. Reject privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix). Empty string "" if none found.
 
-9. PHONE NUMBER (CRITICAL QC RULE):
-- Complete telephone number with ONLY the international calling code (+1, +33, +44, +60, +61, +62, +886) and optional trunk "(0)" removed. Keep ALL remaining national/area digits intact (Example: "+33 (0) 3 89 44 13 88" -> strip +33 and (0) -> "389441388", NEVER drop the area digit '3'; "+6043329299" -> strip +60 -> "43329299"; "+6282136903270" -> strip +62 -> "82136903270").
-- Digits only (no spaces, hyphens, brackets, or dots).
-- Strip leading zeroes. MUST NEVER start with zero.
+9. PHONE NUMBER (CRITICAL HIGH PRIORITY RULE - MANDATORY INTERNATIONAL COUNTRY CODE REMOVAL):
+- ABSOLUTELY NEVER INCLUDE THE COUNTRY CALLING CODE IN phoneNumber! RETURN ONLY DOMESTIC SUBSCRIBER DIGITS!
+- YOU MUST STRIP THE INTERNATIONAL COUNTRY CALLING CODE FOR ALL COUNTRIES WORLDWIDE:
+  * Malaysia (+60): "+60 4-3329299" -> strip +60 -> "43329299" (CRITICAL: NEVER return "6043329299"!)
+  * China (+86): "+86 21 6888 8888" -> strip +86 -> "2168888888" (CRITICAL: NEVER return "862168888888"!)
+  * Taiwan (+886): "+886 4 7322367" -> strip +886 -> "47322367" (CRITICAL: NEVER return "88647322367"!)
+  * India (+91): "+91 98401 23456" -> strip +91 -> "9840123456" (CRITICAL: NEVER return "919840123456"!)
+  * United States / Canada (+1): "+1 (212) 555-1234" -> strip +1 -> "2125551234" (CRITICAL: NEVER return "12125551234"!)
+  * United Kingdom (+44): "+44 1773 768822" -> strip +44 and trunk (0) -> "1773768822"
+  * Australia (+61): "+61 3 9562 0780" -> strip +61 and trunk (0) -> "395620780"
+  * Indonesia (+62): "+62 821 3690 3270" -> strip +62 -> "82136903270"
+  * France (+33): "+33 (0) 3 89 44 13 88" -> strip +33 and trunk (0) -> "389441388"
+  * Germany (+49): "+49 89 123456" -> strip +49 and trunk (0) -> "89123456"
+  * Hong Kong (+852), Japan (+81), South Korea (+82), Singapore (+65), Thailand (+66), Vietnam (+84), Philippines (+63), South Africa (+27), UAE (+971), Saudi Arabia (+966), Italy (+39), Spain (+34), Netherlands (+31), Switzerland (+41), Poland (+48), Türkiye (+90), Mexico (+52), Brazil (+55), New Zealand (+64), Pakistan (+92), Bangladesh (+880), etc.
+- ALWAYS STRIP TRUNK ZERO (e.g. 04-3329299 -> 43329299; 020 7946 0000 -> 2079460000).
+- Digits only (no spaces, hyphens, brackets, dots, or plus signs).
 - STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). If only toll-free is available, return empty string "".
-- Valid numbers must be between 8 and 12 digits.
+- Valid numbers must be domestic national digits between 7 and 12 digits.
 
 10. PRODUCT, IMAGE & DESCRIPTION COUNTS:
 - Values: "0" | "1" | "2" | "3" (3 or more).
@@ -193,8 +205,18 @@ function finalizeParsedAiResult(parsed, crawlData) {
   if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
     parsed.secondaryEmailId = "";
   }
-  if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
-    parsed.phoneNumber = crawlData.phones[0];
+  if (parsed.phoneNumber) {
+    if (typeof cleanPhoneNumber === "function") {
+      parsed.phoneNumber = cleanPhoneNumber(parsed.phoneNumber, parsed.countryName);
+    }
+  } else if (crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
+    for (const p of crawlData.phones) {
+      const cl = typeof cleanPhoneNumber === "function" ? cleanPhoneNumber(p, parsed.countryName) : p;
+      if (cl) {
+        parsed.phoneNumber = cl;
+        break;
+      }
+    }
   }
 
   if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {

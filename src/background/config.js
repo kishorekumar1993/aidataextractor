@@ -168,7 +168,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     phoneNumber: {
       type: "STRING",
-      description: "Complete phone number with ONLY the country code (+1, +33, +44, +60, +61, +62, +886) and trunk (0) removed, keeping ALL remaining national digits (e.g. '+33 (0) 3 89 44 13 88' -> '389441388', NEVER drop '3'; '+6043329299' -> '43329299'; '+6282136903270' -> '82136903270'). Digits only. Do not take toll-free numbers. Do not take numbers starting with zero."
+      description: "Domestic subscriber digits ONLY. Country calling code (+1, +44, +60, +61, +62, +86, +91, +886, etc.) and leading trunk zero MUST ALWAYS BE REMOVED. E.g. '+6043329299' -> '43329299'; '+86 21 6888 8888' -> '2168888888'; '+91 98401 23456' -> '9840123456'; '+886 4 7322367' -> '47322367'; '+1 212 555 1234' -> '2125551234'. Digits only. Strictly do not take toll-free numbers."
     },
     numberOfProducts: {
       type: "STRING",
