@@ -1539,6 +1539,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   country = resolveUkCountryName(country, addr, crawlData);
   result.countryName = country;
 
+  // Re-sanitize address if country was determined/refined to ensure country is stripped & state expanded
+  if (country && addr && addr !== "Not Available" && typeof sanitizeRule6CompanyAddress === "function") {
+    addr = sanitizeRule6CompanyAddress(addr, compName, country, crawlData);
+    result.companyAddress = addr;
+  }
+
   // Helper for cross-country equivalence (UK constituent nations, USA variants)
   const isSameOrConstituentCountry = (c1, c2) => {
     if (!c1 || !c2) return false;

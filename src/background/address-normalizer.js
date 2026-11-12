@@ -209,6 +209,16 @@ function romanizeChineseAddress(addr) {
     [/惠泽/g, "Huize "],
 
     // General terms
+    [/([一二三四五六七八九1-9])\s*段/g, (m, d) => {
+      const numMap = { "一": "1", "二": "2", "三": "3", "四": "4", "五": "5", "六": "6", "七": "7", "八": "8", "九": "9" };
+      return `Section ${numMap[d] || d}, `;
+    }],
+    [/([A-Za-z\u4e00-\u9fa5]+)\s*東路/g, "$1 East Road, "],
+    [/([A-Za-z\u4e00-\u9fa5]+)\s*东路/g, "$1 East Road, "],
+    [/([A-Za-z\u4e00-\u9fa5]+)\s*西路/g, "$1 West Road, "],
+    [/([A-Za-z\u4e00-\u9fa5]+)\s*南路/g, "$1 South Road, "],
+    [/([A-Za-z\u4e00-\u9fa5]+)\s*北路/g, "$1 North Road, "],
+    [/([A-Za-z\u4e00-\u9fa5]+)\s*中路/g, "$1 Middle Road, "],
     [/大道/g, " Avenue, "],
     [/路/g, " Road, "],
     [/街/g, " Street, "],
@@ -462,11 +472,27 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|,\s*)N\b\s+(?=[A-Z][a-z])/g, '$1North ');
   a = a.replace(/(^|,\s*)S\b\s+(?=[A-Z][a-z])/g, '$1South ');
 
+  // (b-2) Directional following street name: e.g. "Yongke E. Rd.", "Yongke E Rd", "Zhongshan N. Road", "Bade E. Road"
+  a = a.replace(/\b([A-Za-z\u00C0-\u024F]+)\s+E\b\.?\s+(?=(?:Rd|Road|St|Street|Ave|Avenue|Blvd|Boulevard|Ln|Lane|Dr|Drive|Way|Ct|Court|Pl|Place|Hwy|Highway|Sec|Section)\b)/gi, '$1 East ');
+  a = a.replace(/\b([A-Za-z\u00C0-\u024F]+)\s+W\b\.?\s+(?=(?:Rd|Road|St|Street|Ave|Avenue|Blvd|Boulevard|Ln|Lane|Dr|Drive|Way|Ct|Court|Pl|Place|Hwy|Highway|Sec|Section)\b)/gi, '$1 West ');
+  a = a.replace(/\b([A-Za-z\u00C0-\u024F]+)\s+N\b\.?\s+(?=(?:Rd|Road|St|Street|Ave|Avenue|Blvd|Boulevard|Ln|Lane|Dr|Drive|Way|Ct|Court|Pl|Place|Hwy|Highway|Sec|Section)\b)/gi, '$1 North ');
+  a = a.replace(/\b([A-Za-z\u00C0-\u024F]+)\s+S\b\.?\s+(?=(?:Rd|Road|St|Street|Ave|Avenue|Blvd|Boulevard|Ln|Lane|Dr|Drive|Way|Ct|Court|Pl|Place|Hwy|Highway|Sec|Section)\b)/gi, '$1 South ');
+
   // (c) Multi-letter directional prefixes: NE, NW, SE, SW
   a = a.replace(/(^|[\s,])N\.?E\.?\s+(?=[A-Za-z0-9])/gi, '$1Northeast ');
   a = a.replace(/(^|[\s,])N\.?W\.?\s+(?=[A-Za-z0-9])/gi, '$1Northwest ');
   a = a.replace(/(^|[\s,])S\.?E\.?\s+(?=[A-Za-z0-9])/gi, '$1Southeast ');
   a = a.replace(/(^|[\s,])S\.?W\.?\s+(?=[A-Za-z0-9])/gi, '$1Southwest ');
+
+  // (c-2) Street directional suffix: e.g. "Main St. E.", "Main Street E", "Washington Ave. S.", "17th Street NW"
+  a = a.replace(/\b(Street|Road|Avenue|Boulevard|Drive|Way|Lane|Court|Place|Close|Crescent|Terrace|Square|Highway|St|Rd|Ave|Blvd|Dr|Ln|Ct|Pl)\s+E\b\.?(?=[,\s]|$)/gi, '$1 East');
+  a = a.replace(/\b(Street|Road|Avenue|Boulevard|Drive|Way|Lane|Court|Place|Close|Crescent|Terrace|Square|Highway|St|Rd|Ave|Blvd|Dr|Ln|Ct|Pl)\s+W\b\.?(?=[,\s]|$)/gi, '$1 West');
+  a = a.replace(/\b(Street|Road|Avenue|Boulevard|Drive|Way|Lane|Court|Place|Close|Crescent|Terrace|Square|Highway|St|Rd|Ave|Blvd|Dr|Ln|Ct|Pl)\s+N\b\.?(?=[,\s]|$)/gi, '$1 North');
+  a = a.replace(/\b(Street|Road|Avenue|Boulevard|Drive|Way|Lane|Court|Place|Close|Crescent|Terrace|Square|Highway|St|Rd|Ave|Blvd|Dr|Ln|Ct|Pl)\s+S\b\.?(?=[,\s]|$)/gi, '$1 South');
+  a = a.replace(/\b(Street|Road|Avenue|Boulevard|Drive|Way|Lane|Court|Place|Close|Crescent|Terrace|Square|Highway|St|Rd|Ave|Blvd|Dr|Ln|Ct|Pl)\s+(?:NE|N\.E\.)(?=[,\s]|$)/gi, '$1 Northeast');
+  a = a.replace(/\b(Street|Road|Avenue|Boulevard|Drive|Way|Lane|Court|Place|Close|Crescent|Terrace|Square|Highway|St|Rd|Ave|Blvd|Dr|Ln|Ct|Pl)\s+(?:NW|N\.W\.)(?=[,\s]|$)/gi, '$1 Northwest');
+  a = a.replace(/\b(Street|Road|Avenue|Boulevard|Drive|Way|Lane|Court|Place|Close|Crescent|Terrace|Square|Highway|St|Rd|Ave|Blvd|Dr|Ln|Ct|Pl)\s+(?:SE|S\.E\.)(?=[,\s]|$)/gi, '$1 Southeast');
+  a = a.replace(/\b(Street|Road|Avenue|Boulevard|Drive|Way|Lane|Court|Place|Close|Crescent|Terrace|Square|Highway|St|Rd|Ave|Blvd|Dr|Ln|Ct|Pl)\s+(?:SW|S\.W\.)(?=[,\s]|$)/gi, '$1 Southwest');
 
   // 3. Number, Section, Lane & Alley prefixes (Global full form expansion)
   // Note: Special characters like # and & must be preserved inside address (e.g. Suite #4, Unit #12)
@@ -624,7 +650,8 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bindl\b\.?/gi, "Industrial");
   a = a.replace(/\bcomml?\b\.?\s+(?=(?:park|estate|est\.?|center|centre|ctr\.?|district|area|zone|hub|complex|rd|road)\b)/gi, "Commercial ");
   a = a.replace(/\bbus\.?\s+(?=(?:park|estate|est\.?|center|centre|ctr\.?|district|hub|complex)\b)/gi, "Business ");
-  a = a.replace(/\btech\.?\s+(?=(?:park|estate|est\.?|center|centre|ctr\.?|zone|hub|corridor|blvd|rd|way|dr)\b)/gi, "Technology ");
+  a = a.replace(/\b(?:hi|high)[-\s]*tech\b\.?/gi, "High-Technology");
+  a = a.replace(/\btech\.?\s+(?=(?:park|estate|est\.?|center|centre|ctr\.?|zone|hub|corridor|blvd|rd|way|dr|industrial)\b)/gi, "Technology ");
   a = a.replace(/\bpk\b\.?/gi, "Park");
   a = a.replace(/\best\b\.?\s+(?=(?:park|area|zone)\b)/gi, "Estate ");
   a = a.replace(/\b([A-Za-z0-9]+\s+(?:Industrial|Business|Trade|Trading|Commercial|Manor|Factory|Enterprise|Logistics|Distribution|Technology|Science)\s+)est\b\.?/gi, "$1Estate");
@@ -2106,9 +2133,10 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   }
 
   // 11. Strip country names from address per Rule 6
-  a = a.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
+  a = a.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|England|Scotland|Wales|Northern\s*Ireland|Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
   a = a.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
   a = a.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
+  a = a.replace(/(?:中華民國|台灣|臺灣|中国|中國)/g, " ");
   if (resolvedCountry && resolvedCountry.length > 2) {
     const cRegex = new RegExp(`\\b${resolvedCountry.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "gi");
     a = a.replace(cRegex, " ");
@@ -2118,7 +2146,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   if (resolvedCountry && /united states/i.test(resolvedCountry)) {
     a = a.replace(/[,;\s]+\b(?:USA|US)\b\s*$/i, "").trim();
   } else {
-    a = a.replace(/[,;\s]+\b(?:CA|USA|US|UK|AU|NZ|ZA|DE|FR|ES|IT|IN|CN|TW|MY|ID)\b\s*$/i, "").trim();
+    a = a.replace(/[,;\s]+\b(?:CA|USA|US|UK|GB|AU|NZ|ZA|DE|FR|ES|IT|IN|CN|PRC|TW|ROC|MY|ID)\b\s*$/i, "").trim();
   }
 
   // 12. Strip postal codes per Rule 6

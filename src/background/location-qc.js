@@ -53,16 +53,16 @@ function resolveCountryFromAllEvidence(currentCountry, addrStr, crawlData) {
   // Check international phone calling codes
   if (!country && crawlData && Array.isArray(crawlData.phones)) {
     const callingCodeMap = {
-      "49": "Germany", "44": "United Kingdom", "1": "United States Of America",
-      "61": "Australia", "64": "New Zealand", "886": "Taiwan", "86": "China",
-      "81": "Japan", "82": "South Korea", "91": "India", "60": "Malaysia",
+      "886": "Taiwan", "852": "Hong Kong", "971": "United Arab Emirates",
+      "966": "Saudi Arabia", "974": "Qatar", "965": "Kuwait", "420": "Czech Republic",
+      "358": "Finland", "351": "Portugal", "353": "Ireland", "385": "Croatia",
+      "49": "Germany", "44": "United Kingdom", "61": "Australia", "64": "New Zealand",
+      "86": "China", "81": "Japan", "82": "South Korea", "91": "India", "60": "Malaysia",
       "62": "Indonesia", "65": "Singapore", "33": "France", "39": "Italy",
       "34": "Spain", "31": "Netherlands", "41": "Switzerland", "43": "Austria",
       "48": "Poland", "27": "South Africa", "55": "Brazil", "52": "Mexico",
-      "90": "Türkiye", "971": "United Arab Emirates", "966": "Saudi Arabia",
-      "974": "Qatar", "965": "Kuwait", "32": "Belgium", "46": "Sweden",
-      "47": "Norway", "45": "Denmark", "358": "Finland", "420": "Czech Republic",
-      "351": "Portugal", "30": "Greece", "353": "Ireland", "385": "Croatia"
+      "90": "Türkiye", "32": "Belgium", "46": "Sweden", "47": "Norway",
+      "45": "Denmark", "30": "Greece", "1": "United States Of America"
     };
     for (const p of crawlData.phones) {
       const pStr = String(p || "").trim();
@@ -70,6 +70,21 @@ function resolveCountryFromAllEvidence(currentCountry, addrStr, crawlData) {
       if (codeMatch && callingCodeMap[codeMatch[1]]) {
         country = callingCodeMap[codeMatch[1]];
         break;
+      }
+      const digits = pStr.replace(/^\+/, "").replace(/\D/g, "");
+      if (digits.length >= 7) {
+        if (callingCodeMap[digits.slice(0, 3)]) {
+          country = callingCodeMap[digits.slice(0, 3)];
+          break;
+        }
+        if (callingCodeMap[digits.slice(0, 2)]) {
+          country = callingCodeMap[digits.slice(0, 2)];
+          break;
+        }
+        if (digits.length >= 10 && callingCodeMap[digits.slice(0, 1)]) {
+          country = callingCodeMap[digits.slice(0, 1)];
+          break;
+        }
       }
     }
   }
@@ -89,6 +104,7 @@ function resolveCountryFromAllEvidence(currentCountry, addrStr, crawlData) {
       [/\.(?:com\.my|org\.my|net\.my|my)(?:\/|$)/, "Malaysia"],
       [/\.(?:co\.id|web\.id|or\.id|id)(?:\/|$)/, "Indonesia"],
       [/\.(?:com\.sg|sg)(?:\/|$)/, "Singapore"],
+      [/\.us(?:\/|$)/, "United States Of America"],
       [/\.ca(?:\/|$)/, "Canada"],
       [/\.fr(?:\/|$)/, "France"],
       [/\.it(?:\/|$)/, "Italy"],
@@ -1003,8 +1019,8 @@ function evaluateCityQC(address, country) {
     return "Available";
   }
 
-  // Structural address detection (for Canada where city precedes province)
-  if (/\b(?:canada)\b/i.test(country || cleanAddr)) {
+  // Structural address detection (for USA, Canada, and countries where city precedes state/province)
+  if (isUnitedStatesLocation(cleanAddr, country) || /\b(?:canada|china|germany|deutschland|france)\b/i.test(country || cleanAddr)) {
     const structCity = detectCityFromStructure(cleanAddr, country);
     if (structCity && !isNotCitySegment(structCity)) {
       return "Available";
@@ -1028,7 +1044,7 @@ function detectCountryFromAddress(address) {
   if (/\b(?:czech\s*republic|ceska\s*republika|cesko|czechia)\b/i.test(unaccented)) return "Czech Republic";
   if (/\b(south\s*africa)\b/i.test(unaccented)) return "South Africa";
   if (/\b(people['’]?s?\s*republic\s*of\s*china|p\.?r\.?c\.?)\b/i.test(unaccented)) return "China";
-  if (/\b(taiwan|republic\s*of\s*china|r\.?o\.?c\.?)\b/i.test(unaccented) || /(?:臺灣|台灣|臺北|台北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|彰化|苗栗|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江|大里區|草堤路)/.test(address)) return "Taiwan";
+  if (/\b(taiwan|republic\s*of\s*china|r\.?o\.?c\.?)\b/i.test(unaccented) || /(?:臺灣|台灣|臺北|台北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|彰化|苗栗|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江|馬祖|基隆|大里|永康|草堤|湖口|竹北|員林|鹿港|板橋|新莊|中壢|楊梅|龜山|蘆竹|中華民國)/.test(address)) return "Taiwan";
   if (/\b(england)\b/i.test(unaccented)) return "England";
   if (/\b(scotland)\b/i.test(unaccented)) return "Scotland";
   if (/(?<!\bnew\s+south\s+)\bwales\b/i.test(unaccented)) return "Wales";
@@ -1117,7 +1133,7 @@ function detectCountryFromAddress(address) {
   if (/\b(?:prague|praha|brno|ostrava|plzen|olomouc|liberec|ceske\s*budejovice|hradec\s*kralove|usti\s*nad\s*labem|pardubice|zlin|havirov|kladno|most|karvina|opava|frydek-mistek)\b/i.test(unaccented)) {
     return "Czech Republic";
   }
-  if (/\b(taoyuan\s*hsien|taoyuan|yangmei|taipei|new\s*taipei|kaohsiung|taichung|tainan|hsinchu)\b/i.test(unaccented)) {
+  if (/\b(?:taoyuan\s*hsien|taoyuan|yangmei|taipei|new\s*taipei|kaohsiung|taichung|tainan|hsinchu|changhua|chiayi|miaoli|nantou|yunlin|pingtung|yilan|hualien|taitung|keelung|kinmen|penghu|lienchiang|matsu|yongkang|zhongli|banqiao|xinzhuang|zhonghe|yonghe|xindian|tucheng|luzhou|xizhi|shulin|sanxia|yingge|wugu|taishan|linkou|tamsui|dali|taiping|fengyuan|shalu|wuqi|houli|tanzi|wuri|lukang|yuanlin|zhubei|zhudong|hukou|toufen|zhunan)\b/i.test(unaccented)) {
     return "Taiwan";
   }
   if (/\b(boksburg|johannesburg|pretoria|durban|cape\s*town|sandton|midrand|centurion|gauteng|ekurhuleni)\b/i.test(unaccented)) {
@@ -1150,12 +1166,20 @@ function detectCountryFromAddress(address) {
   if (/\b(bavaria|bayern|baden-wurttemberg|nordrhein-westfalen|hessen|sachsen|weissenhorn|munich|munchen|berlin|frankfurt|hamburg|stuttgart|cologne|koln|dusseldorf|dortmund|essen|leipzig|bremen|dresden|hannover|nurnberg|nuremberg|ulm|neu-ulm|augsburg|wiesbaden|karlsruhe|mannheim|bonn|munster|bielefeld|aachen|freiburg|heidelberg|wolfsburg|ingolstadt|regensburg)\b/i.test(unaccented)) return "Germany";
   if (/\b(andalucia|cataluna|galicia|pais\s*vasco|aragon|asturias|baleares|canarias|cantabria|castilla|extremadura|navarra|rioja|barcelona|valencia|sevilla|zaragoza|malaga|murcia|alicante|cordoba|valladolid|vigo|gijon|coruna|toledo|vizcaya|bizkaia)\b/i.test(unaccented)) return "Spain";
   if (/\b(maharashtra|karnataka|tamil\s*nadu|gujarat|uttar\s*pradesh|telangana|delhi)\b/i.test(unaccented)) return "India";
-  if (/\b(taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung)\s*(hsien|county)\b/i.test(unaccented)) return "Taiwan";
+  if (/\b(?:taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung|keelung|kinmen|penghu)\s*(?:hsien|county)\b/i.test(unaccented)) return "Taiwan";
   if (/\b(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon)\b/i.test(unaccented)) return "Türkiye";
   if (/\b(selangor|johor|perak|kedah|pahang|negeri\s*sembilan|melaka|malacca|terengganu|kelantan|sabah|sarawak|perlis|wilayah\s*persekutuan|labuan|subang\s*jaya|petaling\s*jaya|shah\s*alam|klang|johor\s*bahru|george\s*town|ipoh|kota\s*kinabalu|kuching|seremban|batu\s*pahat|pasir\s*gudang|iskandar\s*puteri|puchong|cheras|cyberjaya|rawang|kajang|kuantan|alor\s*setar|taiping|sungai\s*petani|bintulu|miri|sibu|sandakan|tawau|butterworth|bukit\s*mertajam|nilai|semenyih)\b/i.test(unaccented)) return "Malaysia";
   if (/\b(penang|pulau\s*pinang)\b/i.test(unaccented) && !/\b(?:penang\s+road|penang\s+street|penang\s+lane)\b/i.test(unaccented)) return "Malaysia";
   if (/\b(jawa\s*barat|jawa\s*tengah|jawa\s*timur|west\s*java|central\s*java|east\s*java|banten|sumatera\s*utara|sumatera\s*barat|sumatera\s*selatan|north\s*sumatra|west\s*sumatra|south\s*sumatra|kalimantan\s*(?:timur|barat|selatan|tengah|utara)?|sulawesi\s*(?:selatan|utara|tengah|tenggara|barat)?|kepulauan\s*riau|bangka\s*belitung|nusa\s*tenggara\s*(?:barat|timur)?|dki\s*jakarta|di\s*yogyakarta|surabaya|bandung|medan|semarang|makassar|palembang|tangerang|tangerang\s*selatan|bekasi|depok|bogor|batam|pekanbaru|bandar\s*lampung|balikpapan|denpasar|samarinda|cikarang|karawang|sidoarjo|gresik|serang|cilegon|solo|surakarta|malang|pontianak|manado|banjarmasin|cimahi|sukabumi|cirebon|tasikmalaya|purwakarta|jepara)\b/i.test(unaccented)) return "Indonesia";
   if (/\b(canterbury|waikato|bay\s*of\s*plenty|otago|hawke's\s*bay|hawkes\s*bay|taranaki|manawatu|southland|northland|marlborough|tasman|west\s*coast|auckland|christchurch|hamilton|tauranga|dunedin|lower\s*hutt|upper\s*hutt|palmerston\s*north|invercargill|rotorua|whangarei|napier|porirua|new\s*plymouth|queenstown|blenheim|timaru|taupo|pukekohe|cambridge|whakatane|hastings|gisborne|nelson|whanganui|feilding|levin|masterton|ashburton|rangiora|rolleston|wanaka)\b/i.test(unaccented)) return "New Zealand";
+
+  // Check Taiwan signals before Chinese character fallback to China
+  const hasTaiwanSignal = /\b(?:taoyuan|yangmei|taipei|new\s*taipei|kaohsiung|taichung|tainan|hsinchu|changhua|chiayi|miaoli|nantou|yunlin|pingtung|yilan|hualien|taitung|keelung|kinmen|penghu|lienchiang|matsu|yongkang|zhongli|banqiao|xinzhuang|zhonghe|yonghe|xindian|tucheng|luzhou|xizhi|shulin|sanxia|yingge|wugu|taishan|linkou|tamsui|dali|taiping|fengyuan|shalu|wuqi|houli|tanzi|wuri|lukang|yuanlin|zhubei|zhudong|hukou|toufen|zhunan)\b/i.test(unaccented) ||
+    /(?:臺灣|台灣|臺北|台北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|彰化|苗栗|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江|馬祖|基隆|大里|永康|草堤|湖口|竹北|員林|鹿港|板橋|新莊|中壢|楊梅|龜山|蘆竹|中華民國)/.test(address);
+  if (hasTaiwanSignal) {
+    return "Taiwan";
+  }
+
   if (/\b(guangdong|jiangsu|zhejiang|shandong|henan|sichuan|hubei|hunan|hebei|fujian|anhui|liaoning|shaanxi|jiangxi|huizhou|shenzhen|guangzhou|dongguan|foshan|zhongshan|zhuhai|suzhou|wuxi|changzhou|nanjing|hangzhou|ningbo|wenzhou|jiaxing|qingdao|jinan|yantai|weifang|xiamen|fuzhou|quanzhou|chengdu|wuhan|changsha|zhengzhou)\b/i.test(unaccented) || /[\u4e00-\u9fa5]/.test(address)) {
     return "China";
   }

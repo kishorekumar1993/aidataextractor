@@ -470,6 +470,14 @@ function preferOfficialCompanyName(name, crawlData) {
     if (!curMatchesDomain && dStemNorm && (offNorm.includes(dStemNorm) || dStemNorm.includes(offNorm))) {
       score += 120;
     }
+    // Strongly boost English legal registered company names over pure Chinese characters
+    if (!/[\u4e00-\u9fa5]/.test(official) && /[A-Za-z]/.test(official) && hasSuffix) {
+      score += 80;
+    }
+    // Demote pure Chinese character candidates when English candidates are available
+    if (/[\u4e00-\u9fa5]/.test(official) && !/[A-Za-z]/.test(official)) {
+      score -= 50;
+    }
     // Boost English candidate matching domain when current is in Chinese/non-Latin
     if (/[\u4e00-\u9fa5]/.test(current) && dStemNorm && offNorm.includes(dStemNorm)) {
       score += 70;
@@ -1104,11 +1112,11 @@ function expandCompanyAbbreviations(name, country = "") {
  */
 function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
   if (!compName || typeof compName !== "string") return compName;
-  // If already has a comma before Incorporated / Company, Limited / Limited Liability Company / Limited, keep it intact
-  if (/,\s*(?:Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Limited)\b/i.test(compName)) {
+  // If already has a comma before corporate legal designations, keep it intact
+  if (/,\s*(?:Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Corporation|Public\s*Limited\s*Company|Proprietary\s*Limited|Private\s*Limited|Limited)\b/i.test(compName)) {
     return compName;
   }
-  const m = compName.match(/^(.*?)\s+(Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Limited)\b(.*)$/i);
+  const m = compName.match(/^(.*?)\s+(Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Corporation|Public\s*Limited\s*Company|Proprietary\s*Limited|Private\s*Limited|Limited)\b(.*)$/i);
   if (m) {
     const base = m[1].trim();
     const suffix = m[2].trim();
@@ -1126,7 +1134,7 @@ function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
 
     const baseTokens = base.split(/\s+/).filter(Boolean);
     const flexibleBasePattern = baseTokens.map(t => t.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")).join("\\s*");
-    if (new RegExp(`${flexibleBasePattern}\\s*,\\s*(?:Inc|Incorporated|LLC|Ltd|Limited)`, "i").test(corpus)) {
+    if (new RegExp(`${flexibleBasePattern}\\s*,\\s*(?:Inc|Incorporated|LLC|Ltd|Limited|Corp|Corporation|Plc)`, "i").test(corpus)) {
       return `${base}, ${suffix}${rest}`;
     }
   }

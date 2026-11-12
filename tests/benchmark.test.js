@@ -2312,6 +2312,159 @@ async function runAsyncTests() {
     assert.strictEqual(restrictedQcResult.state, "");
     assert.strictEqual(restrictedQcResult.city, "");
   });
+
+  runTest('Own Crawl extraction & QC robustness for Taiwan, UK, USA, China', () => {
+    // 1. Taiwan Own Crawl test case
+    const mockTaiwanCrawl = {
+      originalUrl: "http://www.kaulin.com.tw",
+      finalUrl: "https://www.kaulin.com.tw/en/",
+      title: "Kaulin Mfg. Co., Ltd. - Industrial Sewing Machines",
+      copyrightText: "Copyright © 2024 Kaulin Mfg. Co., Ltd. All Rights Reserved.",
+      legalCompanyCandidates: ["Kaulin Mfg. Co., Ltd.", "高林股份有限公司"],
+      addressCandidates: [
+        {
+          raw: "No. 159, Yongke E. Rd., Yongkang Dist., Tainan City 71041, Taiwan, R.O.C.",
+          source: "contact",
+          isHeadquarters: true,
+          isEnglish: true
+        },
+        {
+          raw: "710台南市永康區永科東路159號",
+          source: "footer",
+          isHeadquarters: true,
+          isEnglish: false
+        }
+      ],
+      phones: ["+886-6-233-2888"],
+      emails: ["service@kaulin.com.tw"],
+      mainHtml: `<html><body><h1>Kaulin Mfg. Co., Ltd.</h1><div>No. 159, Yongke E. Rd., Yongkang Dist., Tainan City 71041, Taiwan</div></body></html>`,
+      combinedText: "Kaulin Mfg. Co., Ltd. No. 159, Yongke E. Rd., Yongkang Dist., Tainan City 71041, Taiwan",
+      productItems: [
+        { name: "Overlock Machine", img: "overlock.jpg", desc: "High speed industrial overlock sewing machine" },
+        { name: "Interlock Machine", img: "interlock.jpg", desc: "Multi-thread industrial interlock machine" },
+        { name: "Lockstitch Machine", img: "lockstitch.jpg", desc: "Single needle direct drive lockstitch machine" }
+      ]
+    };
+
+    const taiwanExtracted = ctx.heuristicExtraction(mockTaiwanCrawl, { isRestricted: false });
+    const taiwanQc = ctx.applyStrictInstructions(taiwanExtracted, mockTaiwanCrawl, { isRestricted: false });
+
+    assert.strictEqual(taiwanQc.websiteStatus, "Working");
+    assert.strictEqual(taiwanQc.companyName, "Kaulin Manufacturing Company, Limited", "Taiwan company abbreviation must expand Co., Ltd. to Company, Limited and Mfg. to Manufacturing");
+    assert.strictEqual(taiwanQc.countryName, "Taiwan", "Taiwan country name must be Taiwan");
+    assert.strictEqual(taiwanQc.companyAddress, "Number 159, Yongke East Road, Yongkang District, Tainan City", "Taiwan address must expand Yongke E. Rd. to Yongke East Road, No. to Number, strip 71041 postal code and Taiwan country");
+    assert.strictEqual(taiwanQc.state, "Not Available", "Taiwan municipalities/districts have no state (State: Not Available)");
+    assert.strictEqual(taiwanQc.city, "Available", "Tainan City / Yongkang District must be City Available");
+    assert.strictEqual(taiwanQc.phoneNumber, "62332888", "Taiwan phone must strip +886 calling code");
+
+    // 2. United Kingdom (UK) Own Crawl test case
+    const mockUkCrawl = {
+      originalUrl: "http://www.dataplastics.co.uk",
+      finalUrl: "https://www.dataplastics.co.uk/",
+      title: "Data Plastics Ltd - Precision Injection Moulding",
+      copyrightText: "© 2024 Data Plastics Ltd",
+      legalCompanyCandidates: ["Data Plastics Ltd"],
+      addressCandidates: [
+        {
+          raw: "42 High Street, Manchester, M1 1AA, United Kingdom",
+          source: "contact",
+          isHeadquarters: true,
+          isEnglish: true
+        }
+      ],
+      phones: ["+44 0161 234 5678"],
+      emails: ["enquiries@dataplastics.co.uk"],
+      mainHtml: `<html><body><p>42 High Street, Manchester, M1 1AA</p></body></html>`,
+      combinedText: "Data Plastics Ltd 42 High Street, Manchester, M1 1AA, United Kingdom",
+      productItems: [
+        { name: "Moulding 1", img: "m1.jpg", desc: "Precision custom moulding" },
+        { name: "Moulding 2", img: "m2.jpg", desc: "Medical grade plastic injection" },
+        { name: "Moulding 3", img: "m3.jpg", desc: "Industrial tooling and extrusion" }
+      ]
+    };
+
+    const ukExtracted = ctx.heuristicExtraction(mockUkCrawl, { isRestricted: false });
+    const ukQc = ctx.applyStrictInstructions(ukExtracted, mockUkCrawl, { isRestricted: false });
+
+    assert.strictEqual(ukQc.companyName, "Data Plastics Limited", "UK company abbreviation must expand Ltd to Limited");
+    assert.strictEqual(ukQc.countryName, "United Kingdom", "UK country name must be United Kingdom when explicitly on site");
+    assert.strictEqual(ukQc.companyAddress, "42 High Street, Manchester", "UK address must strip UK postcode M1 1AA, strip United Kingdom, and NOT blindly add Number");
+    assert.strictEqual(ukQc.state, "Not Available", "UK has no state without explicit county keyword");
+    assert.strictEqual(ukQc.city, "Available", "Manchester is an official UK city");
+    assert.strictEqual(ukQc.phoneNumber, "1612345678", "UK phone must strip +44 and leading 0");
+
+    // 3. USA Own Crawl test case
+    const mockUsaCrawl = {
+      originalUrl: "http://www.hartlandprecision.com",
+      finalUrl: "https://www.hartlandprecision.com/",
+      title: "Hartland Precision Tools, LLC",
+      copyrightText: "© 2024 Hartland Precision Tools, LLC. All Rights Reserved.",
+      legalCompanyCandidates: ["Hartland Precision Tools, LLC"],
+      addressCandidates: [
+        {
+          raw: "604 Progress Drive, Hartland, WI 53029, USA",
+          source: "contact",
+          isHeadquarters: true,
+          isEnglish: true
+        }
+      ],
+      phones: ["+1 (262) 367-1234"],
+      emails: ["sales@hartlandprecision.com"],
+      mainHtml: `<html><body><p>604 Progress Drive, Hartland, WI 53029</p></body></html>`,
+      combinedText: "Hartland Precision Tools, LLC 604 Progress Drive, Hartland, WI 53029",
+      productItems: [
+        { name: "Tool A", img: "a.jpg", desc: "Precision tool holder" },
+        { name: "Tool B", img: "b.jpg", desc: "CNC collet chuck" },
+        { name: "Tool C", img: "c.jpg", desc: "Carbide milling insert" }
+      ]
+    };
+
+    const usaExtracted = ctx.heuristicExtraction(mockUsaCrawl, { isRestricted: false });
+    const usaQc = ctx.applyStrictInstructions(usaExtracted, mockUsaCrawl, { isRestricted: false });
+
+    assert.strictEqual(usaQc.companyName, "Hartland Precision Tools, Limited Liability Company", "USA company must expand LLC to Limited Liability Company");
+    assert.strictEqual(usaQc.countryName, "United States Of America", "USA country name must resolve to United States Of America");
+    assert.strictEqual(usaQc.companyAddress, "604 Progress Drive, Hartland, Wisconsin", "USA address must expand WI to Wisconsin, strip 53029 zip, strip USA, and NOT blindly add Number");
+    assert.strictEqual(usaQc.state, "Available", "Wisconsin is a recognized US state (State: Available)");
+    assert.strictEqual(usaQc.city, "Available", "Hartland precedes Wisconsin (City: Available)");
+    assert.strictEqual(usaQc.phoneNumber, "2623671234", "USA phone must strip +1 country calling code");
+
+    // 4. China Own Crawl test case
+    const mockChinaCrawl = {
+      originalUrl: "http://www.dongjianghardware.com",
+      finalUrl: "https://www.dongjianghardware.com/en/",
+      title: "Dongjiang Precision Hardware Co., Ltd.",
+      copyrightText: "Copyright © 2024 Dongjiang Precision Hardware Co., Ltd.",
+      legalCompanyCandidates: ["Dongjiang Precision Hardware Co., Ltd.", "东莞市东江精密五金制品有限公司"],
+      addressCandidates: [
+        {
+          raw: "Number 138 Huize Avenue, Dongjiang High-Tech Industrial Park, Zhongkai High-Tech Zone, Huizhou, Guangdong 516000, China",
+          source: "contact",
+          isHeadquarters: true,
+          isEnglish: true
+        }
+      ],
+      phones: ["+86-752-3891234"],
+      emails: ["info@dongjianghardware.com"],
+      mainHtml: `<html><body><p>Number 138 Huize Avenue, Dongjiang High-Tech Industrial Park, Huizhou, Guangdong 516000</p></body></html>`,
+      combinedText: "Dongjiang Precision Hardware Co., Ltd. Number 138 Huize Avenue, Dongjiang High-Tech Industrial Park, Huizhou, Guangdong 516000",
+      productItems: [
+        { name: "Hardware 1", img: "h1.jpg", desc: "Precision stamping parts" },
+        { name: "Hardware 2", img: "h2.jpg", desc: "CNC machined components" },
+        { name: "Hardware 3", img: "h3.jpg", desc: "Custom brass fittings" }
+      ]
+    };
+
+    const chinaExtracted = ctx.heuristicExtraction(mockChinaCrawl, { isRestricted: false });
+    const chinaQc = ctx.applyStrictInstructions(chinaExtracted, mockChinaCrawl, { isRestricted: false });
+
+    assert.strictEqual(chinaQc.companyName, "Dongjiang Precision Hardware Company, Limited", "China company must prefer English registered legal name and expand Co., Ltd. to Company, Limited");
+    assert.strictEqual(chinaQc.countryName, "China", "China country name must be China");
+    assert.strictEqual(chinaQc.companyAddress, "Number 138 Huize Avenue, Dongjiang High-Technology Industrial Park, Zhongkai High-Technology Zone, Huizhou, Guangdong", "China address must strip 6-digit postal code 516000 and China country");
+    assert.strictEqual(chinaQc.state, "Available", "Guangdong is a Chinese province (State: Available)");
+    assert.strictEqual(chinaQc.city, "Available", "Huizhou is a recognized city in Guangdong (City: Available)");
+    assert.strictEqual(chinaQc.phoneNumber, "7523891234", "China phone must strip +86 calling code");
+  });
 }
 
 runAsyncTests().then(() => {

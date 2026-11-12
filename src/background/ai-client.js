@@ -872,7 +872,7 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     ? resolveCountryFromAllEvidence("", address, crawlData)
     : (typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(address) : "");
   if (/^(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)$/i.test((country || "").trim())) {
-    country = "United Kingdom";
+    country = typeof resolveUkCountryName === "function" ? resolveUkCountryName(country, address, crawlData) : "United Kingdom";
   }
 
   // Sanitize Company Address per Rule 6

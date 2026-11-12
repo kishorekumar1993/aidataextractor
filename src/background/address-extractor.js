@@ -730,25 +730,45 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
   // Fallback home country signals if no explicit HQ block was tagged:
   if (!provenHomeCountry && crawlData) {
     const contactText = (crawlData.contactPageText || "") + " " + (crawlData.footerText || "");
-    const firstPhone = (crawlData.phones && crawlData.phones[0]) || "";
-    if (/^\+?886\b/.test(firstPhone) || /\+886\b/.test(contactText)) provenHomeCountry = "taiwan";
-    else if (/^\+?86\b/.test(firstPhone) || /\+86\b/.test(contactText)) provenHomeCountry = "china";
-    else if (/^\+?44\b/.test(firstPhone) || /\+44\b/.test(contactText)) provenHomeCountry = "england";
-    else if (/^\+?61\b/.test(firstPhone) || /\+61\b/.test(contactText)) provenHomeCountry = "australia";
-    else if (/^\+?91\b/.test(firstPhone) || /\+91\b/.test(contactText)) provenHomeCountry = "india";
-    else if (/^\+?27\b/.test(firstPhone) || /\+27\b/.test(contactText)) provenHomeCountry = "south africa";
-    else if (/^\+?60\b/.test(firstPhone) || /\+60\b/.test(contactText)) provenHomeCountry = "malaysia";
-    else if (/^\+?49\b/.test(firstPhone) || /\+49\b/.test(contactText)) provenHomeCountry = "germany";
-    else if (/^\+?34\b/.test(firstPhone) || /\+34\b/.test(contactText)) provenHomeCountry = "spain";
-    else if (/^\+?39\b/.test(firstPhone) || /\+39\b/.test(contactText)) provenHomeCountry = "italy";
-    else if (/^\+?64\b/.test(firstPhone) || /\+64\b/.test(contactText)) provenHomeCountry = "new zealand";
+    const allPhones = Array.isArray(crawlData.phones) ? crawlData.phones : [];
+    for (const p of allPhones) {
+      const pStr = String(p || "").trim();
+      if (/^\+?886\b/.test(pStr)) { provenHomeCountry = "taiwan"; break; }
+      if (/^\+?86\b/.test(pStr)) { provenHomeCountry = "china"; break; }
+      if (/^\+?44\b/.test(pStr)) { provenHomeCountry = "united kingdom"; break; }
+      if (/^\+?1\b/.test(pStr)) { provenHomeCountry = "united states of america"; break; }
+      if (/^\+?61\b/.test(pStr)) { provenHomeCountry = "australia"; break; }
+      if (/^\+?91\b/.test(pStr)) { provenHomeCountry = "india"; break; }
+      if (/^\+?27\b/.test(pStr)) { provenHomeCountry = "south africa"; break; }
+      if (/^\+?60\b/.test(pStr)) { provenHomeCountry = "malaysia"; break; }
+      if (/^\+?49\b/.test(pStr)) { provenHomeCountry = "germany"; break; }
+      if (/^\+?34\b/.test(pStr)) { provenHomeCountry = "spain"; break; }
+      if (/^\+?39\b/.test(pStr)) { provenHomeCountry = "italy"; break; }
+      if (/^\+?64\b/.test(pStr)) { provenHomeCountry = "new zealand"; break; }
+    }
+
+    if (!provenHomeCountry) {
+      if (/\+886\b/.test(contactText)) provenHomeCountry = "taiwan";
+      else if (/\+86\b/.test(contactText)) provenHomeCountry = "china";
+      else if (/\+44\b/.test(contactText)) provenHomeCountry = "united kingdom";
+      else if (/\+1[\s.-]?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/.test(contactText)) provenHomeCountry = "united states of america";
+      else if (/\+61\b/.test(contactText)) provenHomeCountry = "australia";
+      else if (/\+91\b/.test(contactText)) provenHomeCountry = "india";
+      else if (/\+27\b/.test(contactText)) provenHomeCountry = "south africa";
+      else if (/\+60\b/.test(contactText)) provenHomeCountry = "malaysia";
+      else if (/\+49\b/.test(contactText)) provenHomeCountry = "germany";
+      else if (/\+34\b/.test(contactText)) provenHomeCountry = "spain";
+      else if (/\+39\b/.test(contactText)) provenHomeCountry = "italy";
+      else if (/\+64\b/.test(contactText)) provenHomeCountry = "new zealand";
+    }
 
     // Domain ccTLD if still unknown
     if (!provenHomeCountry) {
       const urlStr = ((crawlData.finalUrl || "") + " " + (crawlData.originalUrl || "")).toLowerCase();
       if (/\.(?:com\.)?tw(?:\/|$)/i.test(urlStr)) provenHomeCountry = "taiwan";
       else if (/\.(?:com\.)?au(?:\/|$)/i.test(urlStr)) provenHomeCountry = "australia";
-      else if (/\.(?:co\.)?uk(?:\/|$)/i.test(urlStr)) provenHomeCountry = "england";
+      else if (/\.(?:co\.)?uk(?:\/|$)/i.test(urlStr)) provenHomeCountry = "united kingdom";
+      else if (/\.us(?:\/|$)/i.test(urlStr)) provenHomeCountry = "united states of america";
       else if (/\.ca(?:\/|$)/i.test(urlStr)) provenHomeCountry = "canada";
       else if (/\.(?:com\.)?cn(?:\/|$)/i.test(urlStr)) provenHomeCountry = "china";
       else if (/\.(?:com\.)?my(?:\/|$)/i.test(urlStr)) provenHomeCountry = "malaysia";
@@ -760,6 +780,43 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
       else if (/\.(?:co\.)?nz(?:\/|$)/i.test(urlStr)) provenHomeCountry = "new zealand";
     }
   }
+
+  const isSameOrConstituent = (c1, c2) => {
+    if (!c1 || !c2) return false;
+    const s1 = c1.trim().toLowerCase();
+    const s2 = c2.trim().toLowerCase();
+    if (s1 === s2) return true;
+    const ukGroup = ["united kingdom", "great britain", "uk", "england", "scotland", "wales", "northern ireland"];
+    if (ukGroup.includes(s1) && ukGroup.includes(s2)) return true;
+    const usGroup = ["united states of america", "united states", "usa", "us", "u.s.a."];
+    if (usGroup.includes(s1) && usGroup.includes(s2)) return true;
+    return false;
+  };
+
+  const matchesHome = (candRaw, home) => {
+    if (!candRaw || !home) return false;
+    const r = candRaw.toLowerCase();
+    const h = home.toLowerCase();
+    if (r.includes(h)) return true;
+    if (isSameOrConstituent("united kingdom", h)) {
+      return /\b(?:united\s*kingdom|great\s*britain|uk|england|scotland|wales|northern\s*ireland)\b/i.test(r) ||
+        /\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b/i.test(r);
+    }
+    if (isSameOrConstituent("united states of america", h)) {
+      return /\b(?:united\s*states|usa|u\.s\.a\.)\b/i.test(r) ||
+        /\b(?:alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new\s*hampshire|new\s*jersey|new\s*mexico|new\s*york|north\s*carolina|north\s*dakota|ohio|oklahoma|oregon|pennsylvania|rhode\s*island|south\s*carolina|south\s*dakota|tennessee|texas|utah|vermont|virginia|washington|west\s*virginia|wisconsin|wyoming)\b/i.test(r) ||
+        /\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/.test(candRaw);
+    }
+    if (h === "taiwan") {
+      return /\b(?:taiwan|r\.?o\.?c\.?|republic\s*of\s*china|taipei|new\s*taipei|kaohsiung|taichung|tainan|taoyuan|hsinchu|changhua|miaoli|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung|keelung)\b/i.test(r) ||
+        /(?:臺灣|台灣|臺北|台北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|彰化|苗栗|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江)/.test(candRaw);
+    }
+    if (h === "china") {
+      return /\b(?:china|p\.?r\.?c\.?|people['’]?s?\s*republic\s*of\s*china|beijing|shanghai|guangdong|shenzhen|guangzhou|dongguan|foshan|jiangsu|suzhou|wuxi|changzhou|nanjing|zhejiang|hangzhou|ningbo|shandong|qingdao)\b/i.test(r) ||
+        (/[\u4e00-\u9fa5]/.test(candRaw) && !/(?:臺灣|台灣|臺北|台北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|彰化|苗栗|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江)/.test(candRaw));
+    }
+    return false;
+  };
 
   // 2. Sort candidates strictly by priority hierarchy:
   // - Explicit Headquarters (Tier 1)
@@ -795,12 +852,8 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
     if (rawB.length > 10 && rawA.includes(rawB) && hasFullA && !hasFullB) return -1;
 
     if (provenHomeCountry) {
-      const matchA = rawA.includes(provenHomeCountry) ||
-        (provenHomeCountry === "china" && /[\u4e00-\u9fa5]/.test(rawA)) ||
-        (provenHomeCountry === "taiwan" && (rawA.includes("taiwan") || /[\u4e00-\u9fa5]/.test(rawA)));
-      const matchB = rawB.includes(provenHomeCountry) ||
-        (provenHomeCountry === "china" && /[\u4e00-\u9fa5]/.test(rawB)) ||
-        (provenHomeCountry === "taiwan" && (rawB.includes("taiwan") || /[\u4e00-\u9fa5]/.test(rawB)));
+      const matchA = matchesHome(rawA, provenHomeCountry);
+      const matchB = matchesHome(rawB, provenHomeCountry);
 
       if (matchA && !matchB) pA -= 4.0;
       else if (matchB && !matchA) pB -= 4.0;
@@ -808,8 +861,8 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
       // Penalize foreign branches located outside the home country
       const countryA = detectCountryFromAddress(rawA);
       const countryB = detectCountryFromAddress(rawB);
-      if (countryA && countryA.toLowerCase() !== provenHomeCountry) pA += 10.0;
-      if (countryB && countryB.toLowerCase() !== provenHomeCountry) pB += 10.0;
+      if (countryA && !isSameOrConstituent(countryA, provenHomeCountry)) pA += 10.0;
+      if (countryB && !isSameOrConstituent(countryB, provenHomeCountry)) pB += 10.0;
 
       // Boost English candidate that matches the home country
       if (matchA && a.isEnglish) pA -= 6.0;
