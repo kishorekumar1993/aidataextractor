@@ -195,6 +195,32 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   // If website fetch failed (network timeout, connection error, DNS failure, empty response):
   // INSTRUCTION: "IF FAILED TO FETCH MEANS MAKE IT NOTWORKING"
   if (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0) {
+    if (crawlResult.redirected || isRedirectDomain(targetUrl, crawlResult.finalUrl)) {
+      console.log(`[AI Assistant] Target URL redirected to ${crawlResult.finalUrl} (Rule 13 Redirect Site)`);
+      return finishAndRecord({
+        websiteStatus: "Redirect Site",
+        businessType: "",
+        companyProfile: "",
+        companyName: "",
+        countryName: "",
+        companyAddress: "",
+        state: "",
+        city: "",
+        emailId: "",
+        secondaryEmailId: "",
+        phoneNumber: "",
+        numberOfProducts: "",
+        productImages: "",
+        numberOfProductDescriptions: "",
+        errorKeyword: "Redirect Domain",
+        errorSourceUrl: crawlResult.finalUrl || targetUrl,
+        errorSnippet: `Website redirected from ${targetUrl} to ${crawlResult.finalUrl} (Rule 13)`,
+        _finalUrl: crawlResult.finalUrl,
+        _originalUrl: targetUrl,
+        _note: "Website redirected to different domain (Rule 13)"
+      });
+    }
+
     if (crawlResult.status === "Domain Expired" || crawlResult.httpStatus === 404) {
       return finishAndRecord({
         websiteStatus: "Domain Expired",
@@ -1060,47 +1086,51 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   const isDiffDomain = isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl);
   const isRedirectSite = isDiffDomain && (crawlData.status === "Redirect Site" || crawlData.redirected === true || isDiffDomain);
 
-  const platformCheck = detectDisallowedWebsitePlatformOrDomain(crawlData.originalUrl || crawlData.finalUrl, crawlData.mainHtml || "", crawlData.bodyText || "");
-  if (platformCheck.isDisallowed) {
-    result.websiteStatus = "Not Working";
-    result.isRestricted = true;
-    result.errorCategory = "Free Platform / Subdomain";
-    result.restrictedReason = platformCheck.reason;
-    result.restrictedKeyword = platformCheck.reason;
-    result.restrictedSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-    result.restrictedSnippet = platformCheck.reason;
-    result.errorKeyword = platformCheck.reason;
-    result.errorSourceUrl = result.restrictedSourceUrl;
-    result.errorSnippet = platformCheck.reason;
-  } else if (crawlData.status === "Flash" || detectFlashFormatSite(crawlData.mainHtml || "")) {
-    result.websiteStatus = "Flash";
-    result.errorCategory = "Flash Format";
-    result.errorKeyword = "Flash Content";
-    result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-    result.errorSnippet = "Flash Format Website - Not copyable (Rule 14)";
-  } else if (crawlData.status === "Non English" || detectNonEnglishWithoutTranslation(crawlData.mainHtml || "", crawlData.bodyText || "")) {
-    result.websiteStatus = "Non English";
-    result.errorCategory = "Non English";
-    result.errorKeyword = "Foreign Language";
-    result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-    result.errorSnippet = "Non-English Language Without Translation Option (Rule 12)";
-  } else if (crawlData.status === "Domain Expired") {
-    result.websiteStatus = "Domain Expired";
-    result.errorCategory = "Domain Expired";
-    result.errorKeyword = "Domain Expired";
-    result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-    result.errorSnippet = "Domain Expired or Server returned HTTP 404 Not Found (Rule 1)";
-  } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working") {
-    result.websiteStatus = (crawlData.status && crawlData.status !== "Working") ? crawlData.status : "Not Working";
-    result.errorCategory = crawlData.fetchError ? "Unreachable / Timeout" : "No Business Content";
-    result.errorKeyword = crawlData.fetchError ? "Connection Failed" : "No Verifiable Content";
-    result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-    result.errorSnippet = crawlData.fetchError || "Website returned empty content or has no verifiable business products";
-    result.notWorkingReason = result.errorSnippet;
-  } else if (isRedirectSite) {
+  if (isRedirectSite) {
     result.websiteStatus = "Redirect Site";
-  } else if (!isDiffDomain && (result.websiteStatus === "Redirect Site" || result.websiteStatus === "Redirect")) {
-    result.websiteStatus = "Working";
+    result._finalUrl = crawlData.finalUrl || crawlData.originalUrl;
+    result._originalUrl = crawlData.originalUrl || "";
+  } else {
+    const platformCheck = detectDisallowedWebsitePlatformOrDomain(crawlData.originalUrl || crawlData.finalUrl, crawlData.mainHtml || "", crawlData.bodyText || "");
+    if (platformCheck.isDisallowed) {
+      result.websiteStatus = "Not Working";
+      result.isRestricted = true;
+      result.errorCategory = "Free Platform / Subdomain";
+      result.restrictedReason = platformCheck.reason;
+      result.restrictedKeyword = platformCheck.reason;
+      result.restrictedSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+      result.restrictedSnippet = platformCheck.reason;
+      result.errorKeyword = platformCheck.reason;
+      result.errorSourceUrl = result.restrictedSourceUrl;
+      result.errorSnippet = platformCheck.reason;
+    } else if (crawlData.status === "Flash" || detectFlashFormatSite(crawlData.mainHtml || "")) {
+      result.websiteStatus = "Flash";
+      result.errorCategory = "Flash Format";
+      result.errorKeyword = "Flash Content";
+      result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+      result.errorSnippet = "Flash Format Website - Not copyable (Rule 14)";
+    } else if (crawlData.status === "Non English" || detectNonEnglishWithoutTranslation(crawlData.mainHtml || "", crawlData.bodyText || "")) {
+      result.websiteStatus = "Non English";
+      result.errorCategory = "Non English";
+      result.errorKeyword = "Foreign Language";
+      result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+      result.errorSnippet = "Non-English Language Without Translation Option (Rule 12)";
+    } else if (crawlData.status === "Domain Expired") {
+      result.websiteStatus = "Domain Expired";
+      result.errorCategory = "Domain Expired";
+      result.errorKeyword = "Domain Expired";
+      result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+      result.errorSnippet = "Domain Expired or Server returned HTTP 404 Not Found (Rule 1)";
+    } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working") {
+      result.websiteStatus = (crawlData.status && crawlData.status !== "Working") ? crawlData.status : "Not Working";
+      result.errorCategory = crawlData.fetchError ? "Unreachable / Timeout" : "No Business Content";
+      result.errorKeyword = crawlData.fetchError ? "Connection Failed" : "No Verifiable Content";
+      result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+      result.errorSnippet = crawlData.fetchError || "Website returned empty content or has no verifiable business products";
+      result.notWorkingReason = result.errorSnippet;
+    } else if (!isDiffDomain && (result.websiteStatus === "Redirect Site" || result.websiteStatus === "Redirect")) {
+      result.websiteStatus = "Working";
+    }
   }
 
   // CRITICAL RULE: "Notworking means all empty"
@@ -1755,8 +1785,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.numberOfProductDescriptions = "";
   }
 
-  // Final safeguard: If website redirected to another domain and is working, ALWAYS ensure websiteStatus is "Redirect Site"
-  if (isRedirectSite && (result.websiteStatus === "Working" || !result.websiteStatus)) {
+  // Final safeguard: If website redirected to another domain, ALWAYS ensure websiteStatus is "Redirect Site"
+  if (isRedirectSite) {
     result.websiteStatus = "Redirect Site";
   } else if (!isDiffDomain && (result.websiteStatus === "Redirect Site" || result.websiteStatus === "Redirect")) {
     result.websiteStatus = "Working";

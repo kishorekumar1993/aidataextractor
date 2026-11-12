@@ -81,6 +81,73 @@ async function fetchViaSilentBackgroundTab() {
 }
 
 /**
+ * Robustly extracts client-side redirects from HTML.
+ * Supports:
+ * - Meta Refresh tags (regardless of attribute order or quote style)
+ * - JavaScript location redirects (assignments, location.replace(), location.assign(), navigate())
+ * - Canonical link headers (<link rel="canonical" href="...">)
+ * - OpenGraph URL (<meta property="og:url" content="...">)
+ */
+function extractClientSideRedirect(html, baseUrl) {
+  if (!html || typeof html !== "string") return null;
+
+  // 1. Meta Refresh (any attribute order, quote style, or spacing)
+  const metaTags = html.match(/<meta\b[^>]+>/gi) || [];
+  for (const tag of metaTags) {
+    if (/http-equiv\s*=\s*["']?refresh["']?/i.test(tag)) {
+      const urlMatch = tag.match(/url\s*=\s*['"]?([^'">\s;]+)/i);
+      if (urlMatch && urlMatch[1] && !urlMatch[1].startsWith("#")) {
+        try {
+          return new URL(urlMatch[1], baseUrl).href;
+        } catch (e) { }
+      }
+    }
+  }
+
+  // 2. JavaScript location redirects
+  const jsMatches = [
+    /(?:window\.|document\.|self\.|top\.)?location(?:\.href)?\s*=\s*['"`]([^'"`]+)['"`]/i,
+    /(?:window\.|document\.|self\.|top\.)?location\.(?:replace|assign)\(\s*['"`]([^'"`]+)['"`]\s*\)/i,
+    /(?:window\.)?navigate\(\s*['"`]([^'"`]+)['"`]\s*\)/i
+  ];
+  for (const regex of jsMatches) {
+    const m = html.match(regex);
+    if (m && m[1] && !m[1].startsWith("#") && !m[1].startsWith("javascript:")) {
+      try {
+        return new URL(m[1], baseUrl).href;
+      } catch (e) { }
+    }
+  }
+
+  // 3. Canonical Link (any attribute order)
+  const linkTags = html.match(/<link\b[^>]+>/gi) || [];
+  for (const tag of linkTags) {
+    if (/\brel\s*=\s*["']?canonical["']?/i.test(tag)) {
+      const hrefMatch = tag.match(/\bhref\s*=\s*["']([^"']+)["']/i);
+      if (hrefMatch && hrefMatch[1] && !hrefMatch[1].startsWith("#")) {
+        try {
+          return new URL(hrefMatch[1], baseUrl).href;
+        } catch (e) { }
+      }
+    }
+  }
+
+  // 4. OpenGraph og:url
+  for (const tag of metaTags) {
+    if (/(?:property|name)\s*=\s*["']?og:url["']?/i.test(tag)) {
+      const contentMatch = tag.match(/\bcontent\s*=\s*["']([^"']+)["']/i);
+      if (contentMatch && contentMatch[1] && !contentMatch[1].startsWith("#")) {
+        try {
+          return new URL(contentMatch[1], baseUrl).href;
+        } catch (e) { }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Deep crawls homepage, handles HTML <frameset>/<frame>, contact pages, footer, JSON-LD, products.
  */
 async function crawlWebsite(targetUrl) {
@@ -219,7 +286,10 @@ async function crawlWebsite(targetUrl) {
     }
 
     if (!mainRes || !mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status)) {
-      if (mainRes && mainRes.status === 404) {
+      if (redirected) {
+        // If domain redirected to a different domain, PRESERVE "Redirect Site" status!
+        status = "Redirect Site";
+      } else if (mainRes && mainRes.status === 404) {
         status = "Domain Expired";
         fetchError = "Site returned HTTP 404 Not Found";
       } else if (mainRes && (mainRes.status === 403 || mainRes.status === 401 || isAntiBotChallenge(mainRes.html, mainRes.status))) {
@@ -235,33 +305,32 @@ async function crawlWebsite(targetUrl) {
 
     // Check for client-side HTML Meta Refresh, JS location redirects, or cross-domain canonical links
     if (mainHtml) {
-      const metaRefreshMatch = mainHtml.match(/<meta[^>]*http-equiv=["']?refresh["']?[^>]*content=["']?[^"'>]*url=['"]?([^'">\s;]+)/i);
-      const jsRedirectMatch = mainHtml.match(/(?:window\.)?location(?:\.href|\.replace)?\s*=\s*['"]([^'"]+)['"]/i);
-      const canonicalMatch = mainHtml.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
+      const clientRedirectHref = extractClientSideRedirect(mainHtml, finalUrl);
 
-      const clientRedirectHref = (metaRefreshMatch && metaRefreshMatch[1]) ||
-        (jsRedirectMatch && jsRedirectMatch[1]) ||
-        (canonicalMatch && canonicalMatch[1]);
-
-      if (clientRedirectHref && !clientRedirectHref.startsWith("#")) {
+      if (clientRedirectHref && clientRedirectHref !== finalUrl && !clientRedirectHref.startsWith("#")) {
         try {
           const resolvedClientUrl = new URL(clientRedirectHref, finalUrl).href;
           const isCrossDomain = isRedirectDomain(targetUrl, resolvedClientUrl) || isRedirectDomain(finalUrl, resolvedClientUrl);
-          const isThinShell = stripHtml(mainHtml).trim().length < 200;
+          const isThinShell = stripHtml(mainHtml).trim().length < 500;
           if (isCrossDomain || isThinShell) {
             console.log(`[AI Assistant] Detected client-side HTML/JS redirect from ${finalUrl} to ${resolvedClientUrl}`);
+            finalUrl = resolvedClientUrl;
+            if (isCrossDomain) {
+              redirected = true;
+              status = "Redirect Site";
+            }
             const clientRes = await fetchDecodedHtml(resolvedClientUrl, {
-              timeoutMs: 3500,
+              timeoutMs: 5000,
               headers: {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
               }
             });
-            if (clientRes.ok && clientRes.html && clientRes.html.trim().length > 0) {
+            if (clientRes && clientRes.html && clientRes.html.trim().length > 0) {
               mainRes = clientRes;
               finalUrl = clientRes.url || resolvedClientUrl;
               mainHtml = clientRes.html;
-              if (isCrossDomain) {
+              if (isRedirectDomain(targetUrl, finalUrl)) {
                 redirected = true;
                 status = "Redirect Site";
               }
@@ -644,9 +713,7 @@ async function crawlWebsite(targetUrl) {
   try {
     if (isRedirectDomain(targetUrl, finalUrl)) {
       redirected = true;
-      if (status === "Working") {
-        status = "Redirect Site";
-      }
+      status = "Redirect Site";
     } else {
       // Same domain redirect (http->https, www, subpath) is NOT a Redirect Site!
       if (status === "Redirect Site") {

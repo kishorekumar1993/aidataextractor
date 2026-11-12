@@ -2671,6 +2671,64 @@ async function runAsyncTests() {
     const contentJs = fs.readFileSync(path.join(rootDir, 'content.js'), 'utf8');
     assert.ok(contentJs.includes('RECORD_WORKING_SITE'), 'content.js must dispatch RECORD_WORKING_SITE action for working sites');
   });
+
+  // 47. Comprehensive Cross-Domain & Client-Side Redirect Detection (Rule 13)
+  await runAsyncTest('Comprehensive Cross-Domain & Client-Side Redirect Detection (Rule 13)', async () => {
+    // 1. Root domain extraction across global multi-part ccTLDs
+    assert.strictEqual(ctx.extractRootDomain("http://example.com"), "example.com");
+    assert.strictEqual(ctx.extractRootDomain("https://www.example.co.uk/path"), "example.co.uk");
+    assert.strictEqual(ctx.extractRootDomain("http://sub.company.com.au"), "company.com.au");
+    assert.strictEqual(ctx.extractRootDomain("https://m.store.co.za"), "store.co.za");
+    assert.strictEqual(ctx.extractRootDomain("http://corp.com.tw/products"), "corp.com.tw");
+
+    // 2. Cross-domain vs same-domain redirect distinction
+    assert.strictEqual(ctx.isRedirectDomain("http://alpha.com", "https://beta.com"), true);
+    assert.strictEqual(ctx.isRedirectDomain("http://alpha.co.uk", "https://alpha.com"), true);
+    assert.strictEqual(ctx.isRedirectDomain("http://company.com.au", "https://company.com"), true);
+    assert.strictEqual(ctx.isRedirectDomain("http://alpha.com", "https://alpha.com/"), false);
+    assert.strictEqual(ctx.isRedirectDomain("http://alpha.com", "https://www.alpha.com/"), false);
+    assert.strictEqual(ctx.isRedirectDomain("http://alpha.com", "https://alpha.com/en/home"), false);
+
+    // 3. Client-side redirect extraction (Meta refresh, JS replace/assign, Canonical, og:url)
+    const metaHtml = '<meta content="0; url=https://newdestination.com/welcome" http-equiv="refresh">';
+    assert.strictEqual(ctx.extractClientSideRedirect(metaHtml, "http://source.com"), "https://newdestination.com/welcome");
+
+    const jsReplaceHtml = '<script>location.replace("https://destinationcorp.com/home");</script>';
+    assert.strictEqual(ctx.extractClientSideRedirect(jsReplaceHtml, "http://sourcecorp.com"), "https://destinationcorp.com/home");
+
+    const jsAssignHtml = '<script>window.location.assign("https://destinationcorp.com/landing");</script>';
+    assert.strictEqual(ctx.extractClientSideRedirect(jsAssignHtml, "http://sourcecorp.com"), "https://destinationcorp.com/landing");
+
+    const canonHtml = '<link href="https://canonicalcorp.com/" rel="canonical">';
+    assert.strictEqual(ctx.extractClientSideRedirect(canonHtml, "http://sourcecorp.com"), "https://canonicalcorp.com/");
+
+    // 4. End-to-end Redirect Site status preservation & field evaluation
+    const redirectCrawl = {
+      originalUrl: "http://www.oldbrandtools.com",
+      finalUrl: "https://www.newbrandtools.com",
+      redirected: true,
+      status: "Redirect Site",
+      title: "New Brand Tools Inc.",
+      mainHtml: `<html><head><title>New Brand Tools Inc.</title></head><body><h1>New Brand Tools Inc.</h1><p>123 Tool Way, Dallas, Texas, United States</p></body></html>`,
+      bodyText: "New Brand Tools Inc. 123 Tool Way, Dallas, Texas, United States",
+      addressCandidates: [{ raw: "123 Tool Way, Dallas, Texas, United States" }],
+      emails: ["sales@newbrandtools.com"],
+      phones: ["2145550188"],
+      detectedProductCount: 3,
+      detectedImageCount: 3,
+      detectedDescCount: 3,
+      crawledPages: [{ url: "https://www.newbrandtools.com", text: "New Brand Tools" }]
+    };
+
+    const extracted = ctx.heuristicExtraction(redirectCrawl, { isRestricted: false });
+    const cleaned = ctx.applyStrictInstructions(extracted, redirectCrawl, { isRestricted: false });
+
+    assert.strictEqual(cleaned.websiteStatus, "Redirect Site", "Must be marked as Redirect Site");
+    assert.strictEqual(cleaned._finalUrl, "https://www.newbrandtools.com", "Must track final redirected URL");
+    assert.strictEqual(cleaned._originalUrl, "http://www.oldbrandtools.com", "Must track original URL");
+    assert.ok(cleaned.companyName.includes("New Brand Tools"), "Must evaluate company name from destination site");
+    assert.strictEqual(cleaned.countryName, "United States Of America", "Must evaluate country from destination site");
+  });
 }
 
 runAsyncTests().then(() => {

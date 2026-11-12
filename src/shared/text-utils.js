@@ -112,6 +112,48 @@ function decodeHtmlEntities(str) {
 }
 
 /**
+ * Extracts the canonical registrable root domain (e.g. "example.com" or "example.co.uk").
+ * Handles multi-part international TLDs (.co.uk, .com.au, .com.tw, .co.za, etc.).
+ */
+function extractRootDomain(urlOrHost) {
+  if (!urlOrHost || typeof urlOrHost !== "string") return "";
+  let host = urlOrHost.trim().toLowerCase();
+  try {
+    if (host.includes("://")) {
+      host = new URL(host).hostname;
+    } else if (host.includes("/")) {
+      host = host.split("/")[0];
+    }
+  } catch (e) { }
+  host = host.replace(/:\d+$/, "");
+  host = host.replace(/^(?:www\d?|m|web)\./i, "");
+  const parts = host.split(".").filter(Boolean);
+  if (parts.length <= 2) return parts.join(".");
+  const lastTwo = parts.slice(-2).join(".");
+  if (/^(?:co|com|org|net|gov|edu|ac|asn|idv|gen|nic|ltd|me|tm|or|go|ne|gv|priv)\.[a-z]{2}$/i.test(lastTwo)) {
+    return parts.slice(-3).join(".");
+  }
+  return parts.slice(-2).join(".");
+}
+
+/**
+ * Checks whether the original URL and final URL belong to different root domains.
+ * Same domain (http <-> https, www vs non-www, language subpaths) return false.
+ * Different domains (companyA.com -> companyB.com, company.co.uk -> company.com) return true.
+ */
+function isRedirectDomain(origUrl, finalUrl) {
+  if (!origUrl || !finalUrl) return false;
+  try {
+    const origRoot = extractRootDomain(origUrl);
+    const finalRoot = extractRootDomain(finalUrl);
+    if (!origRoot || !finalRoot) return false;
+    return origRoot !== finalRoot;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
  * Standardizes country names globally with full expanded official names (135 valid countries).
  * E.g., "USA"/"United States" -> "United States Of America", "Czechia" -> "Czech Republic",
  * "Turkey/Turkiye" -> "Türkiye", "Deutschland" -> "Germany", "Hrvatska" -> "Croatia", "Brunei" -> "Brunei Darussalam"

@@ -159,7 +159,9 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - STRICT MANDATE: Count physical product images on the website ("productImages"). Whatever value "productImages" has, set "numberOfProducts" and "numberOfProductDescriptions" to that EXACT SAME value!
 
 WEBSITE DATA FOR THIS CRAWL:
-Target URL: ${crawlData.originalUrl}
+Target URL (Original): ${crawlData.originalUrl}
+Final URL (Destination): ${crawlData.finalUrl || crawlData.originalUrl}
+Redirect Detection: ${isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl) ? "REDIRECT DETECTED (Original domain redirected to a different destination domain -> MANDATORY: set websiteStatus to 'Redirect Site')" : "Same domain (Not a redirect)"}
 Page Title: ${crawlData.title}
 Detected Website Brand / Logo: ${crawlData.logoText || crawlData.ogSiteName || "(None)"}
 Detected Official Legal Corporate Names: ${crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0 ? crawlData.legalCompanyCandidates.slice(0, 8).join(", ") : "(None)"}
@@ -946,11 +948,12 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   }
 
   const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
-  let websiteStatus = (shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working");
+  const isDiffDomain = isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl);
+  let websiteStatus = isDiffDomain ? "Redirect Site" : ((shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working"));
 
   // Rule 1: If website has 0 products and no address or no verifiable contact information, mark Not Working!
   const hasContactEvidence = !!(address || emailId || phoneNumber);
-  const isZeroProdUnverifiable = (!address && prodCount === "0") || (!hasContactEvidence && prodCount === "0");
+  const isZeroProdUnverifiable = !isDiffDomain && ((!address && prodCount === "0") || (!hasContactEvidence && prodCount === "0"));
   if (isZeroProdUnverifiable) {
     websiteStatus = "Not Working";
   }
