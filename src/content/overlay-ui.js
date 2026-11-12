@@ -282,7 +282,10 @@
 
     // 9. Generic Not Working / No Business Content
     const rawLink = data.errorSourceUrl || siteBaseUrl;
-    const reasonText = data.notWorkingReason || data._note || "Website has no verifiable business products, physical address, or services";
+    const candidateReason = data.notWorkingReason || data.reason || data.errorSnippet;
+    const reasonText = (candidateReason && !/^(?:AI Powered by|Own Crawl|Analyzed via)/i.test(candidateReason))
+      ? candidateReason
+      : "Website has 0 products and no verifiable catalog or physical address (Rule 1)";
     return {
       category: "No Business Content",
       badge: "NO BUSINESS CONTENT",
@@ -683,7 +686,18 @@
           AIExt.stopAutoQueuePipeline("User disabled auto-queue in widget");
           updateStatus("Auto-Queue turned OFF", "idle");
         } else {
-          updateStatus("⚡ Auto-Queue enabled: Will crawl till Working site", "idle");
+          state.isAutoQueuePipelineActive = true;
+          const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+          if (pauseBtn) pauseBtn.style.display = "inline-flex";
+          updateStatus("⚡ Auto-Queue enabled: Crawling till Working site...", "loading");
+          const curUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
+          if (curUrl && !state.isCrawlingInProgress) {
+            setTimeout(() => {
+              if (state.autoQueueEnabled && state.isAutoQueuePipelineActive) {
+                AIExt.triggerCrawlAndFill({ fromAutoQueue: true });
+              }
+            }, 300);
+          }
         }
       });
     }

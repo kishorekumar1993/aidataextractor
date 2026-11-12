@@ -78,24 +78,63 @@
   }
 
   /**
+   * Validates that a non-working reason is an authentic business/technical reason
+   * and never an AI provenance note, model tagline, or engine fallback diagnostic.
+   */
+  function isValidNonWorkingReason(str) {
+    if (!str || typeof str !== "string") return false;
+    const s = str.trim();
+    if (!s || s.length < 3) return false;
+    if (/^(?:AI Powered by|Own Crawl|Analyzed via Own Crawl|AI Only mode|AI First mode)/i.test(s)) return false;
+    if (/\b(?:gemini|groq|gpt-oss)\b/i.test(s) && !/\b(?:failed|error|timeout|quota|rate limit)\b/i.test(s)) return false;
+    return true;
+  }
+
+  /**
    * Extracts a detailed explanation of the issue from crawl / QC / error data.
    */
   function extractErrorReason(data = {}, defaultReason = "") {
-    if (typeof data === "string") return data.trim() || defaultReason || "Website is not working or unavailable";
-    return (
-      data.reason ||
-      data.Reason ||
-      data.notWorkingReason ||
-      data.restrictedReason ||
-      data.shopCartReason ||
-      data.disallowedReason ||
-      data.fetchError ||
-      data._note ||
-      data.errorSnippet ||
-      data.errorKeyword ||
-      defaultReason ||
-      "Website is not working or unavailable"
-    ).toString().trim();
+    if (typeof data === "string") {
+      const s = data.trim();
+      if (isValidNonWorkingReason(s)) return s;
+      return defaultReason || "Website has 0 products and no verifiable catalog or physical address (Rule 1)";
+    }
+
+    const candidate =
+      (isValidNonWorkingReason(data.reason) ? data.reason : "") ||
+      (isValidNonWorkingReason(data.Reason) ? data.Reason : "") ||
+      (isValidNonWorkingReason(data.notWorkingReason) ? data.notWorkingReason : "") ||
+      (isValidNonWorkingReason(data.restrictedReason) ? data.restrictedReason : "") ||
+      (isValidNonWorkingReason(data.shopCartReason) ? data.shopCartReason : "") ||
+      (isValidNonWorkingReason(data.disallowedReason) ? data.disallowedReason : "") ||
+      (isValidNonWorkingReason(data.fetchError) ? data.fetchError : "") ||
+      (isValidNonWorkingReason(data.errorSnippet) ? data.errorSnippet : "") ||
+      (isValidNonWorkingReason(data.errorKeyword) ? data.errorKeyword : "") ||
+      (isValidNonWorkingReason(defaultReason) ? defaultReason : "");
+
+    if (candidate) {
+      return String(candidate).trim();
+    }
+
+    // Dynamic valid synthesis based on category instead of falling back to _note or engine branding
+    const status = normalizeErrorCategory(data["Website Status"] || data.websiteStatus || data.status, data);
+    if (status === "Not English") {
+      return "Non-English Language Without Translation Option (Rule 12)";
+    }
+    if (status === "Flash") {
+      return "Flash Format Website - Not copyable (Rule 14)";
+    }
+    if (status === "Redirect") {
+      return "Redirected to different external domain (Rule 13)";
+    }
+    if (data.websiteStatus === "Domain Expired") {
+      return "Domain Expired or Server returned HTTP 404 Not Found (Rule 1)";
+    }
+    if (data.websiteStatus === "Under Construction") {
+      return "Website is under construction or maintenance";
+    }
+
+    return "Website has 0 products and no verifiable catalog or physical address (Rule 1)";
   }
 
   /**
@@ -458,6 +497,7 @@
     VALID_ERROR_STATUSES,
     getLocalDateString,
     getLocalTimeString,
+    isValidNonWorkingReason,
     normalizeErrorCategory,
     extractErrorReason,
     extractErrorKeyword,

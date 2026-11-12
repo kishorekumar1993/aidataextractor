@@ -730,16 +730,16 @@
         AIExt.showNotWorkingStudyCard(data);
       }
 
-      // Check auto-submit toggle: Only auto-submit if user enabled it!
+      // Check auto-submit toggle: Auto-submit if user enabled auto-queue OR auto-submit Not Working
       if (targetStatus === "Not Working") {
         const currentUrl = getTargetUrl();
-        if (state.autoSubmitNotWorkingEnabled) {
-          AIExt.updateStatus("⚠️ Status set to Not Working. Auto-submitting in 3s... (Click 'Stop Auto-Submit' to study)", "warning");
+        if (state.autoSubmitNotWorkingEnabled || state.autoQueueEnabled) {
+          AIExt.updateStatus("⚠️ Status set to Not Working. Auto-submitting in 2s... (Click 'Stop' to study)", "warning");
           if (state.pendingAutoSubmitTimer) clearTimeout(state.pendingAutoSubmitTimer);
           state.pendingAutoSubmitTimer = setTimeout(() => {
             state.pendingAutoSubmitTimer = null;
             AIExt.autoSubmitNotWorking(currentUrl);
-          }, 3000);
+          }, 2000);
         } else {
           // Auto-submit is OFF so user can review and study
           if (state.pendingAutoSubmitTimer) {

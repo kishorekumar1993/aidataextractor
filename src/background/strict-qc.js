@@ -1,5 +1,58 @@
 // Main crawl orchestration (handleCrawlAndExtract), evidence link mapping, and strict QC enforcement.
 
+function isValidNonWorkingReasonQC(str) {
+  if (!str || typeof str !== "string") return false;
+  const s = str.trim();
+  if (!s || s.length < 3) return false;
+  if (/^(?:AI Powered by|Own Crawl|Analyzed via Own Crawl|AI Only mode|AI First mode)/i.test(s)) return false;
+  if (/\b(?:gemini|groq|gpt-oss)\b/i.test(s) && !/\b(?:failed|error|timeout|quota|rate limit)\b/i.test(s)) return false;
+  return true;
+}
+
+function determineValidNotWorkingReasonQC(data, crawlResult, targetUrl, restrictedCheck) {
+  if (restrictedCheck && restrictedCheck.isRestricted && restrictedCheck.reason) {
+    return restrictedCheck.reason;
+  }
+  if (crawlResult && crawlResult.fetchError) {
+    let fe = crawlResult.fetchError;
+    if (/listener indicated an asynchronous response|message channel closed/i.test(fe)) {
+      return "Connection timed out while loading the website server. The site took too long to respond or is offline.";
+    }
+    return fe;
+  }
+  const status = (data && data.websiteStatus) || (crawlResult && crawlResult.status) || "";
+  if (status === "Non English") {
+    return "Non-English Language Without Translation Option (Rule 12)";
+  }
+  if (status === "Flash") {
+    return "Flash Format Website - Not copyable (Rule 14)";
+  }
+  if (status === "Domain Expired" || (crawlResult && crawlResult.httpStatus === 404)) {
+    return "Domain Expired or Server returned HTTP 404 Not Found (Rule 1)";
+  }
+  if (status === "Redirect Site" || status === "Redirect") {
+    return "Redirected to different external domain (Rule 13)";
+  }
+  if (status === "Under Construction") {
+    return "Website is under construction or maintenance";
+  }
+  if (data && (data.isShopCartSite || (crawlResult && crawlResult.shopCartCheck && crawlResult.shopCartCheck.detected))) {
+    return "Online shopping store with shopping cart / checkout (Non-manufacturer - Rules 11 & 16)";
+  }
+  return "Website has 0 products and no verifiable catalog or physical address (Rule 1).";
+}
+
+function determineValidErrorKeywordQC(data, reason) {
+  if (data && data.websiteStatus === "Non English") return "Non English Language";
+  if (data && data.websiteStatus === "Flash") return "Flash Content";
+  if (data && data.websiteStatus === "Domain Expired") return "Domain Expired";
+  if (data && data.websiteStatus === "Redirect Site") return "Redirect Domain";
+  if (/prohibited|restricted/i.test(reason || "")) return "Prohibited Category";
+  if (/shopping cart|cart|checkout/i.test(reason || "")) return "Shopping Cart / E-commerce";
+  if (/timeout|connection|unreachable|fetch/i.test(reason || "")) return "Connection Timeout / Unreachable";
+  return "0 Products / No Catalog";
+}
+
 async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   const crawlStartTime = Date.now();
   let targetUrl = (rawUrl && typeof rawUrl === "string") ? rawUrl.trim() : "";
@@ -13,20 +66,35 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
           const errKeyword = data.errorKeyword || data.restrictedKeyword || data.disallowedKeyword || data.shopCartKeyword || (data.websiteStatus === "Non English" ? "Non English Language" : (data.websiteStatus === "Flash" ? "Flash Content" : ""));
           const errContext = data.errorSnippet || data.restrictedSnippet || data.disallowedSnippet || data.shopCartSnippet || "";
 
+          let cleanReason = "";
+          const reasonCandidates = [
+            data.notWorkingReason,
+            data.reason,
+            data.Reason,
+            data.restrictedReason,
+            data.shopCartReason,
+            data.disallowedReason,
+            data.fetchError,
+            data.errorSnippet
+          ];
+          for (const cand of reasonCandidates) {
+            if (cand && typeof cand === "string" && isValidNonWorkingReasonQC(cand)) {
+              cleanReason = cand.trim();
+              break;
+            }
+          }
+
+          if (!cleanReason) {
+            cleanReason = determineValidNotWorkingReasonQC(data, crawlResult, targetUrl, restrictedCheck);
+          }
+
           recordNonWorkingWebsite({
             URL: rawUrl || data._originalUrl || targetUrl,
             websiteStatus: data.websiteStatus,
-            reason: data.notWorkingReason ||
-              data.restrictedReason ||
-              data.shopCartReason ||
-              data.disallowedReason ||
-              data.fetchError ||
-              data.errorSnippet ||
-              data._note ||
-              "Website is not working or unavailable",
-            errorKeyword: errKeyword,
+            reason: cleanReason,
+            errorKeyword: errKeyword || determineValidErrorKeywordQC(data, cleanReason),
             errorSourceLink: errSourceLink,
-            errorContext: errContext,
+            errorContext: errContext || cleanReason,
             errorUrl: errSourceLink
           }).catch(() => {});
         }
@@ -362,36 +430,38 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       extractedData._isFromAi = true;
       extractedData._extractionSource = "ai";
       extractedData._extractionMode = "ai_only";
+
+      if (extractedData.websiteStatus === "Not Working") {
+        const ownCheck = heuristicExtraction(crawlResult, restrictedCheck);
+        const hasGenuineOwnWorkingEvidence = ownCheck.websiteStatus === "Working" &&
+          ownCheck.companyName &&
+          (ownCheck.companyAddress || ownCheck.emailId || ownCheck.phoneNumber) &&
+          !restrictedCheck.isRestricted &&
+          !(crawlResult.shopCartCheck && crawlResult.shopCartCheck.detected);
+
+        if (hasGenuineOwnWorkingEvidence) {
+          extractedData = ownCheck;
+          extractedData._note = `Own Crawl (AI False-Negative Verification: ${usedLabel})`;
+          extractedData._extractionSource = "own_crawl_fallback";
+          extractedData._extractionMode = "ai_only";
+          extractedData._isFromAi = false;
+        } else {
+          const validReason = (extractedData.notWorkingReason && isValidNonWorkingReasonQC(extractedData.notWorkingReason))
+            ? extractedData.notWorkingReason
+            : (ownCheck.notWorkingReason || "Website has 0 products and no verifiable catalog or physical address (Rule 1).");
+          extractedData.notWorkingReason = validReason;
+          extractedData.errorSnippet = validReason;
+          extractedData.errorKeyword = ownCheck.errorKeyword || "0 Products / No Catalog";
+          extractedData.errorCategory = ownCheck.errorCategory || "No Business Products / 0 Products";
+        }
+      }
     } catch (aiErr) {
-      console.warn(`[AI Assistant] AI Only mode: ${aiConfig.label} API call failed:`, aiErr.message);
-      return finishAndRecord({
-        websiteStatus: "Not Working",
-        businessType: "",
-        companyProfile: "",
-        companyName: "",
-        countryName: "",
-        companyAddress: "",
-        state: "",
-        city: "",
-        emailId: "",
-        secondaryEmailId: "",
-        phoneNumber: "",
-        numberOfProducts: "",
-        productImages: "",
-        numberOfProductDescriptions: "",
-        errorCategory: "AI Extraction Failed",
-        errorKeyword: "AI Error",
-        errorSourceUrl: targetUrl,
-        errorSnippet: `AI Only mode active: ${aiConfig.label} request failed (${aiErr.message}). Own crawl fallback is disabled.`,
-        notWorkingReason: `AI extraction failed: ${aiErr.message}`,
-        _finalUrl: targetUrl,
-        _originalUrl: targetUrl,
-        _aiFailed: true,
-        _extractionSource: "ai_failed",
-        _extractionMode: "ai_only",
-        _isFromAi: false,
-        _note: `AI Only mode: ${aiConfig.label} failed (${aiErr.message}) - Own crawl prefill prevented`
-      });
+      console.warn(`[AI Assistant] AI Only mode: ${aiConfig.label} API call failed, falling back to Own Crawl:`, aiErr.message);
+      extractedData = heuristicExtraction(crawlResult, restrictedCheck);
+      extractedData._note = `Own Crawl (AI Fallback: ${aiErr.message || "AI Error"})`;
+      extractedData._extractionSource = "own_crawl_fallback";
+      extractedData._extractionMode = "ai_only";
+      extractedData._isFromAi = false;
     }
   } else {
     // Mode: AI First (Default) - AI is ALWAYS first priority; Own Crawl ONLY if AI fails
@@ -419,6 +489,32 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         extractedData._isFromAi = true;
         extractedData._extractionSource = "ai";
         extractedData._extractionMode = "ai_first";
+
+        if (extractedData.websiteStatus === "Not Working") {
+          const ownCheck = heuristicExtraction(crawlResult, restrictedCheck);
+          const hasGenuineOwnWorkingEvidence = ownCheck.websiteStatus === "Working" &&
+            ownCheck.companyName &&
+            (ownCheck.companyAddress || ownCheck.emailId || ownCheck.phoneNumber) &&
+            !restrictedCheck.isRestricted &&
+            !(crawlResult.shopCartCheck && crawlResult.shopCartCheck.detected);
+
+          if (hasGenuineOwnWorkingEvidence) {
+            console.log(`[AI Assistant] AI marked site as Not Working, but Own Crawl detected verified working business (${ownCheck.companyName}). Utilizing verified Own Crawl data.`);
+            extractedData = ownCheck;
+            extractedData._note = `Own Crawl (AI False-Negative Verification: ${usedLabel})`;
+            extractedData._extractionSource = "own_crawl_fallback";
+            extractedData._extractionMode = "ai_first";
+            extractedData._isFromAi = false;
+          } else {
+            const validReason = (extractedData.notWorkingReason && isValidNonWorkingReasonQC(extractedData.notWorkingReason))
+              ? extractedData.notWorkingReason
+              : (ownCheck.notWorkingReason || "Website has 0 products and no verifiable catalog or physical address (Rule 1).");
+            extractedData.notWorkingReason = validReason;
+            extractedData.errorSnippet = validReason;
+            extractedData.errorKeyword = ownCheck.errorKeyword || "0 Products / No Catalog";
+            extractedData.errorCategory = ownCheck.errorCategory || "No Business Products / 0 Products";
+          }
+        }
       } catch (aiErr) {
         console.warn(`[AI Assistant] ${aiConfig.label} API error, falling back to Own Crawl rule engine:`, aiErr.message);
         extractedData = heuristicExtraction(crawlResult, restrictedCheck);
@@ -784,7 +880,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.countryName = country;
 
-    // 4. Company Address: Take directly from API with safe Rule 6 cleanup; fall back to crawl ONLY if API returned empty / Not Available
+    // 4. Company Address: Take directly from API with safe Rule 6 cleanup; reconcile with authentic raw candidates to prevent missing items
     let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
     const aiAddrMatch = resolveBestAddressCandidateAndSource(addr, crawlData);
     const selectedAiCandidate = aiAddrMatch.candidate || (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates[0]) || null;
@@ -799,21 +895,27 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     if (addr && addr !== "Not Available") {
+      if (bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
+        addr = reconcileAddressWithRawEvidence(addr, bestRaw, result.companyName, country, crawlData);
+      }
       addr = typeof sanitizeRule6CompanyAddress === "function"
         ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData)
         : toTitleCase(addr);
     }
     result.companyAddress = addr || "Not Available";
 
-    // 5. State & City: Take directly from API when valid ("Available" / "Not Available"); fall back to QC rules ONLY if missing/invalid
+    // 5. State & City: Evaluate based on complete reconciled address (Rules 7 & 8)
     const apiState = normalizeAvailability(result.state);
     const apiCity = normalizeAvailability(result.city);
     if (!result.companyAddress || result.companyAddress.toLowerCase() === "not available") {
       result.state = apiState || "Not Available";
       result.city = apiCity || "Not Available";
     } else {
-      result.state = apiState || (hasStateInAddress(result.companyAddress, country) ? "Available" : "Not Available");
-      result.city = apiCity || evaluateCityQC(result.companyAddress, country);
+      const stateDetected = hasStateInAddress(result.companyAddress, country);
+      result.state = stateDetected ? "Available" : (apiState || "Not Available");
+
+      const cityDetected = evaluateCityQC(result.companyAddress, country);
+      result.city = (cityDetected === "Available") ? "Available" : (apiCity || "Not Available");
     }
 
     // 6. Email ID & Secondary Email ID: Take from API; fall back to crawl ONLY if empty/invalid
@@ -1318,9 +1420,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         addr = restoreStateIfOmitted(addr, rawSource, country);
       }
 
-      // CRITICAL GLOBAL FIX: Restore missing initial street / building / premise number if dropped
-      // Restore missing number ONLY from the selected candidate's raw text (NEVER mix multiple addresses)
+      // CRITICAL GLOBAL FIX: Restore missing address components from raw candidate
+      // (trailing city/district/state, leading premise/unit/estate, or intermediate village/section)
       if (rawSource) {
+        if (typeof reconcileAddressWithRawEvidence === "function") {
+          addr = reconcileAddressWithRawEvidence(addr, rawSource, compName, country, crawlData);
+        }
         addr = restoreStreetNumberIfOmitted(addr, rawSource, crawlData);
         addr = restoreTaiwanVillageIfOmitted(addr, rawSource, crawlData);
       }
@@ -1673,7 +1778,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (result.websiteStatus === "Not Working") {
     result.errorSourceUrl = result.errorSourceUrl || result.restrictedSourceUrl || result.disallowedSourceUrl || result.shopCartSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
     result.errorKeyword = result.errorKeyword || result.restrictedKeyword || result.disallowedKeyword || result.shopCartKeyword || result.restrictedReason || "";
-    result.errorSnippet = result.errorSnippet || result.restrictedSnippet || result.disallowedSnippet || result.shopCartSnippet || result._note || "";
+    result.errorSnippet = result.errorSnippet || result.restrictedSnippet || result.disallowedSnippet || result.shopCartSnippet || result.notWorkingReason || "";
   }
 
   // Enforce boundary QC rule: special characters like &, #, etc. must NEVER be at the first or end of any field

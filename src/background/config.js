@@ -110,6 +110,10 @@ const GEMINI_RESPONSE_SCHEMA = {
       enum: ["Working", "Not Working", "Domain Expired", "Non English", "Under Construction", "Flash", "Redirect Site"],
       description: "Working if operational physical goods company; Not Working if dead, 404, 0 products, or prohibited; Domain Expired if parked/404; Non English if non-English without translation; Under Construction if under construction; Flash if flash format; Redirect Site if redirected to different domain"
     },
+    notWorkingReason: {
+      type: "STRING",
+      description: "Mandatory if websiteStatus is Not Working, Domain Expired, Non English, Under Construction, or Flash: provide a concise, genuine business or technical reason (e.g. 'Website has 0 products and no verifiable catalog or physical address', 'Prohibited category: medicine/medical', 'Online retailer with shopping cart and no factory', 'Under construction'). Return empty string if Working."
+    },
     businessType: {
       type: "STRING",
       enum: [
@@ -184,6 +188,7 @@ const GEMINI_RESPONSE_SCHEMA = {
   },
   required: [
     "websiteStatus",
+    "notWorkingReason",
     "businessType",
     "companyProfile",
     "companyName",

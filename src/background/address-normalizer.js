@@ -566,7 +566,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\b(?:exp(?:ress)?wy|expy)\b\.?/gi, "Expressway");
   a = a.replace(/\bgtwy\b\.?/gi, "Gateway");
   a = a.replace(/\bhts\b\.?/gi, "Heights");
-  a = a.replace(/\bvlg\b\.?/gi, "Village");
+  a = a.replace(/\b(?:vlg|vil)\b\.?/gi, "Village");
   a = a.replace(/\bvly\b\.?/gi, "Valley");
   a = a.replace(/\bmdws\b\.?/gi, "Meadows");
   a = a.replace(/\bmdw\b\.?/gi, "Meadow");
@@ -2165,6 +2165,50 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
 }
 
 /**
- * Country-specific phone cleaner and validator strictly conforming to Rule 11.
- * Strips international calling codes globally and removes leading zeros.
+ * Reconciles an extracted address (from AI or heuristic parser) with the authentic raw
+ * candidate from the website's Contact Us / Footer to ensure NO authentic address components
+ * are missed, truncated, or dropped (e.g. trailing cities, districts, counties, states,
+ * leading unit/premise/estate names, or intermediate villages/sections).
  */
+function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", country = "", crawlData = null) {
+  if (!rawCand) return addr;
+  const rawText = typeof rawCand === "object" ? (rawCand.raw || "") : String(rawCand || "");
+  if (!rawText || rawText.length < 5) return addr;
+
+  const rawClean = sanitizeRule6CompanyAddress(rawText, companyName, country, crawlData);
+  if (!rawClean || rawClean === "Not Available" || rawClean.length < 5) return addr;
+  if (!addr || addr === "Not Available") return rawClean;
+
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, " ").replace(/\s+/g, " ").trim();
+  const normAi = norm(addr);
+  const normRaw = norm(rawClean);
+
+  if (normAi === normRaw) return addr;
+
+  // Case 1: Raw candidate has trailing components missing from addr (e.g. City / County / State / District / Township)
+  // e.g. addr: "Number 159, Yongke East Road, Yongkang District"
+  // rawClean: "Number 159, Yongke East Road, Yongkang District, Tainan City"
+  if (normRaw.startsWith(normAi) && normRaw.length > normAi.length) {
+    return rawClean;
+  }
+
+  // Case 2: Raw candidate has leading premise / building / unit / estate missing from addr
+  // e.g. addr: "12 Industrie Road, Penrose, Auckland"
+  // rawClean: "Unit 4, 12 Industrie Road, Penrose, Auckland"
+  if (normRaw.endsWith(normAi) && normRaw.length > normAi.length) {
+    return rawClean;
+  }
+
+  // Case 3: Token coverage - if rawClean covers all major tokens of addr and has strictly more tokens
+  // E.g. rawClean has intermediate village or road section or industrial park that AI dropped
+  const aiTokens = normAi.split(" ").filter(t => t.length > 1);
+  const rawTokens = normRaw.split(" ").filter(t => t.length > 1);
+  if (aiTokens.length >= 2) {
+    const matchCount = aiTokens.filter(t => rawTokens.includes(t)).length;
+    if ((matchCount / aiTokens.length) >= 0.8 && rawTokens.length > aiTokens.length) {
+      return rawClean;
+    }
+  }
+
+  return addr;
+}

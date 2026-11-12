@@ -22,9 +22,10 @@ function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
   const jsonSchemaSection = includeJsonSchemaHint ? `
 
 OUTPUT FORMAT (STRICT JSON ONLY):
-Return ONLY a single valid JSON object (no markdown fences or commentary) containing ALL 14 keys below:
+Return ONLY a single valid JSON object (no markdown fences or commentary) containing ALL keys below:
 {
   "websiteStatus": "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site",
+  "notWorkingReason": "string (mandatory explanation if not Working, else empty string \"\")",
   "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
   "companyProfile": "Available" | "Not Available" | "",
   "companyName": "string",
@@ -50,7 +51,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Rule 12 (Non-English): No English translation option -> mark "Non English" (all other fields empty "").
 - Rule 14 (Flash): Designed in Flash format where text is uncopyable -> mark "Flash" (all other fields empty "").
 - Rule 13 (Redirect Site): Redirected to a completely DIFFERENT domain (companyA.com -> companyB.com) -> mark "Redirect Site", evaluate details from destination site. Same-domain redirects (http to https, www vs non-www, language path /en/) are NOT Redirect Sites -> mark "Working".
-- If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "".
+- If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason (e.g. "Website has 0 products and no verifiable catalog or physical address", "Prohibited category: medicine/medical", "Online shopping cart without manufacturing facility", "Domain expired / 404"). If "Working", set "notWorkingReason" to "".
 
 2. BUSINESS TYPE:
 - Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
@@ -85,8 +86,13 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Use standard full English names for ALL countries globally (Afghanistan, Albania, Algeria, Andorra, Angola, Argentina, Armenia, Australia, Austria, Azerbaijan, Bahamas, Bahrain, Bangladesh, Barbados, Belarus, Belgium, Belize, Bhutan, Bolivia, Botswana, Brazil, Brunei Darussalam, Bulgaria, Cambodia, Canada, Cayman Islands, China, Colombia, Costa Rica, Croatia, Cyprus, Czech Republic, Denmark, Dominican Republic, Egypt, Estonia, Ethiopia, Fiji, Finland, France, Germany, Ghana, Greece, Greenland, Guatemala, Guyana, Hong Kong, Hungary, Iceland, India, Indonesia, Iran, Iraq, Ireland, Israel, Italy, Jamaica, Japan, Jordan, Kazakhstan, Kenya, Kuwait, Latvia, Lebanon, Liechtenstein, Lithuania, Luxembourg, Madagascar, Malaysia, Maldives, Malta, Mauritius, Mexico, Moldova, Mongolia, Morocco, Mozambique, Myanmar, Namibia, Nepal, Netherlands, New Zealand, Nicaragua, Nigeria, North Korea, North Macedonia, Norway, Oman, Pakistan, Panama, Papua New Guinea, Paraguay, Peru, Philippines, Poland, Portugal, Qatar, Romania, Russia, Rwanda, Saint Lucia, Samoa, Saudi Arabia, Serbia, Seychelles, Sierra Leone, Singapore, Slovakia, Slovenia, South Africa, South Korea, Spain, Sri Lanka, Sudan, Suriname, Sweden, Switzerland, Syria, Taiwan, Tanzania, Thailand, Trinidad and Tobago, Tunisia, Türkiye, Uganda, Ukraine, United Arab Emirates, United Kingdom, United States Of America, Uruguay, Uzbekistan, Vanuatu, Vietnam, Zambia, Zimbabwe).
 - If omitted on website, infer country from social media or address city/state/postcode globally.
 
-6. COMPANY ADDRESS (CRITICAL QC MANDATE):
-- FULL PHYSICAL HEADQUARTERS ADDRESS: Include premise/building/suite, street number, street name, suburb/town, city, and state/county.
+6. COMPANY ADDRESS (CRITICAL QC MANDATE - NO MISSING ITEMS):
+- FULL PHYSICAL HEADQUARTERS ADDRESS: Include premise/building/suite/unit/floor/level/lot/block/estate/park, street number, street name, section, lane, alley, village, suburb/town, district, city, and state/county/province.
+- CRITICAL - NO MISSING ITEMS / NEVER TRUNCATE:
+  * NEVER DROP CITY, DISTRICT, TOWNSHIP, COUNTY, OR STATE AT THE END OF companyAddress! Even though State and City have their own separate fields, companyAddress MUST contain the entire complete physical address ending with City, District, Township, County, State, or Province. (For example: "No.159, Yongke E. Rd., Yongkang Dist., Tainan City 710, Taiwan" MUST be extracted as "Number 159, Yongke East Road, Yongkang District, Tainan City". NEVER stop at "Yongkang District"!).
+  * NEVER DROP PREMISE / BUILDING / UNIT / SUITE / FLOOR / LEVEL / ESTATE: Retain Unit, Suite, Floor, Level, Building, Block, Plot, Industrial Estate / Park, Business Park at the beginning or middle.
+  * NEVER DROP INTERMEDIATE DIVISIONS: Retain Section, Lane, Alley, Village, Suburb, Town, District.
+  * ONLY STRIP: Postal codes (ZIP codes), Country name, and Telephone/Fax numbers.
 - STRICT NO EXTRA WORDS RULE: Retain authentic address words from the website. Never invent words not present (e.g. do not add "City" or "Number" if not written).
 - STRICT PRESERVATION: NEVER drop leading street/building numbers (e.g. "12110 Best Place" -> keep 12110; "40 Sarah Street" -> keep 40).
 - EXPAND ALL ABBREVIATIONS GLOBALLY (MANDATORY FOR ALL 135+ COUNTRIES):
@@ -205,6 +211,11 @@ function finalizeParsedAiResult(parsed, crawlData) {
     parsed.numberOfProducts = "";
     parsed.productImages = "";
     parsed.numberOfProductDescriptions = "";
+    if (parsed.notWorkingReason && typeof parsed.notWorkingReason === "string") {
+      parsed.notWorkingReason = parsed.notWorkingReason.trim();
+      parsed.errorSnippet = parsed.notWorkingReason;
+      parsed.reason = parsed.notWorkingReason;
+    }
   }
   parsed._isFromAi = true;
   return parsed;
@@ -219,81 +230,97 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
     }
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    try {
-      const abortCtrl = new AbortController();
-      const timeoutPerModel = (modelToTry === candidateModels[0]) ? 9000 : 5000;
-      const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
-      let response;
+
+    // Recheck loop: if attempt 1 fails, recheck again before switching candidate models
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) break;
       try {
-        response = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey
-          },
-          signal: abortCtrl.signal,
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0,
-              maxOutputTokens: 1024,
-              responseMimeType: "application/json",
-              responseSchema: GEMINI_RESPONSE_SCHEMA
-            }
-          })
-        });
-      } finally {
-        clearTimeout(abortTimer);
-      }
-
-      if (!response.ok) {
-        const errText = await response.text();
-        if (response.status === 401 || response.status === 403) {
-          lastError = new Error(`Gemini authorization error ${response.status}: ${errText}`);
-          break;
+        const abortCtrl = new AbortController();
+        const timeoutPerModel = (modelToTry === candidateModels[0]) ? (attempt === 1 ? 8500 : 5000) : 4500;
+        const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
+        let response;
+        try {
+          response = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey
+            },
+            signal: abortCtrl.signal,
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0,
+                maxOutputTokens: 1024,
+                responseMimeType: "application/json",
+                responseSchema: GEMINI_RESPONSE_SCHEMA
+              }
+            })
+          });
+        } finally {
+          clearTimeout(abortTimer);
         }
-        if (response.status === 400) {
-          const retryCtrl = new AbortController();
-          const retryTimer = setTimeout(() => retryCtrl.abort(), 6000);
-          try {
-            const fallbackRes = await fetch(url, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-goog-api-key": apiKey
-              },
-              signal: retryCtrl.signal,
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt + "\nReturn strictly a valid JSON object matching the requested schema." }] }],
-                generationConfig: {
-                  temperature: 0,
-                  maxOutputTokens: 1024,
-                  responseMimeType: "application/json"
-                }
-              })
-            });
-            if (fallbackRes.ok) {
-              const resJson = await fallbackRes.json();
-              const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-              const parsed = parseAiJsonPayload(rawText);
-              if (parsed) return { parsed, activeModel: modelToTry };
-            }
-          } catch (e) {
-          } finally {
-            clearTimeout(retryTimer);
+
+        if (!response.ok) {
+          const errText = await response.text();
+          if (response.status === 401 || response.status === 403) {
+            lastError = new Error(`Gemini authorization error ${response.status}: ${errText}`);
+            return { parsed: null, authError: lastError.message, lastError };
           }
+          if (response.status === 400) {
+            const retryCtrl = new AbortController();
+            const retryTimer = setTimeout(() => retryCtrl.abort(), 5000);
+            try {
+              const fallbackRes = await fetch(url, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "x-goog-api-key": apiKey
+                },
+                signal: retryCtrl.signal,
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: prompt + "\nReturn strictly a valid JSON object matching the requested schema." }] }],
+                  generationConfig: {
+                    temperature: 0,
+                    maxOutputTokens: 1024,
+                    responseMimeType: "application/json"
+                  }
+                })
+              });
+              if (fallbackRes.ok) {
+                const resJson = await fallbackRes.json();
+                const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+                const parsed = parseAiJsonPayload(rawText);
+                if (parsed) return { parsed, activeModel: modelToTry };
+              }
+            } catch (e) {
+            } finally {
+              clearTimeout(retryTimer);
+            }
+          }
+          lastError = new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
+          if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 20000)) {
+            console.warn(`[AI Assistant] Gemini attempt 1 on ${modelToTry} returned ${response.status}. Rechecking again...`);
+            await new Promise(r => setTimeout(r, 400));
+            continue;
+          }
+          break; // move to next model
         }
-        lastError = new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
-        continue;
-      }
 
-      const resJson = await response.json();
-      const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText) throw new Error(`Empty response from Gemini model ${modelToTry}`);
-      const parsed = parseAiJsonPayload(rawText);
-      if (parsed) return { parsed, activeModel: modelToTry };
-    } catch (err) {
-      lastError = err;
+        const resJson = await response.json();
+        const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawText) throw new Error(`Empty response from Gemini model ${modelToTry}`);
+        const parsed = parseAiJsonPayload(rawText);
+        if (parsed) return { parsed, activeModel: modelToTry };
+        throw new Error(`Failed to parse structured JSON from Gemini model ${modelToTry}`);
+      } catch (err) {
+        lastError = err;
+        if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 20000)) {
+          console.warn(`[AI Assistant] Gemini attempt 1 on ${modelToTry} failed (${err.message}). Rechecking again...`);
+          await new Promise(r => setTimeout(r, 400));
+          continue;
+        }
+      }
     }
   }
   throw lastError || new Error("All Gemini models failed to return structured data");

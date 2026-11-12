@@ -1822,7 +1822,44 @@ async function runAsyncTests() {
     assert.ok(ctx.isFullAddressCandidate("Unit 3, Riverside Business Park, Olympic Way, Wembley, London HA9 0GU"), "Must recognize business park as valid address structure");
   });
 
-  // 39. Non-Working Website Records – Normalization, Mandatory Columns, Duplicate Prevention & Multi-Session Excel Append
+  // 39. Rule 6 Address Reconciliation & Missing Item Restoration (Taiwan City, Premise, Village, County)
+  runTest('Rule 6 Address Reconciliation restores missing trailing cities, premises, and intermediate divisions', () => {
+    // 1. Taiwan trailing city restoration (Charng Guey case: Yongkang District -> Tainan City)
+    const rawTaiwan = "No.159, Yongke E. Rd., Yongkang Dist., Tainan City 710, Taiwan";
+    const truncatedAi = "Number 159, Yongke East Road, Yongkang District";
+    const reconciled1 = ctx.reconcileAddressWithRawEvidence(truncatedAi, rawTaiwan, "Charng Guey Machinery Company, Limited", "Taiwan");
+    assert.strictEqual(reconciled1, "Number 159, Yongke East Road, Yongkang District, Tainan City", "Must restore missing trailing Tainan City");
+
+    // 2. Leading premise / unit restoration
+    const rawNz = "Unit 4, 12 Industrie Road, Penrose, Auckland 1061, New Zealand";
+    const truncatedNz = "12 Industrie Road, Penrose, Auckland";
+    const reconciled2 = ctx.reconcileAddressWithRawEvidence(truncatedNz, rawNz, "Teflex Plastics Pty Ltd", "New Zealand");
+    assert.strictEqual(reconciled2, "Unit 4, 12 Industrie Road, Penrose, Auckland", "Must restore missing leading Unit 4");
+
+    // 3. Strict QC end-to-end integration with applyStrictInstructions
+    const strictResult = ctx.applyStrictInstructions({
+      websiteStatus: "Working",
+      businessType: "Manufacturer",
+      companyName: "Charng Guey Machinery Company, Limited",
+      countryName: "Taiwan",
+      companyAddress: "Number 159, Yongke East Road, Yongkang District",
+      state: "Not Available",
+      city: "Available"
+    }, {
+      originalUrl: "http://www.cg-machinery.com.tw",
+      finalUrl: "http://www.cg-machinery.com.tw",
+      mainHtml: "<html><body>Industrial Machinery Manufacturer</body></html>",
+      country: "Taiwan",
+      addressCandidates: [
+        { raw: "No.159, Yongke E. Rd., Yongkang Dist., Tainan City 710, Taiwan", pageUrl: "https://www.cg-machinery.com.tw/contact.html", source: "contact" }
+      ]
+    });
+    assert.strictEqual(strictResult.companyAddress, "Number 159, Yongke East Road, Yongkang District, Tainan City", "Strict QC must produce full address with Tainan City");
+    assert.strictEqual(strictResult.city, "Available", "City must remain Available");
+    assert.strictEqual(strictResult.state, "Not Available", "State must remain Not Available for Tainan City");
+  });
+
+  // 40. Non-Working Website Records – Normalization, Mandatory Columns, Duplicate Prevention & Multi-Session Excel Append
   await runAsyncTest('Non-Working Website Records – Normalization, Mandatory Columns, Duplicate Prevention & Multi-Session Excel Append (50 -> 80 -> 125 -> 150)', async () => {
     // 1. Error Category Normalization: Capture ONLY Not Working, Redirect, Not English
     assert.strictEqual(ctx.normalizeErrorCategory("Not Working"), "Not Working");
@@ -2085,6 +2122,49 @@ async function runAsyncTests() {
     const cleared = await ctx.getNonWorkingRecordsAndStats();
     assert.strictEqual(cleared.records.length, 0);
     assert.strictEqual(cleared.stats.totalHistorical, 0);
+  });
+
+  // 42. Non-Working Website Reason Sanitization & AI Failure Recheck / Own Crawl Fallback
+  await runAsyncTest('Non-Working Website Reason Sanitization & AI Failure Recheck / Own Crawl Fallback', async () => {
+    // 1. Validate that AI branding/notes are strictly blocked from being recorded as error reasons
+    assert.strictEqual(ctx.isValidNonWorkingReason("AI Powered by Gemini (gemini-3.5-flash-lite)"), false);
+    assert.strictEqual(ctx.isValidNonWorkingReason("AI Powered by Groq (openai/gpt-oss-120b)"), false);
+    assert.strictEqual(ctx.isValidNonWorkingReason("Own Crawl (AI Fallback: No Gemini API key configured)"), false);
+    assert.strictEqual(ctx.isValidNonWorkingReason("AI Only mode: Gemini failed (quota exceeded) - Own crawl prefill prevented"), false);
+    assert.strictEqual(ctx.isValidNonWorkingReason("Analyzed via Own Crawl (User Mode: Own Crawl Only)"), false);
+
+    // 2. Validate authentic business/technical reasons are allowed
+    assert.strictEqual(ctx.isValidNonWorkingReason('Medicine, Medical & Hospital ("Clinic")'), true);
+    assert.strictEqual(ctx.isValidNonWorkingReason("Website took longer than 28 seconds to respond or server is unresponsive (Rule 1)."), true);
+    assert.strictEqual(ctx.isValidNonWorkingReason("Chemicals & Petrochemicals (\"industrial chemicals\")"), true);
+    assert.strictEqual(ctx.isValidNonWorkingReason("Website has 0 products and no verifiable catalog or physical address (Rule 1)."), true);
+    assert.strictEqual(ctx.isValidNonWorkingReason("Failed to fetch"), true);
+
+    // 3. Ensure extractErrorReason never picks _note or AI model taglines
+    const badRecord = {
+      URL: "http://www.wiki.apache.org",
+      websiteStatus: "Not Working",
+      _note: "AI Powered by Gemini (gemini-3.5-flash-lite)"
+    };
+    const sanitizedReason = ctx.extractErrorReason(badRecord);
+    assert.ok(!sanitizedReason.includes("AI Powered by"), "Reason must never contain AI Powered by");
+    assert.ok(!sanitizedReason.includes("gemini"), "Reason must never contain gemini model names");
+    assert.strictEqual(sanitizedReason, "Website has 0 products and no verifiable catalog or physical address (Rule 1)");
+
+    // 4. Test error record creation with bad _note
+    const createdRec = ctx.createErrorRecord(badRecord);
+    assert.strictEqual(createdRec.Reason, "Website has 0 products and no verifiable catalog or physical address (Rule 1)");
+    assert.notStrictEqual(createdRec.Reason, "AI Powered by Gemini (gemini-3.5-flash-lite)");
+
+    // 5. When authentic reason is provided alongside _note, authentic reason is preserved
+    const validProhibitedRecord = {
+      URL: "http://www.bsi-hardware.com",
+      websiteStatus: "Not Working",
+      restrictedReason: 'Defence & Military ("military")',
+      _note: "AI Powered by Gemini (gemini-3.5-flash-lite)"
+    };
+    const recWithReason = ctx.createErrorRecord(validProhibitedRecord);
+    assert.strictEqual(recWithReason.Reason, 'Defence & Military ("military")');
   });
 }
 
