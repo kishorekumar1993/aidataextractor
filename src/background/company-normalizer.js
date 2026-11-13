@@ -404,7 +404,7 @@ function preferOfficialCompanyName(name, crawlData) {
   const logoText = (crawlData && crawlData.logoText) || "";
   const ogSiteName = (crawlData && crawlData.ogSiteName) || "";
   const title = (crawlData && crawlData.title) || "";
-  const domain = (crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "";
+  const domain = (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "";
   const domainStem = cleanDomainStem(domain);
   const dStemNorm = normalizeNameForComparison(domainStem);
   const curNorm = normalizeNameForComparison(current);
@@ -429,7 +429,7 @@ function preferOfficialCompanyName(name, crawlData) {
   const logoCandidate = cleanCompanyPrefixesAndSuffixes(logoText);
   const allCandidates = Array.from(new Set([jsonLdName, copyrightName, ...legalCandidates, logoCandidate, titleCandidate]
     .map(n => cleanCompanyPrefixesAndSuffixes(n))
-    .filter(n => n && n.length >= 3 && n.length <= 160 && !hasCompanyProseNoise(n))));
+    .filter(n => n && n.length >= 3 && n.length <= 160 && !hasCompanyProseNoise(n) && !/(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare|ddos protection)/i.test(n))));
 
   let bestOfficial = null;
   let bestScore = -1;
@@ -660,7 +660,7 @@ function restoreOriginalSymbolsInCompanyName(name, crawlData) {
     const withoutCompany = n.replace(/\s+Company$/i, "").trim();
     if (withoutCompany.length >= 3) {
       const esc = withoutCompany.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const domainUrl = (crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "";
+      const domainUrl = (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "";
       const stem = cleanDomainStem(domainUrl);
       const brandExactRegex = new RegExp(`(^|[^a-zA-Z0-9])${esc}([^a-zA-Z0-9]|$)`, "i");
       const brandWithCoRegex = new RegExp(`(^|[^a-zA-Z0-9])(?:${esc}\\s*(?:Company|Co\\.?|Corp\\.?)|${stem}\\s*(?:Company|Co\\.?)|${stem}co)([^a-zA-Z0-9]|$)`, "i");
@@ -794,7 +794,7 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
   }
 
   // 3c. Check social media handles or text evidence for [Brand] Co. / [Brand] Company (e.g. pemfountainco -> PEM Fountain Company)
-  const domainUrl = (crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "";
+  const domainUrl = (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "";
   const stem = cleanDomainStem(domainUrl);
   const socialValues = (crawlData && crawlData.companySocials) ? Object.values(crawlData.companySocials).join(" ").toLowerCase() : "";
   const combinedText = [

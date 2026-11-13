@@ -2,11 +2,11 @@
 
 const RESTRICTED_PATTERNS = [
   {
-    pattern: /\b(?:porn(?:o|ography|ographic)?|erotic|adult|sex\s*shop|escort\s*service|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|sex\s*worker|sensual\s*massage|nude|nudity|onlyfans)\b/i,
+    pattern: /\b(?:porn(?:o|ography|ographic)?|xxx|sex\s*shop|sex\s*store|escort\s*service|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|erotic|sex\s*worker|sensual\s*massage|onlyfans|adult\s*(?:entertainment|content|industry|videos?|movies?|films?|sites?|websites?|novelty|novelties|stores?|shops?|dating|webcams?|services?|chats?|massage|products?|games?|erotica|fun|nightclub|club|arcades?|bookstores?|theaters?|theatres?|magazines?|escorts?|performers?|models?|livestreams?|personals?)|(?:18\+|xxx|explicit|hardcore|erotic)\s+adults?)\b/i,
     label: "Adult & Porn"
   },
   {
-    pattern: /\b(?:weapons?|firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*manufacturer|weapons?\s*trading|weapons?\s*supply|weapons?\s*export(?:ing|er)?|weapons?\s*repair(?:ing)?|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor|body\s*armour|bulletproof|tactical\s*armaments|armor\s*plate|armour\s*plate|armored\s*vehicles?|armoured\s*vehicles?|tactical\s*armor|military\s*armor|combat\s*knives|tactical\s*knives|hunting\s*knives|knives|knife|daggers?|swords?|machetes?|bayonets?|custom\s*knives|knife\s*maker)\b/i,
+    pattern: /\b(?:firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*shop|gun\s*dealer|gun\s*store|weapons?\s*(?:manufacturer|trading|supply|export|repair)|explosives?|bomb\s*making|ballistic\s*vests?|body\s*armor|body\s*armour|bulletproof|tactical\s*armaments|military\s*armor|combat\s*knives|tactical\s*knives|hunting\s*knives|custom\s*knives|knife\s*maker|bayonets?|machetes?|daggers?|swords?)\b/i,
     label: "Weapons, Armor & Knives"
   },
   {
@@ -14,39 +14,39 @@ const RESTRICTED_PATTERNS = [
     label: "Defence & Military"
   },
   {
-    pattern: /\b(?:airlines?|commercial\s*aviation|aviation\s*industry|aviation\s*services?|air\s*travel|flight\s*booking|aircraft\s*leasing|aviation\s*charter|aircraft|aircrafts|airplane|airplanes|air\s*charter|avionics|helicopters?|fighter\s*jets?|jet\s*aircraft)\b/i,
+    pattern: /\b(?:airlines?|commercial\s*aviation|aviation\s*services?|air\s*travel|flight\s*booking|aircraft\s*leasing|aviation\s*charter|aircraft\s*(?:manufacturer|manufacturing|production|builder|assembly|fleet|carrier|operator|maintenance|overhaul|mro)|airplane\s*(?:manufacturer|manufacturing|fleet|carrier)|airplanes?\s*charter|avionics|helicopters?\s*(?:charter|services?|manufacturer)|fighter\s*jets?|jet\s*aircraft)\b/i,
     label: "Aviation & Airlines"
   },
   {
-    pattern: /\b(?:aerospace|aerospace\s*engineering|aerospace\s*components?|aerospace\s*parts?)\b/i,
+    pattern: /\b(?:aerospace\s*(?:manufacturer|manufacturing|contractor|defense|systems\s*manufacturer|industry\s*oem|propulsion|spacecraft|satellite\s*manufacturer|launch\s*vehicle|rocket)|spacecraft|satellite\s*manufacturing|rocket\s*propulsion|space\s*exploration\s*technology)\b/i,
     label: "Aerospace"
   },
   {
-    pattern: /\b(?:marine|maritime|naval|ocean\s*marine|offshore\s*marine)\b/i,
+    pattern: /\b(?:marine\s*industry|marine\s*operations?|marine\s*(?:transport(?:ation)?|shipping|logistics|freight|charter|vessel\s*operator|terminal|port\s*authority|salvage|dredging|aquaculture|fishery|fisheries|offshore\s*drilling|propulsion\s*systems)|maritime\s*(?:transport|logistics|shipping|security|charter|navigation)|naval\s*(?:fleet|operations|dockyard|base))\b/i,
     label: "Marine"
   },
   {
-    pattern: /\b(?:shipyards?|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|naval\s*ships?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|vessels?\s*builder|commercial\s*vessels?|yachts?|motor\s*yachts?|sailing\s*yachts?|ferries|ferry\s*boats?|tugboats?|barges?|watercraft)\b/i,
+    pattern: /\b(?:shipyards?|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|naval\s*ships?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|vessels?\s*builder|commercial\s*vessels?|yachts?\s*(?:builder|charter)|motor\s*yachts?\s*builder|sailing\s*yachts?\s*builder|ferries|ferry\s*boats?|tugboats?|barges?)\b/i,
     label: "Ships & Boats"
   },
   {
-    pattern: /\b(?:specialty\s*chemicals?|industrial\s*chemicals?|petrochemicals?|agrochemicals?|pesticides?|hazardous\s*chemicals?|chemical\s*synthesis|solvents?|toxic\s*chemicals?|raw\s*chemicals?|chemical\s*manufacturer|chemical\s*producer)\b/i,
+    pattern: /\b(?:specialty\s*chemicals?\s*(?:manufacturer|producer|production|supplier)|industrial\s*chemicals?\s*(?:manufacturer|producer|supplier)|petrochemicals?\s*(?:refinery|manufacturer|plant)|agrochemicals?\s*(?:manufacturer|producer)|pesticides?\s*(?:manufacturer|producer)|hazardous\s*chemicals?\s*production|chemical\s*synthesis|solvents?\s*(?:manufacturer|producer)|toxic\s*chemicals?\s*production|raw\s*chemicals?\s*(?:production|manufacturer)|chemical\s*manufacturer|chemical\s*producer|chemical\s*manufacturing)\b/i,
     label: "Chemicals & Petrochemicals"
   },
   {
-    pattern: /\b(?:medicine|medicines|medical|pharmaceuticals?|prescription\s*drugs?|online\s*pharmacy|hospital|hospitals|patient\s*care|dental\s*clinic|outpatient\s*clinic|surgery|veterinary\s*hospital|psychiatric\s*hospital|healthcare|health\s*clinic|diagnostic\s*center|clinic|clinics)\b/i,
+    pattern: /\b(?:hospital|hospitals|patient\s*care|dental\s*clinic|outpatient\s*clinic|surgery\s*center|veterinary\s*hospital|psychiatric\s*hospital|health\s*clinic|diagnostic\s*center|medical\s*(?:practice|center|treatment|services?|diagnostic|consultation|therapy|care|doctor|physician|imaging\s*center|laboratory|surgical\s*center)|pharmaceutical\s*(?:company|manufacturer|manufacturing|drugs?|formulation|products?)|prescription\s*drugs?|online\s*pharmacy|medicine\s*(?:manufacturer|production|formulation|sales|store))\b/i,
     label: "Medicine, Medical & Hospital"
   },
   {
-    pattern: /\b(?:food\s*processing|bakery|bakeries|catering|restaurants?|bistros?|cafes?|eateries|snack\s*foods?|dairy\s*products?|meat\s*processing|poultry\s*processing|seafood\s*processing|edible\s*oils?|confectionery)\b/i,
+    pattern: /\b(?:food\s*(?:processing\s*plant|manufacturing|production|manufacturer|producer|packaging\s*facility|wholesaler)|commercial\s*bakery|catering\s*services?|restaurants?|bistros?|cafes?|eateries|snack\s*foods?\s*(?:manufacturer|producer)|dairy\s*products?\s*(?:processing|manufacturer)|meat\s*processing\s*plant|poultry\s*processing\s*plant|seafood\s*processing\s*plant|edible\s*oils?\s*refinery|confectionery\s*manufacturer)\b/i,
     label: "Food & Beverages"
   },
   {
-    pattern: /\b(?:alcohol|alcoholic|brewery|breweries|distillery|distilleries|liquor\s*store|liquor\s*shop|liquor|wine\s*producer|winery|wineries|vineyards?|craft\s*beer|beer|whiskey|whisky|vodka|tequila|rum|gin|spirits)\b/i,
+    pattern: /\b(?:brewery|breweries|distillery|distilleries|liquor\s*store|liquor\s*shop|wine\s*producer|winery|wineries|vineyards?|craft\s*beer\s*(?:brewery|producer)|beer\s*(?:manufacturer|producer|brewing|brewery)|wine\s*(?:producer|maker|making|cellar)|spirits\s*(?:distiller|distillery|manufacturer)|alcoholic\s*beverages?\s*(?:manufacturer|producer|wholesaler))\b/i,
     label: "Alcohol & Breweries"
   },
   {
-    pattern: /\b(?:animals?|pets?|puppy|puppies|kitten|kittens|dogs?|canine|feline|pet\s*shop|pet\s*store|pet\s*food|pet\s*care|animal\s*breeding|livestock|cattle|poultry\s*farming|pig\s*farming|animal\s*feed|slaughterhouse|veterinary|vet\s*clinic|domestic\s*cats?|pet\s*cats?|cats?\s*(?:and|&)\s*dogs?|dogs?\s*(?:and|&)\s*cats?|cats?\s*(?:food|feed|litter|care|grooming|breed|breeds|adoption|rescue|supplies|accessories|bed|shelter|boarding|neutering|vaccination))\b/i,
+    pattern: /\b(?:pet\s*shop|pet\s*store|pet\s*food\s*manufacturer|pet\s*care\s*services?|animal\s*breeding|livestock\s*(?:farming|producer|breeding|trade)|cattle\s*farming|poultry\s*farming|pig\s*farming|commercial\s*slaughterhouse|veterinary\s*clinic|vet\s*clinic|veterinary\s*hospital|puppy\s*mill|dog\s*breeding|kennel\s*club|cattery)\b/i,
     label: "Animals & Pets"
   },
   {
@@ -79,14 +79,48 @@ const RESTRICTED_PATTERNS = [
   }
 ];
 
-// National Capital Cities for Rule 8 capital city exception (covering all 135 supported countries)
+/**
+ * Classifies website pages by evidence priority per Section 3:
+ * HIGH: Home, About Us, Products, Services, Catalog, Capabilities, Overview.
+ * LOW: Privacy, Terms, Cookies, Policy, Legal, Blogs, News, Testimonials, Bio, FAQ.
+ */
+function getEvidencePagePriority(url = "", pageTitle = "") {
+  const normUrl = String(url || "").toLowerCase();
+  const normTitle = String(pageTitle || "").toLowerCase();
 
-function detectRestrictedKeywordsSingle(text, html = "") {
-  let combined = ((text || "") + " " + extractImageAttributes(html)).trim();
-  if (!combined) return { isRestricted: false, matchedKeyword: null, reason: "", category: "" };
+  if (/(?:privacy|privacy-policy|terms|terms-and-conditions|terms-of-service|terms-of-use|legal|disclaimer|cookie|cookies|cookie-policy|blog|news|article|articles|press|press-release|testimonial|testimonials|reviews|bio|biography|team|staff|author|careers|jobs|faq|faqs|sitemap|imprint|impressum)/i.test(normUrl) ||
+      /(?:privacy\s*policy|terms\s*(?:and|&)\s*conditions|terms\s*of\s*(?:service|use)|cookie\s*policy|blog|latest\s*news|press\s*release|testimonials?|disclaimer)/i.test(normTitle)) {
+    return "LOW";
+  }
 
-  // Strip HTML tags and attributes first so HTML tag/class/id attributes never create false tokens
-  let cleanText = combined.replace(/<[^>]+>/g, " ");
+  if (/(?:^https?:\/\/[^\/]+\/?$|home|index|default|about|about-us|company|profile|corporate-profile|products?|catalog|catalogue|services?|capabilities|what-we-do|our-company|overview|manufacturing)/i.test(normUrl)) {
+    return "HIGH";
+  }
+
+  return "MEDIUM";
+}
+
+/**
+ * Broad candidate mapping to discover potential restricted keyword mentions
+ * before contextual application analysis.
+ */
+const CANDIDATE_CATEGORY_KEYWORDS = [
+  { label: "Adult & Porn", regex: /\b(?:porn(?:o|ography|ographic)?|xxx|adult|sex|escort|brothel|erotic|erotica)\b/i },
+  { label: "Weapons, Armor & Knives", regex: /\b(?:weapons?|firearms?|rifles?|guns?|knives|knife|ammunition)\b/i },
+  { label: "Defence & Military", regex: /\b(?:military|defence|defense|armed\s*forces)\b/i },
+  { label: "Aviation & Airlines", regex: /\b(?:aircraft|airplane|airlines?|aviation)\b/i },
+  { label: "Aerospace", regex: /\b(?:aerospace|spacecraft|satellite)\b/i },
+  { label: "Marine", regex: /\b(?:marine|maritime|naval)\b/i },
+  { label: "Ships & Boats", regex: /\b(?:ship|ships|shipyard|shipbuilding|boat|boats|vessel|vessels|yacht|yachts)\b/i },
+  { label: "Chemicals & Petrochemicals", regex: /\b(?:chemicals?|petrochemicals?|solvents?)\b/i },
+  { label: "Medicine, Medical & Hospital", regex: /\b(?:medical|medicine|hospital|pharmaceuticals?|clinic)\b/i },
+  { label: "Food & Beverages", regex: /\b(?:food|bakery|catering|restaurant|eatery)\b/i },
+  { label: "Alcohol & Breweries", regex: /\b(?:alcohol|brewery|breweries|distillery|distilleries|wine|beer|whiskey|whisky|liquor)\b/i },
+  { label: "Animals & Pets", regex: /\b(?:animals?|pets?|puppy|puppies|dogs?|cats?|livestock|cattle)\b/i }
+];
+
+function sanitizeContextText(text) {
+  let cleanText = String(text || "");
 
   // Sanitize clinic/hospital/medical references inside customer testimonials, client reviews, or manufactured sign/display products
   cleanText = cleanText
@@ -106,7 +140,7 @@ function detectRestrictedKeywordsSingle(text, html = "") {
     .replace(/[/\\_]cat[/\\_]/gi, " ")
     .replace(/[?&]cat=[^&\s]*/gi, " ");
 
-  // 2. Sanitize "Cat" false positives (Category, Cat. No., Cat #, Cat 5/6 cabling, CAT/Caterpillar machinery, etc.)
+  // 2. Sanitize "Cat" false positives
   cleanText = cleanText
     .replace(/\b(?:category|categories|categorized|categorization|catalogue|catalog|catalogues|catalogs|subcat|sub-category|sub-categories)\b/gi, " ")
     .replace(/\b(?:prod(?:uct)?|item|sub|main|shop|article|model|part)?\s*cat\b\.?\s*[:.\-–#]?\s*(?=[A-Za-z0-9])/gi, " ")
@@ -122,7 +156,7 @@ function detectRestrictedKeywordsSingle(text, html = "") {
     .replace(/\bcat(?:ch|cher|chers|ching|ches|chment)\b/gi, " ")
     .replace(/\bcat(?:hode|hodic|hodes)\b/gi, " ");
 
-  // 3. Sanitize "Ship" false positives (words ending in "-ship", parcel/freight logistics)
+  // 3. Sanitize "Ship" false positives
   cleanText = cleanText
     .replace(/\b[a-zA-Z]+(?:ship|ships)\b/gi, (word) => {
       if (/^(?:steamship|warship|battleship|flagship|spaceship|starship)s?$/i.test(word)) {
@@ -137,7 +171,7 @@ function detectRestrictedKeywordsSingle(text, html = "") {
     .replace(/\bshipping\s*(?:policy|policies|cost|costs|info|information|method|methods|address|addresses|rate|rates|calculator|fee|fees|date|dates|label|labels|details|options|charge|charges|times?|carrier|carriers|weight|dimensions|terms|and\s+handling|and\s+returns|returns?)\b/gi, " ")
     .replace(/\b(?:shipment|shipments|shipped|shipping)\b/gi, " ");
 
-  // 4. Sanitize "Defence" / "Defense" false positives (civilian, flood, legal, cyber, self, pest, corrosion defences)
+  // 4. Sanitize "Defence" / "Defense" false positives
   cleanText = cleanText
     .replace(/\b(?:flood|sea|coastal|storm|erosion|frost|weather|wind|sun|uv|heat|fire)\s*defen[cs]es?\b/gi, " ")
     .replace(/\b(?:pest|bug|insect|weed|crop|plant|microbial|infection|immune|body)\s*defen[cs]es?\b/gi, " ")
@@ -158,64 +192,249 @@ function detectRestrictedKeywordsSingle(text, html = "") {
     .replace(/\bresistant\s+to\s+chemicals?\b/gi, " ")
     .replace(/\bisopropyl\s+alcohol\b/gi, " ");
 
-  // 6. Sanitize industrial equipment/machinery/conveyors/tooling/supplies for food processing, bakery, dairy, and beverage industries
+  // 6. Component applications & served industry clause
+  cleanText = cleanText.replace(/\b(?:connectors?|cables?|machining|tooling|components?|parts?|fasteners?|systems?|solutions?|gears?|valves?|pumps?)\s+(?:for|in)\s+[^.\n]+?(?=[.\n]|$)/gi, (match) => {
+    if (/(?:aerospace|aircraft|military|defense|defence|medical|marine)/i.test(match)) {
+      return " ";
+    }
+    return match;
+  });
+
+  // 7. Adult false positives (learners, education, children, furniture, pricing, privacy)
+  cleanText = cleanText
+    .replace(/\badult\s*(?:learners?|students?|children|life|audience|education|outdoor\s*furniture|furniture|tables?|benches?|chairs?|bicycles?|bikes?|watches?|apparel|clothing|shoes?|sizes?|sizing|swim|swimming|camps?|campers?|supervision|literacy|population|health|mental\s*health|care|medicine|patients?|volunteers?|staff|leaders?|advisors?|programs?|courses?|classes?|admissions?|diapers?|bibs?|incontinence|living|guardians?|relatives?|survivors?|immunization|vaccines?)\b/gi, " ")
+    .replace(/(?:per|rates?\s+per|pricing\s+for|tickets?\s+for|cost\s+per|admit|admission\s+for|ages?\s+for)?\s*adults?\b/gi, " ")
+    .replace(/(?:infants?|babies|toddlers?|children|kids?|youth|teens?|teenagers?|seniors?|men|women|families|family)[,\s]+(?:and|&|or)?\s*adults?\b/gi, " ")
+    .replace(/\badults?[,\s]+(?:and|&|or)?\s*(?:children|kids?|youth|teens?|infants?|seniors?)\b/gi, " ")
+    .replace(/\b(?:not\s+intended\s+for\s+children|children\s+under\s+(?:13|16|18)|age\s+of\s+majority|verify\s+your\s+age|parental\s+consent|adult\s+supervision\s+required|must\s+be\s+an\s+adult)\b/gi, " ")
+    .replace(/\bnude\s*(?:color|shade|lip(?:stick|gloss)|palette|nail|tones?|leather|shoes?|pumps?|heels?|dress|fabric|tan)\b/gi, " ");
+
+  // 8. Aerospace & Aircraft application false positives
+  cleanText = cleanText
+    .replace(/\b(?:for|in|serving|services?|supplying|supplies|solutions?|applications?|components?|parts?|tooling|cables?|machining|fabrication|engineering)\s+(?:for|in|to)?\s*(?:the\s+)?(?:aerospace|aircraft|aviation|defence|defense|medical|pharmaceutical)\b/gi, " ")
+    .replace(/\b(?:aerospace|aircraft|aviation|defence|defense)\s+(?:applications?|grade|industry|industries|sector|sectors|market|markets|standards?|specifications?|spec|specs|cables?|connectors?|fasteners?|gears?|components?|parts?|tooling|machining|hangars?|composites?)\b/gi, " ")
+    .replace(/\b(?:aircraft\s*cables?|aircraft-grade)\b/gi, " ")
+    .replace(/\badvising\s+(?:corporate\s+)?clients\s+in\s+[^\n.]*?(?:aerospace|transportation)/gi, " ");
+
+  // 9. Marine false positives
+  cleanText = cleanText
+    .replace(/\b(?:marine\s*grade|marine\s*environment|marine\s*resistant|marine\s*applications?|marine\s*coatings?|marine\s*equipment\s*manufacturers?)\b/gi, " ");
+
+  // 10. Animals false positives (cruelty-free, vegan, animal welfare, government animal husbandry)
+  cleanText = cleanText
+    .replace(/\b(?:cruelty\s*[-–]?\s*free|not\s+tested\s+on\s+animals?|no\s+animal\s+testing|against\s+animal\s+cruelty|animal\s+welfare|animal\s+husbandry(?:\s+department)?)\b/gi, " ")
+    .replace(/\banimal\s*(?:prints?|patterns?|designs?|motifs?|illustrations?|figures?|shapes?)\b/gi, " ");
+
+  // 11. Alcohol false positives
+  cleanText = cleanText
+    .replace(/\b(?:whiskey|whisky)\s*(?:creek|river|ridge|valley|brown|oak|leather|bronze|finish|designs?|media|photo|photography)\b/gi, " ")
+    .replace(/\b(?:photo|photograph|photographer|credit|architect|project)\s*(?:by|:)?\s*[^\n.]*?(?:whiskey|whisky)/gi, " ");
+
+  // 12. Industrial equipment for food processing & bakery
   cleanText = cleanText
     .replace(/\b(?:equipment|machinery|machines?|conveyors?|systems?|solutions?|supplies|tooling)\s+(?:for|in)\s+(?:the\s+)?(?:food\s*processing|meat\s*processing|poultry\s*processing|dairy|bakery|beverage|pharmaceutical|medical)\s*(?:industry|industries|sector|sectors|market|markets|facilities|plants?)?\b/gi, " ")
     .replace(/\b(?:food\s*processing|meat\s*processing|poultry\s*processing|seafood\s*processing|dairy\s*processing|bakery|bakeries|catering)\s+(?:equipment|machinery|machines?|conveyors?|systems?|packaging|packaging\s*machinery|automation|tooling|lines?|plants?|technology|engineering|solutions?|supplies|appliances?|industry|industries|facilities)\b/gi, " ");
 
-  // 7. Sanitize pharmaceutical/medical industrial equipment, machinery, conveyors, packaging & served industries
+  // 13. Pharmaceutical / medical equipment & served industries
   cleanText = cleanText
     .replace(/\b(?:pharmaceutical|medical|healthcare)\s+(?:equipment|machinery|machines?|conveyors?|packaging|packaging\s*machinery|processing|processing\s*equipment|automation|tooling|cleanrooms?|clean\s*rooms?|tanks?|vessels?|pumps?|valves?|piping|tubing|devices?|instrumentation|instruments?|components?|parts?|systems?|grade|applications?|industry|industries|sector|sectors|market|markets|facilities|manufacturing|solutions?)\b/gi, " ")
     .replace(/\b(?:food|beverage|packaging|dairy|bakery|meat|confectionery|cosmetic|cosmetics|chemical|nutraceutical)[,\s]+(?:and\s+)?(?:pharmaceutical|medical)\b/gi, " ")
     .replace(/\b(?:serving|serves|served|for|to)\s+(?:the\s+)?(?:pharmaceutical|medical)\s+(?:industry|industries|sector|sectors|applications?|market|markets)\b/gi, " ");
 
+  return cleanText;
+}
+
+function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
+  let combined = ((text || "") + " " + extractImageAttributes(html)).trim();
+  if (!combined) {
+    return {
+      isRestricted: false,
+      classification: "NO_RESTRICTED_CATEGORY",
+      restricted_category: "",
+      matched_keyword: "",
+      matched_page: pageUrl || "",
+      matched_context: "",
+      business_activity: "",
+      confidence: 1.0,
+      reason: "No content provided",
+      category: "",
+      matchedKeyword: null,
+      sourceUrl: pageUrl || "",
+      snippet: ""
+    };
+  }
+
+  // Strip HTML tags and attributes first
+  let rawClean = combined.replace(/<[^>]+>/g, " ");
+  let cleanText = sanitizeContextText(rawClean);
+
+  // Check against strict genuine restricted business patterns
   for (const item of RESTRICTED_PATTERNS) {
     const regex = item.pattern || item;
     const label = item.label || "Prohibited Category";
     if (regex.test(cleanText)) {
       const m = cleanText.match(regex);
+      let matchedKw = m ? m[0] : "";
+      if (label === "Marine" && /^marine/i.test(matchedKw)) {
+        matchedKw = "Marine";
+      }
+      const snippet = extractContextSnippet(cleanText, matchedKw);
+      const pagePriority = getEvidencePagePriority(pageUrl, "");
+
+      // If matched keyword was found only on a low-priority page (Terms, Privacy, Bio, Blog)
+      if (pagePriority === "LOW" && !/(?:porn|adult\s*video|escort|firearms?\s*store|weapons?\s*manufacturer|airline\s*fleet)/i.test(matchedKw)) {
+        return {
+          isRestricted: false,
+          is_restricted: false,
+          classification: "FALSE_POSITIVE",
+          restricted_category: label,
+          matched_keyword: matchedKw,
+          matched_page: pageUrl,
+          matched_context: snippet,
+          business_activity: "Non-restricted operations (incidental reference in low-priority content)",
+          confidence: 0.94,
+          reason: `Keyword "${matchedKw}" appeared only on a low-priority document (${pageUrl || "legal/policy"}), not company primary business.`,
+          category: label,
+          matchedKeyword: matchedKw,
+          sourceUrl: pageUrl,
+          snippet
+        };
+      }
+
       return {
         isRestricted: true,
-        matchedKeyword: m ? m[0] : "",
+        is_restricted: true,
+        classification: "GENUINE_RESTRICTED",
+        restricted_category: label,
+        matched_keyword: matchedKw,
+        matched_page: pageUrl,
+        matched_context: snippet,
+        business_activity: `Genuine ${label} business`,
+        confidence: 0.98,
+        reason: `${label} ("${matchedKw}")`,
         category: label,
-        reason: `${label} ("${m ? m[0] : ""}")`
+        matchedKeyword: matchedKw,
+        sourceUrl: pageUrl,
+        snippet
       };
     }
   }
-  return { isRestricted: false, matchedKeyword: null, reason: "", category: "" };
+
+  // Check if un-sanitized raw text contains any candidate category keyword
+  // (to produce structured FALSE_POSITIVE evidence if a generic word was used contextually)
+  for (const cand of CANDIDATE_CATEGORY_KEYWORDS) {
+    if (cand.regex.test(rawClean)) {
+      const m = rawClean.match(cand.regex);
+      let matchedKw = m ? m[0] : "";
+      if (cand.label === "Marine" && /^marine/i.test(matchedKw)) {
+        matchedKw = "Marine";
+      }
+      const snippet = extractContextSnippet(rawClean, matchedKw);
+      return {
+        isRestricted: false,
+        is_restricted: false,
+        classification: "FALSE_POSITIVE",
+        restricted_category: cand.label,
+        matched_keyword: matchedKw,
+        matched_page: pageUrl,
+        matched_context: snippet,
+        business_activity: "Eligible physical goods or services (application / incidental context)",
+        confidence: 0.96,
+        reason: `The website mentions ${cand.label} ("${matchedKw}") only as an application area, served industry, or incidental reference.`,
+        category: cand.label,
+        matchedKeyword: matchedKw,
+        sourceUrl: pageUrl,
+        snippet
+      };
+    }
+  }
+
+  return {
+    isRestricted: false,
+    is_restricted: false,
+    classification: "NO_RESTRICTED_CATEGORY",
+    restricted_category: "",
+    matched_keyword: "",
+    matched_page: pageUrl,
+    matched_context: "",
+    business_activity: "",
+    confidence: 1.0,
+    reason: "No relevant restricted business detected",
+    category: "",
+    matchedKeyword: null,
+    sourceUrl: pageUrl,
+    snippet: ""
+  };
 }
 
 /**
- * Searches across all crawled pages to pinpoint the exact URL, matched keyword, and context snippet.
- * Prioritizes deep anchor/product links in HTML over generic homepage URLs.
+ * Searches across all crawled pages to evaluate restricted business evidence.
+ * Prioritizes high-priority pages and deep evidence links.
  */
 function detectRestrictedKeywords(text, html = "", crawledPages = []) {
+  let bestFalsePositive = null;
+  let bestManualReview = null;
+
   if (crawledPages && crawledPages.length > 0) {
     for (const page of crawledPages) {
       const pText = page.text || stripHtml(page.html || "");
-      const res = detectRestrictedKeywordsSingle(pText, page.html || "");
-      if (res.isRestricted) {
-        const exactLink = findExactEvidenceLink(page.html || "", res.matchedKeyword, null, page.url);
+      const res = detectRestrictedKeywordsSingle(pText, page.html || "", page.url || "");
+
+      if (res.classification === "GENUINE_RESTRICTED") {
+        const exactLink = findExactEvidenceLink(page.html || "", res.matched_keyword || res.matchedKeyword, null, page.url);
+        const resolvedUrl = exactLink || page.url;
         return {
           ...res,
-          sourceUrl: exactLink || page.url,
-          snippet: extractContextSnippet(pText, res.matchedKeyword)
+          matched_page: resolvedUrl,
+          sourceUrl: resolvedUrl,
+          snippet: extractContextSnippet(pText, res.matched_keyword || res.matchedKeyword)
         };
+      }
+
+      if (res.classification === "MANUAL_REVIEW" && !bestManualReview) {
+        bestManualReview = { ...res, sourceUrl: page.url, snippet: extractContextSnippet(pText, res.matched_keyword) };
+      }
+
+      if (res.classification === "FALSE_POSITIVE" && !bestFalsePositive) {
+        bestFalsePositive = { ...res, sourceUrl: page.url, snippet: extractContextSnippet(pText, res.matched_keyword) };
       }
     }
   }
 
-  const fallback = detectRestrictedKeywordsSingle(text, html);
-  if (fallback.isRestricted) {
+  // Fallback check on combined text
+  const fallback = detectRestrictedKeywordsSingle(text, html, (crawledPages && crawledPages[0] && crawledPages[0].url) || "");
+  if (fallback.classification === "GENUINE_RESTRICTED") {
     const pageUrl = (crawledPages && crawledPages[0] && crawledPages[0].url) || "";
-    const exactLink = findExactEvidenceLink(html, fallback.matchedKeyword, null, pageUrl);
+    const exactLink = findExactEvidenceLink(html, fallback.matched_keyword || fallback.matchedKeyword, null, pageUrl);
+    const resolvedUrl = exactLink || pageUrl;
     return {
       ...fallback,
-      sourceUrl: exactLink || pageUrl,
-      snippet: extractContextSnippet(text, fallback.matchedKeyword)
+      matched_page: resolvedUrl,
+      sourceUrl: resolvedUrl,
+      snippet: extractContextSnippet(text, fallback.matched_keyword || fallback.matchedKeyword)
     };
   }
-  return { isRestricted: false, matchedKeyword: null, reason: "", category: "", sourceUrl: "", snippet: "" };
+
+  if (bestManualReview) return bestManualReview;
+  if (bestFalsePositive) return bestFalsePositive;
+  if (fallback.classification === "FALSE_POSITIVE" || fallback.classification === "MANUAL_REVIEW") return fallback;
+
+  return {
+    isRestricted: false,
+    is_restricted: false,
+    classification: "NO_RESTRICTED_CATEGORY",
+    restricted_category: "",
+    matched_keyword: "",
+    matched_page: "",
+    matched_context: "",
+    business_activity: "",
+    confidence: 1.0,
+    reason: "No relevant restricted business detected",
+    category: "",
+    matchedKeyword: null,
+    sourceUrl: "",
+    snippet: ""
+  };
 }
 
 /**

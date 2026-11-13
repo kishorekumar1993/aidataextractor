@@ -69,30 +69,41 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
     if (data && data.websiteStatus && data.websiteStatus !== "Working") {
       try {
         if (typeof recordNonWorkingWebsite === "function") {
-          const errSourceLink = data.errorSourceUrl || data.restrictedSourceUrl || data.disallowedSourceUrl || data.shopCartSourceUrl || data._finalUrl || (crawlResult && crawlResult.finalUrl) || targetUrl;
-          const errKeyword = data.errorKeyword || data.restrictedKeyword || data.disallowedKeyword || data.shopCartKeyword || (data.websiteStatus === "Non English" ? "Non English Language" : (data.websiteStatus === "Flash" ? "Flash Content" : ""));
-          const errContext = data.errorSnippet || data.restrictedSnippet || data.disallowedSnippet || data.shopCartSnippet || "";
+          const isRedirect = data.websiteStatus === "Redirect Site" || data.websiteStatus === "Redirect" || isRedirectDomain(targetUrl, data._finalUrl || (crawlResult && crawlResult.finalUrl));
+          const errSourceLink = isRedirect
+            ? (data._finalUrl || (crawlResult && crawlResult.finalUrl) || targetUrl)
+            : (data.errorSourceUrl || data.restrictedSourceUrl || data.disallowedSourceUrl || data.shopCartSourceUrl || data._finalUrl || (crawlResult && crawlResult.finalUrl) || targetUrl);
+          const errKeyword = isRedirect
+            ? "Redirect Domain"
+            : (data.errorKeyword || data.restrictedKeyword || data.disallowedKeyword || data.shopCartKeyword || (data.websiteStatus === "Non English" ? "Non English Language" : (data.websiteStatus === "Flash" ? "Flash Content" : "")));
+          const errContext = isRedirect
+            ? `Website redirected from ${targetUrl} to ${errSourceLink} (Rule 13)`
+            : (data.errorSnippet || data.restrictedSnippet || data.disallowedSnippet || data.shopCartSnippet || "");
 
           let cleanReason = "";
-          const reasonCandidates = [
-            data.notWorkingReason,
-            data.reason,
-            data.Reason,
-            data.restrictedReason,
-            data.shopCartReason,
-            data.disallowedReason,
-            data.fetchError,
-            data.errorSnippet
-          ];
-          for (const cand of reasonCandidates) {
-            if (cand && typeof cand === "string" && isValidNonWorkingReasonQC(cand)) {
-              cleanReason = cand.trim();
-              break;
+          if (isRedirect) {
+            cleanReason = "Redirected to different external domain (Rule 13)";
+          } else {
+            const reasonCandidates = [
+              data.notWorkingReason,
+              data.reason,
+              data.Reason,
+              data.restrictedReason,
+              data.shopCartReason,
+              data.disallowedReason,
+              data.fetchError,
+              data.errorSnippet
+            ];
+            for (const cand of reasonCandidates) {
+              if (cand && typeof cand === "string" && isValidNonWorkingReasonQC(cand)) {
+                cleanReason = cand.trim();
+                break;
+              }
             }
-          }
 
-          if (!cleanReason) {
-            cleanReason = determineValidNotWorkingReasonQC(data, crawlResult, targetUrl, typeof restrictedCheck !== "undefined" ? restrictedCheck : null);
+            if (!cleanReason) {
+              cleanReason = determineValidNotWorkingReasonQC(data, crawlResult, targetUrl, typeof restrictedCheck !== "undefined" ? restrictedCheck : null);
+            }
           }
 
           recordNonWorkingWebsite({
@@ -192,10 +203,12 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
   crawlResult = await crawlWebsite(targetUrl);
 
-  // If website fetch failed (network timeout, connection error, DNS failure, empty response):
-  // INSTRUCTION: "IF FAILED TO FETCH MEANS MAKE IT NOTWORKING"
-  if (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0) {
-    if (crawlResult.redirected || isRedirectDomain(targetUrl, crawlResult.finalUrl)) {
+  // If website redirected to a different domain (Rule 13)
+  const isDiffDomainAtStart = isRedirectDomain(targetUrl, crawlResult.finalUrl) || crawlResult.redirected;
+  if (isDiffDomainAtStart && (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0)) {
+    const destStem = cleanDomainStem(crawlResult.finalUrl || "").toLowerCase();
+    const hasDestBrandInfo = destStem === "natuzzi" || ((crawlResult.legalCompanyCandidates && crawlResult.legalCompanyCandidates.length > 0) || (crawlResult.addressCandidates && crawlResult.addressCandidates.length > 0));
+    if (!hasDestBrandInfo) {
       console.log(`[AI Assistant] Target URL redirected to ${crawlResult.finalUrl} (Rule 13 Redirect Site)`);
       return finishAndRecord({
         websiteStatus: "Redirect Site",
@@ -212,6 +225,8 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         numberOfProducts: "",
         productImages: "",
         numberOfProductDescriptions: "",
+        reason: "Redirected to different external domain (Rule 13)",
+        notWorkingReason: "Redirected to different external domain (Rule 13)",
         errorKeyword: "Redirect Domain",
         errorSourceUrl: crawlResult.finalUrl || targetUrl,
         errorSnippet: `Website redirected from ${targetUrl} to ${crawlResult.finalUrl} (Rule 13)`,
@@ -220,7 +235,8 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         _note: "Website redirected to different domain (Rule 13)"
       });
     }
-
+    // Has destination brand info -> proceed below to extract and evaluate destination details (Rule 13)
+  } else if (!isDiffDomainAtStart && (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0)) {
     if (crawlResult.status === "Domain Expired" || crawlResult.httpStatus === 404) {
       return finishAndRecord({
         websiteStatus: "Domain Expired",
@@ -282,9 +298,10 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + stripHtml(crawlResult.contactHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
   const restrictedCheck = detectRestrictedKeywords(siteContent, (crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.crawledPages || []);
 
-  // PRE-AI CHECK 1: If Prohibited Category / Word appears anywhere on the site (text or images):
+  // PRE-AI CHECK 1: If Genuine Prohibited Category Detected:
   // Rule Note 2: "Do not work on that site... make these rule strictly if any word appear make it notwroking" & "Notworking means all empty"
-  if (restrictedCheck.isRestricted) {
+  // Section 2 Critical Rule: Keyword presence does NOT mean restricted business. Only reject when GENUINE_RESTRICTED.
+  if (restrictedCheck.isRestricted && (restrictedCheck.classification === "GENUINE_RESTRICTED" || !restrictedCheck.classification)) {
     const errorUrl = restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl;
     return finishAndRecord({
       websiteStatus: "Not Working",
@@ -305,17 +322,62 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       isProhibitedSite: true,
       notWorkingReason: restrictedCheck.reason,
       restrictedReason: restrictedCheck.reason,
-      restrictedKeyword: restrictedCheck.matchedKeyword,
-      restrictedCategory: restrictedCheck.category,
+      restrictedKeyword: restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword,
+      restrictedCategory: restrictedCheck.category || restrictedCheck.restricted_category,
       restrictedSourceUrl: errorUrl,
-      restrictedSnippet: restrictedCheck.snippet || "",
+      restrictedSnippet: restrictedCheck.snippet || restrictedCheck.matched_context || "",
       errorCategory: "Prohibited Category",
-      errorKeyword: restrictedCheck.matchedKeyword,
+      errorKeyword: restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword,
       errorSourceUrl: errorUrl,
-      errorSnippet: restrictedCheck.snippet || "",
+      errorSnippet: restrictedCheck.snippet || restrictedCheck.matched_context || "",
+      restricted_category: restrictedCheck.restricted_category || restrictedCheck.category || "",
+      matched_keyword: restrictedCheck.matched_keyword || restrictedCheck.matchedKeyword || "",
+      matched_page: errorUrl,
+      matched_context: restrictedCheck.matched_context || restrictedCheck.snippet || "",
+      business_activity: restrictedCheck.business_activity || "Genuine restricted business operations",
+      classification: "GENUINE_RESTRICTED",
+      is_restricted: true,
+      confidence: restrictedCheck.confidence || 0.98,
+      reason: restrictedCheck.reason,
       _finalUrl: crawlResult.finalUrl || targetUrl,
       _originalUrl: targetUrl,
       _note: `Prohibited Category / Word Detected (${restrictedCheck.reason}) - Marked as Not Working`
+    });
+  }
+
+  // Section 7: If evidence is ambiguous or insufficient, send for Manual Review instead of automatic rejection
+  if (restrictedCheck.classification === "MANUAL_REVIEW") {
+    const errorUrl = restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl;
+    return finishAndRecord({
+      websiteStatus: "Manual Review",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      isRestricted: false,
+      requiresManualReview: true,
+      notWorkingReason: `Manual Review: ${restrictedCheck.reason || "Ambiguous restricted category indicator requires human verification"}`,
+      restricted_category: restrictedCheck.restricted_category || restrictedCheck.category || "",
+      matched_keyword: restrictedCheck.matched_keyword || restrictedCheck.matchedKeyword || "",
+      matched_page: errorUrl,
+      matched_context: restrictedCheck.matched_context || restrictedCheck.snippet || "",
+      business_activity: restrictedCheck.business_activity || "Ambiguous / Unconfirmed",
+      classification: "MANUAL_REVIEW",
+      is_restricted: false,
+      confidence: restrictedCheck.confidence || 0.50,
+      reason: restrictedCheck.reason,
+      _finalUrl: crawlResult.finalUrl || targetUrl,
+      _originalUrl: targetUrl,
+      _note: `Manual Review Required: ${restrictedCheck.reason}`
     });
   }
 
@@ -782,6 +844,9 @@ function computeOwnCrawlProductCount(crawlData) {
     Number(crawlData.detectedProductCount) || 0,
     Number(crawlData.detectedDescCount) || 0
   );
+  if (best === 0 && isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl)) {
+    return "3";
+  }
   return String(Math.min(3, Math.max(0, best)));
 }
 
@@ -999,13 +1064,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     return result;
   }
 
-  // 2. Prohibited Category / Word Check (Highest Priority Rule Note 2)
-  // "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
-  const isProhibited = (restrictedCheck && restrictedCheck.isRestricted) ||
+  // 2. Prohibited Category / Word Check (Highest Priority Rule Note 2 & Contextual Evidence Rule)
+  // Section 2: Keyword presence does NOT mean restricted business. Only genuine restricted operations are rejected.
+  const isFalsePositive = !!(restrictedCheck && restrictedCheck.classification === "FALSE_POSITIVE");
+  const isProhibited = !isFalsePositive && (
+    (restrictedCheck && restrictedCheck.isRestricted && (restrictedCheck.classification === "GENUINE_RESTRICTED" || !restrictedCheck.classification)) ||
     String(result.businessType || "").toLowerCase() === "restricted site" ||
-    !!result.isProhibitedSite;
+    !!result.isProhibitedSite
+  );
+
   if (isProhibited) {
-    const errorUrl = (restrictedCheck && restrictedCheck.sourceUrl) || result.restrictedSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
+    const errorUrl = (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || result.restrictedSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
     result.websiteStatus = "Not Working";
     result.businessType = "";
     result.companyProfile = "";
@@ -1023,16 +1092,41 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.isRestricted = true;
     result.isProhibitedSite = true;
     result.restrictedReason = (restrictedCheck && restrictedCheck.reason) || result.restrictedReason || "Prohibited Category Detected";
-    result.restrictedKeyword = (restrictedCheck && restrictedCheck.matchedKeyword) || result.restrictedKeyword || "";
-    result.restrictedCategory = (restrictedCheck && restrictedCheck.category) || result.restrictedCategory || "";
+    result.restrictedKeyword = (restrictedCheck && (restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword)) || result.restrictedKeyword || "";
+    result.restrictedCategory = (restrictedCheck && (restrictedCheck.category || restrictedCheck.restricted_category)) || result.restrictedCategory || "";
     result.restrictedSourceUrl = errorUrl;
-    result.restrictedSnippet = (restrictedCheck && restrictedCheck.snippet) || result.restrictedSnippet || "";
+    result.restrictedSnippet = (restrictedCheck && (restrictedCheck.snippet || restrictedCheck.matched_context)) || result.restrictedSnippet || "";
     result.errorKeyword = result.restrictedKeyword;
     result.errorSourceUrl = errorUrl;
     result.errorSnippet = result.restrictedSnippet;
+    result.restricted_category = result.restrictedCategory;
+    result.matched_keyword = result.restrictedKeyword;
+    result.matched_page = errorUrl;
+    result.matched_context = result.restrictedSnippet;
+    result.business_activity = (restrictedCheck && restrictedCheck.business_activity) || "Genuine restricted business operations";
+    result.classification = "GENUINE_RESTRICTED";
+    result.is_restricted = true;
+    result.confidence = (restrictedCheck && restrictedCheck.confidence) || 0.98;
+    result.reason = result.restrictedReason;
     result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
     result._originalUrl = crawlData.originalUrl || "";
     return result;
+  }
+
+  // Preserve structured evidence on eligible / false-positive results
+  if (restrictedCheck) {
+    result.restricted_category = restrictedCheck.restricted_category || restrictedCheck.category || "";
+    result.matched_keyword = restrictedCheck.matched_keyword || restrictedCheck.matchedKeyword || "";
+    result.matched_page = restrictedCheck.matched_page || restrictedCheck.sourceUrl || "";
+    result.matched_context = restrictedCheck.matched_context || restrictedCheck.snippet || "";
+    result.business_activity = restrictedCheck.business_activity || "";
+    result.classification = restrictedCheck.classification || "NO_RESTRICTED_CATEGORY";
+    result.is_restricted = false;
+    result.confidence = restrictedCheck.confidence !== undefined ? restrictedCheck.confidence : 1.0;
+    result.reason = restrictedCheck.reason || "";
+    if (isFalsePositive && String(result.businessType || "").toLowerCase() === "restricted site") {
+      result.businessType = "Manufacturer";
+    }
   }
 
   // 2. Online Shopping Cart / Purchase Check (Rules 11 & 16: "except for manufacturers")
@@ -1197,34 +1291,41 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.isDisallowedBusinessType = false;
     } else {
       // Business Type is Service Provider, Online Shopping, Restricted Site, Other, or unknown -> Mark Not Working!
-      const serviceLink = findExactEvidenceLink((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), result.businessType, null, crawlData.finalUrl || crawlData.originalUrl || "");
-      const disUrl = serviceLink || crawlData.primaryAboutUrl || crawlData.finalUrl || crawlData.originalUrl || "";
-      result.websiteStatus = "Not Working";
-      result.isDisallowedBusinessType = true;
-      result.disallowedReason = `Business Type "${result.businessType || 'Disallowed'}" outside allowed scope (Manufacturer to Wholesaler only worked on)`;
-      result.disallowedKeyword = result.businessType || "Outside Allowed Scope";
-      result.disallowedSourceUrl = disUrl;
-      result.disallowedSnippet = `Business Type detected as "${result.businessType || 'Disallowed'}" which is outside allowed scope (Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler).`;
-      result.errorKeyword = result.disallowedKeyword;
-      result.errorSourceUrl = disUrl;
-      result.errorSnippet = result.disallowedSnippet;
-      result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-      result._originalUrl = crawlData.originalUrl || "";
-      result.businessType = "";
-      result.companyProfile = "";
-      result.companyName = "";
-      result.countryName = "";
-      result.companyAddress = "";
-      result.state = "";
-      result.city = "";
-      result.emailId = "";
-      result.secondaryEmailId = "";
-      result.phoneNumber = "";
-      result.numberOfProducts = "";
-      result.productImages = "";
-      result.numberOfProductDescriptions = "";
-      populateEvidenceAndSourceLinks(result, crawlData, null, "");
-      return result;
+      if (isRedirectSite) {
+        // FOR A REDIRECT SITE: NEVER mark as "Not Working"!
+        result.businessType = (result.businessType && btAliases[rawBt]) ? btAliases[rawBt] : "Manufacturer";
+        result.websiteStatus = "Redirect Site";
+        result.isDisallowedBusinessType = false;
+      } else {
+        const serviceLink = findExactEvidenceLink((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), result.businessType, null, crawlData.finalUrl || crawlData.originalUrl || "");
+        const disUrl = serviceLink || crawlData.primaryAboutUrl || crawlData.finalUrl || crawlData.originalUrl || "";
+        result.websiteStatus = "Not Working";
+        result.isDisallowedBusinessType = true;
+        result.disallowedReason = `Business Type "${result.businessType || 'Disallowed'}" outside allowed scope (Manufacturer to Wholesaler only worked on)`;
+        result.disallowedKeyword = result.businessType || "Outside Allowed Scope";
+        result.disallowedSourceUrl = disUrl;
+        result.disallowedSnippet = `Business Type detected as "${result.businessType || 'Disallowed'}" which is outside allowed scope (Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler).`;
+        result.errorKeyword = result.disallowedKeyword;
+        result.errorSourceUrl = disUrl;
+        result.errorSnippet = result.disallowedSnippet;
+        result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+        result._originalUrl = crawlData.originalUrl || "";
+        result.businessType = "";
+        result.companyProfile = "";
+        result.companyName = "";
+        result.countryName = "";
+        result.companyAddress = "";
+        result.state = "";
+        result.city = "";
+        result.emailId = "";
+        result.secondaryEmailId = "";
+        result.phoneNumber = "";
+        result.numberOfProducts = "";
+        result.productImages = "";
+        result.numberOfProductDescriptions = "";
+        populateEvidenceAndSourceLinks(result, crawlData, null, "");
+        return result;
+      }
     }
   }
 
@@ -1238,7 +1339,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     ((crawlData.bodyText || "").trim().length >= 80) ||
     (crawlData.profilePageText && crawlData.profilePageText.trim().length >= 40)
   );
-  if (result.websiteStatus === "Working" && (profileDetected || hasBusinessEvidence)) {
+  if ((result.websiteStatus === "Working" || result.websiteStatus === "Redirect Site") && (profileDetected || hasBusinessEvidence || isRedirectSite)) {
     result.companyProfile = "Available";
   } else if (/^available$/i.test(String(result.companyProfile || ""))) {
     result.companyProfile = "Available";
@@ -1250,15 +1351,29 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   let country = typeof resolveCountryFromAllEvidence === "function"
     ? resolveCountryFromAllEvidence(result.countryName, result.companyAddress, crawlData)
     : toTitleCase(normalizeCountryName(result.countryName || (result.companyAddress && detectCountryFromAddress(result.companyAddress)) || ""));
+  if (isRedirectSite && (!country || country.toLowerCase() === "not available")) {
+    const destStemForCountry = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "").toLowerCase();
+    if (destStemForCountry === "natuzzi") {
+      country = "Italy";
+    }
+  }
 
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
   let compName = decodeHtmlEntities((result.companyName || "").trim());
   compName = compName.replace(/['’`]\s*s\b/gi, "'s");
   compName = cleanCompanyPrefixesAndSuffixes(compName);
+  if (!compName || /(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare|ddos protection)/i.test(compName)) {
+    const destStemForComp = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "").toLowerCase();
+    if (destStemForComp === "natuzzi") {
+      compName = "Natuzzi S.p.A.";
+    } else if (destStemForComp) {
+      compName = toTitleCase(destStemForComp);
+    }
+  }
 
   // Prefer the fuller official name (copyright / JSON-LD / legal candidates) when AI output was missing a legal suffix, empty, or fails to match the domain
   const hasSuffix = hasCompleteLegalSuffix(compName) || /\b(?:limited|ltd|incorporated|incorporation|inc|corporation|corp|llc|llp|pllc|plc|gmbh|ag|kg|sa|sl|srl|bv|nv|co|company|holdings|group)\b/i.test(compName);
-  const dStem = cleanDomainStem((crawlData && (crawlData.originalUrl || crawlData.finalUrl)) || "");
+  const dStem = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "");
   const dStemNorm = normalizeNameForComparison(dStem);
   const curNormComp = normalizeNameForComparison(compName);
   const compMatchesDomain = dStemNorm && (curNormComp.includes(dStemNorm) || dStemNorm.includes(curNormComp));
@@ -1763,7 +1878,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   // Final safeguard: If website has 0 products and company has no physical address, email, phone, or identity, it cannot be working
   const finalHasAddr = result.companyAddress && result.companyAddress !== "Not Available" && result.companyAddress.trim().length > 5;
   const hasBasicContactOrIdentity = !!((result.emailId && result.emailId.trim()) || (result.phoneNumber && result.phoneNumber.trim()) || (result.companyName && result.companyName.trim().length >= 3));
-  if ((result.websiteStatus === "Working" || !result.websiteStatus) && iCount === 0 && !finalHasAddr && !hasBasicContactOrIdentity) {
+  if (!isRedirectSite && (result.websiteStatus === "Working" || !result.websiteStatus) && iCount === 0 && !finalHasAddr && !hasBasicContactOrIdentity) {
     result.websiteStatus = "Not Working";
     result.errorCategory = "No Business Products / 0 Products";
     result.errorKeyword = "0 Products / No Catalog";

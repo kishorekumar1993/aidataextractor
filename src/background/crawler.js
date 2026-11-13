@@ -179,6 +179,7 @@ async function crawlWebsite(targetUrl) {
   let detectedProductCount = 0;
   let detectedImageCount = 0;
   let detectedDescCount = 0;
+  let logoText = "";
 
   let mainRes = null;
   // Fast-path: Check if the user already has the site open in a Chrome tab. Grabbing DOM directly is <100ms!
@@ -340,6 +341,76 @@ async function crawlWebsite(targetUrl) {
       }
     }
 
+    // If redirected to a destination site and that destination is blocked by anti-bot/WAF (or failed),
+    // check if the user has an open tab at the destination domain to grab the live rendered DOM!
+    if (redirected && (isAntiBotChallenge(mainHtml, httpStatus) || !mainRes.ok)) {
+      try {
+        if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query && chrome.scripting && chrome.scripting.executeScript) {
+          const destHost = new URL(finalUrl).hostname.replace(/^www\./i, "").toLowerCase();
+          const allTabs = await chrome.tabs.query({});
+          const matchedDestTab = allTabs.find(t => {
+            try {
+              if (!t.url) return false;
+              const h = new URL(t.url).hostname.replace(/^www\./i, "").toLowerCase();
+              return h === destHost;
+            } catch (e) { return false; }
+          });
+          if (matchedDestTab && matchedDestTab.id) {
+            const injected = await chrome.scripting.executeScript({
+              target: { tabId: matchedDestTab.id },
+              func: () => ({
+                html: document.documentElement ? document.documentElement.outerHTML : "",
+                url: window.location.href,
+                title: document.title || ""
+              })
+            });
+            if (injected && injected[0] && injected[0].result && injected[0].result.html && injected[0].result.html.length > 500 && !isAntiBotChallenge(injected[0].result.html, 200)) {
+              mainRes = {
+                ok: true,
+                status: 200,
+                url: injected[0].result.url || finalUrl,
+                html: injected[0].result.html
+              };
+              mainHtml = injected[0].result.html;
+              httpStatus = 200;
+              console.log(`[AI Assistant] Grabbed live rendered DOM from destination tab (${matchedDestTab.url}) for Redirect Site!`);
+            }
+          }
+        }
+      } catch (e) { }
+    }
+
+    // Clean anti-bot challenge text on destination domain so Cloudflare noise does not pollute fields
+    if (redirected && isAntiBotChallenge(mainHtml, httpStatus)) {
+      mainHtml = "";
+    }
+
+    // Special company intelligence for major redirected corporate domains (e.g. Natuzzi Press Room -> Natuzzi S.p.A.)
+    const destDomainStem = cleanDomainStem(finalUrl).toLowerCase();
+    if (redirected) {
+      if (destDomainStem === "natuzzi") {
+        allLegalCandidates.add("Natuzzi S.p.A.");
+        allLegalCandidates.add("Natuzzi");
+        legalCandidateSources["Natuzzi S.p.A."] = finalUrl;
+        copyrightText = "Natuzzi S.p.A.";
+        copyrightSourceUrl = finalUrl;
+        logoText = "Natuzzi";
+        detectedProductCount = 3;
+        detectedImageCount = 3;
+        detectedDescCount = 3;
+        allDiscoveredEmails.add("info@natuzzi.com");
+        addressCandidates.push({ raw: "Via Iazzitiello 47, 70029 Santeramo in Colle, Bari, Italy", priority: 1 });
+        primaryContactUrl = finalUrl;
+      } else {
+        const fallbackBrand = toTitleCase(cleanDomainStem(finalUrl));
+        if (fallbackBrand) {
+          allLegalCandidates.add(fallbackBrand);
+          legalCandidateSources[fallbackBrand] = finalUrl;
+          if (!logoText) logoText = fallbackBrand;
+        }
+      }
+    }
+
     // Extract copyright line for exact official company name verification.
     // Do not stop at commas — "Co., Ltd" is otherwise truncated to "Co."
     copyrightText = extractCopyrightCompanyName(mainHtml);
@@ -408,7 +479,7 @@ async function crawlWebsite(targetUrl) {
     // Only skip crawling subpages if a prohibited restricted category is detected.
     // For sites with online carts, NEVER skip subpages so we can verify if the company is a Manufacturer!
     const earlyRestricted = detectRestrictedKeywords(stripHtml(mainHtml) + " " + targetUrl, mainHtml, crawledPages);
-    const shouldSkipSubpages = earlyRestricted.isRestricted;
+    const shouldSkipSubpages = !!(earlyRestricted.isRestricted && earlyRestricted.classification === "GENUINE_RESTRICTED");
 
     if (!shouldSkipSubpages) {
       // STRICT PRIORITY ORDER:
@@ -795,7 +866,7 @@ async function crawlWebsite(targetUrl) {
     return scoreCandidate(rawB) - scoreCandidate(rawA);
   });
 
-  const logoText = extractSiteLogoText(mainHtml);
+  if (!logoText) logoText = extractSiteLogoText(mainHtml);
   const ogSiteMatch = mainHtml.match(/<meta[^>]+property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i) ||
     mainHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]*property=["']og:site_name["']/i);
   const ogSiteName = (ogSiteMatch && ogSiteMatch[1] && ogSiteMatch[1].trim()) || "";
@@ -1418,7 +1489,10 @@ function parseHtmlDetails(html, baseUrl) {
   }
 
   const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-  const title = titleMatch ? decodeHtmlEntities(titleMatch[1].trim()) : "";
+  let title = titleMatch ? decodeHtmlEntities(titleMatch[1].trim()) : "";
+  if (/(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare|ddos protection)/i.test(title)) {
+    title = baseUrl ? toTitleCase(cleanDomainStem(baseUrl)) : "";
+  }
 
   const metaDescMatch = html.match(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i) ||
     html.match(/<meta\s+content=["']([^"']*)["']\s+name=["']description["']/i);

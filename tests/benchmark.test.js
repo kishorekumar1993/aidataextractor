@@ -67,7 +67,7 @@ function runTest(name, fn) {
     passed++;
   } catch (err) {
     console.error(`❌ [FAIL] ${name}`);
-    console.error(`   Error: ${err.message}\n`);
+    console.error(err.stack);
     failed++;
   }
 }
@@ -1462,7 +1462,7 @@ async function runAsyncTests() {
       passed++;
     } catch (err) {
       console.error(`❌ [FAIL] ${name}`);
-      console.error(`   Error: ${err.message}\n`);
+      console.error('STACK TRACE:', err.stack);
       failed++;
     }
   }
@@ -1471,13 +1471,13 @@ async function runAsyncTests() {
     const groqCfg = ctx.resolveAiProviderConfig({
       aiProvider: 'groq',
       groqApiKey: 'gsk_test_groq_key',
-      groqModel: 'openai/gpt-oss-120b'
+      groqModel: 'llama-3.1-8b-instant'
     });
     assert.strictEqual(groqCfg.provider, 'groq');
     assert.strictEqual(groqCfg.apiKey, 'gsk_test_groq_key');
-    assert.strictEqual(groqCfg.model, 'openai/gpt-oss-120b');
+    assert.strictEqual(groqCfg.model, 'llama-3.1-8b-instant');
 
-    // Verify legacy grok/grokApiKey with gsk_ migrates cleanly to Groq default (openai/gpt-oss-120b)
+    // Verify legacy grok/grokApiKey with gsk_ migrates cleanly to Groq default (llama-3.1-8b-instant)
     const migratedCfg = ctx.resolveAiProviderConfig({
       aiProvider: 'grok',
       grokApiKey: 'gsk_legacy_key',
@@ -1485,7 +1485,7 @@ async function runAsyncTests() {
     });
     assert.strictEqual(migratedCfg.provider, 'groq');
     assert.strictEqual(migratedCfg.apiKey, 'gsk_legacy_key');
-    assert.strictEqual(migratedCfg.model, 'openai/gpt-oss-120b');
+    assert.strictEqual(migratedCfg.model, 'llama-3.1-8b-instant');
 
     let calls = [];
     let forceFallbackMode = false;
@@ -1527,7 +1527,7 @@ async function runAsyncTests() {
       calls.push({ url, model: parsedBody.model });
 
       if (url === 'https://api.groq.com/openai/v1/chat/completions') {
-        const expectedModel = forceFallbackMode ? 'allam-2-7b' : 'openai/gpt-oss-120b';
+        const expectedModel = forceFallbackMode ? 'allam-2-7b' : 'llama-3.1-8b-instant';
         if (parsedBody.model !== expectedModel) {
           return {
             ok: false,
@@ -1568,18 +1568,18 @@ async function runAsyncTests() {
     forceFallbackMode = false;
     const groqOut = await ctx.analyzeWithAi(mockCrawl, groqCfg, {}, 0);
     assert.strictEqual(groqOut._aiProvider, 'Groq');
-    assert.strictEqual(groqOut._aiModel, 'openai/gpt-oss-120b');
+    assert.strictEqual(groqOut._aiModel, 'llama-3.1-8b-instant');
     assert.strictEqual(groqOut.emailId, 'sales@swanseaindustrial.com');
     assert.strictEqual(groqOut.secondaryEmailId, 'info@swanseaindustrial.com');
     assert.strictEqual(calls.length, 1, 'Happy path must make only 1 API call (no /models call)');
     assert.strictEqual(calls[0].url, 'https://api.groq.com/openai/v1/chat/completions');
-    assert.strictEqual(calls[0].model, 'openai/gpt-oss-120b');
+    assert.strictEqual(calls[0].model, 'llama-3.1-8b-instant');
 
     // 2. Key test happy path: 1 API call total without /models
     calls = [];
-    const testDirect = await ctx.testAiProviderKey({ provider: 'groq', apiKey: 'gsk_test_groq_key', modelName: 'openai/gpt-oss-120b' });
+    const testDirect = await ctx.testAiProviderKey({ provider: 'groq', apiKey: 'gsk_test_groq_key', modelName: 'llama-3.1-8b-instant' });
     assert.strictEqual(testDirect.success, true);
-    assert.strictEqual(testDirect.activeModel, 'openai/gpt-oss-120b');
+    assert.strictEqual(testDirect.activeModel, 'llama-3.1-8b-instant');
     assert.strictEqual(calls.length, 1, 'Key test happy path must make only 1 API call');
 
     // 3. Failure fallback path: when initial candidate models fail, /openai/v1/models is called to discover active models
@@ -1623,10 +1623,11 @@ async function runAsyncTests() {
     assert.ok(popupHtml.includes('id="provider-select"'));
     assert.ok(popupHtml.includes('id="groq-api-key-input"'));
     assert.ok(!popupHtml.includes('id="grok-api-key-input"'));
-    assert.ok(!/deepseek|api\.x\.ai|llama-3\.3-70b-versatile|llama-4-scout|qwen3-32b|llama-3\.1-8b-instant/i.test(popupHtml + popupJs + configJs), 'Only Gemini and active Groq models should remain');
+    assert.ok(!/deepseek|api\.x\.ai|llama-4-scout|qwen3-32b/i.test(popupHtml + popupJs + configJs), 'Only Gemini and active Groq models should remain');
+    assert.ok(!/GROQ_MODELS\s*=\s*\[[^\]]*gpt-oss/i.test(configJs), 'Groq models must not include gpt-oss');
     assert.ok(popupHtml.includes('gemini-3.8-flash') && popupHtml.includes('gemini-3.6-flash'));
     assert.ok(popupJs.includes('gemini-3.8-flash') && configJs.includes('gemini-3.8-flash'));
-    assert.ok(popupJs.includes('qwen/qwen3.8-27b') && configJs.includes('allam-2-7b'));
+    assert.ok(popupJs.includes('llama-3.1-8b-instant') && configJs.includes('llama-3.1-8b-instant'));
     assert.ok(popupJs.includes('PROVIDER_MODELS_UI') && popupJs.includes('groqApiKey'));
   });
 
@@ -2728,6 +2729,330 @@ async function runAsyncTests() {
     assert.strictEqual(cleaned._originalUrl, "http://www.oldbrandtools.com", "Must track original URL");
     assert.ok(cleaned.companyName.includes("New Brand Tools"), "Must evaluate company name from destination site");
     assert.strictEqual(cleaned.countryName, "United States Of America", "Must evaluate country from destination site");
+
+    // 5. Natuzzi Press Room test case (http://www.natuzzipressroom.com -> http://www.natuzzi.com/)
+    const natuzziCrawl = {
+      originalUrl: "http://www.natuzzipressroom.com",
+      finalUrl: "http://www.natuzzi.com/",
+      redirected: true,
+      status: "Redirect Site",
+      title: "Attention Required! | Cloudflare",
+      mainHtml: "<html><title>Attention Required! | Cloudflare</title><body>Just a moment...</body></html>",
+      bodyText: "Attention Required! | Cloudflare",
+      legalCompanyCandidates: ["Natuzzi S.p.A.", "Natuzzi"],
+      legalCandidateSources: { "Natuzzi S.p.A.": "http://www.natuzzi.com/" },
+      addressCandidates: [{ raw: "Via Iazzitiello 47, 70029 Santeramo in Colle, Bari, Italy", priority: 1 }],
+      emails: ["info@natuzzi.com"],
+      phones: [],
+      detectedProductCount: 3,
+      detectedImageCount: 3,
+      detectedDescCount: 3,
+      crawledPages: []
+    };
+
+    const natuzziExtracted = ctx.heuristicExtraction(natuzziCrawl, { isRestricted: false });
+    const natuzziCleaned = ctx.applyStrictInstructions(natuzziExtracted, natuzziCrawl, { isRestricted: false });
+
+    assert.strictEqual(natuzziCleaned.websiteStatus, "Redirect Site", "Natuzzi must be marked as Redirect Site");
+    assert.ok(natuzziCleaned.companyName.includes("Natuzzi"), "Company name must be Natuzzi, never Attention Required");
+    assert.ok(!natuzziCleaned.companyName.toLowerCase().includes("attention"), "Anti-bot title must never be company name");
+    assert.strictEqual(natuzziCleaned.countryName, "Italy", "Natuzzi country must be Italy");
+    assert.strictEqual(natuzziCleaned.businessType, "Manufacturer", "Natuzzi business type must be Manufacturer");
+    assert.strictEqual(natuzziCleaned.companyProfile, "Available", "Profile must be Available");
+    assert.strictEqual(natuzziCleaned.state, "Available", "State must be Available");
+    assert.strictEqual(natuzziCleaned.city, "Available", "City must be Available");
+    assert.strictEqual(natuzziCleaned.numberOfProducts, "3");
+    assert.strictEqual(natuzziCleaned.productImages, "3");
+    assert.strictEqual(natuzziCleaned.numberOfProductDescriptions, "3");
+    assert.strictEqual(natuzziCleaned._finalUrl, "http://www.natuzzi.com/");
+    assert.strictEqual(natuzziCleaned._originalUrl, "http://www.natuzzipressroom.com");
+
+    // 6. Anti-Bot Cloudflare Challenge on generic destination domain
+    const cfCrawl = {
+      originalUrl: "http://www.legacyvalves.com",
+      finalUrl: "https://www.valvecorp.com/",
+      redirected: true,
+      status: "Redirect Site",
+      title: "Just a moment...",
+      mainHtml: "<html><title>Just a moment...</title><body>Cloudflare turnstile challenge</body></html>",
+      bodyText: "",
+      addressCandidates: [],
+      emails: [],
+      phones: [],
+      detectedProductCount: 0,
+      detectedImageCount: 0,
+      detectedDescCount: 0,
+      crawledPages: []
+    };
+    const cfExtracted = ctx.heuristicExtraction(cfCrawl, { isRestricted: false });
+    const cfCleaned = ctx.applyStrictInstructions(cfExtracted, cfCrawl, { isRestricted: false });
+    assert.strictEqual(cfCleaned.websiteStatus, "Redirect Site", "Must preserve Redirect Site even on anti-bot destination");
+    assert.strictEqual(cfCleaned.companyName, "Valvecorp", "Must derive clean brand from domain stem, not Cloudflare");
+    assert.strictEqual(cfCleaned.businessType, "Manufacturer", "Must default to eligible Manufacturer, not Outside Allowed Scope");
+    assert.strictEqual(cfCleaned.numberOfProducts, "3", "Must default products to 3 for eligible redirect site");
+
+    // 7. Dead Redirect Destination (404 / Connection error)
+    const deadCrawl = {
+      originalUrl: "http://oldsite.com",
+      finalUrl: "http://deadnewsitedomain.com",
+      redirected: true,
+      status: "Redirect Site",
+      fetchError: "Site returned HTTP 404 Not Found",
+      mainHtml: "",
+      httpStatus: 404
+    };
+    const deadResult = await ctx.handleCrawlAndExtract("http://oldsite.com", "own_crawl");
+    // Dead crawl result through handleCrawlAndExtract
+    assert.strictEqual(ctx.isRedirectDomain(deadCrawl.originalUrl, deadCrawl.finalUrl), true);
+  });
+
+  // 48. Website Restricted Category Detection, False-Positive Elimination & QC Evidence Accuracy
+  runTest('Website Restricted Category Detection, False-Positive Elimination & QC Evidence Accuracy', () => {
+    // 1. Adult / Porn False Positives
+    const adultCases = [
+      {
+        url: "https://campakeela.com/programs",
+        title: "Camp Akeela - Sleepaway Summer Camp",
+        text: "Camp Akeela is a co-ed sleepaway camp for children, teens, and young adults. We offer camp programs for kids and adults.",
+        expectedBusiness: "Youth summer camp"
+      },
+      {
+        url: "https://carl-f-bucherer.com/en/watches",
+        title: "Carl F. Bucherer Swiss Watches",
+        text: "Carl F. Bucherer is a Swiss luxury watchmaker founded in 1888 in Lucerne. High quality watches for men, women, and adults.",
+        expectedBusiness: "Luxury watchmaker"
+      },
+      {
+        url: "https://northkenya.com/safaris",
+        title: "North Kenya Safaris & Wildlife Tours",
+        text: "North Kenya Safaris: Guided game drives and tours across East Africa. Rates: $150 per adult, $75 per child.",
+        expectedBusiness: "Wildlife safari tours"
+      },
+      {
+        url: "https://nifdindia.org/about",
+        title: "NIFD Global - Premier Design Institute",
+        text: "NIFD Global is a premier design institute. Adult education, vocational courses for adult learners and fashion design students.",
+        expectedBusiness: "Design educational institute"
+      },
+      {
+        url: "https://breswaoutdoorfurniture.co.nz/products",
+        title: "Breswa Outdoor Furniture New Zealand",
+        text: "Breswa Outdoor Furniture New Zealand. Handcrafted wooden picnic tables, outdoor furniture for adults and kids.",
+        expectedBusiness: "Outdoor wooden furniture manufacturing"
+      },
+      {
+        url: "https://cri.fiu.edu/research",
+        title: "Community Research Institute - Florida International University",
+        text: "Community Research Institute at Florida International University. Academic research into adult life, adult population health and development.",
+        expectedBusiness: "University research institute"
+      },
+      {
+        url: "https://momeni.com/terms",
+        title: "Momeni Rugs Terms and Conditions",
+        text: "Momeni Rugs and Carpets. Terms of service: You must be an adult of legal age to place orders on this website.",
+        expectedBusiness: "Rugs and carpet manufacturing"
+      },
+      {
+        url: "https://avanti-conveyors.co.uk/privacy",
+        title: "Avanti Conveyors Privacy Policy",
+        text: "Avanti Conveyors Ltd manufactures packaging conveyors. Privacy notice: our website is intended for adult audience only.",
+        expectedBusiness: "Packaging conveyor systems manufacturing"
+      },
+      {
+        url: "https://theprintedbagshop.co.uk/products",
+        title: "The Printed Bag Shop Products",
+        text: "Custom printed bags, paper packaging, and totes with cute animal illustrations and animal prints.",
+        expectedBusiness: "Custom packaging and printed bags"
+      }
+    ];
+
+    for (const ac of adultCases) {
+      const res = ctx.detectRestrictedKeywordsSingle(ac.text, `<html><head><title>${ac.title}</title></head></html>`, ac.url);
+      assert.strictEqual(res.isRestricted, false, `Must NOT restrict adult false positive: ${ac.url}`);
+      assert.ok(res.classification === "FALSE_POSITIVE" || res.classification === "NO_RESTRICTED_CATEGORY", `Classification must be non-restricted for ${ac.url}`);
+    }
+
+    // 2. Aircraft / Aerospace False Positives (Applications, Materials & Served Industries)
+    const aeroCases = [
+      {
+        url: "https://odu.de/industries",
+        title: "ODU High-Performance Connectors",
+        text: "ODU Connectors: High performance circular connectors for aerospace applications, medical technology, and military equipment."
+      },
+      {
+        url: "https://avongear.com/capabilities",
+        title: "Avon Gear Precision Manufacturing",
+        text: "Avon Gear: Precision gear manufacturing. Custom gears manufactured for aerospace applications and heavy industrial machinery."
+      },
+      {
+        url: "https://3dimensional.co.uk/services",
+        title: "3D Dimensional Laser Prototyping",
+        text: "3D Dimensional: Laser scanning, reverse engineering, and prototyping for automotive and aerospace applications."
+      },
+      {
+        url: "https://globalpublicaffairs.ca/sectors",
+        title: "Global Public Affairs",
+        text: "Global Public Affairs: Advising corporate clients in transportation, aerospace, and energy sectors."
+      },
+      {
+        url: "https://wdserv.com/markets",
+        title: "Water Treatment Services",
+        text: "Water Treatment Services: Industrial water filtration systems serving manufacturing, automotive, and aerospace facilities."
+      },
+      {
+        url: "https://flocomponents.com/products",
+        title: "Flo Components Lubrication Systems",
+        text: "Flo Components: Automatic lubrication systems for mining, construction, and aerospace machinery."
+      },
+      {
+        url: "https://russellsymes.com.au/about",
+        title: "Russell Symes CNC Machining",
+        text: "Russell Symes & Co: Precision CNC machining and toolmaking. Components for medical, defense, and aerospace applications."
+      },
+      {
+        url: "https://mastertechdiamond.com/products",
+        title: "Mastertech Superabrasive Diamond",
+        text: "Mastertech Diamond: Superabrasive diamond grinding wheels for carbide, ceramics, and aerospace composites."
+      },
+      {
+        url: "https://pppltd.com/capabilities",
+        title: "Precision Plastic Products",
+        text: "Precision Plastic Products: Plastic injection moulding for automotive, industrial, and aerospace applications."
+      },
+      {
+        url: "https://cleaningequipmentservices.uk/hire",
+        title: "Cleaning Equipment Services Hire",
+        text: "Cleaning Equipment Services: Industrial floor scrubbers and sweepers hire for warehouses, factories, and aerospace hangars."
+      },
+      {
+        url: "https://slingchoker.com/products",
+        title: "Sling-Choker Rigging Supplies",
+        text: "Sling-Choker: Rigging supplies, synthetic lifting slings, and galvanized aircraft cables for industrial lifting."
+      },
+      {
+        url: "https://thomescanada.com/products",
+        title: "Thomes Canada Birch Plywood",
+        text: "Thomes Canada: Premium Baltic birch plywood and aircraft-grade plywood panels for architectural and furniture use."
+      }
+    ];
+
+    for (const aero of aeroCases) {
+      const res = ctx.detectRestrictedKeywordsSingle(aero.text, `<html><head><title>${aero.title}</title></head></html>`, aero.url);
+      assert.strictEqual(res.isRestricted, false, `Must NOT restrict aerospace/aircraft application: ${aero.url}`);
+      assert.ok(res.classification === "FALSE_POSITIVE" || res.classification === "NO_RESTRICTED_CATEGORY", `Classification must be non-restricted for ${aero.url}`);
+    }
+
+    // 3. Animals False Positives (Welfare, Cruelty-Free Vegan, Government Administration)
+    const animalCases = [
+      {
+        url: "https://zpkolhapur.gov.in/en",
+        title: "Zilla Parishad Kolhapur Government Portal",
+        text: "Zilla Parishad Kolhapur Government Portal. Animal Husbandry Department provides veterinary administrative services and welfare schemes."
+      },
+      {
+        url: "https://suryabrasil.com/about-us",
+        title: "Surya Brasil Vegan Cosmetics",
+        text: "Surya Brasil: Natural organic vegan cosmetics and henna hair color. Cruelty-free, no animal testing, 100% vegan, cruelty-free to animals."
+      },
+      {
+        url: "https://amwarkup.co.uk/buildings",
+        title: "A.M. Warkup Agricultural Buildings",
+        text: "A.M. Warkup Ltd: Agricultural building design and construction. Steel framed livestock housing built for animal welfare."
+      }
+    ];
+
+    for (const anim of animalCases) {
+      const res = ctx.detectRestrictedKeywordsSingle(anim.text, `<html><head><title>${anim.title}</title></head></html>`, anim.url);
+      assert.strictEqual(res.isRestricted, false, `Must NOT restrict animal false positive: ${anim.url}`);
+      assert.ok(res.classification === "FALSE_POSITIVE" || res.classification === "NO_RESTRICTED_CATEGORY", `Classification must be non-restricted for ${anim.url}`);
+    }
+
+    // 4. Alcohol False Positive (Architectural project credit / color finish)
+    const alcoholCase = {
+      url: "https://alumicor.com/projects",
+      title: "Alumicor Architectural Aluminum",
+      text: "Alumicor architectural aluminum windows, curtain walls, and entrances. Featured project: Whiskey Creek Community Center."
+    };
+    const alcRes = ctx.detectRestrictedKeywordsSingle(alcoholCase.text, `<html><head><title>${alcoholCase.title}</title></head></html>`, alcoholCase.url);
+    assert.strictEqual(alcRes.isRestricted, false, "Must NOT restrict architectural project mentioning Whiskey Creek");
+    assert.ok(alcRes.classification === "FALSE_POSITIVE" || alcRes.classification === "NO_RESTRICTED_CATEGORY");
+
+    // 5. Genuine Restricted Businesses MUST Remain Strictly Restricted
+    const genuineCases = [
+      { url: "https://pornhub.com", text: "Pornhub is a free porn videos, xxx movies, adult entertainment and streaming erotica platform.", category: "Adult & Porn" },
+      { url: "https://adulttoyzone.com", text: "Online sex shop selling adult toys, dildos, vibrators, and erotic novelties.", category: "Adult & Porn" },
+      { url: "https://colt.com", text: "Colt Firearms: Manufacturing defense rifles, handguns, pistols, revolvers, and military firearms.", category: "Weapons, Armor & Knives" },
+      { url: "https://emirates.com", text: "Emirates Airline: Book commercial flights, air travel, and passenger tickets worldwide.", category: "Aviation & Airlines" },
+      { url: "https://guinness.com", text: "Guinness Brewery: World famous stout beer brewery and alcoholic beverage producer in Dublin.", category: "Alcohol & Breweries" },
+      { url: "https://cedars-sinai.org", text: "Cedars-Sinai Medical Center: Hospital patient care, outpatient surgery clinic, and emergency healthcare services.", category: "Medicine, Medical & Hospital" },
+      { url: "https://huntingtoningalls.com", text: "Huntington Ingalls Industries: America largest military shipbuilder, naval shipyards, and warships building.", category: "Ships & Boats" },
+      { url: "https://puppyspot.com", text: "PuppySpot: Purebred puppies for sale, trusted dog breeding network and pet store adoption.", category: "Animals & Pets" }
+    ];
+
+    for (const gc of genuineCases) {
+      const res = ctx.detectRestrictedKeywordsSingle(gc.text, "", gc.url);
+      assert.strictEqual(res.isRestricted, true, `Must detect genuine restricted business: ${gc.url}`);
+      assert.strictEqual(res.classification, "GENUINE_RESTRICTED");
+      if (gc.url.includes("huntingtoningalls")) {
+        assert.ok(
+          res.restricted_category === "Ships & Boats" || res.restricted_category === "Defence & Military",
+          `Expected Ships & Boats or Defence & Military, got ${res.restricted_category}`
+        );
+      } else {
+        assert.strictEqual(res.restricted_category, gc.category);
+      }
+      assert.ok(res.confidence >= 0.95, "Confidence score must be >= 0.95 for genuine restricted");
+    }
+
+    // 6. Section 8 Structured Evidence Output Format Verification
+    const sampleAvonEvidence = ctx.detectRestrictedKeywordsSingle(
+      "Avon Gear provides precision gears for aerospace applications.",
+      "<html><head><title>Avon Gear Precision</title></head></html>",
+      "https://avongear.com/capabilities"
+    );
+    assert.strictEqual(sampleAvonEvidence.classification, "FALSE_POSITIVE");
+    assert.strictEqual(sampleAvonEvidence.is_restricted, false);
+    assert.strictEqual(sampleAvonEvidence.restricted_category, "Aerospace");
+    assert.strictEqual(sampleAvonEvidence.matched_keyword, "aerospace");
+    assert.strictEqual(sampleAvonEvidence.matched_page, "https://avongear.com/capabilities");
+    assert.ok(sampleAvonEvidence.matched_context.includes("aerospace applications"));
+    assert.ok(sampleAvonEvidence.confidence >= 0.90);
+    assert.ok(sampleAvonEvidence.reason.length > 10);
+
+    // 7. End-to-end QC Preservation: Eligible company with false-positive application mention keeps Working status
+    const mockAvonCrawl = {
+      finalUrl: "https://avongear.com/about",
+      originalUrl: "https://avongear.com",
+      mainHtml: "<html><body><h1>Avon Gear Company</h1><p>We manufacture custom precision gears for aerospace applications.</p></body></html>",
+      contactHtml: "<html><body><p>123 Gear Way, Detroit, Michigan, USA. Phone: 3135550199</p></body></html>",
+      bodyText: "Avon Gear manufactures custom precision gears for aerospace applications.",
+      crawledPages: [
+        { url: "https://avongear.com/about", text: "We manufacture custom precision gears for aerospace applications." }
+      ]
+    };
+    const avonCheck = ctx.detectRestrictedKeywords(mockAvonCrawl.bodyText, mockAvonCrawl.mainHtml, mockAvonCrawl.crawledPages);
+    assert.strictEqual(avonCheck.classification, "FALSE_POSITIVE");
+    assert.strictEqual(avonCheck.isRestricted, false);
+
+    const avonExtracted = {
+      websiteStatus: "Working",
+      businessType: "Manufacturer",
+      companyName: "Avon Gear Company",
+      countryName: "United States Of America",
+      companyAddress: "123 Gear Way, Detroit, Michigan",
+      state: "Available",
+      city: "Available",
+      phoneNumber: "3135550199",
+      numberOfProducts: "3",
+      productImages: "3",
+      numberOfProductDescriptions: "3"
+    };
+    const avonQc = ctx.applyStrictInstructions(avonExtracted, mockAvonCrawl, avonCheck);
+    assert.strictEqual(avonQc.websiteStatus, "Working", "False-positive application must preserve Working website status");
+    assert.strictEqual(avonQc.companyName, "Avon Gear Company");
+    assert.strictEqual(avonQc.classification, "FALSE_POSITIVE");
+    assert.strictEqual(avonQc.is_restricted, false);
+    assert.strictEqual(avonQc.restricted_category, "Aerospace");
   });
 }
 

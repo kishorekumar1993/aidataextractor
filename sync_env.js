@@ -21,7 +21,7 @@ const envVars = {
   GEMINI_API_KEY: '',
   DEFAULT_MODEL: 'gemini-3.5-flash-lite',
   GROQ_API_KEY: '',
-  GROQ_MODEL: 'openai/gpt-oss-120b'
+  GROQ_MODEL: 'llama-3.1-8b-instant'
 };
 
 if (fs.existsSync(envPath)) {

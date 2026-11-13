@@ -2087,7 +2087,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
 
   // Strip brand/domain stem from crawlData if start of address duplicates site brand
   if (crawlData) {
-    const siteUrl = (crawlData.originalUrl || crawlData.finalUrl || "").toLowerCase();
+    const siteUrl = (crawlData.finalUrl || crawlData.originalUrl || "").toLowerCase();
     const dStem = (typeof cleanDomainStem === "function" ? cleanDomainStem(siteUrl) : "").trim();
     if (dStem && dStem.length >= 4) {
       const dRegex = new RegExp(`^${dStem.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b(?:\\s+(?:pty|ltd|limited|inc|llc|corp|co|gmbh|services|products|group|enterprises|systems))?\\s*[,\\-–]?\\s*`, "i");

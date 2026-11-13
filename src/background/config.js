@@ -35,14 +35,14 @@ const GEMINI_MODELS = [
   "gemini-2.5-flash-lite"
 ];
 const GROQ_MODELS = [
-  "openai/gpt-oss-120b",
-  "qwen/qwen3.8-27b",
-  "openai/gpt-oss-20b",
-  "allam-2-7b"
+  "llama-3.1-8b-instant",
+  "llama-3.3-70b-versatile",
+  "mixtral-8x7b-32768",
+  "gemma2-9b-it"
 ];
 
 const DEFAULT_MODEL = getEnvVar("DEFAULT_MODEL", "gemini-3.5-flash-lite");
-const DEFAULT_GROQ_MODEL = getEnvVar("GROQ_MODEL", "openai/gpt-oss-120b");
+const DEFAULT_GROQ_MODEL = getEnvVar("GROQ_MODEL", "llama-3.1-8b-instant");
 
 const AI_PROVIDERS = {
   gemini: {
@@ -77,7 +77,7 @@ function normalizeProviderAndModel(rawProvider, apiKey, requestedModel = "") {
   const cfg = AI_PROVIDERS[effectiveProvider];
   const reqMod = String(requestedModel || "").trim();
   const modelValidForProvider = effectiveProvider === "groq"
-    ? (reqMod && !/^gemini-|^grok-/i.test(reqMod))
+    ? (reqMod && !/^gemini-|^grok-/i.test(reqMod) && !/gpt-oss/i.test(reqMod))
     : (reqMod && /^gemini-/i.test(reqMod));
   return {
     provider: effectiveProvider,

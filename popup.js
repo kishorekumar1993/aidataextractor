@@ -12,7 +12,7 @@ const DEFAULT_AI_PROVIDER = readPopupEnv("AI_PROVIDER", "gemini").toLowerCase();
 const DEFAULT_API_KEY = readPopupEnv("GEMINI_API_KEY", "");
 const DEFAULT_MODEL = readPopupEnv("DEFAULT_MODEL", "gemini-3.5-flash-lite");
 const DEFAULT_GROQ_API_KEY = readPopupEnv("GROQ_API_KEY", "");
-const DEFAULT_GROQ_MODEL = readPopupEnv("GROQ_MODEL", "openai/gpt-oss-120b");
+const DEFAULT_GROQ_MODEL = readPopupEnv("GROQ_MODEL", "llama-3.1-8b-instant");
 
 const PROVIDER_MODELS_UI = {
   gemini: [
@@ -24,10 +24,10 @@ const PROVIDER_MODELS_UI = {
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" }
   ],
   groq: [
-    { value: "openai/gpt-oss-120b", label: "GPT-OSS 120B (Default)" },
-    { value: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B" },
-    { value: "openai/gpt-oss-20b", label: "GPT-OSS 20B" },
-    { value: "allam-2-7b", label: "ALLaM-2 7B" }
+    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Fast, High Quota - Recommended)" },
+    { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile" },
+    { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B (32K Context)" },
+    { value: "gemma2-9b-it", label: "Gemma 2 9B IT" }
   ]
 };
 
@@ -116,7 +116,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (groqApiKeyInput) groqApiKeyInput.value = savedGroqKey;
 
     savedModelsByProvider.gemini = res.model || DEFAULT_MODEL;
-    savedModelsByProvider.groq = res.groqModel || DEFAULT_GROQ_MODEL;
+    let loadedGroqModel = res.groqModel || DEFAULT_GROQ_MODEL;
+    if (/gpt-oss/i.test(loadedGroqModel)) {
+      loadedGroqModel = DEFAULT_GROQ_MODEL;
+      chrome.storage.sync.set({ groqModel: DEFAULT_GROQ_MODEL });
+    }
+    savedModelsByProvider.groq = loadedGroqModel;
     populateModelsForProvider(activeProvider, savedModelsByProvider[activeProvider]);
 
     toggleStrictFilter.checked = res.strictFilter !== undefined ? res.strictFilter : true;

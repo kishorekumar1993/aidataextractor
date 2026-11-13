@@ -6,7 +6,7 @@
     GEMINI_API_KEY: "your_gemini_api_key_here",
     DEFAULT_MODEL: "gemini-3.5-flash-lite",
     GROQ_API_KEY: "",
-    GROQ_MODEL: "openai/gpt-oss-120b"
+    GROQ_MODEL: "llama-3.1-8b-instant"
   };
 
   if (typeof module !== "undefined" && module.exports) {
