@@ -24,10 +24,7 @@ const PROVIDER_MODELS_UI = {
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" }
   ],
   groq: [
-    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Fast, High Quota - Recommended)" },
-    { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile" },
-    { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B (32K Context)" },
-    { value: "gemma2-9b-it", label: "Gemma 2 9B IT" }
+    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Fast, High Quota - Recommended)" }
   ]
 };
 
@@ -57,7 +54,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const cleanProv = PROVIDER_MODELS_UI[provider] ? provider : "gemini";
     const options = [...PROVIDER_MODELS_UI[cleanProv]];
     const desired = selectedModel || savedModelsByProvider[cleanProv] || options[0].value;
-    if (desired && !options.some(o => o.value === desired) && (cleanProv === "groq" ? !/^gemini-|^grok-/i.test(desired) : /^gemini-/i.test(desired))) {
+    const isInvalidGroqDesired = /gpt-oss|llama-3\.3-70b|mixtral|gemma2/i.test(desired);
+    if (desired && !options.some(o => o.value === desired) && !isInvalidGroqDesired && (cleanProv === "groq" ? !/^gemini-|^grok-/i.test(desired) : /^gemini-/i.test(desired))) {
       options.push({ value: desired, label: desired });
     }
     modelSelect.innerHTML = "";
@@ -117,7 +115,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     savedModelsByProvider.gemini = res.model || DEFAULT_MODEL;
     let loadedGroqModel = res.groqModel || DEFAULT_GROQ_MODEL;
-    if (/gpt-oss/i.test(loadedGroqModel)) {
+    if (/gpt-oss|llama-3\.3-70b|mixtral|gemma2/i.test(loadedGroqModel)) {
       loadedGroqModel = DEFAULT_GROQ_MODEL;
       chrome.storage.sync.set({ groqModel: DEFAULT_GROQ_MODEL });
     }
@@ -752,7 +750,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const now = Date.now();
         const syncKey = typeof NON_WORKING_SYNC_TIME_KEY !== "undefined" ? NON_WORKING_SYNC_TIME_KEY : "nonWorkingLastExcelSyncTime";
         if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-          chrome.storage.local.set({ [syncKey]: now }).catch(() => {});
+          chrome.storage.local.set({ [syncKey]: now }).catch(() => { });
         }
         try {
           chrome.runtime.sendMessage({ action: "UPDATE_LAST_SYNC_TIME", timestamp: now }, () => {

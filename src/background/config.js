@@ -35,10 +35,7 @@ const GEMINI_MODELS = [
   "gemini-2.5-flash-lite"
 ];
 const GROQ_MODELS = [
-  "llama-3.1-8b-instant",
-  "llama-3.3-70b-versatile",
-  "mixtral-8x7b-32768",
-  "gemma2-9b-it"
+  "llama-3.1-8b-instant"
 ];
 
 const DEFAULT_MODEL = getEnvVar("DEFAULT_MODEL", "gemini-3.5-flash-lite");
@@ -76,9 +73,12 @@ function normalizeProviderAndModel(rawProvider, apiKey, requestedModel = "") {
   const effectiveProvider = inferProviderByKeyPrefix(apiKey, cleanRequestedProv);
   const cfg = AI_PROVIDERS[effectiveProvider];
   const reqMod = String(requestedModel || "").trim();
+  const isInvalidGroqModel = !reqMod ||
+    /^gemini-|^grok-/i.test(reqMod) ||
+    /gpt-oss|llama-3\.3-70b|mixtral|gemma2/i.test(reqMod);
   const modelValidForProvider = effectiveProvider === "groq"
-    ? (reqMod && !/^gemini-|^grok-/i.test(reqMod) && !/gpt-oss/i.test(reqMod))
-    : (reqMod && /^gemini-/i.test(reqMod));
+      ? !isInvalidGroqModel
+      : (reqMod && /^gemini-/i.test(reqMod));
   return {
     provider: effectiveProvider,
     label: cfg.label,

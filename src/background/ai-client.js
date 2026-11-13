@@ -403,12 +403,9 @@ async function fetchActiveChatModels(modelsEndpoint, apiKey, forceRefresh = fals
       .filter(m => m && m.id && m.active !== false)
       .filter(m => !Array.isArray(m.output_modalities) || m.output_modalities.includes("text"))
       .map(m => m.id)
-      .filter(id => !/(?:whisper|tts|playai|guard|orpheus|safeguard|prompt-guard|compound-beta)/i.test(id));
+      .filter(id => !/(?:whisper|tts|playai|guard|orpheus|safeguard|prompt-guard|compound-beta|mixtral|gemma2|llama-3\.3-70b)/i.test(id));
     const priorityOrder = [
-      "llama-3.1-8b-instant",
-      "llama-3.3-70b-versatile",
-      "mixtral-8x7b-32768",
-      "gemma2-9b-it"
+      "llama-3.1-8b-instant"
     ];
     const ordered = [
       ...priorityOrder.filter(p => ids.includes(p)),
