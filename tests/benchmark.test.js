@@ -3285,6 +3285,204 @@ async function runAsyncTests() {
       "applyStrictInstructions must strip hallucinated comma before Limited when website evidence has TAD Communications Ltd"
     );
   });
+
+  // 50. Auto 10 Not Working Batch Automation Loop & Form Submission
+  runTest('Auto 10 Not Working batch automation loop, queue advance, and form submission', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(rootDir, 'manifest.json'), 'utf8'));
+    const files = manifest.content_scripts[0].js;
+
+    let submittedCount = 0;
+    let fromQueueClicks = 0;
+    let storedBatch = null;
+    let formValues = {};
+
+    const queueSites = [
+      'http://www.badsite1.com',
+      'http://www.badsite2.com',
+      'http://www.badsite3.com',
+      'http://www.badsite4.com',
+      'http://www.badsite5.com',
+      'http://www.badsite6.com',
+      'http://www.badsite7.com',
+      'http://www.badsite8.com',
+      'http://www.badsite9.com',
+      'http://www.badsite10.com'
+    ];
+    let queueIdx = 0;
+
+    const mockWebsiteInput = {
+      id: 'website-name',
+      name: 'website_name',
+      value: queueSites[0],
+      dispatchEvent: () => {},
+      closest: () => null,
+      classList: { add: () => {}, remove: () => {} },
+      style: {}
+    };
+
+    const mockStatusSelect = {
+      id: 'website-status',
+      name: 'website_status',
+      tagName: 'SELECT',
+      options: [
+        { text: 'Website Status', value: '' },
+        { text: 'Working', value: 'Working' },
+        { text: 'Not Working', value: 'Not Working' }
+      ],
+      selectedIndex: 0,
+      value: '',
+      dispatchEvent: () => {},
+      closest: () => null,
+      classList: { add: () => {}, remove: () => {} },
+      style: {}
+    };
+
+    const mockSubmitBtn = {
+      id: 'btnSubmitForm',
+      tagName: 'BUTTON',
+      textContent: 'Submit',
+      disabled: false,
+      click: () => {
+        submittedCount++;
+        // On submit, simulate form submission and portal loading next queue record
+        if (queueIdx < queueSites.length - 1) {
+          queueIdx++;
+          mockWebsiteInput.value = queueSites[queueIdx];
+        }
+      },
+      closest: () => ({ requestSubmit: () => {} }),
+      classList: { add: () => {}, remove: () => {} },
+      scrollIntoView: () => {}
+    };
+
+    const mockFromQueueBtn = {
+      id: 'btnLoadNextQueueUrl',
+      tagName: 'BUTTON',
+      textContent: 'From Queue',
+      click: () => {
+        fromQueueClicks++;
+        if (queueIdx < queueSites.length - 1) {
+          queueIdx++;
+          mockWebsiteInput.value = queueSites[queueIdx];
+        }
+      }
+    };
+
+    const mockBatch10Btn = {
+      id: 'ai-batch-10-btn',
+      tagName: 'BUTTON',
+      textContent: '⚡ Auto 10 Not Working',
+      style: {},
+      addEventListener: () => {}
+    };
+
+    const mockBatchAllBtn = {
+      id: 'ai-batch-all-btn',
+      tagName: 'BUTTON',
+      textContent: '⚡ Submit ALL Not Working',
+      style: {},
+      addEventListener: () => {}
+    };
+
+    const bCtx = vm.createContext({
+      console: { log: () => {}, warn: () => {}, error: () => {} },
+      window: { location: { href: 'https://example.com/dataextraction' }, addEventListener: () => {} },
+      document: {
+        readyState: 'complete',
+        body: { appendChild: () => {}, querySelectorAll: () => [] },
+        head: { appendChild: () => {} },
+        title: 'Test Portal',
+        createElement: () => ({ style: {}, classList: { add: () => {}, remove: () => {} }, addEventListener: () => {}, setAttribute: () => {}, appendChild: () => {} }),
+        getElementById: (id) => {
+          if (id === 'website-name' || id === 'inputWebsiteName') return mockWebsiteInput;
+          if (id === 'website-status' || id === 'selectWebsiteStatus') return mockStatusSelect;
+          if (id === 'btnSubmitForm' || id === 'btnSubmit') return mockSubmitBtn;
+          if (id === 'btnLoadNextQueueUrl' || id === 'btnNextQueue') return mockFromQueueBtn;
+          if (id === 'ai-batch-10-btn') return mockBatch10Btn;
+          if (id === 'ai-batch-all-btn') return mockBatchAllBtn;
+          return null;
+        },
+        querySelector: (sel) => {
+          if (sel.includes('website')) return mockWebsiteInput;
+          if (sel.includes('status')) return mockStatusSelect;
+          if (sel.includes('submit')) return mockSubmitBtn;
+          return null;
+        },
+        querySelectorAll: (sel) => {
+          if (sel === 'select') return [mockStatusSelect];
+          if (sel && sel.includes('input')) return [mockWebsiteInput];
+          return [mockWebsiteInput, mockStatusSelect, mockSubmitBtn, mockFromQueueBtn];
+        },
+        addEventListener: () => {}
+      },
+      chrome: {
+        runtime: {
+          id: 'test-ext',
+          onMessage: { addListener: () => {} },
+          sendMessage: (_, cb) => cb && cb({ success: true })
+        },
+        storage: {
+          sync: { get: (_, cb) => cb && cb({ autoQueueEnabled: false, autoSubmitNotWorkingEnabled: false }), set: () => {} },
+          local: {
+            get: (keys, cb) => {
+              const res = {};
+              if (keys.includes('batchNotWorking') && storedBatch) res.batchNotWorking = storedBatch;
+              cb(res);
+            },
+            set: (data) => {
+              if (data.batchNotWorking) storedBatch = data.batchNotWorking;
+            },
+            remove: (keys) => {
+              if (keys.includes('batchNotWorking')) storedBatch = null;
+            }
+          },
+          onChanged: { addListener: () => {} }
+        }
+      },
+      setTimeout: (fn) => { fn(); return 1; },
+      clearTimeout: () => {},
+      setInterval: () => 1,
+      clearInterval: () => {},
+      Event: function () {},
+      URL,
+      MutationObserver: function () { return { observe: () => {} }; }
+    });
+    bCtx.globalThis = bCtx;
+
+    for (const rel of files) {
+      const abs = path.join(rootDir, rel);
+      vm.runInContext(fs.readFileSync(abs, 'utf8'), bCtx, { filename: rel });
+    }
+
+    const ext = bCtx.__AI_EXTENSION__;
+    assert.ok(typeof ext.startBatchNotWorking === 'function', 'startBatchNotWorking must be defined');
+    assert.ok(typeof ext.stopBatchNotWorking === 'function', 'stopBatchNotWorking must be defined');
+    assert.ok(typeof ext.processNextBatchNotWorkingItem === 'function', 'processNextBatchNotWorkingItem must be defined');
+    assert.ok(typeof ext.autoSubmitNotWorking === 'function', 'autoSubmitNotWorking must be defined');
+    assert.ok(typeof ext.findSubmitButton === 'function', 'findSubmitButton must be defined');
+
+    // 1. Verify findSubmitButton detects the mock portal submit button
+    const foundSubmit = ext.findSubmitButton();
+    assert.strictEqual(foundSubmit, mockSubmitBtn, 'findSubmitButton must return portal submit button');
+
+    // 2. Start Batch 10 Not Working
+    ext.startBatchNotWorking(10);
+    assert.strictEqual(ext.state.isBatchNotWorkingActive, true, 'Batch Not Working must be active');
+    // First item processed immediately: remaining decremented to 9, submit clicked
+    assert.strictEqual(submittedCount, 1, 'First item must have auto-submitted');
+    assert.strictEqual(ext.state.batchNotWorkingRemaining, 9, 'Remaining count must decrement to 9');
+    assert.ok(storedBatch && storedBatch.active && storedBatch.remaining === 9, 'Storage must persist 9 remaining');
+
+    // 3. Process remaining 9 items through loop
+    for (let i = 9; i > 0; i--) {
+      ext.processNextBatchNotWorkingItem();
+    }
+
+    // 4. Verify all 10 submissions completed and state cleanly reset
+    assert.strictEqual(submittedCount, 10, 'Must have auto-submitted exactly 10 sites as Not Working');
+    assert.strictEqual(ext.state.isBatchNotWorkingActive, false, 'Batch must cleanly stop after 10 sites');
+    assert.strictEqual(storedBatch, null, 'Storage must be cleaned up after batch finishes');
+  });
 }
 
 runAsyncTests().then(() => {

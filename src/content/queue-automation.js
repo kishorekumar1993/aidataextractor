@@ -4,6 +4,62 @@
   const state = (AIExt.state = AIExt.state || {});
 
   // =========================================================================
+  // SUBMIT & CONFIRMATION HELPERS
+  // =========================================================================
+
+  function findSubmitButton() {
+    return document.getElementById("btnSubmitForm") ||
+      document.getElementById("btnSubmit") ||
+      document.getElementById("submitForm") ||
+      document.getElementById("btn-submit") ||
+      document.getElementById("btn_submit") ||
+      document.getElementById("submitBtn") ||
+      document.getElementById("submit") ||
+      document.querySelector('button[type="submit"]') ||
+      document.querySelector('input[type="submit"]') ||
+      document.querySelector('.btn-submit') ||
+      document.querySelector('button[name="submit"]') ||
+      document.querySelector('input[name="submit"]') ||
+      document.querySelector('input[name="btnSubmit"]') ||
+      Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]')).find(b => {
+        if (b.closest("#ai-prefill-widget")) return false; // ignore assistant buttons
+        const t = (b.textContent || b.value || "").trim().toLowerCase();
+        return t === "submit" || (t.includes("submit") && !t.includes("not working") && !t.includes("from queue") && !t.includes("reset") && !t.includes("cancel"));
+      });
+  }
+
+  function findModalConfirmButton() {
+    // SweetAlert / SweetAlert2
+    const swalConfirm = document.querySelector(".swal2-confirm, .swal-button--confirm");
+    if (swalConfirm && swalConfirm.offsetParent !== null) return swalConfirm;
+
+    // Check visible modals
+    const modals = Array.from(document.querySelectorAll('.modal, .swal2-container, .swal-overlay, div[role="dialog"], .confirmation-modal, .popup, div[class*="modal"], div[class*="dialog"], div[class*="confirm"], div[class*="alert"]'));
+    for (const modal of modals) {
+      if (modal.id === "ai-prefill-widget" || modal.closest("#ai-prefill-widget")) continue;
+      const text = (modal.textContent || "").toLowerCase();
+      if (text.includes("confirmation required") || text.includes("are you sure") || text.includes("not working") || text.includes("confirm")) {
+        const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+        const okBtn = buttons.find(b => {
+          const bText = (b.textContent || b.value || "").trim().toLowerCase();
+          return bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText === "proceed" || bText.includes("ok");
+        });
+        if (okBtn) return okBtn;
+      }
+    }
+
+    // Check any button with OK / Yes matching confirmation text nearby
+    const allBtns = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
+    const okBtn = allBtns.find(b => {
+      if (b.closest("#ai-prefill-widget")) return false;
+      const bText = (b.textContent || b.value || "").trim().toLowerCase();
+      const pText = (b.closest("div")?.parentElement?.textContent || "").toLowerCase();
+      return (bText === "ok" || bText === "✓ ok" || bText === "yes") && (pText.includes("are you sure") || pText.includes("not working") || pText.includes("confirmation required"));
+    });
+    return okBtn || null;
+  }
+
+  // =========================================================================
   // BATCH NOT WORKING PIPELINE (Separate options requested by user)
   // =========================================================================
 
@@ -12,19 +68,48 @@
     // NEVER click "click here" buttons, external link buttons, or buttons that open new windows/tabs!
     const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") ||
       document.getElementById("btnNextQueue") ||
+      document.getElementById("btnNext") ||
+      document.getElementById("btn_next") ||
       document.getElementById("loadNext") ||
       document.getElementById("nextRecord") ||
-      Array.from(document.querySelectorAll("button, a, input[type=button]")).find(b => {
+      document.getElementById("btnFromQueue") ||
+      document.getElementById("btn_from_queue") ||
+      document.getElementById("fromQueue") ||
+      document.getElementById("loadQueue") ||
+      document.getElementById("btnLoadQueue") ||
+      document.getElementById("nextQueue") ||
+      document.getElementById("next") ||
+      Array.from(document.querySelectorAll("button, a, input[type=button], input[type=submit]")).find(b => {
         if (b.closest("#ai-prefill-widget")) return false;
         const t = (b.textContent || b.value || "").replace(/\s+/g, " ").trim().toLowerCase();
-        const idCls = `${b.id || ""} ${b.className || ""} ${b.title || ""}`.toLowerCase();
+        const idCls = `${b.id || ""} ${b.className || ""} ${b.title || ""} ${b.name || ""}`.toLowerCase();
 
         // Strictly reject any "click here", "open", "visit", or external link buttons
         if (t.includes("click here") || idCls.includes("clickhere") || idCls.includes("click-here")) return false;
         if (b.getAttribute("target") === "_blank" || (b.getAttribute("href") && b.getAttribute("href").startsWith("http"))) return false;
         if (idCls.includes("external") || idCls.includes("preview") || t.includes("preview") || t.includes("visit")) return false;
 
-        return t.includes("from queue") || t.includes("load next") || t.includes("next url") || t.includes("next record") || t === "next" || t.includes("get url") || (/\bqueue\b/.test(idCls) && !t.includes("manual"));
+        // Strictly reject submit, reset, cancel
+        if (t === "submit" || (t.includes("submit") && !t.includes("from queue") && !t.includes("next")) || t === "reset" || t.includes("reset") || t.includes("cancel")) return false;
+
+        return t.includes("from queue") ||
+          t.includes("load next") ||
+          t.includes("next url") ||
+          t.includes("next website") ||
+          t.includes("next site") ||
+          t.includes("next record") ||
+          t.includes("next data") ||
+          t.includes("next lead") ||
+          t.includes("get url") ||
+          t.includes("get next") ||
+          t.includes("fetch next") ||
+          t.includes("load queue") ||
+          t === "next" ||
+          t === "next >" ||
+          t === "next >>" ||
+          t === ">" ||
+          (/\bqueue\b/.test(idCls) && !t.includes("manual")) ||
+          (/\b(btn[-_]?next|next[-_]?btn)\b/.test(idCls));
       });
     if (fromQueueBtn) {
       console.log("[AI Assistant] Triggering 'From Queue' button:", fromQueueBtn);
@@ -42,13 +127,20 @@
 
     state.isBatchNotWorkingActive = true;
     state.batchNotWorkingRemaining = count;
+    state.batchNotWorkingTotal = count;
     state.isAutoQueuePipelineActive = false; // separate pipeline
+    if (state.pendingAutoSubmitTimer) {
+      clearTimeout(state.pendingAutoSubmitTimer);
+      state.pendingAutoSubmitTimer = null;
+    }
 
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
       chrome.storage.local.set({
         batchNotWorking: {
           active: true,
           remaining: count,
+          total: count,
+          lastSubmittedUrl: "",
           updatedAt: Date.now()
         }
       });
@@ -65,6 +157,7 @@
   function stopBatchNotWorking(msg = "") {
     state.isBatchNotWorkingActive = false;
     state.batchNotWorkingRemaining = 0;
+    state.lastSubmittedUrl = "";
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
       chrome.storage.local.remove(["batchNotWorking"]);
     }
@@ -108,17 +201,64 @@
       return;
     }
 
-    let currentUrl = AIExt.getTargetUrl();
-    if (!currentUrl) {
+    let currentUrl = (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "") || "";
+    const lastSubmitted = (state.lastSubmittedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+    const normCurrent = (currentUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+
+    // If current URL is empty or matches the last submitted URL, advance queue first!
+    if (!normCurrent || (lastSubmitted && normCurrent === lastSubmitted)) {
+      console.log(`[AI Assistant] Batch item URL needs advancement (current="${currentUrl}", lastSubmitted="${lastSubmitted}"). Triggering From Queue...`);
       triggerFromQueue();
-      currentUrl = AIExt.getTargetUrl();
+
+      let attempts = 0;
+      const queuePollTimer = setInterval(() => {
+        attempts++;
+        if (!state.isBatchNotWorkingActive) {
+          clearInterval(queuePollTimer);
+          return;
+        }
+
+        const freshUrl = (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "") || "";
+        const freshNorm = freshUrl.trim().toLowerCase().replace(/\/+$/, "");
+
+        // If fresh URL is present and different from last submitted, proceed!
+        if (freshNorm && (!lastSubmitted || freshNorm !== lastSubmitted)) {
+          clearInterval(queuePollTimer);
+          setTimeout(() => {
+            if (state.isBatchNotWorkingActive) {
+              processNextBatchNotWorkingItem();
+            }
+          }, 200);
+          return;
+        }
+
+        // Retry clicking From Queue every 6 attempts (~900ms)
+        if (attempts % 6 === 0) {
+          triggerFromQueue();
+        }
+
+        // After 20 attempts (~3s), if we have some URL even if identical or default, proceed with it
+        if (attempts >= 20) {
+          clearInterval(queuePollTimer);
+          if (state.isBatchNotWorkingActive) {
+            executeBatchNotWorkingSubmission(freshUrl || currentUrl);
+          }
+        }
+      }, 150);
+      return;
     }
+
+    executeBatchNotWorkingSubmission(currentUrl);
+  }
+
+  function executeBatchNotWorkingSubmission(currentUrl) {
+    if (!state.isBatchNotWorkingActive) return;
 
     const normSubmitted = (currentUrl || `item-${Date.now()}`).trim().toLowerCase().replace(/\/+$/, "");
     const remainingText = state.batchNotWorkingRemaining === -1 ? "ALL" : `${state.batchNotWorkingRemaining} left`;
-    AIExt.updateStatus(`⚡ Batch Not Working [${remainingText}]: Submitting ${currentUrl || "queue item"}...`, "loading");
+    AIExt.updateStatus(`⚡ Batch Not Working [${remainingText}]: Submitting ${currentUrl || "queue site"}...`, "loading");
 
-    // Pre-fill as Not Working and submit
+    // Pre-fill as Not Working: Rule 1 requires websiteStatus="Not Working" and all other 13 fields blank
     const notWorkingData = {
       websiteStatus: "Not Working",
       businessType: "",
@@ -138,6 +278,9 @@
     };
 
     AIExt.fillFormFields(notWorkingData);
+    if (typeof AIExt.renderPreview === "function") {
+      AIExt.renderPreview(notWorkingData);
+    }
 
     try {
       if (typeof AIExt !== "undefined" && typeof AIExt.sendRuntimeMessage === "function") {
@@ -153,32 +296,43 @@
 
     const nextRemaining = state.batchNotWorkingRemaining > 0 ? state.batchNotWorkingRemaining - 1 : -1;
     state.batchNotWorkingRemaining = nextRemaining;
+    state.lastSubmittedUrl = currentUrl;
     updateBatchButtonsState();
 
     if (nextRemaining === 0) {
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
         chrome.storage.local.remove(["batchNotWorking"]);
       }
-      setTimeout(() => {
-        stopBatchNotWorking("🎉 Successfully auto-submitted 10 sites as Not Working!");
-      }, 1500);
-      return;
+    } else {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          batchNotWorking: {
+            active: true,
+            remaining: nextRemaining,
+            total: state.batchNotWorkingTotal || 10,
+            lastSubmittedUrl: currentUrl,
+            updatedAt: Date.now()
+          }
+        });
+      }
     }
 
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({
-        batchNotWorking: {
-          active: true,
-          remaining: nextRemaining,
-          updatedAt: Date.now()
-        }
-      });
+    // ACTUALLY SUBMIT THE FORM & CONFIRM MODALS
+    autoSubmitNotWorking(currentUrl);
+
+    // If 10 items completed, stop batch after brief settle
+    if (nextRemaining === 0) {
+      setTimeout(() => {
+        stopBatchNotWorking("🎉 Successfully auto-submitted 10 sites as Not Working!");
+      }, 1200);
+      return;
     }
 
     // Wait for submission, advance queue, and process next item (for SPA / AJAX portals)
     setTimeout(() => {
       if (!state.isBatchNotWorkingActive) return;
 
+      // Trigger queue advancement if URL hasn't changed automatically
       let pollAttempts = 0;
       const pollTimer = setInterval(() => {
         pollAttempts++;
@@ -187,13 +341,10 @@
           return;
         }
 
-        let nextUrl = AIExt.getTargetUrl();
-        if (!nextUrl && pollAttempts % 3 === 0) {
-          triggerFromQueue();
-          nextUrl = AIExt.getTargetUrl();
-        }
+        let nextUrl = (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "") || "";
+        const normNext = nextUrl.trim().toLowerCase().replace(/\/+$/, "");
 
-        const normNext = (nextUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+        // If next URL is already loaded and different from submitted, advance!
         if (normNext && normNext !== normSubmitted && normNext.length > 3) {
           clearInterval(pollTimer);
           setTimeout(() => {
@@ -204,7 +355,12 @@
           return;
         }
 
-        if (pollAttempts >= 30) { // ~5 seconds max per item
+        // Trigger 'From Queue' button if still empty or identical to submitted URL
+        if ((!normNext || normNext === normSubmitted) && (pollAttempts === 1 || pollAttempts % 5 === 0)) {
+          triggerFromQueue();
+        }
+
+        if (pollAttempts >= 25) { // ~4 seconds max per item
           clearInterval(pollTimer);
           if (state.isBatchNotWorkingActive) {
             triggerFromQueue();
@@ -216,11 +372,11 @@
           }
         }
       }, 160);
-    }, 500);
+    }, 600);
   }
 
   function markAndSubmitCurrentAsNotWorking(reason = "Manual 1-click Not Working") {
-    const currentUrl = AIExt.getTargetUrl();
+    const currentUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
     const notWorkingData = {
       websiteStatus: "Not Working",
       businessType: "",
@@ -246,13 +402,20 @@
           action: "RECORD_NON_WORKING_SITE",
           url: currentUrl,
           websiteStatus: "Not Working",
-          reason: "Batch auto-submit as Not Working",
+          reason: reason || "Manual 1-click Not Working",
           errorUrl: currentUrl
         }).catch(() => {});
       }
     } catch (e) {}
-    AIExt.renderPreview(notWorkingData);
+    if (typeof AIExt.renderPreview === "function") {
+      AIExt.renderPreview(notWorkingData);
+    }
     AIExt.updateStatus(`🚫 Marked as Not Working (${reason}) - Submitting...`, "warning");
+
+    // Execute submission
+    setTimeout(() => {
+      autoSubmitNotWorking(currentUrl);
+    }, 100);
   }
 
   function stopAutoQueuePipeline(reason = "") {
@@ -459,57 +622,6 @@
     let hasClickedSubmit = false;
     let hasConfirmedModal = false;
 
-    // Helper to find the Submit button
-    const findSubmitButton = () => {
-      return document.getElementById("btnSubmitForm") ||
-        document.getElementById("btnSubmit") ||
-        document.getElementById("submitForm") ||
-        document.getElementById("btn-submit") ||
-        document.getElementById("submit") ||
-        document.querySelector('button[type="submit"]') ||
-        document.querySelector('input[type="submit"]') ||
-        document.querySelector('.btn-submit') ||
-        document.querySelector('button[name="submit"]') ||
-        document.querySelector('input[name="submit"]') ||
-        Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]')).find(b => {
-          if (b.closest("#ai-prefill-widget")) return false; // ignore assistant buttons
-          const t = (b.textContent || b.value || "").trim().toLowerCase();
-          return t === "submit" || (t.includes("submit") && !t.includes("not working") && !t.includes("reset") && !t.includes("cancel"));
-        });
-    };
-
-    // Helper to find confirmation modal / dialog buttons
-    const findModalConfirmButton = () => {
-      // SweetAlert / SweetAlert2
-      const swalConfirm = document.querySelector(".swal2-confirm, .swal-button--confirm");
-      if (swalConfirm && swalConfirm.offsetParent !== null) return swalConfirm;
-
-      // Check visible modals
-      const modals = Array.from(document.querySelectorAll('.modal, .swal2-container, .swal-overlay, div[role="dialog"], .confirmation-modal, .popup, div[class*="modal"], div[class*="dialog"], div[class*="confirm"], div[class*="alert"]'));
-      for (const modal of modals) {
-        if (modal.id === "ai-prefill-widget" || modal.closest("#ai-prefill-widget")) continue;
-        const text = (modal.textContent || "").toLowerCase();
-        if (text.includes("confirmation required") || text.includes("are you sure") || text.includes("not working") || text.includes("confirm")) {
-          const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
-          const okBtn = buttons.find(b => {
-            const bText = (b.textContent || b.value || "").trim().toLowerCase();
-            return bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText === "proceed" || bText.includes("ok");
-          });
-          if (okBtn) return okBtn;
-        }
-      }
-
-      // Check any button with OK / Yes matching confirmation text nearby
-      const allBtns = Array.from(document.querySelectorAll('button, input[type="button"]'));
-      const okBtn = allBtns.find(b => {
-        if (b.closest("#ai-prefill-widget")) return false;
-        const bText = (b.textContent || b.value || "").trim().toLowerCase();
-        const pText = (b.closest("div")?.parentElement?.textContent || "").toLowerCase();
-        return (bText === "ok" || bText === "✓ ok" || bText === "yes") && (pText.includes("are you sure") || pText.includes("not working") || pText.includes("confirmation required"));
-      });
-      return okBtn || null;
-    };
-
     // Step A: Click Submit button
     const doSubmit = () => {
       if (hasClickedSubmit) return;
@@ -543,9 +655,9 @@
     }, 60);
 
     // Initial submit attempts
-    setTimeout(doSubmit, 120);
-    setTimeout(doSubmit, 400);
-    setTimeout(doSubmit, 800);
+    setTimeout(doSubmit, 80);
+    setTimeout(doSubmit, 300);
+    setTimeout(doSubmit, 600);
 
     // Queue progression: ONLY for normal auto-crawl pipeline, NEVER during batch Not Working!
     if (!state.isBatchNotWorkingActive) {
@@ -661,6 +773,8 @@
     checkAndAutoTriggerQueueCrawl,
     scheduleNextQueueAutoCrawl,
     autoSubmitNotWorking,
+    findSubmitButton,
+    findModalConfirmButton,
     extractLiveDomPayload
   });
 })(globalThis.__AI_EXTENSION__ = globalThis.__AI_EXTENSION__ || {});

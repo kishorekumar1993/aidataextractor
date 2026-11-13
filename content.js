@@ -29,17 +29,21 @@
         if (batch && batch.active && (batch.remaining > 0 || batch.remaining === -1) && (Date.now() - (batch.updatedAt || 0) < 300000)) {
           state.isBatchNotWorkingActive = true;
           state.batchNotWorkingRemaining = batch.remaining;
+          state.batchNotWorkingTotal = batch.total || 10;
+          state.lastSubmittedUrl = batch.lastSubmittedUrl || "";
           state.isAutoQueuePipelineActive = false;
-          AIExt.updateBatchButtonsState();
-          console.log(`[AI Assistant] Resumed Batch Not Working from storage: ${state.batchNotWorkingRemaining} items left.`);
+          if (typeof AIExt.updateBatchButtonsState === "function") {
+            AIExt.updateBatchButtonsState();
+          }
+          console.log(`[AI Assistant] Resumed Batch Not Working from storage: ${state.batchNotWorkingRemaining} items left. Last submitted: "${state.lastSubmittedUrl}"`);
           AIExt.updateStatus(`⚡ Resuming Batch Not Working (${state.batchNotWorkingRemaining === -1 ? "ALL" : state.batchNotWorkingRemaining + " left"})...`, "loading");
 
           // Give dynamic fields a moment to settle before processing next item
           setTimeout(() => {
-            if (state.isBatchNotWorkingActive) {
+            if (state.isBatchNotWorkingActive && typeof AIExt.processNextBatchNotWorkingItem === "function") {
               AIExt.processNextBatchNotWorkingItem();
             }
-          }, 700);
+          }, 600);
           return;
         } else if (batch) {
           chrome.storage.local.remove(["batchNotWorking"]);

@@ -169,7 +169,7 @@
 
     if (!elements.websiteStatus) {
       elements.websiteStatus = allSelects.find(s => {
-        const firstOpt = (s.options[0]?.text || "").toLowerCase().trim();
+        const firstOpt = (s.options?.[0]?.text || "").toLowerCase().trim();
         return firstOpt.includes("website status") || getElementContext(s).includes("website status");
       }) || allSelects[0];
     }
@@ -177,7 +177,7 @@
     if (!elements.businessType) {
       elements.businessType = allSelects.find(s => {
         if (s === elements.websiteStatus) return false;
-        const firstOpt = (s.options[0]?.text || "").toLowerCase().trim();
+        const firstOpt = (s.options?.[0]?.text || "").toLowerCase().trim();
         return firstOpt.includes("kind of business") || firstOpt.includes("business type") || getElementContext(s).includes("business type");
       }) || allSelects[1];
     }
@@ -185,7 +185,7 @@
     if (!elements.companyProfile) {
       elements.companyProfile = allSelects.find(s => {
         if (s === elements.websiteStatus || s === elements.businessType) return false;
-        const firstOpt = (s.options[0]?.text || "").toLowerCase().trim();
+        const firstOpt = (s.options?.[0]?.text || "").toLowerCase().trim();
         return firstOpt.includes("company profile") || getElementContext(s).includes("company profile");
       }) || allSelects[2];
     }
@@ -733,7 +733,13 @@
       // Check auto-submit toggle: Auto-submit if user enabled auto-queue OR auto-submit Not Working
       if (targetStatus === "Not Working") {
         const currentUrl = getTargetUrl();
-        if (state.autoSubmitNotWorkingEnabled || state.autoQueueEnabled) {
+        if (state.isBatchNotWorkingActive) {
+          // In batch Not Working mode, processNextBatchNotWorkingItem directly manages submission.
+          if (state.pendingAutoSubmitTimer) {
+            clearTimeout(state.pendingAutoSubmitTimer);
+            state.pendingAutoSubmitTimer = null;
+          }
+        } else if (state.autoSubmitNotWorkingEnabled || state.autoQueueEnabled) {
           AIExt.updateStatus("⚠️ Status set to Not Working. Auto-submitting in 2s... (Click 'Stop' to study)", "warning");
           if (state.pendingAutoSubmitTimer) clearTimeout(state.pendingAutoSubmitTimer);
           state.pendingAutoSubmitTimer = setTimeout(() => {

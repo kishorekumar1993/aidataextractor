@@ -290,9 +290,12 @@
         <button id="ai-banner-reload-btn" style="background: #3b82f6; color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-weight: 600;">Refresh Page</button>
       `;
       document.body.appendChild(banner);
-      document.getElementById("ai-banner-reload-btn").addEventListener("click", () => {
-        window.location.reload();
-      });
+      const reloadBtn = document.getElementById("ai-banner-reload-btn");
+      if (reloadBtn) {
+        reloadBtn.addEventListener("click", () => {
+          window.location.reload();
+        });
+      }
     }
   }
 
