@@ -1066,12 +1066,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 2. Prohibited Category / Word Check (Highest Priority Rule Note 2 & Contextual Evidence Rule)
   // Section 2: Keyword presence does NOT mean restricted business. Only genuine restricted operations are rejected.
+  const isGenuineRestricted = !!(restrictedCheck && restrictedCheck.isRestricted && (restrictedCheck.classification === "GENUINE_RESTRICTED" || !restrictedCheck.classification));
   const isFalsePositive = !!(restrictedCheck && restrictedCheck.classification === "FALSE_POSITIVE");
-  const isProhibited = !isFalsePositive && (
-    (restrictedCheck && restrictedCheck.isRestricted && (restrictedCheck.classification === "GENUINE_RESTRICTED" || !restrictedCheck.classification)) ||
-    String(result.businessType || "").toLowerCase() === "restricted site" ||
-    !!result.isProhibitedSite
-  );
+  const isProhibited = isGenuineRestricted;
 
   if (isProhibited) {
     const errorUrl = (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || result.restrictedSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
@@ -1124,8 +1121,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.is_restricted = false;
     result.confidence = restrictedCheck.confidence !== undefined ? restrictedCheck.confidence : 1.0;
     result.reason = restrictedCheck.reason || "";
-    if (isFalsePositive && String(result.businessType || "").toLowerCase() === "restricted site") {
-      result.businessType = "Manufacturer";
+    if (String(result.businessType || "").toLowerCase() === "restricted site") {
+      result.businessType = (typeof checkPhysicalProductSupplier === "function" && checkPhysicalProductSupplier(crawlData, result)) ? "Supplier" : "Manufacturer";
     }
   }
 

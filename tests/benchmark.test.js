@@ -2977,16 +2977,60 @@ async function runAsyncTests() {
     assert.strictEqual(alcRes.isRestricted, false, "Must NOT restrict architectural project mentioning Whiskey Creek");
     assert.ok(alcRes.classification === "FALSE_POSITIVE" || alcRes.classification === "NO_RESTRICTED_CATEGORY");
 
+    // 4b. Industrial False Positives (Negis Rubber/Gaskets, Hospital Lighting, Knife Gate Valves, Bakery Ovens)
+    const industrialFpCases = [
+      {
+        url: "http://www.negis.com.sg/",
+        title: "Ng Eng Guan Industry & Supplier",
+        text: "Ng Eng Guan: Gaskets, Rubbers, Plastics. Our products are mainly used in Marine & Industrial, Refinery, Oil & Gases, Offshore Industrial Chemical Plant, Automotive, Food & Chemical Industry etc."
+      },
+      {
+        url: "https://lumalighting.com/applications",
+        title: "LumaLighting Solutions",
+        text: "LumaLighting: Commercial and industrial LED lighting solutions for hospitals, schools, and offices."
+      },
+      {
+        url: "https://apexvalves.com/products",
+        title: "Apex Industrial Valves",
+        text: "Apex Valves: We manufacture industrial knife gate valves, ball valves, and check valves for wastewater treatment."
+      },
+      {
+        url: "https://industrialtooling.com/products",
+        title: "Industrial Tooling Machinery Blades",
+        text: "Industrial Tooling: Precision slitter knives, circular knives, and rotary blades for paper converting machinery."
+      },
+      {
+        url: "https://baketech.com/ovens",
+        title: "BakeTech Bakery Equipment",
+        text: "BakeTech: Commercial bakery equipment, rotary rack ovens, and dough mixers for bakeries and restaurants."
+      },
+      {
+        url: "https://titanvessels.com/tanks",
+        title: "Titan Stainless Vessels",
+        text: "Titan Vessels: Custom fabrication of stainless steel chemical storage tanks and chemical process equipment."
+      }
+    ];
+
+    for (const ifp of industrialFpCases) {
+      const res = ctx.detectRestrictedKeywordsSingle(ifp.text, `<html><head><title>${ifp.title}</title></head></html>`, ifp.url);
+      assert.strictEqual(res.isRestricted, false, `Must NOT restrict industrial false positive: ${ifp.url}`);
+      assert.ok(res.classification === "FALSE_POSITIVE" || res.classification === "NO_RESTRICTED_CATEGORY", `Classification must be non-restricted for ${ifp.url}`);
+    }
+
     // 5. Genuine Restricted Businesses MUST Remain Strictly Restricted
     const genuineCases = [
       { url: "https://pornhub.com", text: "Pornhub is a free porn videos, xxx movies, adult entertainment and streaming erotica platform.", category: "Adult & Porn" },
       { url: "https://adulttoyzone.com", text: "Online sex shop selling adult toys, dildos, vibrators, and erotic novelties.", category: "Adult & Porn" },
       { url: "https://colt.com", text: "Colt Firearms: Manufacturing defense rifles, handguns, pistols, revolvers, and military firearms.", category: "Weapons, Armor & Knives" },
+      { url: "https://bladeshop.com", text: "BladeShop: Wholesale pocket knives, folding knives, hunting knives, and tactical knives for sale.", category: "Weapons, Armor & Knives" },
       { url: "https://emirates.com", text: "Emirates Airline: Book commercial flights, air travel, and passenger tickets worldwide.", category: "Aviation & Airlines" },
       { url: "https://guinness.com", text: "Guinness Brewery: World famous stout beer brewery and alcoholic beverage producer in Dublin.", category: "Alcohol & Breweries" },
+      { url: "https://abcchemical.com", text: "ABC Chemical: We are a leading chemical distributor and wholesale supplier of industrial chemicals, solvents, and raw materials.", category: "Chemicals & Petrochemicals" },
+      { url: "https://globalchem.com", text: "Global Chem: International chemical trader and exporter of bulk chemicals and industrial solvents.", category: "Chemicals & Petrochemicals" },
       { url: "https://cedars-sinai.org", text: "Cedars-Sinai Medical Center: Hospital patient care, outpatient surgery clinic, and emergency healthcare services.", category: "Medicine, Medical & Hospital" },
       { url: "https://huntingtoningalls.com", text: "Huntington Ingalls Industries: America largest military shipbuilder, naval shipyards, and warships building.", category: "Ships & Boats" },
-      { url: "https://puppyspot.com", text: "PuppySpot: Purebred puppies for sale, trusted dog breeding network and pet store adoption.", category: "Animals & Pets" }
+      { url: "https://puppyspot.com", text: "PuppySpot: Purebred puppies for sale, trusted dog breeding network and pet store adoption.", category: "Animals & Pets" },
+      { url: "https://bestpetstore.com", text: "BestPetStore: Pet shop selling pet supplies, puppy food, dog accessories, and cat collars.", category: "Animals & Pets" }
     ];
 
     for (const gc of genuineCases) {

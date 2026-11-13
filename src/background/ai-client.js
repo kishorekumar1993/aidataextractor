@@ -940,10 +940,11 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   let hasState = address && hasStateInAddress(address, country);
   let hasCity = address && hasCityInAddress(address, country);
 
-  let inferredBusiness = restrictedCheck.isRestricted
+  const isGenuineRestricted = !!(restrictedCheck && restrictedCheck.isRestricted && (restrictedCheck.classification === "GENUINE_RESTRICTED" || !restrictedCheck.classification));
+  let inferredBusiness = isGenuineRestricted
     ? "Restricted Site"
     : inferBusinessTypeFromEvidence(text, crawlData.mainHtml || "");
-  if (!inferredBusiness && !restrictedCheck.isRestricted) {
+  if (!inferredBusiness && !isGenuineRestricted) {
     if (typeof checkPhysicalProductSupplier === "function" && checkPhysicalProductSupplier(crawlData, { companyAddress: address })) {
       inferredBusiness = "Supplier";
     } else if (prodCount !== "0" || (address && (emailId || phoneNumber))) {
