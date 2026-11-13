@@ -13,6 +13,50 @@ function isAntiBotChallenge(html, status) {
 }
 
 /**
+ * Traces a server-side 3xx HTTP redirect chain (up to maxHops) to discover the true final URL.
+ * Handles single-hop (301, 302, 307, 308) and multi-hop redirects across protocols and domains.
+ */
+async function resolveRedirectChain(initialUrl, maxHops = 8) {
+  if (!initialUrl || typeof initialUrl !== "string") return { finalUrl: initialUrl, hops: 0 };
+  let currentUrl = initialUrl.trim();
+  let hops = 0;
+  const visited = new Set();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+  try {
+    while (hops < maxHops) {
+      visited.add(currentUrl);
+      const res = await fetch(currentUrl, {
+        redirect: "manual",
+        headers: {
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+        },
+        signal: controller.signal
+      });
+      const loc = res.headers.get("location");
+      if (loc && ((res.status >= 300 && res.status < 400) || res.type === "opaqueredirect")) {
+        const nextUrl = new URL(loc, currentUrl).href;
+        if (visited.has(nextUrl)) {
+          // Circular redirect loop detected
+          break;
+        }
+        currentUrl = nextUrl;
+        hops++;
+      } else {
+        break;
+      }
+    }
+  } catch (e) {
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  return { finalUrl: currentUrl, hops };
+}
+
+/**
  * Resilient, charset-aware HTTP fetcher with timeout and fallback decoders.
  */
 async function fetchDecodedHtml(url, options = {}) {
@@ -64,24 +108,18 @@ async function fetchDecodedHtml(url, options = {}) {
   } catch (err) {
     if (!options._isRedirectRescue) {
       try {
-        const manRes = await fetch(url, {
-          redirect: "manual",
-          headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
-          signal: controller.signal
-        });
-        const loc = manRes.headers.get("location");
-        if (loc && ((manRes.status >= 300 && manRes.status < 400) || manRes.type === "opaqueredirect")) {
-          const resolvedUrl = new URL(loc, url).href;
-          const destRes = await fetchDecodedHtml(resolvedUrl, {
+        const chain = await resolveRedirectChain(url, 6);
+        if (chain && chain.hops > 0 && chain.finalUrl && chain.finalUrl !== url) {
+          const destRes = await fetchDecodedHtml(chain.finalUrl, {
             ...options,
             _isRedirectRescue: true,
             headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
           });
           return {
             ...destRes,
-            url: resolvedUrl,
+            url: (destRes && destRes.url) || chain.finalUrl,
             redirected: true,
-            status: destRes.status || manRes.status || 301,
+            status: (destRes && destRes.status) || 200,
             ok: destRes.ok !== undefined ? destRes.ok : true,
             error: destRes.error || null
           };
@@ -243,9 +281,26 @@ async function crawlWebsite(targetUrl) {
     }
   } catch (e) { }
 
+  // 1. Upfront Multi-Hop 3xx Server-Side Redirect Chain Resolution
+  // Follows all 301/302/303/307/308 hops (up to 8 hops) to discover the true final destination
+  try {
+    const chain = await resolveRedirectChain(targetUrl, 8);
+    if (chain && chain.hops > 0 && chain.finalUrl && chain.finalUrl !== targetUrl) {
+      if (isRedirectDomain(targetUrl, chain.finalUrl)) {
+        redirected = true;
+        status = "Redirect Site";
+        finalUrl = chain.finalUrl;
+        console.log(`[AI Assistant] Detected multi-hop redirect (${chain.hops} hops): ${targetUrl} -> ${finalUrl}`);
+      } else {
+        // Same domain redirect (e.g. http->https, www toggle, or language path /en/)
+        finalUrl = chain.finalUrl;
+      }
+    }
+  } catch (e) { }
+
   try {
     if (!mainRes) {
-      mainRes = await fetchDecodedHtml(targetUrl, {
+      mainRes = await fetchDecodedHtml(finalUrl, {
         timeoutMs: 8000,
         headers: {
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
@@ -258,13 +313,14 @@ async function crawlWebsite(targetUrl) {
     let isMainFailed = !mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status);
     if (isMainFailed) {
       const fallbackUrls = [];
-      if (/^http:\/\//i.test(targetUrl)) {
-        fallbackUrls.push(targetUrl.replace(/^http:\/\//i, "https://"));
-      } else if (/^https:\/\//i.test(targetUrl)) {
-        fallbackUrls.push(targetUrl.replace(/^https:\/\//i, "http://"));
+      const urlToFallback = finalUrl || targetUrl;
+      if (/^http:\/\//i.test(urlToFallback)) {
+        fallbackUrls.push(urlToFallback.replace(/^http:\/\//i, "https://"));
+      } else if (/^https:\/\//i.test(urlToFallback)) {
+        fallbackUrls.push(urlToFallback.replace(/^https:\/\//i, "http://"));
       }
       try {
-        const parsedU = new URL(targetUrl);
+        const parsedU = new URL(urlToFallback);
         if (parsedU.pathname && parsedU.pathname !== "/" && parsedU.pathname !== "") {
           fallbackUrls.push(parsedU.origin + "/");
         }
@@ -295,31 +351,24 @@ async function crawlWebsite(targetUrl) {
       }
     }
 
-    // REDIRECT RESCUE: If main fetch failed, or did not detect redirect, verify if targetUrl returns a 3xx redirect
+    // REDIRECT RESCUE: If main fetch failed, or did not detect redirect, verify multi-hop redirect chain
     if (!redirected && isMainFailed) {
       try {
-        const checkRedirect = await fetch(targetUrl, {
-          redirect: "manual",
-          headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
-        });
-        const loc = checkRedirect.headers.get("location");
-        if (loc && ((checkRedirect.status >= 300 && checkRedirect.status < 400) || checkRedirect.type === "opaqueredirect")) {
-          const resolvedLoc = new URL(loc, targetUrl).href;
-          if (isRedirectDomain(targetUrl, resolvedLoc)) {
-            finalUrl = resolvedLoc;
-            redirected = true;
-            status = "Redirect Site";
-            isMainFailed = false;
-            fetchError = null;
-            const destRes = await fetchDecodedHtml(resolvedLoc, {
-              timeoutMs: 6000,
-              headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
-            });
-            if (destRes && destRes.html && destRes.html.trim().length > 0) {
-              mainRes = destRes;
-              mainHtml = destRes.html;
-              httpStatus = destRes.status || 200;
-            }
+        const checkChain = await resolveRedirectChain(targetUrl, 8);
+        if (checkChain && checkChain.hops > 0 && checkChain.finalUrl && isRedirectDomain(targetUrl, checkChain.finalUrl)) {
+          finalUrl = checkChain.finalUrl;
+          redirected = true;
+          status = "Redirect Site";
+          isMainFailed = false;
+          fetchError = null;
+          const destRes = await fetchDecodedHtml(checkChain.finalUrl, {
+            timeoutMs: 6000,
+            headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
+          });
+          if (destRes && destRes.html && destRes.html.trim().length > 0) {
+            mainRes = destRes;
+            mainHtml = destRes.html;
+            httpStatus = destRes.status || 200;
           }
         }
       } catch (e) { }

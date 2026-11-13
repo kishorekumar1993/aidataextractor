@@ -203,40 +203,9 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
   crawlResult = await crawlWebsite(targetUrl);
 
-  // If website redirected to a different domain (Rule 13)
+  // If website redirected to a different domain (Rule 13), proceed to evaluate destination details
   const isDiffDomainAtStart = isRedirectDomain(targetUrl, crawlResult.finalUrl) || crawlResult.redirected;
-  if (isDiffDomainAtStart && (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0)) {
-    const destStem = cleanDomainStem(crawlResult.finalUrl || "").toLowerCase();
-    const hasDestBrandInfo = destStem === "natuzzi" || ((crawlResult.legalCompanyCandidates && crawlResult.legalCompanyCandidates.length > 0) || (crawlResult.addressCandidates && crawlResult.addressCandidates.length > 0));
-    if (!hasDestBrandInfo) {
-      console.log(`[AI Assistant] Target URL redirected to ${crawlResult.finalUrl} (Rule 13 Redirect Site)`);
-      return finishAndRecord({
-        websiteStatus: "Redirect Site",
-        businessType: "",
-        companyProfile: "",
-        companyName: "",
-        countryName: "",
-        companyAddress: "",
-        state: "",
-        city: "",
-        emailId: "",
-        secondaryEmailId: "",
-        phoneNumber: "",
-        numberOfProducts: "",
-        productImages: "",
-        numberOfProductDescriptions: "",
-        reason: "Redirected to different external domain (Rule 13)",
-        notWorkingReason: "Redirected to different external domain (Rule 13)",
-        errorKeyword: "Redirect Domain",
-        errorSourceUrl: crawlResult.finalUrl || targetUrl,
-        errorSnippet: `Website redirected from ${targetUrl} to ${crawlResult.finalUrl} (Rule 13)`,
-        _finalUrl: crawlResult.finalUrl,
-        _originalUrl: targetUrl,
-        _note: "Website redirected to different domain (Rule 13)"
-      });
-    }
-    // Has destination brand info -> proceed below to extract and evaluate destination details (Rule 13)
-  } else if (!isDiffDomainAtStart && (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0)) {
+  if (!isDiffDomainAtStart && (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0)) {
     if (crawlResult.status === "Domain Expired" || crawlResult.httpStatus === 404) {
       return finishAndRecord({
         websiteStatus: "Domain Expired",

@@ -2829,6 +2829,33 @@ async function runAsyncTests() {
     assert.strictEqual(visotekResult.state, "Available");
     assert.strictEqual(visotekResult.city, "Available");
     assert.strictEqual(visotekResult.phoneNumber, "2484749480");
+
+    // 9. resolveRedirectChain multi-hop mock tracing test
+    const mockHops = {
+      "http://hop1.com": { status: 301, location: "https://hop2.com" },
+      "https://hop2.com": { status: 302, location: "https://finaldestination.com/" },
+      "https://hop2.com/": { status: 302, location: "https://finaldestination.com/" },
+      "https://finaldestination.com/": { status: 200 }
+    };
+    const origFetch = ctx.fetch;
+    try {
+      ctx.fetch = async (url) => {
+        const info = mockHops[url] || { status: 200 };
+        return {
+          status: info.status,
+          type: info.status >= 300 && info.status < 400 ? "opaqueredirect" : "basic",
+          headers: {
+            get: (h) => (h.toLowerCase() === "location" ? info.location : null)
+          }
+        };
+      };
+      const chainRes = await ctx.resolveRedirectChain("http://hop1.com", 6);
+      assert.strictEqual(chainRes.finalUrl, "https://finaldestination.com/", "resolveRedirectChain must trace multi-hop chain to final destination");
+      assert.strictEqual(chainRes.hops, 2, "resolveRedirectChain must report correct hop count");
+      assert.strictEqual(ctx.isRedirectDomain("http://hop1.com", chainRes.finalUrl), true, "Cross-domain redirect must be detected from chain");
+    } finally {
+      ctx.fetch = origFetch;
+    }
   });
 
   // 48. Website Restricted Category Detection, False-Positive Elimination & QC Evidence Accuracy
