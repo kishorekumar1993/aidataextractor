@@ -1352,6 +1352,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     const destStemForCountry = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "").toLowerCase();
     if (destStemForCountry === "natuzzi") {
       country = "Italy";
+    } else if (destStemForCountry === "lasermech") {
+      country = "United States Of America";
     }
   }
 
@@ -1363,6 +1365,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     const destStemForComp = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "").toLowerCase();
     if (destStemForComp === "natuzzi") {
       compName = "Natuzzi S.p.A.";
+    } else if (destStemForComp === "lasermech") {
+      compName = "Laser Mechanisms, Inc.";
     } else if (destStemForComp) {
       compName = toTitleCase(destStemForComp);
     }

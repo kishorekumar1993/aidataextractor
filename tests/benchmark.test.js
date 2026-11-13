@@ -2804,6 +2804,31 @@ async function runAsyncTests() {
     const deadResult = await ctx.handleCrawlAndExtract("http://oldsite.com", "own_crawl");
     // Dead crawl result through handleCrawlAndExtract
     assert.strictEqual(ctx.isRedirectDomain(deadCrawl.originalUrl, deadCrawl.finalUrl), true);
+
+    // 8. Visotek Inc -> Laser Mechanisms Inc (HTTP 301 socket reset rescue)
+    const visotekCrawl = {
+      originalUrl: "http://www.visotekinc.com",
+      finalUrl: "https://www.lasermech.com/",
+      redirected: true,
+      status: "Redirect Site",
+      title: "Laser Mechanisms, Inc",
+      mainHtml: "<html><head><title>Laser Mechanisms, Inc</title></head><body><h1>Laser Mechanisms</h1><p>25325 Regency Drive, Novi, Michigan 48375 USA</p></body></html>",
+      bodyText: "Corporate Offices · Sales & Engineering Laser Mechanisms, Inc. 25325 Regency Drive Novi, Michigan 48375 USA Phone (248) 474-9480",
+      legalCompanyCandidates: ["Laser Mechanisms, Inc.", "Laser Mechanisms"],
+      addressCandidates: [{ raw: "25325 Regency Drive, Novi, Michigan 48375, USA", priority: 1 }],
+      phones: ["(248) 474-9480"],
+      detectedProductCount: 3,
+      crawledPages: []
+    };
+    const visotekExtracted = ctx.heuristicExtraction(visotekCrawl, { isRestricted: false });
+    const visotekResult = ctx.applyStrictInstructions(visotekExtracted, visotekCrawl, { isRestricted: false });
+    assert.strictEqual(visotekResult.websiteStatus, "Redirect Site", "Must classify visotekinc.com as Redirect Site");
+    assert.strictEqual(visotekResult.companyName, "Laser Mechanisms, Incorporated", "Must extract and expand Laser Mechanisms, Inc.");
+    assert.strictEqual(visotekResult.countryName, "United States Of America");
+    assert.strictEqual(visotekResult.companyAddress, "25325 Regency Drive, Novi, Michigan");
+    assert.strictEqual(visotekResult.state, "Available");
+    assert.strictEqual(visotekResult.city, "Available");
+    assert.strictEqual(visotekResult.phoneNumber, "2484749480");
   });
 
   // 48. Website Restricted Category Detection, False-Positive Elimination & QC Evidence Accuracy

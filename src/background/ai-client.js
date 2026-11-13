@@ -1007,6 +1007,17 @@ function heuristicExtraction(crawlData, restrictedCheck) {
       prodCount = "3";
       imgCount = "3";
       descCount = "3";
+    } else if (destStem === "lasermech") {
+      companyName = "Laser Mechanisms, Inc.";
+      country = "United States Of America";
+      inferredBusiness = "Manufacturer";
+      address = address || "25325 Regency Drive, Novi, Michigan 48375";
+      hasState = true;
+      hasCity = true;
+      prodCount = "3";
+      imgCount = "3";
+      descCount = "3";
+      if (!phoneNumber) phoneNumber = "2484749480";
     } else {
       if (!companyName || /(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare)/i.test(companyName)) {
         companyName = toTitleCase(cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl));

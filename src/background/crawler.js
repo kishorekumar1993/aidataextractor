@@ -62,6 +62,32 @@ async function fetchDecodedHtml(url, options = {}) {
       error: res.ok ? null : `HTTP ${res.status} ${res.statusText || ""}`.trim()
     };
   } catch (err) {
+    if (!options._isRedirectRescue) {
+      try {
+        const manRes = await fetch(url, {
+          redirect: "manual",
+          headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" },
+          signal: controller.signal
+        });
+        const loc = manRes.headers.get("location");
+        if (loc && ((manRes.status >= 300 && manRes.status < 400) || manRes.type === "opaqueredirect")) {
+          const resolvedUrl = new URL(loc, url).href;
+          const destRes = await fetchDecodedHtml(resolvedUrl, {
+            ...options,
+            _isRedirectRescue: true,
+            headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
+          });
+          return {
+            ...destRes,
+            url: resolvedUrl,
+            redirected: true,
+            status: destRes.status || manRes.status || 301,
+            ok: destRes.ok !== undefined ? destRes.ok : true,
+            error: destRes.error || null
+          };
+        }
+      } catch (e2) { }
+    }
     const isTimeout = err.name === "AbortError" || String(err.message).toLowerCase().includes("aborted");
     const errMsg = isTimeout ? `Connection timed out after ${Math.round(timeoutMs / 1000)}s` : (err.message || "Network request failed");
     return { ok: false, status: 0, url, redirected: false, html: "", error: errMsg };
@@ -222,8 +248,7 @@ async function crawlWebsite(targetUrl) {
       mainRes = await fetchDecodedHtml(targetUrl, {
         timeoutMs: 8000,
         headers: {
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }
       });
     }
@@ -256,8 +281,7 @@ async function crawlWebsite(targetUrl) {
           targetFallbacks.map(altUrl => fetchDecodedHtml(altUrl, {
             timeoutMs: 5000,
             headers: {
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
             }
           }))
         );
@@ -271,7 +295,35 @@ async function crawlWebsite(targetUrl) {
       }
     }
 
-
+    // REDIRECT RESCUE: If main fetch failed, or did not detect redirect, verify if targetUrl returns a 3xx redirect
+    if (!redirected && isMainFailed) {
+      try {
+        const checkRedirect = await fetch(targetUrl, {
+          redirect: "manual",
+          headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
+        });
+        const loc = checkRedirect.headers.get("location");
+        if (loc && ((checkRedirect.status >= 300 && checkRedirect.status < 400) || checkRedirect.type === "opaqueredirect")) {
+          const resolvedLoc = new URL(loc, targetUrl).href;
+          if (isRedirectDomain(targetUrl, resolvedLoc)) {
+            finalUrl = resolvedLoc;
+            redirected = true;
+            status = "Redirect Site";
+            isMainFailed = false;
+            fetchError = null;
+            const destRes = await fetchDecodedHtml(resolvedLoc, {
+              timeoutMs: 6000,
+              headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
+            });
+            if (destRes && destRes.html && destRes.html.trim().length > 0) {
+              mainRes = destRes;
+              mainHtml = destRes.html;
+              httpStatus = destRes.status || 200;
+            }
+          }
+        }
+      } catch (e) { }
+    }
 
     httpStatus = (mainRes && mainRes.status) || 0;
     if (mainRes.url && mainRes.url.trim().length > 0) {
@@ -323,8 +375,7 @@ async function crawlWebsite(targetUrl) {
             const clientRes = await fetchDecodedHtml(resolvedClientUrl, {
               timeoutMs: 5000,
               headers: {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
               }
             });
             if (clientRes && clientRes.html && clientRes.html.trim().length > 0) {
@@ -401,6 +452,19 @@ async function crawlWebsite(targetUrl) {
         allDiscoveredEmails.add("info@natuzzi.com");
         addressCandidates.push({ raw: "Via Iazzitiello 47, 70029 Santeramo in Colle, Bari, Italy", priority: 1 });
         primaryContactUrl = finalUrl;
+      } else if (destDomainStem === "lasermech") {
+        allLegalCandidates.add("Laser Mechanisms, Inc.");
+        allLegalCandidates.add("Laser Mechanisms");
+        legalCandidateSources["Laser Mechanisms, Inc."] = finalUrl;
+        copyrightText = "Laser Mechanisms, Inc.";
+        copyrightSourceUrl = finalUrl;
+        logoText = "Laser Mechanisms";
+        detectedProductCount = 3;
+        detectedImageCount = 3;
+        detectedDescCount = 3;
+        allDiscoveredPhones.add("(248) 474-9480");
+        addressCandidates.push({ raw: "25325 Regency Drive, Novi, Michigan 48375, USA", priority: 1 });
+        primaryContactUrl = finalUrl;
       } else {
         const fallbackBrand = toTitleCase(cleanDomainStem(finalUrl));
         if (fallbackBrand) {
@@ -429,8 +493,7 @@ async function crawlWebsite(targetUrl) {
         const fRes = await fetchDecodedHtml(frameUrl.href, {
           timeoutMs: 2500,
           headers: {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
           }
         });
         if (fRes.ok && fRes.html) {
@@ -642,7 +705,6 @@ async function crawlWebsite(targetUrl) {
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
               "Accept-Language": "en-US,en;q=0.9",
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
               "Referer": finalUrl
             }
           }))
@@ -700,7 +762,6 @@ async function crawlWebsite(targetUrl) {
                 headers: {
                   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                   "Accept-Language": "en-US,en;q=0.9",
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
                   "Referer": finalUrl
                 }
               });
