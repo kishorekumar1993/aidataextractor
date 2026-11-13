@@ -253,12 +253,13 @@
         } catch (e) {}
 
         if (state.autoQueueEnabled || state.autoSubmitNotWorkingEnabled) {
-          AIExt.updateStatus(`⚠️ Website unreachable (${errorMsg}). Status set to Not Working (auto-submitting in 2s...).`, "warning");
+          const delay = state.autoQueueEnabled ? 500 : 1500;
+          AIExt.updateStatus(`⚠️ Website unreachable (${errorMsg}). Status set to Not Working (auto-submitting in ${delay === 500 ? "0.5s" : "1.5s"}...).`, "warning");
           if (state.pendingAutoSubmitTimer) clearTimeout(state.pendingAutoSubmitTimer);
           state.pendingAutoSubmitTimer = setTimeout(() => {
             state.pendingAutoSubmitTimer = null;
             AIExt.autoSubmitNotWorking(targetUrl);
-          }, 2000);
+          }, delay);
         } else {
           AIExt.updateStatus(`⚠️ Website unreachable (${errorMsg}). Status set to Not Working.`, "warning");
         }
@@ -294,12 +295,13 @@
         AIExt.renderPreview(data);
         AIExt.showRestrictedBanner(reason);
         if (state.autoQueueEnabled || state.autoSubmitNotWorkingEnabled) {
-          AIExt.updateStatus(`⛔ PROHIBITED CATEGORY DETECTED: ${reason}. Status set to Not Working (auto-submitting in 2s...).`, "error");
+          const delay = state.autoQueueEnabled ? 500 : 1500;
+          AIExt.updateStatus(`⛔ PROHIBITED CATEGORY DETECTED: ${reason}. Status set to Not Working (auto-submitting in ${delay === 500 ? "0.5s" : "1.5s"}...).`, "error");
           if (state.pendingAutoSubmitTimer) clearTimeout(state.pendingAutoSubmitTimer);
           state.pendingAutoSubmitTimer = setTimeout(() => {
             state.pendingAutoSubmitTimer = null;
             AIExt.autoSubmitNotWorking(targetUrl);
-          }, 2000);
+          }, delay);
         } else {
           AIExt.updateStatus(`⛔ PROHIBITED CATEGORY / WORD DETECTED: ${reason}. Website Status set to Not Working (all fields cleared).`, "error");
         }
@@ -323,12 +325,13 @@
             : `⚠️ Website Status set to Not Working (all other fields cleared).`);
 
         if (state.autoQueueEnabled || state.autoSubmitNotWorkingEnabled) {
-          AIExt.updateStatus(`${msg} (auto-submitting in 2s...)`, "warning");
+          const delay = state.autoQueueEnabled ? 500 : 1500;
+          AIExt.updateStatus(`${msg} (auto-submitting in ${delay === 500 ? "0.5s" : "1.5s"}...)`, "warning");
           if (state.pendingAutoSubmitTimer) clearTimeout(state.pendingAutoSubmitTimer);
           state.pendingAutoSubmitTimer = setTimeout(() => {
             state.pendingAutoSubmitTimer = null;
             AIExt.autoSubmitNotWorking(targetUrl);
-          }, 2000);
+          }, delay);
         } else {
           AIExt.updateStatus(msg, "warning");
         }
@@ -469,12 +472,13 @@
         AIExt.fillFormFields(notWorkingData);
         AIExt.renderPreview(notWorkingData);
         if (state.autoQueueEnabled || state.autoSubmitNotWorkingEnabled) {
-          AIExt.updateStatus(`⚠️ Failed to fetch website (${err.message}). Status set to Not Working (auto-submitting in 2s...).`, "warning");
+          const delay = state.autoQueueEnabled ? 500 : 1500;
+          AIExt.updateStatus(`⚠️ Failed to fetch website (${err.message}). Status set to Not Working (auto-submitting in ${delay === 500 ? "0.5s" : "1.5s"}...).`, "warning");
           if (state.pendingAutoSubmitTimer) clearTimeout(state.pendingAutoSubmitTimer);
           state.pendingAutoSubmitTimer = setTimeout(() => {
             state.pendingAutoSubmitTimer = null;
             AIExt.autoSubmitNotWorking(targetUrl);
-          }, 2000);
+          }, delay);
         } else {
           AIExt.updateStatus(`⚠️ Failed to fetch website (${err.message}). Status set to Not Working.`, "warning");
         }
