@@ -80,7 +80,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - NEVER expand special characters or symbols into words (do NOT convert "&" to "And", "+" to "Plus", "@" to "At", "/" to "Slash"/"Or", "%" to "Percent", "#" to "Number"; keep internal symbols as-is such as "CJ Tool & Mouldings Limited", "H&R Manufacturing", "Design+Build").
 - Format in Title Case where EVERY word starts with a capital letter (keep brand acronyms like PEM, BMW in UPPERCASE).
 - Strictly REMOVE ANY special characters from the beginning or end of the company name (no leading or trailing ".", ",", "-", "!", "*", "&", "+", "/", "#", "@", "®", "™", "©", quotes, brackets, or symbols).
-- Preserve comma before corporate suffix if standard or present on website (e.g. "ECU Testing, Limited", "Mocap, Limited Liability Company").
+- Preserve comma before corporate suffix ONLY IF a comma is explicitly present before that suffix on the website (e.g. "Hsin Hsin Metals, Ltd." -> "Hsin Hsin Metals, Limited", "Mocap, LLC" -> "Mocap, Limited Liability Company"). If NO comma is present before the suffix on the website (e.g. "TAD Communications Ltd"), do NOT add a comma -> output "TAD Communications Limited". If comma available then only put comma else leave.
 
 5. COUNTRY NAME (CRITICAL QC RULE - SUPPORT ALL 135+ COUNTRIES GLOBALLY WITH FULL NAME EXPANSION):
 - ALWAYS output the full expanded original English country name (NEVER return an abbreviation like USA/UK/UAE/KSA/PNG/NZ/HK, a city, state, continent, email, or local-language name).

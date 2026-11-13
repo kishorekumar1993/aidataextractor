@@ -3123,6 +3123,141 @@ async function runAsyncTests() {
     assert.strictEqual(avonQc.is_restricted, false);
     assert.strictEqual(avonQc.restricted_category, "Aerospace");
   });
+
+  // 49. Rule 4 Corporate Suffix Comma Reconciliation: "is comma available then only u put comma else leave"
+  runTest('Rule 4 Corporate Suffix Comma Reconciliation - only put comma if available on website else leave (TAD Communications Ltd -> TAD Communications Limited)', () => {
+    // A. Direct function tests for restoreCommaBeforeCorporateSuffix
+    // 1. TAD Communications Ltd: on-site evidence has NO comma before Ltd -> output must NOT have comma
+    const tadCrawlNoComma = {
+      copyrightText: "Copyright © 2024 TAD Communications Ltd. All rights reserved.",
+      title: "TAD Communications Ltd - Radio & Wireless Solutions",
+      legalCompanyCandidates: ["TAD Communications Ltd"],
+      combinedText: "TAD Communications Ltd provides radio and wireless communications."
+    };
+    // Even if AI generated a comma, it must be stripped
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("TAD Communications, Limited", tadCrawlNoComma),
+      "TAD Communications Limited",
+      "Hallucinated comma before Limited must be stripped when website has TAD Communications Ltd without comma"
+    );
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("TAD Communications Limited", tadCrawlNoComma),
+      "TAD Communications Limited",
+      "No-comma company name must remain without comma when website has TAD Communications Ltd"
+    );
+
+    // 2. TAD Communications, Ltd: on-site evidence HAS a comma before Ltd -> output MUST preserve comma
+    const tadCrawlWithComma = {
+      copyrightText: "Copyright © 2024 TAD Communications, Ltd. All rights reserved.",
+      title: "TAD Communications, Ltd. - Radio Solutions",
+      legalCompanyCandidates: ["TAD Communications, Ltd."],
+      combinedText: "TAD Communications, Ltd. provides communications."
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("TAD Communications Limited", tadCrawlWithComma),
+      "TAD Communications, Limited",
+      "Comma before Limited must be restored when website has TAD Communications, Ltd with comma"
+    );
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("TAD Communications, Limited", tadCrawlWithComma),
+      "TAD Communications, Limited",
+      "Existing comma before Limited must be preserved when website has TAD Communications, Ltd with comma"
+    );
+
+    // 3. Co., Ltd. vs Co. Ltd. (Company, Limited vs Company Limited)
+    const kaulinCrawl = {
+      copyrightText: "Copyright © 2024 Kaulin Mfg. Co., Ltd.",
+      title: "Kaulin Mfg. Co., Ltd."
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Kaulin Manufacturing Company Limited", kaulinCrawl),
+      "Kaulin Manufacturing Company, Limited",
+      "Company, Limited must have comma when on-site evidence has Co., Ltd."
+    );
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Kaulin Manufacturing Company, Limited", kaulinCrawl),
+      "Kaulin Manufacturing Company, Limited"
+    );
+
+    const coLtdNoCommaCrawl = {
+      copyrightText: "Copyright © 2024 Apex Tools Co. Ltd. All rights reserved.",
+      title: "Apex Tools Co. Ltd."
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Apex Tools Company, Limited", coLtdNoCommaCrawl),
+      "Apex Tools Company Limited",
+      "Company Limited must NOT have comma when on-site evidence has Co. Ltd without comma"
+    );
+
+    // 4. Mocap LLC (no comma) vs Mocap, LLC (with comma)
+    const mocapNoCommaCrawl = {
+      bodyText: "Mocap LLC produces rubber and plastic caps.",
+      copyrightText: "© 2024 Mocap LLC"
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Mocap, Limited Liability Company", mocapNoCommaCrawl),
+      "Mocap Limited Liability Company",
+      "Limited Liability Company must NOT have comma when website has Mocap LLC without comma"
+    );
+
+    const mocapWithCommaCrawl = {
+      bodyText: "Mocap, LLC produces rubber and plastic caps.",
+      copyrightText: "© 2024 Mocap, LLC"
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Mocap Limited Liability Company", mocapWithCommaCrawl),
+      "Mocap, Limited Liability Company",
+      "Limited Liability Company MUST have comma when website has Mocap, LLC with comma"
+    );
+
+    // 5. TP Orthodontics, Inc (with comma)
+    const tpOrthodonticsCrawl = {
+      title: "TP Orthodontics, Inc. - Precision Orthodontics",
+      combinedText: "TP Orthodontics, Inc."
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("TP Orthodontics Incorporated", tpOrthodonticsCrawl),
+      "TP Orthodontics, Incorporated",
+      "Incorporated must have comma when website has TP Orthodontics, Inc. with comma"
+    );
+
+    // B. End-to-end QC pipeline test via applyStrictInstructions
+    const tadMockExtracted = {
+      websiteStatus: "Working",
+      businessType: "Manufacturer",
+      companyName: "TAD Communications, Limited", // AI generated with unwanted comma
+      countryName: "United Kingdom",
+      companyAddress: "14 Wireless Way, Leeds, West Yorkshire",
+      state: "Available",
+      city: "Available",
+      phoneNumber: "1132550199",
+      numberOfProducts: "3",
+      productImages: "3",
+      numberOfProductDescriptions: "3"
+    };
+    const tadMockCrawl = {
+      originalUrl: "http://www.tadcommunications.co.uk",
+      finalUrl: "https://www.tadcommunications.co.uk/",
+      title: "TAD Communications Ltd - Radio & Wireless Systems",
+      copyrightText: "Copyright © 2024 TAD Communications Ltd. All rights reserved.",
+      legalCompanyCandidates: ["TAD Communications Ltd"],
+      mainHtml: "<html><body><h1>TAD Communications Ltd</h1><p>We manufacture commercial two-way radios and communication equipment.</p></body></html>",
+      bodyText: "TAD Communications Ltd is a UK manufacturer of wireless equipment.",
+      combinedText: "TAD Communications Ltd is a UK manufacturer of wireless equipment. We manufacture commercial two-way radios and communication equipment.",
+      addressCandidates: [{ raw: "14 Wireless Way, Leeds, West Yorkshire, LS1 2AB, UK", isHeadquarters: true }],
+      productItems: [
+        { name: "Two-Way Radio", img: "radio.jpg", desc: "Commercial handheld radio transceiver" },
+        { name: "Base Station", img: "station.jpg", desc: "VHF base repeater station" },
+        { name: "Antenna Mast", img: "antenna.jpg", desc: "High gain communication antenna" }
+      ]
+    };
+    const tadQcResult = ctx.applyStrictInstructions(tadMockExtracted, tadMockCrawl, { isRestricted: false });
+    assert.strictEqual(
+      tadQcResult.companyName,
+      "TAD Communications Limited",
+      "applyStrictInstructions must strip hallucinated comma before Limited when website evidence has TAD Communications Ltd"
+    );
+  });
 }
 
 runAsyncTests().then(() => {

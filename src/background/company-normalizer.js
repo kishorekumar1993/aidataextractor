@@ -1105,9 +1105,66 @@ function expandCompanyAbbreviations(name, country = "") {
 }
 
 /**
+ * Helper to build abbreviation regex for a standardized corporate legal entity suffix.
+ */
+function getCorporateSuffixPattern(suffix) {
+  const s = (suffix || "").toLowerCase().trim();
+  if (s === "limited") {
+    return "(?:l[\\.\\s]*t[\\.\\s]*d|limited)";
+  }
+  if (s === "incorporated") {
+    return "(?:i[\\.\\s]*n[\\.\\s]*c|incorporated)";
+  }
+  if (s === "limited liability company") {
+    return "(?:l[\\.\\s]*l[\\.\\s]*c|limited\\s+liability\\s+company)";
+  }
+  if (s === "corporation") {
+    return "(?:c[\\.\\s]*o[\\.\\s]*r[\\.\\s]*p|corporation)";
+  }
+  if (s === "public limited company") {
+    return "(?:p[\\.\\s]*l[\\.\\s]*c|public\\s+limited\\s+company)";
+  }
+  if (s === "proprietary limited") {
+    return "(?:p[\\.\\s]*t[\\.\\s]*y[\\.\\s]*(?:l[\\.\\s]*t[\\.\\s]*d|limited)|proprietary\\s+limited)";
+  }
+  if (s === "private limited") {
+    return "(?:p[\\.\\s]*[tv][\\.\\s]*e?[\\.\\s]*(?:l[\\.\\s]*t[\\.\\s]*d|limited)|private\\s+limited)";
+  }
+  if (s === "limited liability partnership") {
+    return "(?:l[\\.\\s]*l[\\.\\s]*p|limited\\s+liability\\s+partnership)";
+  }
+  if (s === "sendirian berhad") {
+    return "(?:sdn[\\.\\s]*bhd|sendirian\\s+berhad)";
+  }
+  return suffix.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+}
+
+/**
+ * Helper to build a flexible regex pattern for a company's base name,
+ * allowing for optional dots/spaces in acronyms (e.g. TAD -> T.A.D.) and connectors (& / and).
+ */
+function buildFlexibleBasePattern(base) {
+  const tokens = (base || "").split(/\s+/).filter(Boolean);
+  return tokens.map(rawTok => {
+    const trimmed = rawTok.trim();
+    if (/^(?:and|&|\+)$/i.test(trimmed)) {
+      return "(?:&|and|\\+)";
+    }
+    const tok = trimmed.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+    if (!tok) return "";
+    if (/^[A-Z]{2,5}$/.test(tok)) {
+      return tok.split("").map(c => c.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")).join("[\\.\\s]*");
+    }
+    return tok.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+  }).filter(Boolean).join("[\\s,]*");
+}
+
+/**
  * Rule 4: Preserves/restores comma before corporate legal designations:
+ * "is comma available then only u put comma else leave"
+ * e.g. "TAD Communications Ltd" on website -> "TAD Communications Limited" (no comma)
+ * e.g. "Hsin Hsin Metals, Ltd." on website -> "Hsin Hsin Metals, Limited" (comma preserved)
  * e.g. "TP Orthodontics, Inc" -> "TP Orthodontics, Incorporated"
- * e.g. "Transformer Manufacturers, Inc" -> "Transformer Manufacturers, Incorporated"
  * e.g. "Kaulin Manufacturing Company, Limited"
  */
 function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
@@ -1124,40 +1181,68 @@ function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
     crawlData && crawlData.combinedText
   ].filter(Boolean).join(" ");
 
-  // Rule: Co., Ltd. -> Company, Limited vs Co. Ltd. -> Company Limited
-  // "if comma come only we put else we dont put"
-  if (/\bCompany\s+Limited\b/i.test(compName) && !/\bCompany,\s*Limited\b/i.test(compName)) {
-    if (corpus && /\b(?:co[\.\s]*,|company,)\s*(?:l[\.\s]*t[\.\s]*d|limited)\b/i.test(corpus)) {
-      return compName.replace(/\bCompany\s+Limited\b/gi, "Company, Limited");
+  // 1. Rule: Co., Ltd. -> Company, Limited vs Co. Ltd. -> Company Limited
+  // "is comma available then only u put comma else leave"
+  if (/\bCompany\s*,\s*Limited\b/i.test(compName) || /\bCompany\s+Limited\b/i.test(compName)) {
+    if (corpus) {
+      const hasComma = /\b(?:co[\.\s]*,|company,)\s*(?:l[\.\s]*t[\.\s]*d|limited)\b/i.test(corpus);
+      const hasNoComma = /\b(?:co[\.\s]+|company\s+)(?:l[\.\s]*t[\.\s]*d|limited)\b/i.test(corpus);
+      if (hasComma) {
+        return compName.replace(/\bCompany\s+Limited\b/gi, "Company, Limited");
+      }
+      if (hasNoComma || !hasComma) {
+        return compName.replace(/\bCompany\s*,\s*Limited\b/gi, "Company Limited");
+      }
     }
     return compName;
   }
 
-  if (/\bCompany,\s*Limited\b/i.test(compName)) {
-    // If on-site evidence explicitly writes "Co. Ltd" / "Co Ltd" without comma, AND never has "Co.," / "Company,"
-    if (corpus && /\bco[\.\s]+l[\.\s]*t[\.\s]*d\b/i.test(corpus) && !/\b(?:co[\.\s]*,|company,)\s*(?:l[\.\s]*t[\.\s]*d|limited)\b/i.test(corpus)) {
-      return compName.replace(/\bCompany,\s*Limited\b/gi, "Company Limited");
-    }
+  // 2. Rule: General Corporate Legal Entity Suffixes
+  // Match base name and corporate suffix:
+  const m = compName.match(/^(.*?)(?:,\s*|\s+)(Incorporated|Limited\s*Liability\s*Company|Limited\s*Liability\s*Partnership|Public\s*Limited\s*Company|Proprietary\s*Limited|Private\s*Limited|Corporation|Sendirian\s*Berhad|Limited)\b(.*)$/i);
+  if (!m) return compName;
+
+  const base = m[1].trim();
+  const suffix = m[2].trim();
+  const rest = m[3] || "";
+  const hadCommaInInput = compName.slice(base.length).trim().startsWith(",");
+
+  if (!corpus || !corpus.trim()) {
     return compName;
   }
 
-  // If already has a comma before corporate legal designations, keep it intact
-  if (/,\s*(?:Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Corporation|Public\s*Limited\s*Company|Proprietary\s*Limited|Private\s*Limited|Limited)\b/i.test(compName)) {
-    return compName;
-  }
-  const m = compName.match(/^(.*?)\s+(Incorporated|Company,\s*Limited|Limited\s*Liability\s*Company|Corporation|Public\s*Limited\s*Company|Proprietary\s*Limited|Private\s*Limited|Limited)\b(.*)$/i);
-  if (m) {
-    const base = m[1].trim();
-    const suffix = m[2].trim();
-    const rest = m[3] || "";
+  const suffixPattern = getCorporateSuffixPattern(suffix);
+  const flexibleBasePattern = buildFlexibleBasePattern(base);
 
-    const baseTokens = base.split(/\s+/).filter(Boolean);
-    const flexibleBasePattern = baseTokens.map(t => t.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")).join("\\s*");
-    if (new RegExp(`${flexibleBasePattern}\\s*,\\s*(?:Inc|Incorporated|LLC|Ltd|Limited|Corp|Corporation|Plc)`, "i").test(corpus)) {
-      return `${base}, ${suffix}${rest}`;
-    }
+  const baseWithCommaRegex = new RegExp(`${flexibleBasePattern}\\s*,\\s*${suffixPattern}\\b`, "i");
+  const baseWithoutCommaRegex = new RegExp(`${flexibleBasePattern}\\s+${suffixPattern}\\b`, "i");
+
+  const hasCommaForBase = baseWithCommaRegex.test(corpus);
+  const hasNoCommaForBase = baseWithoutCommaRegex.test(corpus);
+
+  if (hasCommaForBase) {
+    // Comma is explicitly present before suffix on website -> PUT COMMA
+    return `${base}, ${suffix}${rest}`;
   }
-  return compName;
+
+  if (hasNoCommaForBase) {
+    // Company name is on website WITHOUT comma before suffix -> LEAVE WITHOUT COMMA
+    return `${base} ${suffix}${rest}`;
+  }
+
+  // If exact base + suffix was not found as a unit, check general suffix punctuation in corpus:
+  const anyCommaBeforeSuffix = new RegExp(`,\\s*${suffixPattern}\\b`, "i").test(corpus);
+  const anySuffixInCorpus = new RegExp(`\\b${suffixPattern}\\b`, "i").test(corpus);
+
+  if (anyCommaBeforeSuffix) {
+    return `${base}, ${suffix}${rest}`;
+  }
+  if (anySuffixInCorpus && !anyCommaBeforeSuffix) {
+    return `${base} ${suffix}${rest}`;
+  }
+
+  // If no evidence in corpus at all, preserve input state
+  return hadCommaInInput ? `${base}, ${suffix}${rest}` : `${base} ${suffix}${rest}`;
 }
 
 /**
