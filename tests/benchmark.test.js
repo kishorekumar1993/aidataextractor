@@ -3384,6 +3384,28 @@ async function runAsyncTests() {
       addEventListener: () => {}
     };
 
+    let modalConfirmClicks = 0;
+    const mockModal = {
+      id: 'notWorkingConfirmModal',
+      classList: {
+        contains: (cls) => cls === 'active' || cls === 'modal-overlay',
+        add: () => {},
+        remove: () => {}
+      },
+      offsetParent: {}
+    };
+
+    const mockModalConfirmOkBtn = {
+      id: 'btnNotWorkingConfirmOk',
+      tagName: 'BUTTON',
+      textContent: 'OK',
+      click: () => {
+        modalConfirmClicks++;
+      },
+      closest: (sel) => sel.includes('Modal') || sel.includes('modal') ? mockModal : null,
+      offsetParent: {}
+    };
+
     const bCtx = vm.createContext({
       console: { log: () => {}, warn: () => {}, error: () => {} },
       window: { location: { href: 'https://example.com/dataextraction' }, addEventListener: () => {} },
@@ -3398,6 +3420,8 @@ async function runAsyncTests() {
           if (id === 'website-status' || id === 'selectWebsiteStatus') return mockStatusSelect;
           if (id === 'btnSubmitForm' || id === 'btnSubmit') return mockSubmitBtn;
           if (id === 'btnLoadNextQueueUrl' || id === 'btnNextQueue') return mockFromQueueBtn;
+          if (id === 'btnNotWorkingConfirmOk') return mockModalConfirmOkBtn;
+          if (id === 'notWorkingConfirmModal') return mockModal;
           if (id === 'ai-batch-10-btn') return mockBatch10Btn;
           if (id === 'ai-batch-all-btn') return mockBatchAllBtn;
           return null;
@@ -3406,12 +3430,13 @@ async function runAsyncTests() {
           if (sel.includes('website')) return mockWebsiteInput;
           if (sel.includes('status')) return mockStatusSelect;
           if (sel.includes('submit')) return mockSubmitBtn;
+          if (sel.includes('btnNotWorkingConfirmOk') || sel.includes('confirm-ok')) return mockModalConfirmOkBtn;
           return null;
         },
         querySelectorAll: (sel) => {
           if (sel === 'select') return [mockStatusSelect];
           if (sel && sel.includes('input')) return [mockWebsiteInput];
-          return [mockWebsiteInput, mockStatusSelect, mockSubmitBtn, mockFromQueueBtn];
+          return [mockWebsiteInput, mockStatusSelect, mockSubmitBtn, mockFromQueueBtn, mockModalConfirmOkBtn];
         },
         addEventListener: () => {}
       },
@@ -3480,6 +3505,7 @@ async function runAsyncTests() {
 
     // 4. Verify all 10 submissions completed and state cleanly reset
     assert.strictEqual(submittedCount, 10, 'Must have auto-submitted exactly 10 sites as Not Working');
+    assert.ok(modalConfirmClicks >= 10, `Must have auto-confirmed Not Working modal (confirmed ${modalConfirmClicks} times)`);
     assert.strictEqual(ext.state.isBatchNotWorkingActive, false, 'Batch must cleanly stop after 10 sites');
     assert.strictEqual(storedBatch, null, 'Storage must be cleaned up after batch finishes');
   });
