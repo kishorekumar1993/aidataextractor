@@ -15,14 +15,22 @@ function isAntiBotChallenge(html, status) {
 /**
  * Traces a server-side 3xx HTTP redirect chain (up to maxHops) to discover the true final URL.
  * Handles single-hop (301, 302, 307, 308) and multi-hop redirects across protocols and domains.
+ * Detects circular redirect loops explicitly and preserves failure details (Items 8 & 15).
  */
-async function resolveRedirectChain(initialUrl, maxHops = 8) {
-  if (!initialUrl || typeof initialUrl !== "string") return { finalUrl: initialUrl, hops: 0 };
+async function resolveRedirectChain(initialUrl, maxHops = 8, options = {}) {
+  if (!initialUrl || typeof initialUrl !== "string") {
+    return { finalUrl: initialUrl, hops: 0, isRedirectLoop: false, loopUrl: null, error: null };
+  }
   let currentUrl = initialUrl.trim();
   let hops = 0;
   const visited = new Set();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000);
+  const timeoutMs = options.timeoutMs || 6000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let isRedirectLoop = false;
+  let loopUrl = null;
+  let redirectError = null;
 
   try {
     while (hops < maxHops) {
@@ -33,13 +41,15 @@ async function resolveRedirectChain(initialUrl, maxHops = 8) {
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         },
-        signal: controller.signal
+        signal: options.signal || controller.signal
       });
       const loc = res.headers.get("location");
       if (loc && ((res.status >= 300 && res.status < 400) || res.type === "opaqueredirect")) {
         const nextUrl = new URL(loc, currentUrl).href;
         if (visited.has(nextUrl)) {
-          // Circular redirect loop detected
+          // Circular redirect loop detected (Item 15)
+          isRedirectLoop = true;
+          loopUrl = nextUrl;
           break;
         }
         currentUrl = nextUrl;
@@ -49,27 +59,84 @@ async function resolveRedirectChain(initialUrl, maxHops = 8) {
       }
     }
   } catch (e) {
+    redirectError = e.message || "Redirect resolution error"; // Item 8: Preserve redirect error details
   } finally {
     clearTimeout(timeoutId);
   }
 
-  return { finalUrl: currentUrl, hops };
+  return { finalUrl: currentUrl, hops, isRedirectLoop, loopUrl, error: redirectError };
 }
 
 /**
- * Resilient, charset-aware HTTP fetcher with timeout and fallback decoders.
+ * Normalizes and deduplicates URLs across crawler requests (Item 14).
+ * Strips tracking parameters, hash fragments, and normalizes trailing slashes.
+ */
+function normalizeCrawlUrl(rawUrl, baseUrl = "") {
+  if (!rawUrl || typeof rawUrl !== "string") return "";
+  try {
+    const resolved = baseUrl ? new URL(rawUrl, baseUrl) : new URL(rawUrl);
+    resolved.hash = "";
+    const sp = resolved.searchParams;
+    const trackingKeys = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid", "ref", "source"];
+    for (const k of trackingKeys) sp.delete(k);
+    resolved.search = sp.toString();
+    let p = resolved.pathname;
+    if (p.length > 1 && p.endsWith("/")) {
+      resolved.pathname = p.replace(/\/+$/, "");
+    }
+    return resolved.href;
+  } catch (e) {
+    return String(rawUrl).trim();
+  }
+}
+
+/**
+ * Identifies irrelevant URLs that waste crawl quota (Item 12).
+ */
+function isIrrelevantUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== "string") return true;
+  return /(?:cart|checkout|basket|my-account|account|login|signin|signup|register|wishlist|\.pdf$|\.zip$|\.tar$|\.gz$|wp-content\/uploads\/|feed\/|rss\/|tag\/|author\/|comment|replytocom|search\?)/i.test(urlStr);
+}
+
+/**
+ * Resilient, charset-aware HTTP fetcher with configurable timeout and content-type validation.
+ * Validates Content-Type before parsing (Item 17) and supports external abort cancellation (Item 18).
  */
 async function fetchDecodedHtml(url, options = {}) {
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 4500;
+  const timeoutMs = options.timeoutMs || 7000; // Controlled, configurable timeout (Item 16)
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (options.signal) {
+    if (options.signal.aborted) {
+      clearTimeout(timeoutId);
+      return { ok: false, status: 0, url, redirected: false, html: "", isAborted: true, error: "Aborted" };
+    }
+    options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
 
   try {
     const res = await fetch(url, { redirect: "follow", ...options, signal: controller.signal });
+
+    // Validate content-type before parsing (Item 17: Non-HTML responses should not be parsed as HTML)
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    const isHtmlOrText = !ct || ct.includes("text/html") || ct.includes("application/xhtml") || ct.includes("text/plain");
+    if (!isHtmlOrText) {
+      return {
+        ok: false,
+        status: res.status,
+        url: res.url,
+        redirected: res.redirected,
+        html: "",
+        isNonHtml: true,
+        contentType: ct,
+        error: `Non-HTML response type (${ct})`
+      };
+    }
+
     const buf = await res.arrayBuffer();
 
     let charset = "utf-8";
-    const ct = res.headers.get("content-type") || "";
     const ctMatch = ct.match(/charset=([^;]+)/i);
     if (ctMatch) {
       charset = ctMatch[1].trim();
@@ -106,29 +173,9 @@ async function fetchDecodedHtml(url, options = {}) {
       error: res.ok ? null : `HTTP ${res.status} ${res.statusText || ""}`.trim()
     };
   } catch (err) {
-    if (!options._isRedirectRescue) {
-      try {
-        const chain = await resolveRedirectChain(url, 6);
-        if (chain && chain.hops > 0 && chain.finalUrl && chain.finalUrl !== url) {
-          const destRes = await fetchDecodedHtml(chain.finalUrl, {
-            ...options,
-            _isRedirectRescue: true,
-            headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
-          });
-          return {
-            ...destRes,
-            url: (destRes && destRes.url) || chain.finalUrl,
-            redirected: true,
-            status: (destRes && destRes.status) || 200,
-            ok: destRes.ok !== undefined ? destRes.ok : true,
-            error: destRes.error || null
-          };
-        }
-      } catch (e2) { }
-    }
     const isTimeout = err.name === "AbortError" || String(err.message).toLowerCase().includes("aborted");
     const errMsg = isTimeout ? `Connection timed out after ${Math.round(timeoutMs / 1000)}s` : (err.message || "Network request failed");
-    return { ok: false, status: 0, url, redirected: false, html: "", error: errMsg };
+    return { ok: false, status: 0, url, redirected: false, html: "", isTimeout, error: errMsg };
   } finally {
     clearTimeout(timeoutId);
   }
@@ -213,8 +260,9 @@ function extractClientSideRedirect(html, baseUrl) {
 
 /**
  * Deep crawls homepage, handles HTML <frameset>/<frame>, contact pages, footer, JSON-LD, products.
+ * Globally enforces a maximum of 5 pages crawled per website across all requests (Items 13 & 70).
  */
-async function crawlWebsite(targetUrl) {
+async function crawlWebsite(targetUrl, options = {}) {
   let mainHtml = "";
   let contactHtml = "";
   let footerText = "";
@@ -224,6 +272,8 @@ async function crawlWebsite(targetUrl) {
   let status = "Working";
   let fetchError = null;
   let httpStatus = 0;
+  let isBlocked = false;
+  let requiresManualReview = false;
   const addressCandidates = [];
   let profilePageText = "";
   let copyrightText = "";
@@ -244,6 +294,22 @@ async function crawlWebsite(targetUrl) {
   let detectedImageCount = 0;
   let detectedDescCount = 0;
   let logoText = "";
+
+  // Global crawl budget counter: maximum 5 HTTP fetches per website (Item 13 & Test 70)
+  let pagesFetchedCount = 0;
+  const MAX_CRAWL_PAGES = options.maxPages || 5;
+
+  async function safeFetchHtml(urlToFetch, fetchOpts = {}) {
+    if (pagesFetchedCount >= MAX_CRAWL_PAGES) {
+      console.log(`[Crawler] Global 5-page crawl limit reached (${pagesFetchedCount}/${MAX_CRAWL_PAGES}). Skipping: ${urlToFetch}`);
+      return null;
+    }
+    if (options.abortSignal && options.abortSignal.aborted) {
+      return null;
+    }
+    pagesFetchedCount++;
+    return await fetchDecodedHtml(urlToFetch, { ...fetchOpts, signal: options.abortSignal || fetchOpts.signal });
+  }
 
   let mainRes = null;
   // Fast-path: Check if the user already has the site open in a Chrome tab. Grabbing DOM directly is <100ms!
@@ -283,24 +349,25 @@ async function crawlWebsite(targetUrl) {
 
   // 1. Upfront Multi-Hop 3xx Server-Side Redirect Chain Resolution
   // Follows all 301/302/303/307/308 hops (up to 8 hops) to discover the true final destination
+  let redirectChainInfo = null;
   try {
-    const chain = await resolveRedirectChain(targetUrl, 8);
-    if (chain && chain.hops > 0 && chain.finalUrl && chain.finalUrl !== targetUrl) {
-      if (isRedirectDomain(targetUrl, chain.finalUrl)) {
+    redirectChainInfo = await resolveRedirectChain(targetUrl, 8, { signal: options.abortSignal });
+    if (redirectChainInfo && redirectChainInfo.hops > 0 && redirectChainInfo.finalUrl && redirectChainInfo.finalUrl !== targetUrl) {
+      if (isRedirectDomain(targetUrl, redirectChainInfo.finalUrl)) {
         redirected = true;
         status = "Redirect Site";
-        finalUrl = chain.finalUrl;
-        console.log(`[AI Assistant] Detected multi-hop redirect (${chain.hops} hops): ${targetUrl} -> ${finalUrl}`);
+        finalUrl = redirectChainInfo.finalUrl;
+        console.log(`[AI Assistant] Detected multi-hop redirect (${redirectChainInfo.hops} hops): ${targetUrl} -> ${finalUrl}`);
       } else {
         // Same domain redirect (e.g. http->https, www toggle, or language path /en/)
-        finalUrl = chain.finalUrl;
+        finalUrl = redirectChainInfo.finalUrl;
       }
     }
   } catch (e) { }
 
   try {
     if (!mainRes) {
-      mainRes = await fetchDecodedHtml(finalUrl, {
+      mainRes = await safeFetchHtml(finalUrl, {
         timeoutMs: 8000,
         headers: {
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
@@ -310,8 +377,8 @@ async function crawlWebsite(targetUrl) {
 
     // If HTTP failed, returned 403, 400, 0, empty HTML, or anti-bot challenge:
     // Automatically try protocol swap (http <-> https), www toggle, and root homepage fallback
-    let isMainFailed = !mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status);
-    if (isMainFailed) {
+    let isMainFailed = !mainRes || !mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status);
+    if (isMainFailed && pagesFetchedCount < MAX_CRAWL_PAGES) {
       const fallbackUrls = [];
       const urlToFallback = finalUrl || targetUrl;
       if (/^http:\/\//i.test(urlToFallback)) {
@@ -332,50 +399,24 @@ async function crawlWebsite(targetUrl) {
       } catch (e) { }
 
       const targetFallbacks = fallbackUrls.slice(0, 2);
-      if (targetFallbacks.length > 0) {
-        const fallbackResults = await Promise.allSettled(
-          targetFallbacks.map(altUrl => fetchDecodedHtml(altUrl, {
-            timeoutMs: 5000,
-            headers: {
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-            }
-          }))
-        );
-        for (const res of fallbackResults) {
-          if (res.status === "fulfilled" && res.value && res.value.ok && res.value.html && res.value.html.trim().length > 0 && !isAntiBotChallenge(res.value.html, res.value.status)) {
-            mainRes = res.value;
-            isMainFailed = false;
-            break;
+      for (const altUrl of targetFallbacks) {
+        if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
+        const res = await safeFetchHtml(altUrl, {
+          timeoutMs: 5000,
+          headers: {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
           }
+        });
+        if (res && res.ok && res.html && res.html.trim().length > 0 && !isAntiBotChallenge(res.html, res.status)) {
+          mainRes = res;
+          isMainFailed = false;
+          break;
         }
       }
     }
 
-    // REDIRECT RESCUE: If main fetch failed, or did not detect redirect, verify multi-hop redirect chain
-    if (!redirected && isMainFailed) {
-      try {
-        const checkChain = await resolveRedirectChain(targetUrl, 8);
-        if (checkChain && checkChain.hops > 0 && checkChain.finalUrl && isRedirectDomain(targetUrl, checkChain.finalUrl)) {
-          finalUrl = checkChain.finalUrl;
-          redirected = true;
-          status = "Redirect Site";
-          isMainFailed = false;
-          fetchError = null;
-          const destRes = await fetchDecodedHtml(checkChain.finalUrl, {
-            timeoutMs: 6000,
-            headers: { "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" }
-          });
-          if (destRes && destRes.html && destRes.html.trim().length > 0) {
-            mainRes = destRes;
-            mainHtml = destRes.html;
-            httpStatus = destRes.status || 200;
-          }
-        }
-      } catch (e) { }
-    }
-
     httpStatus = (mainRes && mainRes.status) || 0;
-    if (mainRes.url && mainRes.url.trim().length > 0) {
+    if (mainRes && mainRes.url && mainRes.url.trim().length > 0) {
       finalUrl = mainRes.url;
     }
     if (isRedirectDomain(targetUrl, finalUrl)) {
@@ -383,7 +424,7 @@ async function crawlWebsite(targetUrl) {
       status = "Redirect Site";
     }
 
-    if (mainRes.html && mainRes.html.trim().length > 0) {
+    if (mainRes && mainRes.html && mainRes.html.trim().length > 0) {
       mainHtml = mainRes.html;
     }
 
@@ -394,9 +435,22 @@ async function crawlWebsite(targetUrl) {
       } else if (mainRes && mainRes.status === 404) {
         status = "Domain Expired";
         fetchError = "Site returned HTTP 404 Not Found";
-      } else if (mainRes && (mainRes.status === 403 || mainRes.status === 401 || isAntiBotChallenge(mainRes.html, mainRes.status))) {
-        status = "Not Working";
-        fetchError = `Site access restricted / blocked (HTTP ${mainRes.status || 403} Security Check / Forbidden)`;
+      } else if (mainRes && (mainRes.status === 403 || mainRes.status === 401 || mainRes.status === 429 || isAntiBotChallenge(mainRes.html, mainRes.status))) {
+        // Items 4 & 9: Separate blocked/WAF from dead websites! Use Manual Review / Blocked, NOT Not Working!
+        status = "Manual Review";
+        isBlocked = true;
+        requiresManualReview = true;
+        fetchError = `Site access restricted / blocked (HTTP ${mainRes.status || 403} Security Check / Anti-bot). Manual Review required.`;
+      } else if (redirectChainInfo && redirectChainInfo.isRedirectLoop) {
+        // Item 15: Explicit redirect loop result
+        status = "Manual Review";
+        requiresManualReview = true;
+        fetchError = `Redirect loop detected at ${redirectChainInfo.loopUrl || targetUrl} after ${redirectChainInfo.hops} hops`;
+      } else if (mainRes && mainRes.isTimeout) {
+        // Item 1 & 66: Slow website -> not automatically Not Working
+        status = "Manual Review";
+        requiresManualReview = true;
+        fetchError = mainRes.error || "Connection timed out. Retry Required / Manual Review.";
       } else {
         status = "Not Working";
         fetchError = (mainRes && mainRes.error) || fetchError || `Connection failed or empty response (HTTP ${(mainRes && mainRes.status) || 0})`;
@@ -531,6 +585,7 @@ async function crawlWebsite(targetUrl) {
     // Support HTML <frameset> / <frame src="..."> / <iframe src="..."> (e.g. polyprise.com.tw)
     const frameMatches = [...mainHtml.matchAll(/<(?:frame|iframe)[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
     for (const fSrc of frameMatches.slice(0, 2)) {
+      if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
       try {
         if (!fSrc || /^(javascript:|about:|mailto:|tel:|data:)/i.test(fSrc)) continue;
         const frameUrl = new URL(fSrc, finalUrl);
@@ -539,13 +594,13 @@ async function crawlWebsite(targetUrl) {
         const fHost = frameUrl.hostname.replace(/^www\./i, "");
         if (fHost !== mainHost && !fHost.endsWith("." + mainHost)) continue;
 
-        const fRes = await fetchDecodedHtml(frameUrl.href, {
+        const fRes = await safeFetchHtml(frameUrl.href, {
           timeoutMs: 2500,
           headers: {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
           }
         });
-        if (fRes.ok && fRes.html) {
+        if (fRes && fRes.ok && fRes.html) {
           mainHtml += "\n" + fRes.html;
         }
       } catch (e) { }
@@ -748,25 +803,33 @@ async function crawlWebsite(targetUrl) {
 
       const fetchSubpageBatch = async (urls, timeoutMs = 3500) => {
         if (!urls || urls.length === 0) return [];
-        return Promise.allSettled(
-          urls.map(cUrl => fetchDecodedHtml(cUrl, {
+        const results = [];
+        for (const cUrl of urls) {
+          if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
+          const res = await safeFetchHtml(cUrl, {
             timeoutMs,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
               "Accept-Language": "en-US,en;q=0.9",
               "Referer": finalUrl
             }
-          }))
-        );
+          });
+          if (res) {
+            results.push({ status: "fulfilled", value: res });
+          } else {
+            results.push({ status: "rejected" });
+          }
+        }
+        return results;
       };
 
       // PHASE 1: Fetch dedicated Contact Us page(s) FIRST and wait before checking other pages
-      if (contactPriorityLinks.length > 0) {
+      if (contactPriorityLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
         const contactResults = await fetchSubpageBatch(contactPriorityLinks, 4000);
         for (let i = 0; i < contactPriorityLinks.length; i++) {
           const cUrl = contactPriorityLinks[i];
           const settled = contactResults[i];
-          if (settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
+          if (settled && settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
             recordSubpageContent(settled.value.url || cUrl, settled.value.html, { includeAddresses: true, includeProfileText: true });
           }
         }
@@ -774,12 +837,12 @@ async function crawlWebsite(targetUrl) {
 
       // PHASE 2: After Contact Us, fetch About / Profile / Product subpages
       const candidateSubpages = otherTopLinks.slice(0, 3);
-      if (candidateSubpages.length > 0) {
+      if (candidateSubpages.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
         const subpageResults = await fetchSubpageBatch(candidateSubpages, 3500);
         for (let i = 0; i < candidateSubpages.length; i++) {
           const cUrl = candidateSubpages[i];
           const settled = subpageResults[i];
-          if (settled.status !== "fulfilled") continue;
+          if (!settled || settled.status !== "fulfilled") continue;
           const cRes = settled.value;
 
           if (cRes && cRes.ok && cRes.html) {
@@ -789,9 +852,10 @@ async function crawlWebsite(targetUrl) {
       }
       // Double check for secondary email: if fewer than 2 corporate emails discovered so far,
       // concurrently fetch remaining contact, support, privacy, policy, terms, legal, and warranty subpages from contactLinks
-      if (allDiscoveredEmails.size < 2 && contactLinks && contactLinks.length > 0) {
+      if (allDiscoveredEmails.size < 2 && contactLinks && contactLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
         const remainingCandidates = contactLinks
-          .filter(l => !fetchedUrls.has(l))
+          .map(l => normalizeCrawlUrl(l, finalUrl))
+          .filter(l => l && !fetchedUrls.has(l) && !isIrrelevantUrl(l))
           .sort((a, b) => {
             const score = (u) => {
               if (/(?:contact|kontakt|contacto|contatti|impressum)/i.test(u)) return 15;
@@ -800,28 +864,21 @@ async function crawlWebsite(targetUrl) {
             };
             return score(b) - score(a);
           })
-          .slice(0, 8);
+          .slice(0, 4);
 
-        if (remainingCandidates.length > 0) {
-          const extraResults = await Promise.allSettled(
-            remainingCandidates.map(cUrl => {
-              fetchedUrls.add(cUrl);
-              return fetchDecodedHtml(cUrl, {
-                timeoutMs: 5000,
-                headers: {
-                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                  "Accept-Language": "en-US,en;q=0.9",
-                  "Referer": finalUrl
-                }
-              });
-            })
-          );
-          for (let i = 0; i < remainingCandidates.length; i++) {
-            const cUrl = remainingCandidates[i];
-            const settled = extraResults[i];
-            if (settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
-              recordSubpageContent(settled.value.url || cUrl, settled.value.html, { includeAddresses: true, includeProfileText: false });
+        for (const cUrl of remainingCandidates) {
+          if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
+          fetchedUrls.add(cUrl);
+          const settled = await safeFetchHtml(cUrl, {
+            timeoutMs: 4000,
+            headers: {
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.9",
+              "Referer": finalUrl
             }
+          });
+          if (settled && settled.ok && settled.html) {
+            recordSubpageContent(settled.url || cUrl, settled.html, { includeAddresses: true, includeProfileText: false });
           }
         }
       }
@@ -841,45 +898,45 @@ async function crawlWebsite(targetUrl) {
     companySocials = extractOfficialSocialLinks(allCrawlText);
 
     // High-speed smart social check: ONLY if NO email was discovered on the website at all,
-    // check company's official Facebook/LinkedIn pages concurrently with tight 1.5s timeout.
+    // check company's official Facebook/LinkedIn pages sequentially with tight 1.5s timeout.
     const socialCandidates = [companySocials.facebook, companySocials.linkedin].filter(Boolean);
-    if (allDiscoveredEmails.size === 0 && socialCandidates.length > 0) {
-      const socialTasks = socialCandidates
-        .filter(url => url && !fetchedUrls.has(url))
-        .map(async (socialUrl) => {
-          fetchedUrls.add(socialUrl);
-          try {
-            const sRes = await fetchDecodedHtml(socialUrl, {
-              timeoutMs: 1500,
-              headers: {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
-                "Upgrade-Insecure-Requests": "1"
-              }
-            });
-            if (sRes && sRes.ok && sRes.html) {
-              // Un-escape Facebook/LinkedIn JSON Unicode email obfuscation (\u0040 and %40)
-              const decodedSocialHtml = sRes.html.replace(/\\u0040/g, "@").replace(/%40/g, "@");
-              const rawSocialMatches = decodedSocialHtml.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-              for (const em of rawSocialMatches) {
-                const cleanEm = em.toLowerCase().trim();
-                if (isValidCorporateEmail(cleanEm) && !isUnwantedEmail(cleanEm)) {
-                  allDiscoveredEmails.add(cleanEm);
-                  updateEmailSource(emailSourceMap, cleanEm, socialUrl, finalUrl, targetUrl);
-                }
-              }
-              for (const em of extractEmailsFromHtml(decodedSocialHtml, finalUrl)) {
-                allDiscoveredEmails.add(em);
-                updateEmailSource(emailSourceMap, em, socialUrl, finalUrl, targetUrl);
+    if (allDiscoveredEmails.size === 0 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
+      for (const socialUrl of socialCandidates) {
+        if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
+        const normSocial = normalizeCrawlUrl(socialUrl);
+        if (!normSocial || fetchedUrls.has(normSocial)) continue;
+        fetchedUrls.add(normSocial);
+        try {
+          const sRes = await safeFetchHtml(socialUrl, {
+            timeoutMs: 1500,
+            headers: {
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+              "Sec-Fetch-Dest": "document",
+              "Sec-Fetch-Mode": "navigate",
+              "Sec-Fetch-Site": "none",
+              "Sec-Fetch-User": "?1",
+              "Upgrade-Insecure-Requests": "1"
+            }
+          });
+          if (sRes && sRes.ok && sRes.html) {
+            // Un-escape Facebook/LinkedIn JSON Unicode email obfuscation (\u0040 and %40)
+            const decodedSocialHtml = sRes.html.replace(/\\u0040/g, "@").replace(/%40/g, "@");
+            const rawSocialMatches = decodedSocialHtml.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+            for (const em of rawSocialMatches) {
+              const cleanEm = em.toLowerCase().trim();
+              if (isValidCorporateEmail(cleanEm) && !isUnwantedEmail(cleanEm)) {
+                allDiscoveredEmails.add(cleanEm);
+                updateEmailSource(emailSourceMap, cleanEm, socialUrl, finalUrl, targetUrl);
               }
             }
-          } catch (e) { }
-        });
-      await Promise.allSettled(socialTasks);
+            for (const em of extractEmailsFromHtml(decodedSocialHtml, finalUrl)) {
+              allDiscoveredEmails.add(em);
+              updateEmailSource(emailSourceMap, em, socialUrl, finalUrl, targetUrl);
+            }
+          }
+        } catch (e) { }
+      }
     }
   } catch (err) {
     fetchError = err.message || "Failed to fetch website";
@@ -1002,6 +1059,12 @@ async function crawlWebsite(targetUrl) {
     addressCandidates,
     detectedAddresses: addressCandidates.map(c => (typeof c === "object" ? c.raw : c)),
     isDynamicSpa,
+    spaDetected: isDynamicSpa,
+    incompleteExtraction: !!(isDynamicSpa || (mainHtml && stripHtml(mainHtml).length < 250)),
+    pagesFetchedCount,
+    maxPages: MAX_CRAWL_PAGES,
+    isBlocked: isBlocked || (httpStatus === 403 || httpStatus === 401 || httpStatus === 429),
+    requiresManualReview: requiresManualReview || status === "Manual Review",
     contactPageText: contactPageText.slice(0, 12000),
     footerText: footerText.slice(0, 4000),
     profilePageText: profilePageText.slice(0, 8000),
@@ -1037,7 +1100,7 @@ function discoverContactLinks(html, baseUrl) {
     const raw = match[1].trim();
     const innerText = match[2].replace(/<[^>]+>/g, "").trim().toLowerCase();
     const rawLower = raw.toLowerCase();
-    if (!raw || /^(javascript:|mailto:|tel:|#)/i.test(raw)) continue;
+    if (!raw || /^(javascript:|mailto:|tel:|#)/i.test(raw) || isIrrelevantUrl(rawLower)) continue;
 
     let score = 0;
     if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us|kontakt|contacto|contactenos|contáctenos|contatti|contattaci|contactez-nous|nous-contacter|contato|fale-conosco|hubungi|hubungi-kami|kontak|kontak-kami|impressum|imprint)\b/i.test(rawLower)) score += 100;
@@ -1097,7 +1160,7 @@ function discoverProductAndCatalogLinks(html, baseUrl) {
     const raw = match[1].trim();
     const innerText = match[2].replace(/<[^>]+>/g, "").trim().toLowerCase();
     const rawLower = raw.toLowerCase();
-    if (!raw || /^(javascript:|mailto:|tel:|#)/i.test(raw)) continue;
+    if (!raw || /^(javascript:|mailto:|tel:|#)/i.test(raw) || isIrrelevantUrl(rawLower)) continue;
 
     let score = 0;
     let isRestrictedHint = false;
@@ -1783,19 +1846,41 @@ function extractImageAttributes(html) {
   if (!html || typeof html !== "string") return "";
   const tokens = [];
 
-  // 1. Human-readable alt & title attributes on images
-  const imgMatches = [...html.matchAll(/<img[^>]+(?:alt|title)=["']([^"']+)["']/gi)];
+  // 1. Human-readable alt, title, and aria-label attributes on images
+  const imgMatches = [...html.matchAll(/<img[^>]+(?:alt|title|aria-label|data-alt|data-title)=["']([^"']+)["']/gi)];
   for (const m of imgMatches) {
     if (m[1]) tokens.push(m[1].trim());
   }
 
-  // 2. Human-readable title and aria-label attributes on links and interactive elements
+  // 2. Image src and data-src filenames (e.g. src="/products/medical-drill.jpg" -> "medical drill")
+  const imgSrcMatches = [...html.matchAll(/<img[^>]+(?:src|data-src)=["']([^"']+)["']/gi)];
+  for (const m of imgSrcMatches) {
+    const raw = (m[1] || "").trim();
+    if (!raw || /^(?:data:)/i.test(raw)) continue;
+    try {
+      const pathname = new URL(raw, "http://localhost").pathname;
+      const filename = pathname.split("/").pop() || "";
+      const baseName = filename.replace(/\.[a-zA-Z0-9]+$/, "");
+      const words = baseName.replace(/[/\\_\-.]+/g, " ").trim();
+      if (words.length > 2) {
+        tokens.push(words);
+      }
+    } catch (e) { }
+  }
+
+  // 3. Image captions and figcaptions
+  const captionMatches = [...html.matchAll(/<(?:figcaption|caption)[^>]*>([\s\S]*?)<\/(?:figcaption|caption)>/gi)];
+  for (const m of captionMatches) {
+    if (m[1]) tokens.push(stripHtml(m[1]).trim());
+  }
+
+  // 4. Human-readable title and aria-label attributes on links and interactive elements
   const linkMatches = [...html.matchAll(/<(?:a|button)[^>]+(?:title|aria-label)=["']([^"']+)["']/gi)];
   for (const m of linkMatches) {
     if (m[1]) tokens.push(m[1].trim());
   }
 
-  // 3. Anchor link URLs pathname words (e.g. href="/products/medical-equipment" -> "medical equipment")
+  // 5. Anchor link URLs pathname words (e.g. href="/products/medical-equipment" -> "medical equipment")
   const hrefMatches = [...html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)];
   for (const m of hrefMatches) {
     const raw = (m[1] || "").trim();
@@ -1809,7 +1894,7 @@ function extractImageAttributes(html) {
     } catch (e) { }
   }
 
-  // 4. Meta descriptions and keywords
+  // 6. Meta descriptions and keywords
   const metaMatches = [...html.matchAll(/<meta[^>]+(?:name|property)=["'](?:description|keywords|og:description|og:title)["'][^>]+content=["']([^"']+)["']/gi)];
   for (const m of metaMatches) {
     if (m[1]) tokens.push(m[1].trim());

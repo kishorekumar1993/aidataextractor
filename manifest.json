@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "AI Web Crawler & Auto Pre-Fill Assistant",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "AI-powered web crawler and auto pre-filler for data entry portals based on strict instruction sheet guidelines.",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
+    "unlimitedStorage",
     "tabs"
   ],
   "host_permissions": [

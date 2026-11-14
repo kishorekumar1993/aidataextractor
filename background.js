@@ -42,14 +42,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // Bounded safety timeout: 28s (well before Chrome's 30s message channel deadline)
     let finished = false;
+    const crawlAbortController = typeof AbortController !== "undefined" ? new AbortController() : null;
+
     const timeoutId = setTimeout(() => {
       if (finished) return;
       finished = true;
       clearInterval(keepAlive);
-      console.warn("[Background] Crawl reached safety boundary (28s). Returning timeout Not Working result before channel closes.");
+      if (crawlAbortController) {
+        try { crawlAbortController.abort(); } catch (e) { }
+      }
+      console.warn("[Background] Crawl reached safety boundary (28s). Returning Manual Review / Retry Required before channel closes.");
       try {
-        const timeoutNotWorking = {
-          websiteStatus: "Not Working",
+        const timeoutReview = {
+          websiteStatus: "Manual Review",
+          requiresManualReview: true,
+          retryRequired: true,
           businessType: "",
           companyProfile: "",
           companyName: "",
@@ -63,65 +70,94 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           numberOfProducts: "",
           productImages: "",
           numberOfProductDescriptions: "",
-          errorCategory: "Unreachable / Timeout",
-          errorKeyword: "Connection Timeout / Unresponsive",
+          errorCategory: "Crawl Timeout",
+          errorKeyword: "Connection Timeout / Slow Response",
           errorSourceUrl: request.url,
-          errorSnippet: "Website took longer than 28 seconds to respond or server is unresponsive (Rule 1).",
-          notWorkingReason: "Website took longer than 28 seconds to respond or server is unresponsive (Rule 1).",
+          errorSnippet: "Website took longer than 28 seconds to respond or server is unresponsive. Retry Required / Manual Review.",
+          notWorkingReason: "Website took longer than 28 seconds to respond or server is unresponsive. Retry Required / Manual Review.",
           _finalUrl: request.url,
           _originalUrl: request.url,
-          _note: "Crawl timeout reached safety boundary - Marked as Not Working (Rule 1)"
+          _note: "Crawl timeout reached safety boundary - Marked for Manual Review / Retry Required"
         };
-        if (typeof recordNonWorkingWebsite === "function") {
-          recordNonWorkingWebsite(timeoutNotWorking).catch(() => {});
-        }
-        sendResponse({ success: true, data: timeoutNotWorking });
+        // DO NOT record as confirmed Not Working in error dataset!
+        sendResponse({ success: true, data: timeoutReview });
       } catch (err) {
         try { sendResponse({ success: false, error: "Crawl timeout" }); } catch (e) { }
       }
     }, 28000);
 
-    handleCrawlAndExtract(request.url, request.extractionMode)
+    handleCrawlAndExtract(request.url, request.extractionMode, { abortSignal: crawlAbortController ? crawlAbortController.signal : null })
       .then(result => {
-        if (finished) return;
+        if (finished) return; // Late result after timeout: strictly ignore to prevent duplicate records!
         finished = true;
         clearTimeout(timeoutId);
         clearInterval(keepAlive);
         try { sendResponse({ success: true, data: result }); } catch (e) { }
       })
       .catch(error => {
-        if (finished) return;
+        if (finished) return; // Late error after timeout: strictly ignore
         finished = true;
         clearTimeout(timeoutId);
         clearInterval(keepAlive);
         console.warn("[Background] handleCrawlAndExtract caught error:", error.message);
         try {
-          const fetchErrData = {
-            websiteStatus: "Not Working",
-            businessType: "",
-            companyProfile: "",
-            companyName: "",
-            countryName: "",
-            companyAddress: "",
-            state: "",
-            city: "",
-            emailId: "",
-            secondaryEmailId: "",
-            phoneNumber: "",
-            numberOfProducts: "",
-            productImages: "",
-            numberOfProductDescriptions: "",
-            errorSourceUrl: request.url,
-            notWorkingReason: `Unreachable / Failed to Fetch (${error.message || "Site error"})`,
-            _note: `Unreachable / Failed to Fetch (${error.message || "Site error"}) - Marked as Not Working`
-          };
-          if (typeof recordNonWorkingWebsite === "function") {
-            recordNonWorkingWebsite(fetchErrData).catch(() => {});
+          const errMsg = String(error && error.message || "").toLowerCase();
+          const isConfirmedDead = /nxdomain|enotfound|domain expired|dns failure|getaddrinfo\s+enotfound|http\s*404/i.test(errMsg);
+
+          if (isConfirmedDead) {
+            const confirmedDeadData = {
+              websiteStatus: "Not Working",
+              businessType: "",
+              companyProfile: "",
+              companyName: "",
+              countryName: "",
+              companyAddress: "",
+              state: "",
+              city: "",
+              emailId: "",
+              secondaryEmailId: "",
+              phoneNumber: "",
+              numberOfProducts: "",
+              productImages: "",
+              numberOfProductDescriptions: "",
+              errorCategory: "Domain Inaccessible",
+              errorKeyword: "DNS Lookup Failed / Domain Expired",
+              errorSourceUrl: request.url,
+              notWorkingReason: `Confirmed Domain Failure (${error.message || "Domain not found"})`,
+              _note: `Confirmed Domain Failure (${error.message || "Domain not found"}) - Marked as Not Working`
+            };
+            if (typeof recordNonWorkingWebsite === "function") {
+              recordNonWorkingWebsite(confirmedDeadData).catch(() => {});
+            }
+            sendResponse({ success: true, data: confirmedDeadData });
+          } else {
+            // Temporary error, timeout, abort, rate limit, or network disruption -> Separate from confirmed failure!
+            const temporaryErrData = {
+              websiteStatus: "Manual Review",
+              requiresManualReview: true,
+              retryRequired: true,
+              businessType: "",
+              companyProfile: "",
+              companyName: "",
+              countryName: "",
+              companyAddress: "",
+              state: "",
+              city: "",
+              emailId: "",
+              secondaryEmailId: "",
+              phoneNumber: "",
+              numberOfProducts: "",
+              productImages: "",
+              numberOfProductDescriptions: "",
+              errorCategory: "Temporary Network / Crawl Error",
+              errorKeyword: "Temporary Error",
+              errorSourceUrl: request.url,
+              notWorkingReason: `Temporary network/fetch issue: ${error.message || "Temporary error"}. Retry Required / Manual Review.`,
+              _note: `Temporary crawl exception (${error.message || "Temporary error"}) - Marked for Manual Review / Retry Required`
+            };
+            // Never record temporary errors as confirmed Not Working!
+            sendResponse({ success: true, data: temporaryErrData });
           }
-          sendResponse({
-            success: true,
-            data: fetchErrData
-          });
         } catch (e) { }
       });
     return true;

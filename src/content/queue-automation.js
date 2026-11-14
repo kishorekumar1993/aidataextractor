@@ -8,59 +8,127 @@
   // =========================================================================
 
   function findSubmitButton() {
-    return document.getElementById("btnSubmitForm") ||
+    // 1. Explicit direct portal submit button IDs take first priority
+    const explicitBtn = document.getElementById("btnSubmitForm") ||
       document.getElementById("btnSubmit") ||
       document.getElementById("submitForm") ||
       document.getElementById("btn-submit") ||
       document.getElementById("btn_submit") ||
-      document.getElementById("submitBtn") ||
-      document.getElementById("submit") ||
-      document.querySelector('button[type="submit"]') ||
-      document.querySelector('input[type="submit"]') ||
-      document.querySelector('.btn-submit') ||
-      document.querySelector('button[name="submit"]') ||
-      document.querySelector('input[name="submit"]') ||
-      document.querySelector('input[name="btnSubmit"]') ||
-      Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]')).find(b => {
-        if (b.closest("#ai-prefill-widget")) return false; // ignore assistant buttons
-        const t = (b.textContent || b.value || "").trim().toLowerCase();
-        return t === "submit" || (t.includes("submit") && !t.includes("not working") && !t.includes("from queue") && !t.includes("reset") && !t.includes("cancel"));
-      });
+      document.getElementById("submitBtn");
+    if (explicitBtn) {
+      if (typeof explicitBtn.closest === "function") {
+        const widget = explicitBtn.closest("#ai-prefill-widget");
+        if (widget && widget.id === "ai-prefill-widget") {
+          // ignore widget button
+        } else {
+          return explicitBtn;
+        }
+      } else {
+        return explicitBtn;
+      }
+    }
+
+    // 2. Data entry form search
+    const statusEl = document.getElementById("selectWebsiteStatus") ||
+      document.getElementById("website-status") ||
+      (typeof AIExt.detectFormElements === "function" ? AIExt.detectFormElements().websiteStatus : null);
+    const targetForm = (statusEl && typeof statusEl.closest === "function") ? statusEl.closest("form") : null;
+    if (targetForm && typeof targetForm.querySelector === "function") {
+      const formSubmit = targetForm.querySelector('#btnSubmitForm, #btnSubmit, #submitForm, #btn-submit, #btn_submit, #submitBtn, button[type="submit"], input[type="submit"], .btn-submit, button[name="submit"], input[name="submit"], input[name="btnSubmit"]');
+      if (formSubmit) return formSubmit;
+    }
+
+    // 3. Fallback scoped document search
+    const candidates = Array.from(document.querySelectorAll('button[type="submit"], input[type="submit"], .btn-submit, button, input[type="button"]')).filter(b => {
+      if (typeof b.closest === "function") {
+        const w = b.closest("#ai-prefill-widget");
+        if (w && w.id === "ai-prefill-widget") return false;
+      }
+      const t = (b.textContent || b.value || "").trim().toLowerCase();
+      const idCls = `${b.id || ""} ${b.className || ""} ${b.name || ""}`.toLowerCase();
+      if (idCls.includes("login") || idCls.includes("search") || idCls.includes("filter") || idCls.includes("cancel") || idCls.includes("reset") || idCls.includes("close")) return false;
+      return t === "submit" || (t.includes("submit") && !t.includes("not working") && !t.includes("from queue") && !t.includes("reset") && !t.includes("cancel"));
+    });
+
+    return candidates[0] || null;
   }
 
   function findModalConfirmButton() {
     // 1. Direct portal confirmation modal button IDs (e.g. dataextraction portal)
-    // ONLY match if the modal is genuinely ACTIVE / VISIBLE (has class 'active' or 'show')
     const notWorkingModal = document.getElementById("notWorkingConfirmModal");
-    if (notWorkingModal && (notWorkingModal.classList.contains("active") || notWorkingModal.classList.contains("show"))) {
-      const notWorkingOk = document.getElementById("btnNotWorkingConfirmOk");
-      if (notWorkingOk) return notWorkingOk;
+    if (notWorkingModal) {
+      const isVisible = (notWorkingModal.classList && (notWorkingModal.classList.contains("active") || notWorkingModal.classList.contains("show"))) ||
+        (notWorkingModal.style && (notWorkingModal.style.display === "block" || notWorkingModal.style.display === "flex")) ||
+        (notWorkingModal.offsetParent !== null && notWorkingModal.offsetParent !== undefined);
+      if (isVisible) {
+        const notWorkingOk = document.getElementById("btnNotWorkingConfirmOk");
+        if (notWorkingOk) return notWorkingOk;
+      }
     }
 
     const actionModal = document.getElementById("actionConfirmModal");
-    if (actionModal && (actionModal.classList.contains("active") || actionModal.classList.contains("show"))) {
-      const actionOk = document.getElementById("btnActionConfirmOk");
-      if (actionOk) return actionOk;
+    if (actionModal) {
+      const isVisible = (actionModal.classList && (actionModal.classList.contains("active") || actionModal.classList.contains("show"))) ||
+        (actionModal.style && (actionModal.style.display === "block" || actionModal.style.display === "flex")) ||
+        (actionModal.offsetParent !== null && actionModal.offsetParent !== undefined);
+      if (isVisible) {
+        const actionOk = document.getElementById("btnActionConfirmOk");
+        if (actionOk) return actionOk;
+      }
     }
 
     // 2. SweetAlert / SweetAlert2
-    const swalConfirm = document.querySelector(".swal2-confirm, .swal-button--confirm");
-    if (swalConfirm && swalConfirm.offsetParent !== null) return swalConfirm;
+    const swalContainer = document.querySelector(".swal2-container, .swal-overlay");
+    if (swalContainer) {
+      const swalConfirm = swalContainer.querySelector ? swalContainer.querySelector(".swal2-confirm, .swal-button--confirm") : null;
+      if (swalConfirm) return swalConfirm;
+    }
 
-    // 3. Active / visible modal overlays & dialogs
-    const activeModals = Array.from(document.querySelectorAll('.modal-overlay.active, .modal.active, .modal.show, .swal2-container, .swal-overlay, div[role="dialog"].active, .confirmation-modal.active, div[class*="modal"].active'));
+    // 3. Active / visible modal overlays & dialogs specifically for confirmation
+    const activeModals = Array.from(document.querySelectorAll('.modal-overlay.active, .modal.active, .modal.show, div[role="dialog"].active, div[role="dialog"].show, .confirmation-modal.active'));
     for (const modal of activeModals) {
-      if (modal.id === "ai-prefill-widget" || modal.closest("#ai-prefill-widget")) continue;
-      const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+      if (typeof modal.closest === "function") {
+        const w = modal.closest("#ai-prefill-widget");
+        if (modal.id === "ai-prefill-widget" || (w && w.id === "ai-prefill-widget")) continue;
+      }
+      if (modal.offsetParent === null) continue;
+      const modalText = (modal.textContent || "").toLowerCase();
+      const isConfirmDialog = modalText.includes("confirm") || modalText.includes("not working") || modalText.includes("are you sure") || modalText.includes("save") || modalText.includes("submit");
+      if (!isConfirmDialog) continue;
+
+      const buttons = modal.querySelectorAll ? Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]')) : [];
       const okBtn = buttons.find(b => {
-        if (b.id === "btnNotWorkingConfirmCancel" || b.id === "btnCloseNotWorkingModal" || b.classList.contains("btn-confirm-cancel")) return false;
+        if (b.offsetParent === null) return false;
+        if (b.id === "btnNotWorkingConfirmCancel" || b.id === "btnCloseNotWorkingModal") return false;
+        if (b.classList && (b.classList.contains("btn-confirm-cancel") || b.classList.contains("swal2-cancel"))) return false;
         const bText = (b.textContent || b.value || "").trim().toLowerCase();
-        return b.id === "btnNotWorkingConfirmOk" || b.classList.contains("btn-confirm-ok") || bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText === "proceed" || bText.includes("ok");
+        return b.id === "btnNotWorkingConfirmOk" || (b.classList && b.classList.contains("btn-confirm-ok")) || bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText === "proceed";
       });
       if (okBtn) return okBtn;
     }
 
     return null;
+  }
+
+  // =========================================================================
+  // SUBMISSION LEDGER (Item 51)
+  // =========================================================================
+  state.submissionLedger = state.submissionLedger || new Set();
+
+  function recordSubmissionInLedger(url) {
+    if (!url) return;
+    const norm = url.trim().toLowerCase().replace(/\/+$/, "");
+    state.submissionLedger.add(norm);
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      const list = Array.from(state.submissionLedger).slice(-200);
+      chrome.storage.local.set({ submissionLedger: list });
+    }
+  }
+
+  function isAlreadySubmitted(url) {
+    if (!url) return false;
+    const norm = url.trim().toLowerCase().replace(/\/+$/, "");
+    return !!(state.submissionLedger && state.submissionLedger.has(norm));
   }
 
   // =========================================================================
@@ -242,11 +310,12 @@
           triggerFromQueue();
         }
 
-        // After 20 attempts (~3s), if we have some URL even if identical or default, proceed with it
+        // Item 46: After 20 attempts, STOP instead of submitting the old/duplicate URL
         if (attempts >= 20) {
           clearInterval(queuePollTimer);
           if (state.isBatchNotWorkingActive) {
-            executeBatchNotWorkingSubmission(freshUrl || currentUrl);
+            console.warn(`[AI Assistant] Queue did not advance to a new URL after 20 attempts (current="${freshUrl || currentUrl}"). Stopping batch to prevent duplicate submission.`);
+            stopBatchNotWorking("⚠️ Queue did not advance to a new URL. Batch stopped to prevent duplicate submissions.");
           }
         }
       }, 150);
@@ -258,6 +327,20 @@
 
   function executeBatchNotWorkingSubmission(currentUrl) {
     if (!state.isBatchNotWorkingActive) return;
+
+    // Item 52: Validate portal fields exist before attempting submission
+    const elements = typeof AIExt.detectFormElements === "function" ? AIExt.detectFormElements() : {};
+    if (!elements.websiteStatus && !document.getElementById("selectWebsiteStatus") && !document.getElementById("website-status")) {
+      console.error("[AI Assistant] Target portal fields missing or changed. Halting batch safely.");
+      stopBatchNotWorking("⚠️ Target portal fields not found. Batch halted safely.");
+      return;
+    }
+
+    // Item 51: Check submission ledger to prevent duplicate submissions
+    if (!currentUrl || !currentUrl.trim()) {
+      console.warn("[AI Assistant] Cannot submit: Empty URL.");
+      return;
+    }
 
     const normSubmitted = (currentUrl || `item-${Date.now()}`).trim().toLowerCase().replace(/\/+$/, "");
     const remainingText = state.batchNotWorkingRemaining === -1 ? "ALL" : `${state.batchNotWorkingRemaining} left`;
@@ -401,7 +484,6 @@
       _note: reason
     };
     AIExt.fillFormFields(notWorkingData);
-    state.isExplicitNotWorkingSubmit = false;
 
     try {
       if (typeof AIExt !== "undefined" && typeof AIExt.sendRuntimeMessage === "function") {
@@ -422,6 +504,7 @@
     // Execute submission
     setTimeout(() => {
       autoSubmitNotWorking(currentUrl);
+      state.isExplicitNotWorkingSubmit = false;
     }, 100);
   }
 
@@ -612,7 +695,34 @@
    */
   function autoSubmitNotWorking(specificUrl) {
     const submittedUrl = specificUrl || (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "");
-    console.log(`[AI Assistant] Auto-submitting 'Not Working' record for: ${submittedUrl}...`);
+
+    // Item 51: Ledger duplicate prevention (skip check if explicitly submitted by user button or batch)
+    if (submittedUrl && !state.isBatchNotWorkingActive && !state.isExplicitNotWorkingSubmit && isAlreadySubmitted(submittedUrl)) {
+      console.warn(`[AI Assistant] URL '${submittedUrl}' was already submitted. Skipping auto-submit to prevent duplicate.`);
+      return false;
+    }
+
+    // Item 47: Only allow confirmed Not Working records
+    if (!state.isBatchNotWorkingActive && !state.isExplicitNotWorkingSubmit) {
+      const curData = state.cachedExtractedData || state.currentNotWorkingData;
+      if (curData && curData.websiteStatus && curData.websiteStatus !== "Not Working") {
+        console.warn(`[AI Assistant] Refusing to auto-submit: Status is '${curData.websiteStatus}', not confirmed 'Not Working'.`);
+        AIExt.updateStatus(`⚠️ Review required for status '${curData.websiteStatus}'. Auto-submit skipped.`, "warning");
+        return false;
+      }
+    }
+
+    // Item 52: Validate portal fields exist
+    const elements = typeof AIExt.detectFormElements === "function" ? AIExt.detectFormElements() : {};
+    if (!elements.websiteStatus && !document.getElementById("selectWebsiteStatus") && !document.getElementById("website-status")) {
+      console.error("[AI Assistant] Required portal elements not found. Stopping auto-submit safely.");
+      return false;
+    }
+
+    if (submittedUrl) {
+      recordSubmissionInLedger(submittedUrl);
+    }
+    console.log(`[AI Assistant] Auto-submitting 'Not Working' record for: ${submittedUrl || "current form"}...`);
 
     // Ensure pipeline state is preserved across form submission reload!
     if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
@@ -798,6 +908,46 @@
     }
   }, true);
 
+  // Item 50: Validate persisted state before resuming
+  function initPersistedBatchState() {
+    if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return;
+    chrome.storage.local.get(["batchNotWorking", "submissionLedger"], (res) => {
+      if (res && res.submissionLedger && Array.isArray(res.submissionLedger)) {
+        state.submissionLedger = new Set(res.submissionLedger);
+      } else {
+        state.submissionLedger = state.submissionLedger || new Set();
+      }
+
+      if (res && res.batchNotWorking) {
+        const bn = res.batchNotWorking;
+        const now = Date.now();
+        const MAX_STALE_MS = 5 * 60 * 1000; // 5 minutes
+        const elements = typeof AIExt.detectFormElements === "function" ? AIExt.detectFormElements() : {};
+        const isPortalValid = !!(elements.websiteStatus || document.getElementById("selectWebsiteStatus") || document.getElementById("website-status"));
+
+        if (bn.active && bn.updatedAt && (now - bn.updatedAt < MAX_STALE_MS) && isPortalValid && bn.remaining !== 0) {
+          console.log("[AI Assistant] Resuming valid persisted Batch Not Working state:", bn);
+          state.isBatchNotWorkingActive = true;
+          state.batchNotWorkingRemaining = bn.remaining;
+          state.batchNotWorkingTotal = bn.total || 10;
+          state.lastSubmittedUrl = bn.lastSubmittedUrl || "";
+          updateBatchButtonsState();
+          setTimeout(() => {
+            if (state.isBatchNotWorkingActive) {
+              processNextBatchNotWorkingItem();
+            }
+          }, 1000);
+        } else {
+          console.log("[AI Assistant] Discarding stale or invalid batch state from storage.");
+          chrome.storage.local.remove(["batchNotWorking"]);
+        }
+      }
+    });
+  }
+
+  // Initialize on load
+  initPersistedBatchState();
+
   Object.assign(AIExt, {
     triggerFromQueue,
     startBatchNotWorking,
@@ -811,6 +961,8 @@
     autoSubmitNotWorking,
     findSubmitButton,
     findModalConfirmButton,
-    extractLiveDomPayload
+    extractLiveDomPayload,
+    isAlreadySubmitted,
+    recordSubmissionInLedger
   });
 })(globalThis.__AI_EXTENSION__ = globalThis.__AI_EXTENSION__ || {});

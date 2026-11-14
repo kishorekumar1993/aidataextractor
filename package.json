@@ -3,7 +3,9 @@
   "version": "2.0.0",
   "description": "AI Data Entry Assistant Chrome Extension",
   "scripts": {
-    "test": "node tests/benchmark.test.js"
+    "test": "node tests/benchmark.test.js && node tests/review-items-regression.test.js",
+    "test:benchmark": "node tests/benchmark.test.js",
+    "test:review": "node tests/review-items-regression.test.js"
   },
   "keywords": [
     "chrome-extension",

@@ -2920,11 +2920,11 @@ async function runAsyncTests() {
 
     for (const ac of adultCases) {
       const res = ctx.detectRestrictedKeywordsSingle(ac.text, `<html><head><title>${ac.title}</title></head></html>`, ac.url);
-      assert.strictEqual(res.isRestricted, false, `Must NOT restrict adult false positive: ${ac.url}`);
-      assert.ok(res.classification === "FALSE_POSITIVE" || res.classification === "NO_RESTRICTED_CATEGORY", `Classification must be non-restricted for ${ac.url}`);
+      assert.strictEqual(res.isRestricted, true, `Must strictly restrict adult/animal mention: ${ac.url}`);
+      assert.strictEqual(res.classification, "GENUINE_RESTRICTED");
     }
 
-    // 2. Aircraft / Aerospace False Positives (Applications, Materials & Served Industries)
+    // 2. Aircraft / Aerospace Mentions Trigger Restriction
     const aeroCases = [
       {
         url: "https://odu.de/industries",
@@ -2990,11 +2990,11 @@ async function runAsyncTests() {
 
     for (const aero of aeroCases) {
       const res = ctx.detectRestrictedKeywordsSingle(aero.text, `<html><head><title>${aero.title}</title></head></html>`, aero.url);
-      assert.strictEqual(res.isRestricted, false, `Must NOT restrict aerospace/aircraft application: ${aero.url}`);
-      assert.ok(res.classification === "FALSE_POSITIVE" || res.classification === "NO_RESTRICTED_CATEGORY", `Classification must be non-restricted for ${aero.url}`);
+      assert.strictEqual(res.isRestricted, true, `Must strictly restrict aerospace/aircraft mention: ${aero.url}`);
+      assert.strictEqual(res.classification, "GENUINE_RESTRICTED");
     }
 
-    // 3. Animals False Positives (Welfare, Cruelty-Free Vegan, Government Administration)
+    // 3. Animals Mentions Trigger Restriction
     const animalCases = [
       {
         url: "https://zpkolhapur.gov.in/en",
@@ -3015,21 +3015,21 @@ async function runAsyncTests() {
 
     for (const anim of animalCases) {
       const res = ctx.detectRestrictedKeywordsSingle(anim.text, `<html><head><title>${anim.title}</title></head></html>`, anim.url);
-      assert.strictEqual(res.isRestricted, false, `Must NOT restrict animal false positive: ${anim.url}`);
-      assert.ok(res.classification === "FALSE_POSITIVE" || res.classification === "NO_RESTRICTED_CATEGORY", `Classification must be non-restricted for ${anim.url}`);
+      assert.strictEqual(res.isRestricted, true, `Must strictly restrict animal mention: ${anim.url}`);
+      assert.strictEqual(res.classification, "GENUINE_RESTRICTED");
     }
 
-    // 4. Alcohol False Positive (Architectural project credit / color finish)
+    // 4. Alcohol Mention (Whiskey Creek) Triggers Restriction
     const alcoholCase = {
       url: "https://alumicor.com/projects",
       title: "Alumicor Architectural Aluminum",
       text: "Alumicor architectural aluminum windows, curtain walls, and entrances. Featured project: Whiskey Creek Community Center."
     };
     const alcRes = ctx.detectRestrictedKeywordsSingle(alcoholCase.text, `<html><head><title>${alcoholCase.title}</title></head></html>`, alcoholCase.url);
-    assert.strictEqual(alcRes.isRestricted, false, "Must NOT restrict architectural project mentioning Whiskey Creek");
-    assert.ok(alcRes.classification === "FALSE_POSITIVE" || alcRes.classification === "NO_RESTRICTED_CATEGORY");
+    assert.strictEqual(alcRes.isRestricted, true, "Must strictly restrict alcohol keyword 'whiskey'");
+    assert.strictEqual(alcRes.classification, "GENUINE_RESTRICTED");
 
-    // 4b. Industrial False Positives (Negis Rubber/Gaskets, Hospital Lighting, Knife Gate Valves, Bakery Ovens)
+    // 4b. Industrial Mentions of Restricted Words (Marine, Hospital, Knife, Bakery, Chemical) Trigger Restriction
     const industrialFpCases = [
       {
         url: "http://www.negis.com.sg/",
@@ -3065,8 +3065,8 @@ async function runAsyncTests() {
 
     for (const ifp of industrialFpCases) {
       const res = ctx.detectRestrictedKeywordsSingle(ifp.text, `<html><head><title>${ifp.title}</title></head></html>`, ifp.url);
-      assert.strictEqual(res.isRestricted, false, `Must NOT restrict industrial false positive: ${ifp.url}`);
-      assert.ok(res.classification === "FALSE_POSITIVE" || res.classification === "NO_RESTRICTED_CATEGORY", `Classification must be non-restricted for ${ifp.url}`);
+      assert.strictEqual(res.isRestricted, true, `Must strictly restrict industrial mention of restricted terms: ${ifp.url}`);
+      assert.strictEqual(res.classification, "GENUINE_RESTRICTED");
     }
 
     // 5. Genuine Restricted Businesses MUST Remain Strictly Restricted
@@ -3106,16 +3106,25 @@ async function runAsyncTests() {
       "<html><head><title>Avon Gear Precision</title></head></html>",
       "https://avongear.com/capabilities"
     );
-    assert.strictEqual(sampleAvonEvidence.classification, "FALSE_POSITIVE");
-    assert.strictEqual(sampleAvonEvidence.is_restricted, false);
+    assert.strictEqual(sampleAvonEvidence.classification, "GENUINE_RESTRICTED");
+    assert.strictEqual(sampleAvonEvidence.is_restricted, true);
+    assert.strictEqual(sampleAvonEvidence.isRestricted, true);
     assert.strictEqual(sampleAvonEvidence.restricted_category, "Aerospace");
     assert.strictEqual(sampleAvonEvidence.matched_keyword, "aerospace");
     assert.strictEqual(sampleAvonEvidence.matched_page, "https://avongear.com/capabilities");
-    assert.ok(sampleAvonEvidence.matched_context.includes("aerospace applications"));
+    assert.ok(sampleAvonEvidence.matched_context.includes("aerospace"));
     assert.ok(sampleAvonEvidence.confidence >= 0.90);
     assert.ok(sampleAvonEvidence.reason.length > 10);
 
-    // 7. End-to-end QC Preservation: Eligible company with false-positive application mention keeps Working status
+    // 7. Substring safety: 'ownership' must not trigger 'ship'
+    const ownershipRes = ctx.detectRestrictedKeywordsSingle("Proudly under family ownership since 1985.", "", "https://example.com/about");
+    assert.strictEqual(ownershipRes.isRestricted, false, "'ownership' must NOT trigger 'ship' restriction");
+
+    // 8. Genuine occurrence of 'ship' must trigger
+    const shipRes = ctx.detectRestrictedKeywordsSingle("We build and repair ship components.", "", "https://example.com/about");
+    assert.strictEqual(shipRes.isRestricted, true, "Genuine 'ship' must trigger restriction");
+
+    // 9. End-to-end QC: Mention of restricted category triggers Not Working and clears fields
     const mockAvonCrawl = {
       finalUrl: "https://avongear.com/about",
       originalUrl: "https://avongear.com",
@@ -3127,8 +3136,8 @@ async function runAsyncTests() {
       ]
     };
     const avonCheck = ctx.detectRestrictedKeywords(mockAvonCrawl.bodyText, mockAvonCrawl.mainHtml, mockAvonCrawl.crawledPages);
-    assert.strictEqual(avonCheck.classification, "FALSE_POSITIVE");
-    assert.strictEqual(avonCheck.isRestricted, false);
+    assert.strictEqual(avonCheck.classification, "GENUINE_RESTRICTED");
+    assert.strictEqual(avonCheck.isRestricted, true);
 
     const avonExtracted = {
       websiteStatus: "Working",
@@ -3144,11 +3153,9 @@ async function runAsyncTests() {
       numberOfProductDescriptions: "3"
     };
     const avonQc = ctx.applyStrictInstructions(avonExtracted, mockAvonCrawl, avonCheck);
-    assert.strictEqual(avonQc.websiteStatus, "Working", "False-positive application must preserve Working website status");
-    assert.strictEqual(avonQc.companyName, "Avon Gear Company");
-    assert.strictEqual(avonQc.classification, "FALSE_POSITIVE");
-    assert.strictEqual(avonQc.is_restricted, false);
-    assert.strictEqual(avonQc.restricted_category, "Aerospace");
+    assert.strictEqual(avonQc.websiteStatus, "Not Working", "Restricted category mention triggers Not Working");
+    assert.strictEqual(avonQc.companyName, "", "All fields empty on Not Working");
+    assert.strictEqual(avonQc.isRestricted, true);
   });
 
   // 49. Rule 4 Corporate Suffix Comma Reconciliation: "is comma available then only u put comma else leave"

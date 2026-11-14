@@ -52,14 +52,23 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Rule 14 (Flash): Designed in Flash format where text is uncopyable -> mark "Flash" (all other fields empty "").
 - Rule 13 (Redirect Site): Redirected to a completely DIFFERENT domain (companyA.com -> companyB.com) -> mark "Redirect Site", evaluate details from destination site. Same-domain redirects (http to https, www vs non-www, language path /en/) are NOT Redirect Sites -> mark "Working".
 - If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason (e.g. "Website has 0 products and no verifiable catalog or physical address", "Prohibited category: Marine", "Online shopping cart without manufacturing facility", "Domain expired / 404"). If "Working", set "notWorkingReason" to "".
-- CRITICAL RULE NOTE 2 - PROHIBITED / RESTRICTED CATEGORIES (EVIDENCE & PRIMARY BUSINESS ACTIVITY RULE):
-  * Prohibited Categories: Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals.
-  * CRITICAL: Keyword presence does NOT mean restricted business! You must determine whether the company's ACTUAL PRIMARY BUSINESS ACTIVITY is genuinely restricted.
-  * Incidental references, component applications, and served industries are FALSE POSITIVES and are 100% ELIGIBLE:
-    - "Connectors for aerospace applications", "precision gears for aerospace/defense", "aircraft cable", "marine-grade material/hardware", "medical device molding", "food processing machinery" are eligible industrial manufacturing/services!
-    - "Adult learners", "adult children", "adult education", "adults outdoor furniture", "rates per adult", "no animal testing", "cruelty-free cosmetics", "Animal Husbandry Department", "whiskey in a name/finish", "terms mentioning pornographic content" are NOT restricted businesses!
-    - References in low-priority content (Privacy Policy, Terms, Cookie Policy, Blogs, Testimonials) must NEVER trigger a rejection!
-  * ONLY set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category]" when there is clear, direct evidence that the company's OWN PRIMARY BUSINESS is genuinely a restricted operation (e.g. adult entertainment/pornography, firearms/weapons manufacturing, airline/commercial aviation, commercial brewery/distillery, hospital/patient healthcare clinic, pet shop/breeding). If genuine restricted business is confirmed, leave all other 12 fields empty "".
+- CRITICAL RULE NOTE 2 - PROHIBITED / RESTRICTED CATEGORIES (OFFICIAL STRICT RESTRICTION POLICY):
+  * Strictly Prohibited Categories:
+    1. Porn and adult content
+    2. Medicine, medical, and hospitals
+    3. Food and food products
+    4. Weapons, knives, and firearms
+    5. Defence and military
+    6. Aircraft, aviation, and aerospace
+    7. Marine, ships, and boats
+    8. Chemicals and chemical products
+    9. Alcohol and alcoholic beverages
+    10. Animals and animal-related products
+  * CRITICAL MANDATE: A website must be rejected if ANY restricted category word, meaningful category phrase, or relevant image is found ANYWHERE in the available website content.
+  * Incidental mentions, component applications, served industries, testimonials, blogs, news, FAQs, footers, headers, privacy/terms pages, and image attributes (alt, title, filename) are NOT EXEMPT.
+  * AI extraction CANNOT override a deterministic strict restriction match.
+  * When a restricted category word or phrase is detected, you MUST set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
+  * Return evidence showing the matching word or phrase, the category, and the page or source where it was found in notWorkingReason.
 
 2. BUSINESS TYPE:
 - Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
@@ -937,7 +946,38 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   let hasState = address && hasStateInAddress(address, country);
   let hasCity = address && hasCityInAddress(address, country);
 
-  const isGenuineRestricted = !!(restrictedCheck && restrictedCheck.isRestricted && (restrictedCheck.classification === "GENUINE_RESTRICTED" || !restrictedCheck.classification));
+  const isGenuineRestricted = !!(restrictedCheck && restrictedCheck.isRestricted);
+  if (isGenuineRestricted) {
+    const errorUrl = (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || crawlData.finalUrl || crawlData.originalUrl || "";
+    return {
+      websiteStatus: "Not Working",
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      errorCategory: "Prohibited Category",
+      errorKeyword: (restrictedCheck && (restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword)) || "",
+      errorSourceUrl: errorUrl,
+      errorSnippet: (restrictedCheck && (restrictedCheck.snippet || restrictedCheck.matched_context)) || "",
+      notWorkingReason: (restrictedCheck && restrictedCheck.reason) || "Prohibited Category Detected",
+      restrictedReason: (restrictedCheck && restrictedCheck.reason) || "Prohibited Category Detected",
+      restrictedKeyword: (restrictedCheck && (restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword)) || "",
+      restrictedCategory: (restrictedCheck && (restrictedCheck.category || restrictedCheck.restricted_category)) || "",
+      restrictedSourceUrl: errorUrl,
+      restrictedSnippet: (restrictedCheck && (restrictedCheck.snippet || restrictedCheck.matched_context)) || "",
+      isRestricted: true,
+      isProhibitedSite: true
+    };
+  }
   let inferredBusiness = isGenuineRestricted
     ? "Restricted Site"
     : inferBusinessTypeFromEvidence(text, crawlData.mainHtml || "");

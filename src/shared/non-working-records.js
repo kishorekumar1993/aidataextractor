@@ -51,11 +51,12 @@
 
   /**
    * Normalizes websiteStatus into one of the 3 required error categories:
-   * 1. Not Working
-   * 2. Redirect
-   * 3. Not English
+   * 1. Not Working (confirmed dead, expired domain, 404, prohibited category, 0 products, flash, under construction)
+   * 2. Redirect (redirected to different external domain)
+   * 3. Not English (no English translation)
    *
-   * Successfully working and eligible websites return null (STRICTLY EXCLUDED).
+   * Successfully working websites, Manual Review, Retry Required, and Unknown statuses
+   * return null (STRICTLY EXCLUDED from error records).
    */
   function normalizeErrorCategory(rawStatus, data = {}) {
     if (!rawStatus && !data.websiteStatus) return null;
@@ -63,6 +64,11 @@
 
     // STRICT: Working websites are NEVER included in error records
     if (/^working$/i.test(statusStr)) {
+      return null;
+    }
+
+    // STRICT: Manual Review, Retry Required, Blocked, and Pending states are NEVER recorded as Not Working
+    if (/^(?:manual\s*review|retry\s*required|blocked|pending|processing|idle|unknown)$/i.test(statusStr)) {
       return null;
     }
 
@@ -74,8 +80,13 @@
       return "Not English";
     }
 
-    // Default failure status is "Not Working" (inaccessible, DNS, timeout, 404, prohibited, 0 products, flash, etc.)
-    return "Not Working";
+    // Confirmed non-working failure statuses
+    if (/^(?:not\s*working|domain\s*expired|under\s*construction|flash)$/i.test(statusStr)) {
+      return "Not Working";
+    }
+
+    // Reject all other unknown/unhandled statuses - never default blindly to "Not Working"
+    return null;
   }
 
   /**
@@ -199,7 +210,7 @@
    */
   function createErrorRecord(input = {}) {
     if (!input) return null;
-    const rawUrl = String(input.URL || input.url || input.rawUrl || input._originalUrl || "").trim();
+    const rawUrl = String(input.URL || input.url || input.rawUrl || input._originalUrl || input._finalUrl || input.errorUrl || input["Error Source Link"] || "").trim();
     if (!rawUrl) return null;
 
     const rawStatus = input["Website Status"] || input.websiteStatus || input.status;

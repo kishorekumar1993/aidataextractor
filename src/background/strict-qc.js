@@ -203,6 +203,38 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
   crawlResult = await crawlWebsite(targetUrl);
 
+  // If website returned HTTP 401/403/429, anti-bot challenge, timeout, or blocked status:
+  // Items 4, 9, 66, 68: Separate blocked/WAF/slow sites from dead websites! Return Manual Review / Blocked, NOT Not Working!
+  if (crawlResult.status === "Manual Review" || crawlResult.isBlocked || crawlResult.httpStatus === 403 || crawlResult.httpStatus === 401 || crawlResult.httpStatus === 429) {
+    console.warn(`[AI Assistant] Site access blocked/restricted for ${targetUrl} (HTTP ${crawlResult.httpStatus || 403}). Marking as Manual Review.`);
+    return finishAndRecord({
+      websiteStatus: "Manual Review",
+      requiresManualReview: true,
+      isBlocked: true,
+      businessType: "",
+      companyProfile: "",
+      companyName: "",
+      countryName: "",
+      companyAddress: "",
+      state: "",
+      city: "",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "",
+      productImages: "",
+      numberOfProductDescriptions: "",
+      errorCategory: "Blocked / WAF Challenge",
+      errorKeyword: "Security Check / Anti-bot",
+      errorSourceUrl: crawlResult.finalUrl || targetUrl,
+      errorSnippet: crawlResult.fetchError || `HTTP ${crawlResult.httpStatus || 403} Security Check / Anti-bot Challenge`,
+      notWorkingReason: crawlResult.fetchError || "Site access restricted / blocked by security check. Manual Review required.",
+      _finalUrl: crawlResult.finalUrl || targetUrl,
+      _originalUrl: targetUrl,
+      _note: "Site access restricted / blocked (HTTP 401/403/429 / Anti-bot) - Marked for Manual Review"
+    });
+  }
+
   // If website redirected to a different domain (Rule 13), proceed to evaluate destination details
   const isDiffDomainAtStart = isRedirectDomain(targetUrl, crawlResult.finalUrl) || crawlResult.redirected;
   if (!isDiffDomainAtStart && (crawlResult.fetchError || !crawlResult.mainHtml || crawlResult.mainHtml.trim().length === 0)) {
@@ -232,9 +264,43 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
     }
 
     let reason = crawlResult.fetchError || "Site unreachable or returned empty HTML";
+    const isTimeout = /timeout|timed out|took too long/i.test(reason);
     if (/listener indicated an asynchronous response|message channel closed/i.test(reason)) {
       reason = "Connection timed out while loading the website server. The site took too long to respond or is offline.";
     }
+
+    // Slow website or timeout: Item 1 & 66: Slow website not automatically classified as Not Working
+    if (isTimeout) {
+      console.warn(`[AI Assistant] Timeout loading ${targetUrl}: ${reason}. Marking for Manual Review.`);
+      return finishAndRecord({
+        websiteStatus: "Manual Review",
+        requiresManualReview: true,
+        retryRequired: true,
+        businessType: "",
+        companyProfile: "",
+        companyName: "",
+        countryName: "",
+        companyAddress: "",
+        state: "",
+        city: "",
+        emailId: "",
+        secondaryEmailId: "",
+        phoneNumber: "",
+        numberOfProducts: "",
+        productImages: "",
+        numberOfProductDescriptions: "",
+        fetchError: reason,
+        errorCategory: "Slow Website / Timeout",
+        errorKeyword: "Connection Timeout",
+        errorSourceUrl: targetUrl,
+        errorSnippet: reason,
+        notWorkingReason: reason,
+        _finalUrl: targetUrl,
+        _originalUrl: targetUrl,
+        _note: `Slow Website / Timeout (${reason}) - Marked for Manual Review / Retry Required`
+      });
+    }
+
     console.warn(`[AI Assistant] Failed to fetch ${targetUrl}: ${reason}. Marking as Not Working.`);
     return finishAndRecord({
       websiteStatus: "Not Working",
@@ -267,10 +333,11 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + stripHtml(crawlResult.contactHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
   const restrictedCheck = detectRestrictedKeywords(siteContent, (crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.crawledPages || []);
 
-  // PRE-AI CHECK 1: If Genuine Prohibited Category Detected:
-  // Rule Note 2: "Do not work on that site... make these rule strictly if any word appear make it notwroking" & "Notworking means all empty"
-  // Section 2 Critical Rule: Keyword presence does NOT mean restricted business. Only reject when GENUINE_RESTRICTED.
-  if (restrictedCheck.isRestricted && (restrictedCheck.classification === "GENUINE_RESTRICTED" || !restrictedCheck.classification)) {
+  // PRE-AI CHECK 1: If Prohibited Category Detected:
+  // Rule Note 2 & Official Strict Restriction Policy:
+  // A website must be rejected if any restricted category word, meaningful phrase, or relevant image is found anywhere.
+  // Incidental mentions and low-priority pages are NOT exempt.
+  if (restrictedCheck.isRestricted) {
     const errorUrl = restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl;
     return finishAndRecord({
       websiteStatus: "Not Working",
@@ -511,12 +578,35 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         extractedData.errorCategory = determineValidErrorCategoryQC(validReason);
       }
     } catch (aiErr) {
-      console.warn(`[AI Assistant] AI Only mode: ${aiConfig.label} API call failed, falling back to Own Crawl:`, aiErr.message);
-      extractedData = heuristicExtraction(crawlResult, restrictedCheck);
-      extractedData._note = `Own Crawl (AI Fallback: ${aiErr.message || "AI Error"})`;
-      extractedData._extractionSource = "own_crawl_fallback";
-      extractedData._extractionMode = "ai_only";
-      extractedData._isFromAi = false;
+      console.warn(`[AI Assistant] AI Only mode: ${aiConfig.label} API call failed:`, aiErr.message);
+      // Item 6: In AI Only mode, DO NOT fall back to heuristic extraction! Keep extraction modes strictly separate.
+      return finishAndRecord({
+        websiteStatus: "Manual Review",
+        requiresManualReview: true,
+        businessType: "",
+        companyProfile: "",
+        companyName: "",
+        countryName: "",
+        companyAddress: "",
+        state: "",
+        city: "",
+        emailId: "",
+        secondaryEmailId: "",
+        phoneNumber: "",
+        numberOfProducts: "",
+        productImages: "",
+        numberOfProductDescriptions: "",
+        errorCategory: "AI Extraction Failure",
+        errorKeyword: "AI Error",
+        errorSourceUrl: targetUrl,
+        errorSnippet: `AI extraction failed in AI Only mode (${aiErr.message || "Model error"}). Heuristic fallback disabled.`,
+        notWorkingReason: `AI extraction failed in AI Only mode (${aiErr.message || "Model error"}). Manual Review required.`,
+        _aiFailed: true,
+        _extractionSource: "ai_failed",
+        _extractionMode: "ai_only",
+        _isFromAi: false,
+        _note: `AI Only Mode: AI call failed (${aiErr.message}) - Heuristic fallback prevented (Item 6)`
+      });
     }
   } else {
     // Mode: AI First (Default) - AI is ALWAYS first priority; Own Crawl ONLY if AI fails
@@ -788,6 +878,24 @@ function populateEvidenceAndSourceLinks(result, crawlData, selectedCandidate = n
       rawSource = typeof addrResolution.candidate === "object" ? (addrResolution.candidate.raw || "") : String(addrResolution.candidate);
     }
     result.selectedAddressCandidateRaw = rawSource || "";
+
+    // Items 19 & 20: Comprehensive field-level source attribution & supporting evidence
+    result._fieldEvidence = {
+      websiteStatus: { value: result.websiteStatus, sourceUrl: finalUrl },
+      businessType: { value: result.businessType, sourceUrl: result.businessTypeSource || finalUrl, snippet: result.businessTypeSnippet || "" },
+      companyProfile: { value: result.companyProfile, sourceUrl: crawlData.primaryAboutUrl || finalUrl },
+      companyName: { value: result.companyName, sourceUrl: result.companyNameSource || finalUrl, snippet: crawlData.copyrightText || "" },
+      countryName: { value: result.countryName, sourceUrl: result.companyAddressSource || finalUrl },
+      companyAddress: { value: result.companyAddress, sourceUrl: result.companyAddressSource || finalUrl, snippet: result.selectedAddressCandidateRaw || "" },
+      state: { value: result.state, sourceUrl: result.companyAddressSource || finalUrl },
+      city: { value: result.city, sourceUrl: result.companyAddressSource || finalUrl },
+      emailId: { value: result.emailId, sourceUrl: result.primaryEmailSource || finalUrl },
+      secondaryEmailId: { value: result.secondaryEmailId, sourceUrl: result.secondaryEmailSource || finalUrl },
+      phoneNumber: { value: result.phoneNumber, sourceUrl: crawlData.primaryContactUrl || finalUrl },
+      numberOfProducts: { value: result.numberOfProducts, sourceUrl: finalUrl },
+      productImages: { value: result.productImages, sourceUrl: finalUrl },
+      numberOfProductDescriptions: { value: result.numberOfProductDescriptions, sourceUrl: finalUrl }
+    };
   } else {
     result.companyNameSource = "";
     result.primaryEmailSource = "";
@@ -795,6 +903,9 @@ function populateEvidenceAndSourceLinks(result, crawlData, selectedCandidate = n
     result.businessTypeSource = "";
     result.companyAddressSource = "";
     result.errorSourceUrl = result.errorSourceUrl || result.restrictedSourceUrl || result.disallowedSourceUrl || result.shopCartSourceUrl || finalUrl || origUrl || "";
+    result._fieldEvidence = {
+      websiteStatus: { value: result.websiteStatus, sourceUrl: result.errorSourceUrl, snippet: result.errorSnippet || result.notWorkingReason || "" }
+    };
   }
 
   return result;
@@ -823,7 +934,9 @@ function computeOwnCrawlProductCount(crawlData) {
  * Enforces all 14 instructions deterministically based on physical address evidence.
  */
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
-  const result = { ...data };
+  const result = { ...(data || {}) };
+  result.URL = (crawlData && (crawlData.originalUrl || crawlData.finalUrl || crawlData.errorUrl || crawlData.targetUrl)) || result.URL || result.url || "";
+  result.url = result.URL;
 
   // 1. Authoritative API Ground Truth: When AI API succeeded, take ALL 14 fields from the API response.
   // Only fall back to local/manual crawl helpers for individual fields that the API left empty/invalid.
@@ -1033,11 +1146,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     return result;
   }
 
-  // 2. Prohibited Category / Word Check (Highest Priority Rule Note 2 & Contextual Evidence Rule)
-  // Section 2: Keyword presence does NOT mean restricted business. Only genuine restricted operations are rejected.
-  const isGenuineRestricted = !!(restrictedCheck && restrictedCheck.isRestricted && (restrictedCheck.classification === "GENUINE_RESTRICTED" || !restrictedCheck.classification));
-  const isFalsePositive = !!(restrictedCheck && restrictedCheck.classification === "FALSE_POSITIVE");
-  const isProhibited = isGenuineRestricted;
+  // 2. Prohibited Category / Word Check (Highest Priority Rule Note 2 & Official Strict Restriction Policy)
+  // Any restricted category word, meaningful phrase, or relevant image found anywhere triggers rejection.
+  // Incidental mentions and low-priority pages are NOT exempt. AI extraction cannot override this result.
+  const isProhibited = !!(restrictedCheck && restrictedCheck.isRestricted);
 
   if (isProhibited) {
     const errorUrl = (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || result.restrictedSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
@@ -1088,6 +1200,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.business_activity = restrictedCheck.business_activity || "";
     result.classification = restrictedCheck.classification || "NO_RESTRICTED_CATEGORY";
     result.is_restricted = false;
+    result.isRestricted = false;
     result.confidence = restrictedCheck.confidence !== undefined ? restrictedCheck.confidence : 1.0;
     result.reason = restrictedCheck.reason || "";
     if (String(result.businessType || "").toLowerCase() === "restricted site") {
@@ -1175,7 +1288,16 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.errorKeyword = "Foreign Language";
       result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
       result.errorSnippet = "Non-English Language Without Translation Option (Rule 12)";
-    } else if (crawlData.status === "Domain Expired") {
+    } else if (crawlData.status === "Manual Review" || crawlData.requiresManualReview || crawlData.isBlocked) {
+      result.websiteStatus = "Manual Review";
+      result.requiresManualReview = true;
+      if (crawlData.retryRequired) result.retryRequired = true;
+      if (crawlData.isBlocked) result.isBlocked = true;
+      result.errorCategory = crawlData.isBlocked ? "Blocked / WAF Challenge" : "Slow Website / Timeout";
+      result.errorKeyword = crawlData.errorKeyword || (crawlData.isBlocked ? "Security Check / Anti-bot" : "Connection Timeout");
+      result.errorSnippet = crawlData.reason || "Manual Review required";
+      result.notWorkingReason = result.errorSnippet;
+    } else if (crawlData.status === "Domain Expired" || crawlData.isDomainExpired) {
       result.websiteStatus = "Domain Expired";
       result.errorCategory = "Domain Expired";
       result.errorKeyword = "Domain Expired";

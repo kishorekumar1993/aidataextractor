@@ -2,7 +2,7 @@
 
 const RESTRICTED_PATTERNS = [
   {
-    pattern: /\b(?:porn(?:o|ography|ographic)?|xxx|sex\s*shop|sex\s*store|escort\s*service|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|erotic|sex\s*worker|sensual\s*massage|onlyfans|adult\s*(?:entertainment|content|industry|videos?|movies?|films?|sites?|websites?|novelty|novelties|stores?|shops?|dating|webcams?|services?|chats?|massage|products?|games?|erotica|fun|nightclub|club|arcades?|bookstores?|theaters?|theatres?|magazines?|escorts?|performers?|models?|livestreams?|personals?)|(?:18\+|xxx|explicit|hardcore|erotic)\s+adults?)\b/i,
+    pattern: /\b(?:porn(?:o|ography|ographic)?|sex\s*shop|sex\s*store|escort\s*service|cam\s*girl|cam\s*model|strip\s*club|brothel|adult\s*toys?|dildos?|vibrators?|fetish|erotica|erotic|sex\s*worker|sensual\s*massage|onlyfans|adult\s*(?:entertainment|content|industry|videos?|movies?|films?|sites?|websites?|novelty|novelties|stores?|shops?|dating|webcams?|services?|chats?|massage|products?|games?|erotica|fun|nightclub|club|arcades?|bookstores?|theaters?|theatres?|magazines?|escorts?|performers?|models?|livestreams?|personals?)|(?:18\+|explicit|hardcore|erotic)\s+adults?)\b/i,
     label: "Adult & Porn"
   },
   {
@@ -89,7 +89,7 @@ function getEvidencePagePriority(url = "", pageTitle = "") {
   const normTitle = String(pageTitle || "").toLowerCase();
 
   if (/(?:privacy|privacy-policy|terms|terms-and-conditions|terms-of-service|terms-of-use|legal|disclaimer|cookie|cookies|cookie-policy|blog|news|article|articles|press|press-release|testimonial|testimonials|reviews|bio|biography|team|staff|author|careers|jobs|faq|faqs|sitemap|imprint|impressum)/i.test(normUrl) ||
-      /(?:privacy\s*policy|terms\s*(?:and|&)\s*conditions|terms\s*of\s*(?:service|use)|cookie\s*policy|blog|latest\s*news|press\s*release|testimonials?|disclaimer)/i.test(normTitle)) {
+    /(?:privacy\s*policy|terms\s*(?:and|&)\s*conditions|terms\s*of\s*(?:service|use)|cookie\s*policy|blog|latest\s*news|press\s*release|testimonials?|disclaimer)/i.test(normTitle)) {
     return "LOW";
   }
 
@@ -105,7 +105,7 @@ function getEvidencePagePriority(url = "", pageTitle = "") {
  * before contextual application analysis.
  */
 const CANDIDATE_CATEGORY_KEYWORDS = [
-  { label: "Adult & Porn", regex: /\b(?:porn(?:o|ography|ographic)?|xxx|adult|sex|escort|brothel|erotic|erotica)\b/i },
+  { label: "Adult & Porn", regex: /\b(?:porn(?:o|ography|ographic)?|adult|sex|escort|brothel|erotic|erotica)\b/i },
   { label: "Weapons, Armor & Knives", regex: /\b(?:weapons?|firearms?|rifles?|guns?|knives|knife|ammunition)\b/i },
   { label: "Defence & Military", regex: /\b(?:military|defence|defense|armed\s*forces)\b/i },
   { label: "Aviation & Airlines", regex: /\b(?:aircraft|airplane|airlines?|aviation)\b/i },
@@ -264,11 +264,100 @@ function sanitizeContextText(text) {
   return cleanText;
 }
 
+// Official Strict Restriction Policy Categories (10 Strictly Prohibited Categories):
+// 1. Porn and adult content
+// 2. Medicine, medical, and hospitals
+// 3. Food and food products
+// 4. Weapons, knives, and firearms
+// 5. Defence and military
+// 6. Aircraft, aviation, and aerospace
+// 7. Marine, ships, and boats
+// 8. Chemicals and chemical products
+// 9. Alcohol and alcoholic beverages
+// 10. Animals and animal-related products
+
+const STRICT_OFFICIAL_CATEGORIES = [
+  {
+    category: "Adult & Porn",
+    label: "Adult & Porn",
+    officialCategory: "Porn and adult content",
+    regex: /\b(?:porn(?:o|ography|ographic)?|adults?|sex|escorts?|brothels?|erotica?|sensual\s*massage|strip\s*clubs?|adult\s*toys?|dildos?|vibrators?|fetish(?:es)?|onlyfans)\b/i
+  },
+  {
+    category: "Medicine, Medical & Hospital",
+    label: "Medicine, Medical & Hospital",
+    officialCategory: "Medicine, medical, and hospitals",
+    regex: /\b(?:medicines?|medical|hospitals?|pharmaceuticals?|pharmac(?:y|ies)|clinics?|physicians?|doctors?|patient\s*care|prescription\s*drugs?)\b/i
+  },
+  {
+    category: "Weapons, Armor & Knives",
+    label: "Weapons, Armor & Knives",
+    officialCategory: "Weapons, knives, and firearms",
+    regex: /\b(?:weapons?|firearms?|rifles?|guns?|handguns?|pistols?|shotguns?|knif(?:e|es)?|knives|ammunition|munitions?|daggers?|swords?|machetes?|switchblades?|bayonets?)\b/i
+  },
+  {
+    category: "Defence & Military",
+    label: "Defence & Military",
+    officialCategory: "Defence and military",
+    regex: /\b(?:defen[cs]es?|military|armed\s*forces|tactical\s*armaments?|artillery)\b/i
+  },
+  {
+    category: "Aerospace",
+    label: "Aerospace",
+    officialCategory: "Aircraft, aviation, and aerospace",
+    regex: /\b(?:aerospace)\b/i
+  },
+  {
+    category: "Aviation & Airlines",
+    label: "Aviation & Airlines",
+    officialCategory: "Aircraft, aviation, and aerospace",
+    regex: /\b(?:aircrafts?|airplanes?|aeroplanes?|aviation|airlines?|helicopters?|spacecrafts?|avionics)\b/i
+  },
+  {
+    category: "Marine",
+    label: "Marine",
+    officialCategory: "Marine, ships, and boats",
+    regex: /\b(?:marine|maritime|naval)\b/i
+  },
+  {
+    category: "Ships & Boats",
+    label: "Ships & Boats",
+    officialCategory: "Marine, ships, and boats",
+    regex: /\b(?:ships?|boats?|vessels?|yachts?|shipyards?|shipbuilding|ferr(?:y|ies)|tugboats?|barges?)\b/i
+  },
+  {
+    category: "Chemicals & Petrochemicals",
+    label: "Chemicals & Petrochemicals",
+    officialCategory: "Chemicals and chemical products",
+    regex: /\b(?:chemicals?|petrochemicals?|solvents?|agrochemicals?|pesticides?)\b/i
+  },
+  {
+    category: "Alcohol & Breweries",
+    label: "Alcohol & Breweries",
+    officialCategory: "Alcohol and alcoholic beverages",
+    regex: /\b(?:alcohol|alcoholic|brewer(?:y|ies)|distiller(?:y|ies)|wines?|winer(?:y|ies)|beers?|whiskey|whisky|liquor|spirits)\b/i
+  },
+  {
+    category: "Animals & Pets",
+    label: "Animals & Pets",
+    officialCategory: "Animals and animal-related products",
+    regex: /\b(?:animals?|pets?|pupp(?:y|ies)|dogs?|cats?(?!\s*[-_.]?\s*(?:no\b|num|#|code|part|id|class|rating|group|ref|item|type|section|3\b|5\b|5e\b|6\b|6a\b|7\b|7a\b|8\b|cables?|cabling))|livestock|cattle|horses?|poultry|swine|pigs?|veterinar(?:y|ian))\b/i
+  },
+  {
+    category: "Food & Beverages",
+    label: "Food & Beverages",
+    officialCategory: "Food and food products",
+    regex: /\b(?:foods?|baker(?:y|ies)|catering|restaurants?|bistros?|cafes?|eater(?:y|ies)|beverages?|edible|confectioner(?:y|ies)|dairy|meat|poultry|seafood|snacks?|cuisine)\b/i
+  }
+];
+
 function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
-  let combined = ((text || "") + " " + extractImageAttributes(html)).trim();
+  let imgAttributes = typeof extractImageAttributes === "function" ? extractImageAttributes(html) : "";
+  let combined = ((text || "") + " " + imgAttributes).trim();
   if (!combined) {
     return {
       isRestricted: false,
+      is_restricted: false,
       classification: "NO_RESTRICTED_CATEGORY",
       restricted_category: "",
       matched_keyword: "",
@@ -284,87 +373,68 @@ function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
     };
   }
 
-  // Strip HTML tags and attributes first
-  let rawClean = combined.replace(/<[^>]+>/g, " ");
-  let cleanText = sanitizeContextText(rawClean);
+  // Strip HTML tags for clean raw text scanning
+  let rawClean = combined.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
-  // Check against strict genuine restricted business patterns
+  // 1. STRICT OFFICIAL RESTRICTION POLICY:
+  // Reject if any restricted category word or phrase is found anywhere in the available content
+  for (const item of STRICT_OFFICIAL_CATEGORIES) {
+    if (item.regex.test(rawClean)) {
+      const m = rawClean.match(item.regex);
+      let matchedKw = m ? m[0] : "";
+      if (item.label === "Marine" && /^marine/i.test(matchedKw)) {
+        matchedKw = "Marine";
+      }
+      const snippet = extractContextSnippet(rawClean, matchedKw);
+      const exactLink = typeof findExactEvidenceLink === "function" ? findExactEvidenceLink(html, matchedKw, null, pageUrl) : pageUrl;
+      const resolvedUrl = exactLink || pageUrl || "";
+      return {
+        isRestricted: true,
+        is_restricted: true,
+        classification: "GENUINE_RESTRICTED",
+        restricted_category: item.category,
+        matched_keyword: matchedKw,
+        matched_page: resolvedUrl,
+        matched_context: snippet,
+        business_activity: `Restricted Category: ${item.category}`,
+        confidence: 1.0,
+        reason: `Prohibited Category Detected: ${item.category} ("${matchedKw}")`,
+        category: item.label,
+        matchedKeyword: matchedKw,
+        sourceUrl: resolvedUrl,
+        snippet: snippet
+      };
+    }
+  }
+
+  // 2. Also check other existing prohibited patterns (Gambling, Tobacco, Cannabis, Hacking, etc.)
   for (const item of RESTRICTED_PATTERNS) {
     const regex = item.pattern || item;
     const label = item.label || "Prohibited Category";
-    if (regex.test(cleanText)) {
-      const m = cleanText.match(regex);
+    if (regex.test(rawClean)) {
+      const m = rawClean.match(regex);
       let matchedKw = m ? m[0] : "";
-      if (label === "Marine" && /^marine/i.test(matchedKw)) {
+      if (item.label === "Marine" && /^marine/i.test(matchedKw)) {
         matchedKw = "Marine";
       }
-      const snippet = extractContextSnippet(cleanText, matchedKw);
-      const pagePriority = getEvidencePagePriority(pageUrl, "");
-
-      // If matched keyword was found only on a low-priority page (Terms, Privacy, Bio, Blog)
-      if (pagePriority === "LOW" && !/(?:porn|adult\s*video|escort|firearms?\s*store|weapons?\s*manufacturer|airline\s*fleet)/i.test(matchedKw)) {
-        return {
-          isRestricted: false,
-          is_restricted: false,
-          classification: "FALSE_POSITIVE",
-          restricted_category: label,
-          matched_keyword: matchedKw,
-          matched_page: pageUrl,
-          matched_context: snippet,
-          business_activity: "Non-restricted operations (incidental reference in low-priority content)",
-          confidence: 0.94,
-          reason: `Keyword "${matchedKw}" appeared only on a low-priority document (${pageUrl || "legal/policy"}), not company primary business.`,
-          category: label,
-          matchedKeyword: matchedKw,
-          sourceUrl: pageUrl,
-          snippet
-        };
-      }
-
+      const snippet = extractContextSnippet(rawClean, matchedKw);
+      const exactLink = typeof findExactEvidenceLink === "function" ? findExactEvidenceLink(html, matchedKw, null, pageUrl) : pageUrl;
+      const resolvedUrl = exactLink || pageUrl || "";
       return {
         isRestricted: true,
         is_restricted: true,
         classification: "GENUINE_RESTRICTED",
         restricted_category: label,
         matched_keyword: matchedKw,
-        matched_page: pageUrl,
+        matched_page: resolvedUrl,
         matched_context: snippet,
-        business_activity: `Genuine ${label} business`,
-        confidence: 0.98,
-        reason: `${label} ("${matchedKw}")`,
+        business_activity: `Restricted Category: ${label}`,
+        confidence: 1.0,
+        reason: `Prohibited Category Detected: ${label} ("${matchedKw}")`,
         category: label,
         matchedKeyword: matchedKw,
-        sourceUrl: pageUrl,
-        snippet
-      };
-    }
-  }
-
-  // Check if un-sanitized raw text contains any candidate category keyword
-  // (to produce structured FALSE_POSITIVE evidence if a generic word was used contextually)
-  for (const cand of CANDIDATE_CATEGORY_KEYWORDS) {
-    if (cand.regex.test(rawClean)) {
-      const m = rawClean.match(cand.regex);
-      let matchedKw = m ? m[0] : "";
-      if (cand.label === "Marine" && /^marine/i.test(matchedKw)) {
-        matchedKw = "Marine";
-      }
-      const snippet = extractContextSnippet(rawClean, matchedKw);
-      return {
-        isRestricted: false,
-        is_restricted: false,
-        classification: "FALSE_POSITIVE",
-        restricted_category: cand.label,
-        matched_keyword: matchedKw,
-        matched_page: pageUrl,
-        matched_context: snippet,
-        business_activity: "Eligible physical goods or services (application / incidental context)",
-        confidence: 0.96,
-        reason: `The website mentions ${cand.label} ("${matchedKw}") only as an application area, served industry, or incidental reference.`,
-        category: cand.label,
-        matchedKeyword: matchedKw,
-        sourceUrl: pageUrl,
-        snippet
+        sourceUrl: resolvedUrl,
+        snippet: snippet
       };
     }
   }
@@ -375,69 +445,42 @@ function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
     classification: "NO_RESTRICTED_CATEGORY",
     restricted_category: "",
     matched_keyword: "",
-    matched_page: pageUrl,
+    matched_page: pageUrl || "",
     matched_context: "",
     business_activity: "",
     confidence: 1.0,
     reason: "No relevant restricted business detected",
     category: "",
     matchedKeyword: null,
-    sourceUrl: pageUrl,
+    sourceUrl: pageUrl || "",
     snippet: ""
   };
 }
 
 /**
  * Searches across all crawled pages to evaluate restricted business evidence.
- * Prioritizes high-priority pages and deep evidence links.
+ * Includes Homepage, About Us, Contact, Products, Services, Blog, FAQ, Footer, Terms/Privacy, and Images.
  */
 function detectRestrictedKeywords(text, html = "", crawledPages = []) {
-  let bestFalsePositive = null;
-  let bestManualReview = null;
-
-  if (crawledPages && crawledPages.length > 0) {
+  if (Array.isArray(crawledPages) && crawledPages.length > 0) {
     for (const page of crawledPages) {
-      const pText = page.text || stripHtml(page.html || "");
+      if (!page) continue;
+      const pText = ((page.text || "") + " " + (page.html ? stripHtml(page.html) : "")).trim();
       const res = detectRestrictedKeywordsSingle(pText, page.html || "", page.url || "");
 
-      if (res.classification === "GENUINE_RESTRICTED") {
-        const exactLink = findExactEvidenceLink(page.html || "", res.matched_keyword || res.matchedKeyword, null, page.url);
-        const resolvedUrl = exactLink || page.url;
-        return {
-          ...res,
-          matched_page: resolvedUrl,
-          sourceUrl: resolvedUrl,
-          snippet: extractContextSnippet(pText, res.matched_keyword || res.matchedKeyword)
-        };
-      }
-
-      if (res.classification === "MANUAL_REVIEW" && !bestManualReview) {
-        bestManualReview = { ...res, sourceUrl: page.url, snippet: extractContextSnippet(pText, res.matched_keyword) };
-      }
-
-      if (res.classification === "FALSE_POSITIVE" && !bestFalsePositive) {
-        bestFalsePositive = { ...res, sourceUrl: page.url, snippet: extractContextSnippet(pText, res.matched_keyword) };
+      if (res.isRestricted) {
+        return res;
       }
     }
   }
 
-  // Fallback check on combined text
-  const fallback = detectRestrictedKeywordsSingle(text, html, (crawledPages && crawledPages[0] && crawledPages[0].url) || "");
-  if (fallback.classification === "GENUINE_RESTRICTED") {
-    const pageUrl = (crawledPages && crawledPages[0] && crawledPages[0].url) || "";
-    const exactLink = findExactEvidenceLink(html, fallback.matched_keyword || fallback.matchedKeyword, null, pageUrl);
-    const resolvedUrl = exactLink || pageUrl;
-    return {
-      ...fallback,
-      matched_page: resolvedUrl,
-      sourceUrl: resolvedUrl,
-      snippet: extractContextSnippet(text, fallback.matched_keyword || fallback.matchedKeyword)
-    };
+  // Fallback check on combined text and html
+  const fallbackUrl = (crawledPages && crawledPages[0] && crawledPages[0].url) || "";
+  const combinedFallbackText = ((text || "") + " " + (html ? stripHtml(html) : "")).trim();
+  const fallback = detectRestrictedKeywordsSingle(combinedFallbackText, html, fallbackUrl);
+  if (fallback.isRestricted) {
+    return fallback;
   }
-
-  if (bestManualReview) return bestManualReview;
-  if (bestFalsePositive) return bestFalsePositive;
-  if (fallback.classification === "FALSE_POSITIVE" || fallback.classification === "MANUAL_REVIEW") return fallback;
 
   return {
     isRestricted: false,

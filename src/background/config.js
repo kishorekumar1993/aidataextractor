@@ -99,8 +99,22 @@ function resolveAiProviderConfig(settings = {}) {
   return normalizeProviderAndModel("gemini", key, settings.model || DEFAULT_MODEL);
 }
 
-// Primary prohibited core industries per Instruction Sheet Note 2
-// Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
+// Authoritative Strict Restriction Policy for Prohibited / Restricted Categories:
+// A website must be rejected if any restricted category word, meaningful category phrase,
+// or relevant image is found anywhere in the available website content.
+// The 10 strictly prohibited categories are:
+// 1. Porn and adult content
+// 2. Medicine, medical, and hospitals
+// 3. Food and food products
+// 4. Weapons, knives, and firearms
+// 5. Defence and military
+// 6. Aircraft, aviation, and aerospace
+// 7. Marine, ships, and boats
+// 8. Chemicals and chemical products
+// 9. Alcohol and alcoholic beverages
+// 10. Animals and animal-related products
+// Incidental mentions, testimonials, blogs, news, FAQs, footers, headers, privacy/terms,
+// and images are NOT exempt. Genuine occurrences trigger rejection across all crawled content.
 
 const GEMINI_RESPONSE_SCHEMA = {
   type: "OBJECT",
