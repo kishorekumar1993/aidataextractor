@@ -733,19 +733,20 @@
       // Check auto-submit toggle: Auto-submit if user enabled auto-queue OR auto-submit Not Working
       if (targetStatus === "Not Working") {
         const currentUrl = getTargetUrl();
-        if (state.isBatchNotWorkingActive) {
-          // In batch Not Working mode, processNextBatchNotWorkingItem directly manages submission.
+        if (state.isBatchNotWorkingActive || state.isExplicitNotWorkingSubmit) {
+          // Direct submission is managed by caller (batch runner or 1-click submit)
           if (state.pendingAutoSubmitTimer) {
             clearTimeout(state.pendingAutoSubmitTimer);
             state.pendingAutoSubmitTimer = null;
           }
         } else if (state.autoSubmitNotWorkingEnabled || state.autoQueueEnabled) {
-          AIExt.updateStatus("⚠️ Status set to Not Working. Auto-submitting in 2s... (Click 'Stop' to study)", "warning");
+          const delay = state.autoQueueEnabled ? 500 : 1500;
+          AIExt.updateStatus(`⚠️ Status set to Not Working. Auto-submitting in ${delay === 500 ? "0.5s" : "1.5s"}... (Click 'Stop' to study)`, "warning");
           if (state.pendingAutoSubmitTimer) clearTimeout(state.pendingAutoSubmitTimer);
           state.pendingAutoSubmitTimer = setTimeout(() => {
             state.pendingAutoSubmitTimer = null;
             AIExt.autoSubmitNotWorking(currentUrl);
-          }, 2000);
+          }, delay);
         } else {
           // Auto-submit is OFF so user can review and study
           if (state.pendingAutoSubmitTimer) {
@@ -753,7 +754,7 @@
             state.pendingAutoSubmitTimer = null;
           }
           const studyInfo = AIExt.extractNotWorkingReason(data);
-          AIExt.updateStatus(`🚫 NOT WORKING: ${studyInfo.reason}. Auto-submit is STOPPED so you can study.`, "error");
+          AIExt.updateStatus(`🚫 NOT WORKING: ${studyInfo.reason}. Auto-submit is OFF (Study mode active).`, "error");
         }
       }
 

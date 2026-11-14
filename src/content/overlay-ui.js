@@ -790,10 +790,13 @@
           state.pendingAutoSubmitTimer = null;
         }
         state.autoSubmitNotWorkingEnabled = false;
+        state.autoQueueEnabled = false;
         const toggleEl = document.getElementById("ai-auto-submit-notworking-toggle");
         if (toggleEl) toggleEl.checked = false;
+        const autoQueueToggleEl = document.getElementById("ai-widget-auto-queue-toggle");
+        if (autoQueueToggleEl) autoQueueToggleEl.checked = false;
         if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-          chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: false });
+          chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: false, autoQueueEnabled: false });
         }
         AIExt.stopAutoQueuePipeline("User stopped auto-submit for study");
         AIExt.stopBatchNotWorking("User stopped auto-submit for study");
@@ -824,8 +827,12 @@
     const studyConfirmBtn = document.getElementById("ai-study-confirm-submit-btn");
     if (studyConfirmBtn) {
       studyConfirmBtn.addEventListener("click", () => {
-        const currentUrl = AIExt.getTargetUrl();
-        AIExt.autoSubmitNotWorking(currentUrl);
+        if (typeof AIExt.markAndSubmitCurrentAsNotWorking === "function") {
+          AIExt.markAndSubmitCurrentAsNotWorking("Study card confirmed Not Working");
+        } else {
+          const currentUrl = AIExt.getTargetUrl();
+          AIExt.autoSubmitNotWorking(currentUrl);
+        }
       });
     }
 
@@ -893,6 +900,10 @@
           chrome.storage.sync.set({ autoQueueEnabled: widgetAutoToggle.checked });
         }
         if (!state.autoQueueEnabled) {
+          if (state.pendingAutoSubmitTimer) {
+            clearTimeout(state.pendingAutoSubmitTimer);
+            state.pendingAutoSubmitTimer = null;
+          }
           state.isWaitingForUserWorkingReview = false;
           AIExt.stopAutoQueuePipeline("User disabled auto-queue in widget");
           updateStatus("Auto-Queue turned OFF", "idle");
@@ -903,8 +914,16 @@
           const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
           if (pauseBtn) pauseBtn.style.display = "inline-flex";
           updateStatus("⚡ Auto-Queue enabled: Crawling till Working site...", "loading");
+          const curUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
+          if (!curUrl && typeof AIExt.triggerFromQueue === "function") {
+            AIExt.triggerFromQueue();
+          }
           if (typeof AIExt.checkAndAutoTriggerQueueCrawl === "function") {
-            AIExt.checkAndAutoTriggerQueueCrawl();
+            setTimeout(() => {
+              if (state.autoQueueEnabled && !state.isCrawlingInProgress) {
+                AIExt.checkAndAutoTriggerQueueCrawl();
+              }
+            }, 300);
           }
         }
       });

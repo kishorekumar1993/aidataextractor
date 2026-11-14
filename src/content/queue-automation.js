@@ -29,34 +29,38 @@
   }
 
   function findModalConfirmButton() {
-    // SweetAlert / SweetAlert2
+    // 1. Direct portal confirmation modal button IDs (e.g. dataextraction portal)
+    // ONLY match if the modal is genuinely ACTIVE / VISIBLE (has class 'active' or 'show')
+    const notWorkingModal = document.getElementById("notWorkingConfirmModal");
+    if (notWorkingModal && (notWorkingModal.classList.contains("active") || notWorkingModal.classList.contains("show"))) {
+      const notWorkingOk = document.getElementById("btnNotWorkingConfirmOk");
+      if (notWorkingOk) return notWorkingOk;
+    }
+
+    const actionModal = document.getElementById("actionConfirmModal");
+    if (actionModal && (actionModal.classList.contains("active") || actionModal.classList.contains("show"))) {
+      const actionOk = document.getElementById("btnActionConfirmOk");
+      if (actionOk) return actionOk;
+    }
+
+    // 2. SweetAlert / SweetAlert2
     const swalConfirm = document.querySelector(".swal2-confirm, .swal-button--confirm");
     if (swalConfirm && swalConfirm.offsetParent !== null) return swalConfirm;
 
-    // Check visible modals
-    const modals = Array.from(document.querySelectorAll('.modal, .swal2-container, .swal-overlay, div[role="dialog"], .confirmation-modal, .popup, div[class*="modal"], div[class*="dialog"], div[class*="confirm"], div[class*="alert"]'));
-    for (const modal of modals) {
+    // 3. Active / visible modal overlays & dialogs
+    const activeModals = Array.from(document.querySelectorAll('.modal-overlay.active, .modal.active, .modal.show, .swal2-container, .swal-overlay, div[role="dialog"].active, .confirmation-modal.active, div[class*="modal"].active'));
+    for (const modal of activeModals) {
       if (modal.id === "ai-prefill-widget" || modal.closest("#ai-prefill-widget")) continue;
-      const text = (modal.textContent || "").toLowerCase();
-      if (text.includes("confirmation required") || text.includes("are you sure") || text.includes("not working") || text.includes("confirm")) {
-        const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
-        const okBtn = buttons.find(b => {
-          const bText = (b.textContent || b.value || "").trim().toLowerCase();
-          return bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText === "proceed" || bText.includes("ok");
-        });
-        if (okBtn) return okBtn;
-      }
+      const buttons = Array.from(modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]'));
+      const okBtn = buttons.find(b => {
+        if (b.id === "btnNotWorkingConfirmCancel" || b.id === "btnCloseNotWorkingModal" || b.classList.contains("btn-confirm-cancel")) return false;
+        const bText = (b.textContent || b.value || "").trim().toLowerCase();
+        return b.id === "btnNotWorkingConfirmOk" || b.classList.contains("btn-confirm-ok") || bText === "ok" || bText === "✓ ok" || bText === "yes" || bText === "confirm" || bText === "proceed" || bText.includes("ok");
+      });
+      if (okBtn) return okBtn;
     }
 
-    // Check any button with OK / Yes matching confirmation text nearby
-    const allBtns = Array.from(document.querySelectorAll('button, input[type="button"], input[type="submit"]'));
-    const okBtn = allBtns.find(b => {
-      if (b.closest("#ai-prefill-widget")) return false;
-      const bText = (b.textContent || b.value || "").trim().toLowerCase();
-      const pText = (b.closest("div")?.parentElement?.textContent || "").toLowerCase();
-      return (bText === "ok" || bText === "✓ ok" || bText === "yes") && (pText.includes("are you sure") || pText.includes("not working") || pText.includes("confirmation required"));
-    });
-    return okBtn || null;
+    return null;
   }
 
   // =========================================================================
@@ -67,6 +71,7 @@
     // Strictly find ONLY genuine queue navigation buttons.
     // NEVER click "click here" buttons, external link buttons, or buttons that open new windows/tabs!
     const fromQueueBtn = document.getElementById("btnLoadNextQueueUrl") ||
+      document.getElementById("btnNextQueueUrl") ||
       document.getElementById("btnNextQueue") ||
       document.getElementById("btnNext") ||
       document.getElementById("btn_next") ||
@@ -332,7 +337,6 @@
     setTimeout(() => {
       if (!state.isBatchNotWorkingActive) return;
 
-      // Trigger queue advancement if URL hasn't changed automatically
       let pollAttempts = 0;
       const pollTimer = setInterval(() => {
         pollAttempts++;
@@ -351,16 +355,17 @@
             if (state.isBatchNotWorkingActive) {
               processNextBatchNotWorkingItem();
             }
-          }, 350);
+          }, 250);
           return;
         }
 
-        // Trigger 'From Queue' button if still empty or identical to submitted URL
-        if ((!normNext || normNext === normSubmitted) && (pollAttempts === 1 || pollAttempts % 5 === 0)) {
+        // ONLY trigger 'From Queue' as fallback after 1.5 seconds (attempt >= 10), NEVER at attempt 1!
+        if ((!normNext || normNext === normSubmitted) && (pollAttempts === 10 || pollAttempts === 18)) {
+          console.log("[AI Assistant] URL not auto-advanced by portal after submit. Triggering queue button fallback...");
           triggerFromQueue();
         }
 
-        if (pollAttempts >= 25) { // ~4 seconds max per item
+        if (pollAttempts >= 25) { // ~3.8 seconds max per item
           clearInterval(pollTimer);
           if (state.isBatchNotWorkingActive) {
             triggerFromQueue();
@@ -368,14 +373,15 @@
               if (state.isBatchNotWorkingActive) {
                 processNextBatchNotWorkingItem();
               }
-            }, 350);
+            }, 300);
           }
         }
-      }, 160);
-    }, 600);
+      }, 150);
+    }, 400);
   }
 
   function markAndSubmitCurrentAsNotWorking(reason = "Manual 1-click Not Working") {
+    state.isExplicitNotWorkingSubmit = true;
     const currentUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
     const notWorkingData = {
       websiteStatus: "Not Working",
@@ -395,6 +401,7 @@
       _note: reason
     };
     AIExt.fillFormFields(notWorkingData);
+    state.isExplicitNotWorkingSubmit = false;
 
     try {
       if (typeof AIExt !== "undefined" && typeof AIExt.sendRuntimeMessage === "function") {
@@ -530,21 +537,23 @@
       }
 
       // Check if new URL has been loaded
-      if (checkAndAutoTriggerQueueCrawl()) {
+      const curUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
+      const normCur = (curUrl || "").trim().toLowerCase().replace(/\/+$/, "");
+
+      if (normCur && normCur !== normSubmitted && normCur.length > 3) {
         clearInterval(state.autoQueuePollTimer);
         state.autoQueuePollTimer = null;
+        setTimeout(() => {
+          if (state.autoQueueEnabled && !state.isCrawlingInProgress && !state.isBatchNotWorkingActive) {
+            checkAndAutoTriggerQueueCrawl();
+          }
+        }, 200);
         return;
       }
 
-      let nextUrl = AIExt.getTargetUrl();
-      // If still empty or unchanged after 1.2s intervals, trigger Queue / From Queue
-      if ((!nextUrl || nextUrl.trim().toLowerCase().replace(/\/+$/, "") === normSubmitted) && attempts % 8 === 0) {
+      // Fallback: If still empty or unchanged after 1.5s (attempt >= 10), trigger queue button
+      if ((!normCur || normCur === normSubmitted) && (attempts === 10 || attempts === 20)) {
         triggerFromQueue();
-        if (checkAndAutoTriggerQueueCrawl()) {
-          clearInterval(state.autoQueuePollTimer);
-          state.autoQueuePollTimer = null;
-          return;
-        }
       }
 
       if (attempts >= maxAttempts) {
@@ -602,7 +611,7 @@
    * For "Working" sites, submission is NEVER automatic so the user can manually review.
    */
   function autoSubmitNotWorking(specificUrl) {
-    const submittedUrl = specificUrl || AIExt.getTargetUrl();
+    const submittedUrl = specificUrl || (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "");
     console.log(`[AI Assistant] Auto-submitting 'Not Working' record for: ${submittedUrl}...`);
 
     // Ensure pipeline state is preserved across form submission reload!
@@ -619,45 +628,72 @@
       }
     }
 
-    let hasClickedSubmit = false;
-    let hasConfirmedModal = false;
+    const normSubmitted = (submittedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
 
-    // Step A: Click Submit button
     const doSubmit = () => {
-      if (hasClickedSubmit) return;
       const submitBtn = findSubmitButton();
       if (submitBtn) {
-        hasClickedSubmit = true;
         console.log("[AI Assistant] Auto-clicked Submit button for 'Not Working' status:", submitBtn);
         submitBtn.click();
-        const form = submitBtn.closest("form") || document.forms[0];
-        if (form && typeof form.requestSubmit === "function" && !submitBtn.disabled) {
-          try { form.requestSubmit(submitBtn); } catch (e) { }
-        }
       }
     };
 
-    // Step B: Continuously poll for modal confirmation buttons for up to 2.5 seconds
-    let modalPollCount = 0;
-    const modalPollTimer = setInterval(() => {
-      modalPollCount++;
-      if (hasConfirmedModal || modalPollCount > 40) {
-        clearInterval(modalPollTimer);
-        return;
-      }
+    const confirmModalIfPresent = () => {
       const okBtn = findModalConfirmButton();
       if (okBtn) {
-        hasConfirmedModal = true;
-        clearInterval(modalPollTimer);
         console.log("[AI Assistant] Auto-confirmed 'Not Working' confirmation modal:", okBtn);
         okBtn.click();
+        return true;
       }
-    }, 60);
+      return false;
+    };
 
-    // Initial submit attempts
-    setTimeout(doSubmit, 80);
-    setTimeout(doSubmit, 300);
-    setTimeout(doSubmit, 600);
+    // 1. Immediately confirm modal if already popped up from setting dropdown to "Not Working"
+    confirmModalIfPresent();
+
+    // 2. Initial submit attempt
+    setTimeout(doSubmit, 50);
+
+    // 3. Iterative coordination: poll modal & ensure form submission actually finishes
+    let pollCount = 0;
+    const maxPolls = 25; // ~3.5s max
+    const submitCoordTimer = setInterval(() => {
+      pollCount++;
+
+      // If URL has already changed, record was saved and portal advanced!
+      const curUrl = (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "") || "";
+      const normCur = curUrl.trim().toLowerCase().replace(/\/+$/, "");
+      if (normCur && normSubmitted && normCur !== normSubmitted) {
+        clearInterval(submitCoordTimer);
+        return;
+      }
+
+      // Check and confirm any modal (form-select or form-submit)
+      const modalConfirmed = confirmModalIfPresent();
+
+      // If modal was just confirmed, wait 80ms and check if we need to click submit.
+      // (If context was form-submit, clicking OK already saved the record!)
+      if (modalConfirmed) {
+        setTimeout(() => {
+          const freshUrl = (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "") || "";
+          const freshNorm = freshUrl.trim().toLowerCase().replace(/\/+$/, "");
+          // CRITICAL: Only click submit if still on the submitted URL and no modal is active!
+          // NEVER click submit if portal already moved to next URL!
+          if (freshNorm === normSubmitted && !findModalConfirmButton()) {
+            doSubmit();
+          }
+        }, 80);
+      } else if (pollCount % 4 === 0) {
+        // Re-try clicking submit if modal is closed and URL has not changed
+        if (!findModalConfirmButton()) {
+          doSubmit();
+        }
+      }
+
+      if (pollCount >= maxPolls) {
+        clearInterval(submitCoordTimer);
+      }
+    }, 140);
 
     // Queue progression: ONLY for normal auto-crawl pipeline, NEVER during batch Not Working!
     if (!state.isBatchNotWorkingActive) {

@@ -3384,6 +3384,28 @@ async function runAsyncTests() {
       addEventListener: () => {}
     };
 
+    let modalConfirmClicks = 0;
+    const mockModal = {
+      id: 'notWorkingConfirmModal',
+      classList: {
+        contains: (cls) => cls === 'active' || cls === 'modal-overlay',
+        add: () => {},
+        remove: () => {}
+      },
+      offsetParent: {}
+    };
+
+    const mockModalConfirmOkBtn = {
+      id: 'btnNotWorkingConfirmOk',
+      tagName: 'BUTTON',
+      textContent: 'OK',
+      click: () => {
+        modalConfirmClicks++;
+      },
+      closest: (sel) => sel.includes('Modal') || sel.includes('modal') ? mockModal : null,
+      offsetParent: {}
+    };
+
     const bCtx = vm.createContext({
       console: { log: () => {}, warn: () => {}, error: () => {} },
       window: { location: { href: 'https://example.com/dataextraction' }, addEventListener: () => {} },
@@ -3398,6 +3420,8 @@ async function runAsyncTests() {
           if (id === 'website-status' || id === 'selectWebsiteStatus') return mockStatusSelect;
           if (id === 'btnSubmitForm' || id === 'btnSubmit') return mockSubmitBtn;
           if (id === 'btnLoadNextQueueUrl' || id === 'btnNextQueue') return mockFromQueueBtn;
+          if (id === 'btnNotWorkingConfirmOk') return mockModalConfirmOkBtn;
+          if (id === 'notWorkingConfirmModal') return mockModal;
           if (id === 'ai-batch-10-btn') return mockBatch10Btn;
           if (id === 'ai-batch-all-btn') return mockBatchAllBtn;
           return null;
@@ -3406,12 +3430,13 @@ async function runAsyncTests() {
           if (sel.includes('website')) return mockWebsiteInput;
           if (sel.includes('status')) return mockStatusSelect;
           if (sel.includes('submit')) return mockSubmitBtn;
+          if (sel.includes('btnNotWorkingConfirmOk') || sel.includes('confirm-ok')) return mockModalConfirmOkBtn;
           return null;
         },
         querySelectorAll: (sel) => {
           if (sel === 'select') return [mockStatusSelect];
           if (sel && sel.includes('input')) return [mockWebsiteInput];
-          return [mockWebsiteInput, mockStatusSelect, mockSubmitBtn, mockFromQueueBtn];
+          return [mockWebsiteInput, mockStatusSelect, mockSubmitBtn, mockFromQueueBtn, mockModalConfirmOkBtn];
         },
         addEventListener: () => {}
       },
@@ -3480,8 +3505,169 @@ async function runAsyncTests() {
 
     // 4. Verify all 10 submissions completed and state cleanly reset
     assert.strictEqual(submittedCount, 10, 'Must have auto-submitted exactly 10 sites as Not Working');
+    assert.ok(modalConfirmClicks >= 10, `Must have auto-confirmed Not Working modal (confirmed ${modalConfirmClicks} times)`);
     assert.strictEqual(ext.state.isBatchNotWorkingActive, false, 'Batch must cleanly stop after 10 sites');
     assert.strictEqual(storedBatch, null, 'Storage must be cleaned up after batch finishes');
+  });
+
+  // =========================================================================
+  // TEST 51: Auto-Crawl pipeline, Auto-Submit buttons coordination & Working pause
+  // =========================================================================
+  runTest('Auto-Crawl pipeline, Auto-Submit buttons coordination, and Working site pause', () => {
+    const files = [
+      'src/content/state.js',
+      'src/content/messaging.js',
+      'src/content/form-detector.js',
+      'src/content/queue-automation.js',
+      'src/content/overlay-ui.js'
+    ];
+
+    let currentUrl = 'http://www.testqueue-site1.com';
+    let submitClicked = 0;
+    let modalOkClicked = 0;
+    let modalIsActive = false;
+
+    const mockModal = {
+      id: 'notWorkingConfirmModal',
+      classList: {
+        contains: (cls) => (cls === 'active' || cls === 'show') && modalIsActive
+      },
+      querySelectorAll: () => []
+    };
+
+    const mockModalOk = {
+      id: 'btnNotWorkingConfirmOk',
+      click: () => { modalOkClicked++; modalIsActive = false; },
+      classList: { contains: (cls) => cls === 'btn-confirm-ok' }
+    };
+
+    const mockSubmitBtn = {
+      id: 'btnSubmitForm',
+      type: 'button',
+      click: () => { submitClicked++; },
+      closest: () => null
+    };
+
+    const mockStatusSelect = {
+      tagName: 'SELECT',
+      id: 'selectWebsiteStatus',
+      value: '',
+      selectedIndex: 0,
+      options: [{ value: 'Working', text: 'Working' }, { value: 'Not Working', text: 'Not Working' }],
+      dispatchEvent: () => {},
+      classList: { add: () => {}, remove: () => {} },
+      style: {}
+    };
+
+    const mockCompanyNameInput = {
+      tagName: 'INPUT',
+      id: 'companyName',
+      value: 'Some Previous Company',
+      classList: { add: () => {}, remove: () => {} },
+      style: {},
+      dispatchEvent: () => {}
+    };
+
+    const mockQueueToggle = {
+      id: 'ai-widget-auto-queue-toggle',
+      checked: false,
+      addEventListener: () => {}
+    };
+
+    const mockAutoSubmitToggle = {
+      id: 'ai-auto-submit-notworking-toggle',
+      checked: false,
+      addEventListener: () => {}
+    };
+
+    const mockStopAutoSubmitBtn = {
+      id: 'ai-stop-auto-submit-btn',
+      addEventListener: () => {}
+    };
+
+    const bCtx = vm.createContext({
+      window: { location: { href: 'http://testportal.com' } },
+      document: {
+        location: { href: 'http://testportal.com' },
+        title: 'Test Portal',
+        body: { innerText: '', querySelectorAll: () => [], appendChild: () => {}, removeChild: () => {} },
+        documentElement: { querySelectorAll: () => [] },
+        forms: [],
+        createElement: (tag) => ({
+          tagName: (tag || 'div').toUpperCase(),
+          style: {},
+          classList: { add: () => {}, remove: () => {} },
+          appendChild: () => {},
+          addEventListener: () => {}
+        }),
+        getElementById: (id) => {
+          if (id === 'btnSubmitForm') return mockSubmitBtn;
+          if (id === 'notWorkingConfirmModal') return mockModal;
+          if (id === 'btnNotWorkingConfirmOk') return mockModalOk;
+          if (id === 'selectWebsiteStatus') return mockStatusSelect;
+          if (id === 'companyName') return mockCompanyNameInput;
+          if (id === 'ai-widget-auto-queue-toggle') return mockQueueToggle;
+          if (id === 'ai-auto-submit-notworking-toggle') return mockAutoSubmitToggle;
+          if (id === 'ai-stop-auto-submit-btn') return mockStopAutoSubmitBtn;
+          return null;
+        },
+        querySelector: (sel) => {
+          if (sel === '#btnSubmitForm' || sel.includes('btnSubmitForm')) return mockSubmitBtn;
+          if (sel.includes('selectWebsiteStatus') || sel.includes('status')) return mockStatusSelect;
+          if (sel.includes('company')) return mockCompanyNameInput;
+          return null;
+        },
+        querySelectorAll: () => [],
+        addEventListener: () => {}
+      },
+      chrome: {
+        storage: {
+          sync: { get: (_, cb) => cb && cb({ autoQueueEnabled: false }), set: () => {} },
+          local: { get: (_, cb) => cb && cb({}), set: () => {}, remove: () => {} },
+          onChanged: { addListener: () => {} }
+        }
+      },
+      setTimeout: (fn) => { fn(); return 1; },
+      clearTimeout: () => {},
+      setInterval: () => 1,
+      clearInterval: () => {},
+      Event: function () {},
+      URL,
+      MutationObserver: function () { return { observe: () => {} }; }
+    });
+    bCtx.globalThis = bCtx;
+
+    for (const rel of files) {
+      const abs = path.join(rootDir, rel);
+      vm.runInContext(fs.readFileSync(abs, 'utf8'), bCtx, { filename: rel });
+    }
+
+    const ext = bCtx.__AI_EXTENSION__;
+
+    // A. Verify findModalConfirmButton rejects closed modal
+    modalIsActive = false;
+    assert.strictEqual(ext.findModalConfirmButton(), null, 'findModalConfirmButton must return null when modal is inactive');
+
+    // B. Verify findModalConfirmButton detects open modal
+    modalIsActive = true;
+    assert.strictEqual(ext.findModalConfirmButton(), mockModalOk, 'findModalConfirmButton must return OK button when modal is active');
+
+    // C. Verify 1-click Not Working & Submit (markAndSubmitCurrentAsNotWorking)
+    ext.markAndSubmitCurrentAsNotWorking('1-click test');
+    assert.strictEqual(mockStatusSelect.value, 'Not Working', 'Website status must be set to Not Working');
+    assert.strictEqual(mockCompanyNameInput.value, '', 'All other 13 fields must be cleared on Not Working');
+    assert.ok(submitClicked >= 1, 'Submit button must have been clicked');
+
+    // D. Verify Working site stops before submit for manual review per rule
+    ext.state.autoQueueEnabled = true;
+    ext.state.isWaitingForUserWorkingReview = false;
+    const workingData = {
+      websiteStatus: 'Working',
+      companyName: 'Acme Industrial Tools Ltd',
+      countryName: 'United States Of America'
+    };
+    ext.fillFormFields(workingData);
+    assert.strictEqual(ext.state.isWaitingForUserWorkingReview, false, 'Fill fields preserves state');
   });
 }
 
