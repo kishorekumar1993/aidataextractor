@@ -206,7 +206,7 @@ function sanitizeContextText(text) {
     .replace(/\b(?:(?:our|these)?\s*(?:products?|goods|components?|materials?|supplies|equipment|machinery|solutions?|parts?|services?)\s+(?:are\s+)?(?:mainly\s+|widely\s+|commonly\s+)?(?:used|applied|utilized|suitable|designed|recommended|engineered)\s+(?:for|in)\s+[^.\n;]+?(?=[.\n;]|$))/gi, " ")
     .replace(/\b(?:used|applied|serving)\s+(?:in|for|to)\s+(?:marine|industrial|chemical|food|beverage|pharmaceutical|medical|aerospace|automotive|defence|defense|military|offshore|oil|gas|refinery)[^.\n;]*?(?=[.\n;]|$)/gi, " ")
     .replace(/(?:(?:^|[\r\n])\s*(?:industries|markets|sectors|applications?)\s*[:\-–]|(?:\b(?:target|key|served)\s+(?:industries|markets|sectors)\s*[:\-–])|(?:\b(?:industries|markets|sectors|applications?)\s+(?:we\s+serve|served|supported)\s*[:\-–]))[^.\n;]+?(?=[.\n;]|$)/gi, " ")
-    .replace(/\b(?:serving|serves|served|supplying|supplies|supplied|catering|caters|catered)\s+(?:to\s+)?(?:the\s+)?(?:marine|aerospace|aviation|aircraft|defence|defense|military|chemical|petrochemical|food|beverage|pharmaceutical|medical|healthcare|hospital|automotive|mining|oil|gas|refinery|industrial)\s*(?:and|&|or|industry|industries|plants?|sector|sectors|market|markets|facilities|applications?|environments?)*[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:serving|serves|served|supplying|supplies|supplied|catering|caters|catered)\s+(?:to\s+)?(?:the\s+)?(?:manufacturing|marine|aerospace|aviation|aircraft|defence|defense|military|chemical|petrochemical|food|beverage|pharmaceutical|medical|healthcare|hospital|automotive|mining|oil|gas|refinery|industrial)\s*(?:and|&|or|,|\s*industry|\s*industries|\s*plants?|\s*sector|\s*sectors|\s*market|\s*markets|\s*facilities|\s*applications?|\s*environments?)*[^.\n;]*?(?=[.\n;]|$)/gi, " ")
     .replace(/\b(?:used\s+in\s+)?(?:marine\s*(&|and)\s*industrial|offshore\s*industrial\s*chemical\s*plant|food\s*(&|and)\s*chemical\s*industry)\b/gi, " ");
 
   // 6c. Architectural & commercial facility installations (lighting, flooring, doors, HVAC, etc.)
@@ -217,27 +217,32 @@ function sanitizeContextText(text) {
 
   // 7. Adult false positives (learners, education, children, furniture, pricing, privacy)
   cleanText = cleanText
+    .replace(/\b(?:young|older|mature|elderly|all)\s+adults?\b/gi, " ")
     .replace(/\badult\s*(?:learners?|students?|children|life|audience|education|outdoor\s*furniture|furniture|tables?|benches?|chairs?|bicycles?|bikes?|watches?|apparel|clothing|shoes?|sizes?|sizing|swim|swimming|camps?|campers?|supervision|literacy|population|health|mental\s*health|care|medicine|patients?|volunteers?|staff|leaders?|advisors?|programs?|courses?|classes?|admissions?|diapers?|bibs?|incontinence|living|guardians?|relatives?|survivors?|immunization|vaccines?)\b/gi, " ")
-    .replace(/(?:per|rates?\s+per|pricing\s+for|tickets?\s+for|cost\s+per|admit|admission\s+for|ages?\s+for)?\s*adults?\b/gi, " ")
+    .replace(/\b(?:per|rates?\s+per|pricing\s+for|tickets?\s+for|cost\s+per|admit|admission\s+for|ages?\s+for)\s+adults?\b/gi, " ")
     .replace(/(?:infants?|babies|toddlers?|children|kids?|youth|teens?|teenagers?|seniors?|men|women|families|family)[,\s]+(?:and|&|or)?\s*adults?\b/gi, " ")
     .replace(/\badults?[,\s]+(?:and|&|or)?\s*(?:children|kids?|youth|teens?|infants?|seniors?)\b/gi, " ")
-    .replace(/\b(?:not\s+intended\s+for\s+children|children\s+under\s+(?:13|16|18)|age\s+of\s+majority|verify\s+your\s+age|parental\s+consent|adult\s+supervision\s+required|must\s+be\s+an\s+adult)\b/gi, " ")
+    .replace(/\b(?:not\s+intended\s+for\s+children|children\s+under\s+(?:13|16|18)|age\s+of\s+majority|verify\s+your\s+age|parental\s+consent|adult\s+supervision\s+required|must\s+be\s+an\s+adult(?:\s+of\s+legal\s+age)?|adult\s+of\s+legal\s+age|legal\s+adult\s+age|you\s+must\s+be\s+an\s+adult)\b/gi, " ")
     .replace(/\bnude\s*(?:color|shade|lip(?:stick|gloss)|palette|nail|tones?|leather|shoes?|pumps?|heels?|dress|fabric|tan)\b/gi, " ");
 
   // 8. Aerospace & Aircraft application false positives
   cleanText = cleanText
+    .replace(/\b(?:titanium\s+)?(?:bolts?|fasteners?|brackets?|components?|parts?|connectors?|cables?|machining|tooling)\s+(?:perform\s+flawlessly\s+on|for|in|on|used\s+in)\s+(?:our\s+)?(?:military\s+aircraft|commercial\s+aircraft|aircraft|aviation|aerospace)\b/gi, " ")
     .replace(/\b(?:for|in|serving|services?|supplying|supplies|solutions?|applications?|components?|parts?|tooling|cables?|machining|fabrication|engineering)\s+(?:for|in|to)?\s*(?:the\s+)?(?:aerospace|aircraft|aviation|defence|defense|medical|pharmaceutical)\b/gi, " ")
     .replace(/\b(?:aerospace|aircraft|aviation|defence|defense)\s+(?:applications?|grade|industry|industries|sector|sectors|market|markets|standards?|specifications?|spec|specs|cables?|connectors?|fasteners?|gears?|components?|parts?|tooling|machining|hangars?|composites?)\b/gi, " ")
     .replace(/\b(?:aircraft\s*cables?|aircraft-grade)\b/gi, " ")
-    .replace(/\badvising\s+(?:corporate\s+)?clients\s+in\s+[^\n.]*?(?:aerospace|transportation)/gi, " ");
+    .replace(/\badvising\s+(?:corporate\s+)?clients\s+in\s+[^.\n;]+?(?=[.\n;]|$)/gi, " ");
 
   // 9. Marine false positives
   cleanText = cleanText
+    .replace(/\b(?:overhead\s+)?(?:gantries|gantry\s+systems?|cranes?|hoists?|lift\s+systems?)\s+(?:for|in)\s+(?:ship\s+maintenance|marine\s+operations?)\b/gi, " ")
+    .replace(/\bmarine\s+hardware\b/gi, " ")
     .replace(/\b(?:marine\s*grade|marine\s*environment|marine\s*environments|marine\s*resistant|marine\s*applications?|marine\s*coatings?|marine\s*paints?|marine\s*grease|marine\s*lubricants?|marine\s*fasteners?|marine\s*plywood|marine\s*hardware|marine\s*use|marine\s*conditions?|marine\s*equipment\s*manufacturers?|marine\s*(&|and)\s*industrial)\b/gi, " ");
 
   // 10. Animals false positives (cruelty-free, vegan, animal welfare, government animal husbandry)
   cleanText = cleanText
-    .replace(/\b(?:cruelty\s*[-–]?\s*free|not\s+tested\s+on\s+animals?|no\s+animal\s+testing|against\s+animal\s+cruelty|animal\s+welfare|animal\s+husbandry(?:\s+department)?)\b/gi, " ")
+    .replace(/\b(?:safe\s+for\s+(?:farm\s+)?animals?(?:\s+and\s+pets?)?|safe\s+near\s+animals?)\b/gi, " ")
+    .replace(/\b(?:cruelty\s*[-–]?\s*free(?:\s+to\s+animals?)?|not\s+tested\s+on\s+animals?|no\s+animal\s+testing|against\s+animal\s+cruelty|animal\s+welfare|animal\s+husbandry(?:\s+department)?|veterinary\s+administrative(?:\s+services)?|livestock\s+(?:housing|buildings?|barns?|sheds?|facilities|shelters?|enclosures?|fencing|equipment))\b/gi, " ")
     .replace(/\banimal\s*(?:prints?|patterns?|designs?|motifs?|illustrations?|figures?|shapes?)\b/gi, " ");
 
   // 11. Alcohol false positives
@@ -247,8 +252,9 @@ function sanitizeContextText(text) {
 
   // 12. Industrial equipment for food processing & bakery
   cleanText = cleanText
-    .replace(/\b(?:equipment|machinery|machines?|conveyors?|systems?|solutions?|supplies|tooling|ovens?|mixers?|appliances?)\s+(?:for|in)\s+(?:the\s+)?(?:food\s*processing|meat\s*processing|poultry\s*processing|dairy|bakery|bakeries|beverage|pharmaceutical|medical|restaurants?|cafes?|commercial\s*kitchens?)\s*(?:and|&|or|,|\s*industry|\s*industries|\s*sector|\s*sectors|\s*market|\s*markets|\s*facilities|\s*plants?|\s*bakeries|\s*restaurants?|\s*cafes?|\s*commercial\s*kitchens?)*[^.\n;]*?(?=[.\n;]|$)/gi, " ")
-    .replace(/\b(?:food\s*processing|meat\s*processing|poultry\s*processing|seafood\s*processing|dairy\s*processing|bakery|bakeries|catering)\s+(?:equipment|machinery|machines?|conveyors?|systems?|packaging|packaging\s*machinery|automation|tooling|lines?|plants?|technology|engineering|solutions?|supplies|appliances?|industry|industries|facilities)\b/gi, " ");
+    .replace(/\b(?:equipment|machinery|machines?|conveyors?|systems?|solutions?|supplies|tooling|ovens?|mixers?|appliances?)\s+(?:designed\s+(?:specifically\s+)?for|for|in|used\s+in)\s+(?:the\s+)?(?:food\s*processing|meat\s*processing|poultry\s*processing|dairy|bakery|bakeries|beverage|pharmaceutical|medical|restaurants?|cafes?|commercial\s*kitchens?)\s*(?:and|&|or|,|\s*industry|\s*industries|\s*sector|\s*sectors|\s*market|\s*markets|\s*facilities|\s*plants?|\s*bakeries|\s*restaurants?|\s*cafes?|\s*commercial\s*kitchens?)*[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:food\s*processing|meat\s*processing|poultry\s*processing|seafood\s*processing|dairy\s*processing|bakery|bakeries|catering)\s+(?:equipment|machinery|machines?|conveyors?|systems?|packaging|packaging\s*machinery|automation|tooling|lines?|plants?|technology|engineering|solutions?|supplies|appliances?|industry|industries|facilities)\b/gi, " ")
+    .replace(/\b(?:food\s+processing\s+plants?|chemical\s+and\s+petrochemical\s+plants?)\b/gi, " ");
 
   // 13. Pharmaceutical / medical equipment & served industries
   cleanText = cleanText
@@ -259,7 +265,8 @@ function sanitizeContextText(text) {
   // 14. Industrial chemical equipment and tanks false positives
   cleanText = cleanText
     .replace(/\b(?:chemical\s*(?:storage|process(?:ing)?|handling|injection|dosing|transfer)\s*(?:tanks?|vessels?|reactors?|equipment|machinery|machines?|pumps?|skids?|piping|systems?|solutions?))\b/gi, " ")
-    .replace(/\b(?:brewing|distillery)\s*(?:equipment|machinery|systems?|tanks?|kettles?|vessels?|fermenters?|stills?|columns?)\b/gi, " ");
+    .replace(/\b(?:brewing|distillery)\s*(?:equipment|machinery|systems?|tanks?|kettles?|vessels?|fermenters?|stills?|columns?)\b/gi, " ")
+    .replace(/\b(?:(?:titan|stainless|steel|pressure|reactor|storage|process|jacketed|mixing|containment)\s+vessels?)\b/gi, " ");
 
   return cleanText;
 }
@@ -376,11 +383,14 @@ function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
   // Strip HTML tags for clean raw text scanning
   let rawClean = combined.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
+  // Distinguish genuine prohibited category operations/products from unrelated contextual mentions (equipment for food plants, chemical tanks, hospital lighting, adult education/terms of service, cruelty-free, aerospace applications)
+  let cleanText = sanitizeContextText(rawClean);
+
   // 1. STRICT OFFICIAL RESTRICTION POLICY:
   // Reject if any restricted category word or phrase is found anywhere in the available content
   for (const item of STRICT_OFFICIAL_CATEGORIES) {
-    if (item.regex.test(rawClean)) {
-      const m = rawClean.match(item.regex);
+    if (item.regex.test(cleanText)) {
+      const m = cleanText.match(item.regex);
       let matchedKw = m ? m[0] : "";
       if (item.label === "Marine" && /^marine/i.test(matchedKw)) {
         matchedKw = "Marine";
@@ -411,8 +421,8 @@ function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
   for (const item of RESTRICTED_PATTERNS) {
     const regex = item.pattern || item;
     const label = item.label || "Prohibited Category";
-    if (regex.test(rawClean)) {
-      const m = rawClean.match(regex);
+    if (regex.test(cleanText)) {
+      const m = cleanText.match(regex);
       let matchedKw = m ? m[0] : "";
       if (item.label === "Marine" && /^marine/i.test(matchedKw)) {
         matchedKw = "Marine";

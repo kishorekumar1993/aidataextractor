@@ -295,9 +295,10 @@ async function crawlWebsite(targetUrl, options = {}) {
   let detectedDescCount = 0;
   let logoText = "";
 
-  // Global crawl budget counter: maximum 5 HTTP fetches per website (Item 13 & Test 70)
+  // Global crawl budget counter: maximum 5 HTTP page fetches per website (Item 13 & Test 70)
+  // Options cannot override this ceiling beyond 5
   let pagesFetchedCount = 0;
-  const MAX_CRAWL_PAGES = options.maxPages || 5;
+  const MAX_CRAWL_PAGES = Math.min(Number(options.maxPages) || 5, 5);
 
   async function safeFetchHtml(urlToFetch, fetchOpts = {}) {
     if (pagesFetchedCount >= MAX_CRAWL_PAGES) {
@@ -348,10 +349,10 @@ async function crawlWebsite(targetUrl, options = {}) {
   } catch (e) { }
 
   // 1. Upfront Multi-Hop 3xx Server-Side Redirect Chain Resolution
-  // Follows all 301/302/303/307/308 hops (up to 8 hops) to discover the true final destination
+  // Follows all 301/302/303/307/308 hops (up to 4 hops budget) to discover the true final destination
   let redirectChainInfo = null;
   try {
-    redirectChainInfo = await resolveRedirectChain(targetUrl, 8, { signal: options.abortSignal });
+    redirectChainInfo = await resolveRedirectChain(targetUrl, 4, { signal: options.abortSignal });
     if (redirectChainInfo && redirectChainInfo.hops > 0 && redirectChainInfo.finalUrl && redirectChainInfo.finalUrl !== targetUrl) {
       if (isRedirectDomain(targetUrl, redirectChainInfo.finalUrl)) {
         redirected = true;
@@ -539,13 +540,11 @@ async function crawlWebsite(targetUrl, options = {}) {
       mainHtml = "";
     }
 
-    // For redirected domains, seed generic brand fallback from destination domain if available
+    // For redirected domains, seed logo fallback if absent (do NOT treat domain-derived name as verified legal candidate)
     if (redirected) {
       const fallbackBrand = toTitleCase(cleanDomainStem(finalUrl));
-      if (fallbackBrand) {
-        allLegalCandidates.add(fallbackBrand);
-        legalCandidateSources[fallbackBrand] = finalUrl;
-        if (!logoText) logoText = fallbackBrand;
+      if (fallbackBrand && !logoText) {
+        logoText = fallbackBrand;
       }
     }
 
@@ -1010,10 +1009,8 @@ async function crawlWebsite(targetUrl, options = {}) {
   const ogSiteName = (ogSiteMatch && ogSiteMatch[1] && ogSiteMatch[1].trim()) || "";
 
   // Check for online purchase / shopping cart ("Shopchart")
+  // Note: Manufacturer exception (Rules 11 & 16) is applied in strict QC, so do not blanket reject here!
   const shopCartCheck = detectPurchaseOrShoppingCart(mainHtml + "\n" + contactHtml, (extracted && extracted.bodyText) || "");
-  if (shopCartCheck && shopCartCheck.detected) {
-    status = "Not Working";
-  }
 
   return {
     originalUrl: targetUrl,
@@ -1025,6 +1022,8 @@ async function crawlWebsite(targetUrl, options = {}) {
     mainHtml,
     contactHtml: contactHtml.slice(0, 50000),
     shopCartCheck,
+    redirectHops: redirectChainInfo ? redirectChainInfo.hops : 0,
+    totalNetworkRequests: pagesFetchedCount + (redirectChainInfo ? redirectChainInfo.hops : 0),
     logoText,
     ogSiteName,
     addressCandidates,

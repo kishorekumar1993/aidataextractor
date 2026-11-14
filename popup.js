@@ -8,11 +8,10 @@ function readPopupEnv(key, fallback = "") {
   );
 }
 
-const DEFAULT_AI_PROVIDER = readPopupEnv("AI_PROVIDER", "gemini").toLowerCase();
+const DEFAULT_AI_PROVIDER = "gemini";
 const DEFAULT_API_KEY = readPopupEnv("GEMINI_API_KEY", "");
 const DEFAULT_MODEL = readPopupEnv("DEFAULT_MODEL", "gemini-3.5-flash-lite");
-const DEFAULT_GROQ_API_KEY = readPopupEnv("GROQ_API_KEY", "");
-const DEFAULT_GROQ_MODEL = readPopupEnv("GROQ_MODEL", "llama-3.1-8b-instant");
+// Removed Groq from popup UI (background config retains llama-3.1-8b-instant for legacy compatibility)
 
 const PROVIDER_MODELS_UI = {
   gemini: [
@@ -22,19 +21,52 @@ const PROVIDER_MODELS_UI = {
     { value: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite" },
     { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" }
-  ],
-  groq: [
-    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant (Fast, High Quota - Recommended)" }
   ]
 };
+
+function saveSettingsToStorage(obj, cb) {
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.set(obj, () => {
+      if (chrome.storage.sync) {
+        try { chrome.storage.sync.set(obj, () => {}); } catch (e) {}
+      }
+      if (cb) cb();
+    });
+  } else if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+    chrome.storage.sync.set(obj, cb);
+  } else if (cb) {
+    cb();
+  }
+}
+
+function loadSettingsFromStorage(keys, cb) {
+  const local = (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) ? chrome.storage.local : null;
+  const sync = (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) ? chrome.storage.sync : null;
+
+  if (local && sync) {
+    local.get(keys, (localRes) => {
+      sync.get(keys, (syncRes) => {
+        const merged = { ...(syncRes || {}), ...(localRes || {}) };
+        if (syncRes && Object.keys(syncRes).length > 0) {
+          try { local.set(syncRes, () => {}); } catch (e) {}
+        }
+        cb(merged);
+      });
+    });
+  } else if (local) {
+    local.get(keys, (res) => cb(res || {}));
+  } else if (sync) {
+    sync.get(keys, (res) => cb(res || {}));
+  } else {
+    cb({});
+  }
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   const extractionModeSelect = document.getElementById("extraction-mode-select");
   const providerSelect = document.getElementById("provider-select");
   const apiKeyInput = document.getElementById("api-key-input");
-  const groqApiKeyInput = document.getElementById("groq-api-key-input");
   const toggleKeyVisibilityBtn = document.getElementById("btn-toggle-key-visibility");
-  const toggleGroqKeyVisibilityBtn = document.getElementById("btn-toggle-groq-key-visibility");
   const modelSelect = document.getElementById("model-select");
   const btnSaveKey = document.getElementById("btn-save-key");
   const btnTestKey = document.getElementById("btn-test-key");
@@ -45,17 +77,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const toggleInlineBtn = document.getElementById("toggle-inline-btn");
   const btnOpenTestPortal = document.getElementById("btn-open-test-portal");
 
+  // Clean up Groq from UI if present
+  const groupGroqKey = document.getElementById("group-groq-key");
+  if (groupGroqKey) groupGroqKey.style.display = "none";
+  if (providerSelect) {
+    const groqOpt = providerSelect.querySelector('option[value="groq"]');
+    if (groqOpt) groqOpt.remove();
+    providerSelect.value = "gemini";
+  }
+
   const savedModelsByProvider = {
-    gemini: DEFAULT_MODEL,
-    groq: DEFAULT_GROQ_MODEL
+    gemini: DEFAULT_MODEL
   };
 
   function populateModelsForProvider(provider, selectedModel) {
-    const cleanProv = PROVIDER_MODELS_UI[provider] ? provider : "gemini";
-    const options = [...PROVIDER_MODELS_UI[cleanProv]];
-    const desired = selectedModel || savedModelsByProvider[cleanProv] || options[0].value;
-    const isInvalidGroqDesired = /gpt-oss|llama-3\.3-70b|mixtral|gemma2/i.test(desired);
-    if (desired && !options.some(o => o.value === desired) && !isInvalidGroqDesired && (cleanProv === "groq" ? !/^gemini-|^grok-/i.test(desired) : /^gemini-/i.test(desired))) {
+    const cleanProv = "gemini";
+    const options = [...PROVIDER_MODELS_UI.gemini];
+    const desired = selectedModel || savedModelsByProvider.gemini || options[0].value;
+    if (desired && !options.some(o => o.value === desired) && /^gemini-/i.test(desired)) {
       options.push({ value: desired, label: desired });
     }
     modelSelect.innerHTML = "";
@@ -66,15 +105,6 @@ document.addEventListener("DOMContentLoaded", () => {
       modelSelect.appendChild(el);
     }
     modelSelect.value = options.some(o => o.value === desired) ? desired : options[0].value;
-
-    const activeGroupMap = {
-      gemini: document.getElementById("group-gemini-key"),
-      groq: document.getElementById("group-groq-key")
-    };
-    for (const [provKey, groupEl] of Object.entries(activeGroupMap)) {
-      if (!groupEl) continue;
-      groupEl.style.opacity = provKey === cleanProv ? "1" : "0.72";
-    }
   }
 
   function wireVisibilityToggle(btn, input) {
@@ -91,36 +121,21 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   wireVisibilityToggle(toggleKeyVisibilityBtn, apiKeyInput);
-  wireVisibilityToggle(toggleGroqKeyVisibilityBtn, groqApiKeyInput);
 
-  // Load existing settings or pre-configure defaults
-  chrome.storage.sync.get([
-    "aiProvider", "apiKey", "groqApiKey", "grokApiKey",
-    "model", "groqModel", "extractionMode",
+  // Load existing settings with chrome.storage.local priority and sync fallback
+  loadSettingsFromStorage([
+    "aiProvider", "apiKey", "groqApiKey", "model", "extractionMode",
     "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"
   ], (res) => {
-    let rawProv = String(res.aiProvider || DEFAULT_AI_PROVIDER || "gemini").toLowerCase();
-    if (rawProv === "grok") rawProv = "groq";
-    const activeProvider = PROVIDER_MODELS_UI[rawProv] ? rawProv : "gemini";
-
     if (extractionModeSelect) {
       extractionModeSelect.value = res.extractionMode || "ai_first";
     }
 
-    const savedGroqKey = res.groqApiKey || res.grokApiKey || DEFAULT_GROQ_API_KEY;
-    if (providerSelect) providerSelect.value = activeProvider;
-
+    if (providerSelect) providerSelect.value = "gemini";
     apiKeyInput.value = res.apiKey || DEFAULT_API_KEY;
-    if (groqApiKeyInput) groqApiKeyInput.value = savedGroqKey;
 
     savedModelsByProvider.gemini = res.model || DEFAULT_MODEL;
-    let loadedGroqModel = res.groqModel || DEFAULT_GROQ_MODEL;
-    if (/gpt-oss|llama-3\.3-70b|mixtral|gemma2/i.test(loadedGroqModel)) {
-      loadedGroqModel = DEFAULT_GROQ_MODEL;
-      chrome.storage.sync.set({ groqModel: DEFAULT_GROQ_MODEL });
-    }
-    savedModelsByProvider.groq = loadedGroqModel;
-    populateModelsForProvider(activeProvider, savedModelsByProvider[activeProvider]);
+    populateModelsForProvider("gemini", savedModelsByProvider.gemini);
 
     toggleStrictFilter.checked = res.strictFilter !== undefined ? res.strictFilter : true;
     if (toggleAutoQueue) {
@@ -134,56 +149,33 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  if (providerSelect) {
-    providerSelect.addEventListener("change", () => {
-      const nextProv = providerSelect.value;
-      populateModelsForProvider(nextProv, savedModelsByProvider[nextProv]);
-    });
-  }
-
-  // Auto-select Groq when pasting a gsk_ key or Gemini when pasting AIza key
-  if (groqApiKeyInput) {
-    groqApiKeyInput.addEventListener("input", () => {
-      if (/^gsk_/i.test(groqApiKeyInput.value.trim()) && providerSelect && providerSelect.value !== "groq") {
-        providerSelect.value = "groq";
-        populateModelsForProvider("groq", savedModelsByProvider.groq);
-      }
-    });
-  }
   if (apiKeyInput) {
     apiKeyInput.addEventListener("input", () => {
-      if (/^AIza/i.test(apiKeyInput.value.trim()) && providerSelect && providerSelect.value !== "gemini") {
-        providerSelect.value = "gemini";
-        populateModelsForProvider("gemini", savedModelsByProvider.gemini);
-      }
+      if (providerSelect) providerSelect.value = "gemini";
     });
   }
 
   modelSelect.addEventListener("change", () => {
-    const prov = providerSelect ? providerSelect.value : "gemini";
-    savedModelsByProvider[prov] = modelSelect.value;
+    savedModelsByProvider.gemini = modelSelect.value;
   });
 
   // Save Settings
   btnSaveKey.addEventListener("click", () => {
-    const aiProvider = providerSelect ? providerSelect.value : "gemini";
+    const aiProvider = "gemini";
     const extractionMode = extractionModeSelect ? extractionModeSelect.value : "ai_first";
     const key = apiKeyInput.value.trim();
-    const groqApiKey = groqApiKeyInput ? groqApiKeyInput.value.trim() : "";
-    savedModelsByProvider[aiProvider] = modelSelect.value;
+    savedModelsByProvider.gemini = modelSelect.value;
 
     const strict = toggleStrictFilter.checked;
     const autoQueue = toggleAutoQueue ? toggleAutoQueue.checked : true;
     const floating = toggleFloatingWidget ? toggleFloatingWidget.checked : true;
     const inline = toggleInlineBtn ? toggleInlineBtn.checked : true;
 
-    chrome.storage.sync.set({
+    saveSettingsToStorage({
       aiProvider,
       extractionMode,
       apiKey: key,
-      groqApiKey,
       model: savedModelsByProvider.gemini,
-      groqModel: savedModelsByProvider.groq,
       strictFilter: strict,
       autoQueueEnabled: autoQueue,
       showFloatingWidget: floating,
@@ -196,49 +188,32 @@ document.addEventListener("DOMContentLoaded", () => {
   // Instant toggles without requiring Save button
   if (extractionModeSelect) {
     extractionModeSelect.addEventListener("change", () => {
-      chrome.storage.sync.set({ extractionMode: extractionModeSelect.value });
+      saveSettingsToStorage({ extractionMode: extractionModeSelect.value });
     });
   }
   if (toggleAutoQueue) {
     toggleAutoQueue.addEventListener("change", () => {
-      chrome.storage.sync.set({ autoQueueEnabled: toggleAutoQueue.checked });
+      saveSettingsToStorage({ autoQueueEnabled: toggleAutoQueue.checked });
     });
   }
   if (toggleFloatingWidget) {
     toggleFloatingWidget.addEventListener("change", () => {
-      chrome.storage.sync.set({ showFloatingWidget: toggleFloatingWidget.checked });
+      saveSettingsToStorage({ showFloatingWidget: toggleFloatingWidget.checked });
     });
   }
   if (toggleInlineBtn) {
     toggleInlineBtn.addEventListener("change", () => {
-      chrome.storage.sync.set({ showInlineBtn: toggleInlineBtn.checked });
+      saveSettingsToStorage({ showInlineBtn: toggleInlineBtn.checked });
     });
   }
 
-  // Test Connection for active AI provider
+  // Test Connection for Gemini
   btnTestKey.addEventListener("click", () => {
-    let provider = providerSelect ? providerSelect.value : "gemini";
-    let key = "";
-    let defaultMod = DEFAULT_MODEL;
-    if (provider === "groq") {
-      key = (groqApiKeyInput ? groqApiKeyInput.value.trim() : "") || DEFAULT_GROQ_API_KEY;
-      defaultMod = DEFAULT_GROQ_MODEL;
-    } else {
-      key = apiKeyInput.value.trim() || DEFAULT_API_KEY;
-      defaultMod = DEFAULT_MODEL;
-    }
+    const provider = "gemini";
+    const key = apiKeyInput.value.trim() || DEFAULT_API_KEY;
+    const model = modelSelect.value || DEFAULT_MODEL;
 
-    if (/^gsk_/i.test(key) && provider !== "groq") {
-      provider = "groq";
-      defaultMod = DEFAULT_GROQ_MODEL;
-      if (providerSelect) providerSelect.value = "groq";
-      populateModelsForProvider("groq", savedModelsByProvider.groq);
-    }
-
-    const model = modelSelect.value || defaultMod;
-    const providerName = provider === "groq" ? "Groq" : "Gemini";
-
-    showStatus(`Testing ${providerName} API connection...`, "loading");
+    showStatus("Testing Gemini API connection...", "loading");
 
     chrome.runtime.sendMessage({
       action: "TEST_API_KEY",
@@ -251,23 +226,16 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       if (res && res.success) {
-        if (Array.isArray(res.availableModels) && res.availableModels.length > 0 && provider === "groq") {
-          PROVIDER_MODELS_UI.groq = res.availableModels.map(m => ({ value: m, label: m }));
-        }
         if (res.activeModel) {
-          savedModelsByProvider[provider] = res.activeModel;
-          populateModelsForProvider(provider, res.activeModel);
-          chrome.storage.sync.set(provider === "groq" ? { groqModel: res.activeModel } : { model: res.activeModel });
+          savedModelsByProvider.gemini = res.activeModel;
+          populateModelsForProvider("gemini", res.activeModel);
+          saveSettingsToStorage({ model: res.activeModel });
         }
-        showStatus(res.message || `Connected! ${providerName} API is active & ready.`, "success");
+        showStatus(res.message || "Connected! Gemini API is active & ready.", "success");
       } else {
         const err = res?.error || "Unknown error";
         if (/401|403|unauthorized|unauthenticated/i.test(err)) {
-          const hintMap = {
-            gemini: "Google Gemini keys start with 'AIzaSy...'. Check aistudio.google.com/app/apikey",
-            groq: "Groq keys start with 'gsk_...'. Check console.groq.com/keys"
-          };
-          showStatus(`${providerName} Unauthorized: ${hintMap[provider] || err}`, "error");
+          showStatus("Gemini Unauthorized: Google Gemini keys start with 'AIzaSy...'. Check aistudio.google.com/app/apikey", "error");
         } else {
           showStatus(`Test failed: ${err}`, "error");
         }

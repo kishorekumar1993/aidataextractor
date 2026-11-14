@@ -240,10 +240,11 @@ async function runAll() {
 
   // =========================================================================
   // Item 72: Website-Wide Strict Restriction Validation (14 Required Scenarios)
-  // Official Policy: Reject if ANY restricted category word/phrase/image is found ANYWHERE.
-  // Covering all 10 prohibited categories.
+  // Official Policy: Distinguish genuine prohibited category operations from
+  // unrelated contextual mentions (equipment for food plants, chemical tanks,
+  // hospital lighting, adult education/legal age, titanium bolts for aircraft).
   // =========================================================================
-  runTest('Item 72.1: Restricted word on homepage -> Reject (Category 1: Adult/Porn)', () => {
+  runTest('Item 72.1: Genuine restricted business on homepage -> Reject (Category 1: Adult/Porn)', () => {
     const { ctx } = createTestContext();
     const text = 'Welcome to Adult Entertainment Zone. High quality adult media and videos.';
     const check = ctx.detectRestrictedKeywords(text, '', [{ url: 'https://example.com', text }]);
@@ -251,65 +252,105 @@ async function runAll() {
     assert.strictEqual(check.classification, 'GENUINE_RESTRICTED');
   });
 
-  runTest('Item 72.2: Restricted word on About Us page -> Reject (Category 2: Medicine/Medical)', () => {
+  runTest('Item 72.2: Genuine restricted business on About Us -> Reject (Category 2: Medicine/Medical)', () => {
     const { ctx } = createTestContext();
-    const check = ctx.detectRestrictedKeywords('Industrial Engineering Co.', '', [
-      { url: 'https://example.com', text: 'Industrial Engineering Co.' },
-      { url: 'https://example.com/about', text: 'Our company was founded by medical physicians and doctors.' }
+    const check = ctx.detectRestrictedKeywords('Medical Health Clinic', '', [
+      { url: 'https://example.com', text: 'Medical Health Clinic' },
+      { url: 'https://example.com/about', text: 'Our company was founded by medical physicians and doctors providing patient hospital care.' }
     ]);
     assert.strictEqual(check.isRestricted, true);
     assert.strictEqual(check.category, 'Medicine, Medical & Hospital');
   });
 
-  runTest('Item 72.3: Restricted word in footer -> Reject (Category 8: Chemicals)', () => {
+  runTest('Item 72.3: Contextual mention in footer (equipment for chemical plants) -> Permitted (Working)', () => {
     const { ctx } = createTestContext();
     const html = '<html><body><div>Precision Lathes</div><footer>Supplying equipment for chemical and petrochemical plants.</footer></body></html>';
     const check = ctx.detectRestrictedKeywords('Precision Lathes', html, [{ url: 'https://example.com', html, text: 'Precision Lathes' }]);
+    assert.strictEqual(check.isRestricted, false, 'Industrial equipment for chemical plants is permitted');
+  });
+
+  runTest('Item 72.3b: Genuine prohibited chemical supplier -> Reject (Category 8: Chemicals)', () => {
+    const { ctx } = createTestContext();
+    const text = 'Bulk industrial chemicals, petrochemical solvents, and agrochemicals distribution.';
+    const check = ctx.detectRestrictedKeywords(text, '', [{ url: 'https://example.com', text }]);
     assert.strictEqual(check.isRestricted, true);
     assert.strictEqual(check.category, 'Chemicals & Petrochemicals');
   });
 
-  runTest('Item 72.4: Restricted word in testimonial -> Reject (Category 5: Defence & 6: Aerospace)', () => {
+  runTest('Item 72.4: Contextual mention in testimonial (bolts for military aircraft) -> Permitted (Working)', () => {
     const { ctx } = createTestContext();
     const text = 'Customer Testimonial: These machined titanium bolts perform flawlessly on our military aircraft.';
     const check = ctx.detectRestrictedKeywords(text, '', [{ url: 'https://example.com/testimonials', text }]);
-    assert.strictEqual(check.isRestricted, true);
+    assert.strictEqual(check.isRestricted, false, 'Hardware fasteners applied in aircraft are permitted');
   });
 
-  runTest('Item 72.5: Restricted word in blog/news page -> Reject (Category 9: Alcohol & Breweries)', () => {
+  runTest('Item 72.4b: Genuine military armaments business -> Reject (Category 5: Defence)', () => {
+    const { ctx } = createTestContext();
+    const text = 'Defense contractor producing tactical armaments and military artillery systems.';
+    const check = ctx.detectRestrictedKeywords(text, '', [{ url: 'https://example.com', text }]);
+    assert.strictEqual(check.isRestricted, true);
+    assert.strictEqual(check.category, 'Defence & Military');
+  });
+
+  runTest('Item 72.5: Restricted business in blog/news page -> Reject (Category 9: Alcohol & Breweries)', () => {
     const { ctx } = createTestContext();
     const check = ctx.detectRestrictedKeywords('Stainless Tank Fabricators', '', [
       { url: 'https://example.com', text: 'Stainless Tank Fabricators' },
-      { url: 'https://example.com/blog/craft-brewery-visit', text: 'Our team visited a local craft beer brewery in Dublin.' }
+      { url: 'https://example.com/blog/craft-brewery-visit', text: 'Our company operates a local craft beer brewery in Dublin.' }
     ]);
     assert.strictEqual(check.isRestricted, true);
     assert.strictEqual(check.category, 'Alcohol & Breweries');
   });
 
-  runTest('Item 72.6: Restricted word in FAQ -> Reject (Category 10: Animals & Pets)', () => {
+  runTest('Item 72.6: Contextual mention in FAQ (enclosure safe for animals) -> Permitted (Working)', () => {
     const { ctx } = createTestContext();
     const check = ctx.detectRestrictedKeywords('Fencing Systems', '', [
       { url: 'https://example.com', text: 'Fencing Systems' },
       { url: 'https://example.com/faq', text: 'Q: Is this enclosure safe for farm animals and pets? A: Yes.' }
     ]);
+    assert.strictEqual(check.isRestricted, false, 'Fencing enclosure safety mention is permitted');
+  });
+
+  runTest('Item 72.6b: Genuine live animal sales -> Reject (Category 10: Animals & Pets)', () => {
+    const { ctx } = createTestContext();
+    const check = ctx.detectRestrictedKeywords('Pet Kingdom', '', [
+      { url: 'https://example.com', text: 'Pet Kingdom' },
+      { url: 'https://example.com/pets', text: 'Purebred puppies and kittens available for adoption at our pet store.' }
+    ]);
     assert.strictEqual(check.isRestricted, true);
     assert.strictEqual(check.category, 'Animals & Pets');
   });
 
-  runTest('Item 72.7: Restricted word in privacy/terms page -> Reject (Category 1: Adult)', () => {
+  runTest('Item 72.7: Contextual mention in privacy/terms (legal adult age) -> Permitted (Working)', () => {
     const { ctx } = createTestContext();
     const check = ctx.detectRestrictedKeywords('Standard Tools Corp', '', [
       { url: 'https://example.com', text: 'Standard Tools Corp' },
       { url: 'https://example.com/terms', text: 'Terms of service: You must be an adult of legal age to browse this site.' }
     ]);
+    assert.strictEqual(check.isRestricted, false, 'Terms of service adult disclaimer is permitted');
+  });
+
+  runTest('Item 72.7b: Genuine adult entertainment -> Reject (Category 1: Adult)', () => {
+    const { ctx } = createTestContext();
+    const check = ctx.detectRestrictedKeywords('Erotic Video Network', '', [
+      { url: 'https://example.com', text: 'Erotic Video Network' },
+      { url: 'https://example.com/videos', text: 'Exclusive adult toys, erotica, and uncensored adult videos.' }
+    ]);
     assert.strictEqual(check.isRestricted, true);
     assert.strictEqual(check.category, 'Adult & Porn');
   });
 
-  runTest('Item 72.8: Restricted word in product description -> Reject (Category 3: Food)', () => {
+  runTest('Item 72.8: Contextual mention in product description (conveyors for food plants) -> Permitted (Working)', () => {
     const { ctx } = createTestContext();
     const text = 'Model F-200: Industrial conveyor systems designed specifically for food processing plants.';
     const check = ctx.detectRestrictedKeywords(text, '', [{ url: 'https://example.com/products/f200', text }]);
+    assert.strictEqual(check.isRestricted, false, 'Conveyor equipment for food plants is permitted');
+  });
+
+  runTest('Item 72.8b: Genuine food manufacturer/bakery -> Reject (Category 3: Food)', () => {
+    const { ctx } = createTestContext();
+    const text = 'Artisan bakery producing gourmet breads, pastries, and confectionery food products.';
+    const check = ctx.detectRestrictedKeywords(text, '', [{ url: 'https://example.com', text }]);
     assert.strictEqual(check.isRestricted, true);
     assert.strictEqual(check.category, 'Food & Beverages');
   });
@@ -321,11 +362,20 @@ async function runAll() {
     assert.strictEqual(check.isRestricted, true);
   });
 
-  runTest('Item 72.10: Restricted word in another crawled page -> Reject (Category 7: Marine/Ships)', () => {
+  runTest('Item 72.10: Contextual mention in crawled page (gantry for ship maintenance) -> Permitted (Working)', () => {
     const { ctx } = createTestContext();
     const check = ctx.detectRestrictedKeywords('Heavy Cranes Ltd', '', [
       { url: 'https://example.com', text: 'Heavy Cranes Ltd' },
       { url: 'https://example.com/industries/marine', text: 'Overhead gantry systems for ship maintenance.' }
+    ]);
+    assert.strictEqual(check.isRestricted, false, 'Gantry systems are permitted');
+  });
+
+  runTest('Item 72.10b: Genuine shipyard shipbuilding -> Reject (Category 7: Marine/Ships)', () => {
+    const { ctx } = createTestContext();
+    const check = ctx.detectRestrictedKeywords('Seaway Shipbuilders Ltd', '', [
+      { url: 'https://example.com', text: 'Seaway Shipbuilders Ltd' },
+      { url: 'https://example.com/shipbuilding', text: 'Full-service shipyard constructing commercial passenger vessels, ferries, and ships.' }
     ]);
     assert.strictEqual(check.isRestricted, true);
   });
@@ -418,6 +468,59 @@ async function runAll() {
     assert.strictEqual(qcResult.websiteStatus, 'Working', 'Manufacturer with shopping cart is permitted (Rules 11 & 16 exception)');
     assert.strictEqual(qcResult.businessType, 'Manufacturer');
     assert.strictEqual(qcResult.isRestricted, false);
+  });
+
+  runTest('Item 72.15: Non-manufacturer retailer with shopping cart -> Reject as Not Working', () => {
+    const { ctx } = createTestContext();
+    const crawlData = {
+      originalUrl: 'https://consumer-retail.com',
+      finalUrl: 'https://consumer-retail.com',
+      mainHtml: '<html><body><h1>Super Gadgets Retail</h1><p>Online store with direct checkout.</p><button>Add to Cart</button></body></html>',
+      bodyText: 'Super Gadgets Retail. Online store with direct checkout. Add to Cart. Price $19.99.',
+      shopCartCheck: { detected: true, reason: 'Add to Cart button found' },
+      isShopCartSite: true,
+      crawledPages: [{ url: 'https://consumer-retail.com', text: 'Online store with direct checkout.' }]
+    };
+    const check = ctx.detectRestrictedKeywords(crawlData.bodyText, crawlData.mainHtml, crawlData.crawledPages);
+    assert.strictEqual(check.isRestricted, false);
+
+    const qcResult = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Trader',
+      companyName: 'Super Gadgets Retail Limited',
+      countryName: 'United States Of America',
+      companyAddress: '100 Market St, San Francisco, CA',
+      phoneNumber: '4155550100',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    }, crawlData, check);
+
+    assert.strictEqual(qcResult.websiteStatus, 'Not Working', 'Non-manufacturer retailer with cart must be Not Working');
+  });
+
+  runTest('Item 72.16: Supplier with 0 displayed products -> Classify as Supplier with count 0 & Working status', () => {
+    const { ctx } = createTestContext();
+    const crawlData = {
+      originalUrl: 'https://raw-alloys-supplier.com',
+      finalUrl: 'https://raw-alloys-supplier.com',
+      mainHtml: '<html><body><h1>Raw Alloys Supply Corp</h1><p>Supplier of industrial metals, ingots, and alloys upon enquiry.</p><footer>Address: 50 Metal Way, Birmingham, UK. Tel: +44 121 555 1234</footer></body></html>',
+      bodyText: 'Raw Alloys Supply Corp. Supplier of industrial metals, ingots, and alloys upon enquiry. Address: 50 Metal Way, Birmingham, UK. Tel: +44 121 555 1234',
+      crawledPages: [{ url: 'https://raw-alloys-supplier.com', text: 'Raw Alloys Supply Corp. Supplier of industrial metals, ingots, and alloys upon enquiry.' }],
+      detectedProductCount: 0,
+      detectedImageCount: 0,
+      detectedDescCount: 0,
+      emails: ['info@raw-alloys-supplier.com'],
+      phones: ['+44 121 555 1234'],
+      addressCandidates: [{ raw: '50 Metal Way, Birmingham, UK', priority: 1 }]
+    };
+    const check = ctx.detectRestrictedKeywords(crawlData.bodyText, crawlData.mainHtml, crawlData.crawledPages);
+    assert.strictEqual(check.isRestricted, false);
+
+    const extracted = ctx.heuristicExtraction(crawlData, check);
+    assert.strictEqual(extracted.businessType, 'Supplier');
+    assert.strictEqual(extracted.numberOfProducts, '0');
+    assert.strictEqual(extracted.websiteStatus, 'Working', 'Supplier with 0 products is Working (eligible for Non-Paid submission)');
   });
 
   // =========================================================================

@@ -24,9 +24,9 @@ function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
 OUTPUT FORMAT (STRICT JSON ONLY):
 Return ONLY a single valid JSON object (no markdown fences or commentary) containing ALL keys below:
 {
-  "websiteStatus": "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site",
+  "websiteStatus": "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site" | "Manual Review",
   "notWorkingReason": "string (mandatory explanation if not Working, else empty string \"\")",
-  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
+  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
   "companyProfile": "Available" | "Not Available" | "",
   "companyName": "string",
   "countryName": "string",
@@ -44,15 +44,18 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   return `You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
 
 1. WEBSITE STATUS QC RULES:
-- Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site".
+- Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site" | "Manual Review".
 - Rules 11 & 16 (Online Store / Shopping Cart / Buy Now / Checkout):
-  * If company IS A MANUFACTURER (produces/fabricates products in own factory, OEM/ODM) -> Mark "Working" and "Manufacturer", extract all 14 fields.
+  * If company IS A MANUFACTURER (produces/fabricates products in own factory, OEM/ODM) -> Mark "Working" and "Manufacturer", extract all 14 fields. Online ordering/cart is PERMITTED for manufacturers!
   * If company is NOT A MANUFACTURER (Retailer, Reseller, Trader, E-commerce Store, Distributor) -> Mark "Not Working" and leave all other 13 fields empty "".
+  * B2B quotation actions ("Request a Quote", "Add to Quote", "Inquire") or dealer locators are NOT online shopping carts -> Eligible!
 - Rule 12 (Non-English): No English translation option -> mark "Non English" (all other fields empty "").
 - Rule 14 (Flash): Designed in Flash format where text is uncopyable -> mark "Flash" (all other fields empty "").
 - Rule 13 (Redirect Site): Redirected to a completely DIFFERENT domain (companyA.com -> companyB.com) -> mark "Redirect Site", evaluate details from destination site. Same-domain redirects (http to https, www vs non-www, language path /en/) are NOT Redirect Sites -> mark "Working".
-- If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason (e.g. "Website has 0 products and no verifiable catalog or physical address", "Prohibited category: Marine", "Online shopping cart without manufacturing facility", "Domain expired / 404"). If "Working", set "notWorkingReason" to "".
-- CRITICAL RULE NOTE 2 - PROHIBITED / RESTRICTED CATEGORIES (OFFICIAL STRICT RESTRICTION POLICY):
+- Manual Review: Anti-bot challenge (Cloudflare/Access Denied) or ambiguous access.
+- Supplier with 0 Displayed Products: An operational physical supplier with no displayed product catalog is classified as "Supplier" with product count "0" and marked "Working" (submitted as Non-Paid). Do NOT mark 0 products as Not Working if company is an operational supplier!
+- If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason. If "Working", set "notWorkingReason" to "".
+- CRITICAL RULE NOTE 2 - PROHIBITED / RESTRICTED CATEGORIES:
   * Strictly Prohibited Categories:
     1. Porn and adult content
     2. Medicine, medical, and hospitals
@@ -64,15 +67,13 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
     8. Chemicals and chemical products
     9. Alcohol and alcoholic beverages
     10. Animals and animal-related products
-  * CRITICAL MANDATE: A website must be rejected if ANY restricted category word, meaningful category phrase, or relevant image is found ANYWHERE in the available website content.
-  * Incidental mentions, component applications, served industries, testimonials, blogs, news, FAQs, footers, headers, privacy/terms pages, and image attributes (alt, title, filename) are NOT EXEMPT.
-  * AI extraction CANNOT override a deterministic strict restriction match.
-  * When a restricted category word or phrase is detected, you MUST set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
-  * Return evidence showing the matching word or phrase, the category, and the page or source where it was found in notWorkingReason.
+  * CRITICAL MANDATE: A website must be rejected if the business genuinely belongs to or sells products/services in any restricted category anywhere in the content. Incidental selling or mentions of these restricted activities on any page (About, Footer, Blog, FAQ, images) are NOT exempt.
+  * CONTEXTUAL EXCLUSIONS (NOT RESTRICTED): Distinguish genuine prohibited category operations from unrelated contextual mentions! An industrial machinery manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, knife gate valves, connectors for aerospace applications, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business.
+  * When a genuine restricted category business/product is detected, you MUST set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
 
 2. BUSINESS TYPE:
-- Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
-- Note exact spelling "Distributer". If company manufactures, fabricates, molds, or engineers products -> "Manufacturer".
+- Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
+- If company manufactures, fabricates, molds, or engineers products -> "Manufacturer".
 
 3. COMPANY PROFILE:
 - Options: "Available" | "Not Available".
@@ -991,11 +992,16 @@ function heuristicExtraction(crawlData, restrictedCheck) {
 
   const shopCartCheck = crawlData.shopCartCheck || detectPurchaseOrShoppingCart((crawlData.mainHtml || "") + "\n" + (crawlData.contactHtml || ""), crawlData.bodyText || "");
   const isDiffDomain = isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl);
-  let websiteStatus = isDiffDomain ? "Redirect Site" : ((shopCartCheck && shopCartCheck.detected) ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working"));
+  // Preserving manufacturer exception (Rules 11 & 16: Manufacturers with online store/cart are eligible!)
+  const isMfg = inferredBusiness === "Manufacturer" || (typeof isManufacturerFromEvidence === "function" && isManufacturerFromEvidence(crawlData));
+  const isNonMfgShopCart = !!(shopCartCheck && shopCartCheck.detected && !isMfg);
+  let websiteStatus = isDiffDomain ? "Redirect Site" : (isNonMfgShopCart ? "Not Working" : (crawlData.status || crawlData.initialStatus || "Working"));
 
-  // Rule 1: If website has 0 products and no address or no verifiable contact information, mark Not Working!
+  // Rule 1: A supplier with no displayed products can still be classified as Supplier with product count 0 and submitted as Non-Paid!
+  // Only mark Not Working if website has 0 products AND has NO physical address AND NO contact information at all, and is NOT an eligible supplier.
   const hasContactEvidence = !!(address || emailId || phoneNumber);
-  const isZeroProdUnverifiable = !isDiffDomain && ((!address && prodCount === "0") || (!hasContactEvidence && prodCount === "0"));
+  const isSupplier = inferredBusiness === "Supplier" || (typeof checkPhysicalProductSupplier === "function" && checkPhysicalProductSupplier(crawlData, { companyAddress: address }));
+  const isZeroProdUnverifiable = !isDiffDomain && !isSupplier && ((!address && prodCount === "0") || (!hasContactEvidence && prodCount === "0"));
   if (isZeroProdUnverifiable) {
     websiteStatus = "Not Working";
   }

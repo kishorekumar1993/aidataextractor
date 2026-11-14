@@ -186,11 +186,18 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
 
   let settings = {};
   try {
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-      settings = await chrome.storage.sync.get([
-        "aiProvider", "apiKey", "groqApiKey", "grokApiKey",
-        "model", "groqModel", "extractionMode"
-      ]);
+    if (typeof chrome !== "undefined" && chrome.storage) {
+      if (chrome.storage.local) {
+        settings = await chrome.storage.local.get([
+          "aiProvider", "apiKey", "model", "extractionMode"
+        ]);
+      }
+      if ((!settings || !settings.apiKey) && chrome.storage.sync) {
+        const syncSettings = await chrome.storage.sync.get([
+          "aiProvider", "apiKey", "model", "extractionMode"
+        ]);
+        settings = { ...syncSettings, ...settings };
+      }
     }
   } catch (e) {
     settings = {};
@@ -981,8 +988,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       "export": "Exporter",
       "trader": "Trader",
       "trading": "Trader",
-      "distributer": "Distributer",
-      "distributor": "Distributer",
+      "distributer": "Distributor",
+      "distributor": "Distributor",
       "supplier": "Supplier",
       "wholesaler": "Wholesaler",
       "wholesale": "Wholesaler",
@@ -1351,9 +1358,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     "trader": "Trader",
     "trading": "Trader",
     "trade": "Trader",
-    "distributer": "Distributer",
-    "distributor": "Distributer",
-    "distribution": "Distributer",
+    "distributer": "Distributor",
+    "distributor": "Distributor",
+    "distribution": "Distributor",
     "supplier": "Supplier",
     "supplying": "Supplier",
     "supplies": "Supplier",

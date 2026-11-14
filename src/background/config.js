@@ -121,12 +121,12 @@ const GEMINI_RESPONSE_SCHEMA = {
   properties: {
     websiteStatus: {
       type: "STRING",
-      enum: ["Working", "Not Working", "Domain Expired", "Non English", "Under Construction", "Flash", "Redirect Site"],
-      description: "Working if operational physical goods company; Not Working if dead, 404, 0 products, or prohibited; Domain Expired if parked/404; Non English if non-English without translation; Under Construction if under construction; Flash if flash format; Redirect Site if redirected to different domain"
+      enum: ["Working", "Not Working", "Domain Expired", "Non English", "Under Construction", "Flash", "Redirect Site", "Manual Review"],
+      description: "Working if operational physical goods company or service provider; Not Working if dead, unreachable, 404, or prohibited; Domain Expired if parked/404; Non English if non-English without translation; Under Construction if under construction; Flash if flash format; Redirect Site if redirected to different domain; Manual Review if anti-bot challenge or ambiguous verification required"
     },
     notWorkingReason: {
       type: "STRING",
-      description: "Mandatory if websiteStatus is Not Working, Domain Expired, Non English, Under Construction, or Flash: provide a concise, genuine business or technical reason (e.g. 'Website has 0 products and no verifiable catalog or physical address', 'Prohibited category: medicine/medical', 'Online retailer with shopping cart and no factory', 'Under construction'). Return empty string if Working."
+      description: "Mandatory if websiteStatus is Not Working, Domain Expired, Non English, Under Construction, Flash, or Manual Review: provide a concise, genuine business or technical reason (e.g. 'Website has 0 products and no verifiable catalog or physical address', 'Prohibited category: medicine/medical', 'Online retailer with shopping cart and no factory', 'Under construction'). Return empty string if Working."
     },
     businessType: {
       type: "STRING",
@@ -136,6 +136,7 @@ const GEMINI_RESPONSE_SCHEMA = {
         "Exporter",
         "Trader",
         "Distributer",
+        "Distributor",
         "Supplier",
         "Wholesaler",
         "Service Provider",
@@ -143,7 +144,7 @@ const GEMINI_RESPONSE_SCHEMA = {
         "Restricted Site",
         "Other"
       ],
-      description: "Business scope classification. Manufacturer, Industrial Services, Exporter, Trader, Distributer, Supplier, Wholesaler are allowed working types."
+      description: "Business scope classification. Manufacturer, Industrial Services, Exporter, Trader, Distributor, Supplier, Wholesaler are allowed working types."
     },
     companyProfile: {
       type: "STRING",
