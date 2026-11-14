@@ -437,11 +437,11 @@ async function crawlWebsite(targetUrl, options = {}) {
         status = "Domain Expired";
         fetchError = "Site returned HTTP 404 Not Found";
       } else if (mainRes && (mainRes.status === 403 || mainRes.status === 401 || mainRes.status === 429 || isAntiBotChallenge(mainRes.html, mainRes.status))) {
-        // Items 4 & 9: Separate blocked/WAF from dead websites! Use Manual Review / Blocked, NOT Not Working!
-        status = "Manual Review";
+        status = "Not Working";
         isBlocked = true;
-        requiresManualReview = true;
-        fetchError = `Site access restricted / blocked (HTTP ${mainRes.status || 403} Security Check / Anti-bot). Manual Review required.`;
+        requiresManualReview = false;
+        errorKeyword = "Security Check / Anti-bot";
+        fetchError = `Site access restricted / blocked (HTTP ${mainRes.status || 403} Security Check / Anti-bot)`;
       } else if (redirectChainInfo && redirectChainInfo.isRedirectLoop) {
         // Item 15: Explicit redirect loop result
         status = "Manual Review";
@@ -1034,7 +1034,7 @@ async function crawlWebsite(targetUrl, options = {}) {
     pagesFetchedCount,
     maxPages: MAX_CRAWL_PAGES,
     isBlocked: isBlocked || (httpStatus === 403 || httpStatus === 401 || httpStatus === 429),
-    requiresManualReview: requiresManualReview || status === "Manual Review",
+    requiresManualReview: (requiresManualReview || status === "Manual Review") && !isBlocked && httpStatus !== 403 && httpStatus !== 401 && httpStatus !== 429,
     contactPageText: contactPageText.slice(0, 12000),
     footerText: footerText.slice(0, 4000),
     profilePageText: profilePageText.slice(0, 8000),

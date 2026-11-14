@@ -210,13 +210,14 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
   crawlResult = await crawlWebsite(targetUrl);
 
-  // If website returned HTTP 401/403/429, anti-bot challenge, timeout, or blocked status:
-  // Items 4, 9, 66, 68: Separate blocked/WAF/slow sites from dead websites! Return Manual Review / Blocked, NOT Not Working!
-  if (crawlResult.status === "Manual Review" || crawlResult.isBlocked || crawlResult.httpStatus === 403 || crawlResult.httpStatus === 401 || crawlResult.httpStatus === 429) {
-    console.warn(`[AI Assistant] Site access blocked/restricted for ${targetUrl} (HTTP ${crawlResult.httpStatus || 403}). Marking as Manual Review.`);
+  // If website returned HTTP 401/403/429, anti-bot challenge, or blocked status:
+  // User Instruction: Security Check / Anti-bot (HTTP 403) marked as Not Working
+  if (crawlResult.isBlocked || crawlResult.httpStatus === 403 || crawlResult.httpStatus === 401 || crawlResult.httpStatus === 429 || isAntiBotChallenge(crawlResult.mainHtml, crawlResult.httpStatus)) {
+    console.warn(`[AI Assistant] Site access blocked/restricted for ${targetUrl} (HTTP ${crawlResult.httpStatus || 403}). Marking as Not Working.`);
+    const errorSnippet = (crawlResult.fetchError || `Site access restricted / blocked (HTTP ${crawlResult.httpStatus || 403} Security Check / Anti-bot)`).replace(/\.?\s*Manual Review required\.?/i, "").trim();
     return finishAndRecord({
-      websiteStatus: "Manual Review",
-      requiresManualReview: true,
+      websiteStatus: "Not Working",
+      requiresManualReview: false,
       isBlocked: true,
       businessType: "",
       companyProfile: "",
@@ -231,14 +232,14 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       numberOfProducts: "",
       productImages: "",
       numberOfProductDescriptions: "",
-      errorCategory: "Blocked / WAF Challenge",
+      errorCategory: "Not Working",
       errorKeyword: "Security Check / Anti-bot",
       errorSourceUrl: crawlResult.finalUrl || targetUrl,
-      errorSnippet: crawlResult.fetchError || `HTTP ${crawlResult.httpStatus || 403} Security Check / Anti-bot Challenge`,
-      notWorkingReason: crawlResult.fetchError || "Site access restricted / blocked by security check. Manual Review required.",
+      errorSnippet: errorSnippet,
+      notWorkingReason: errorSnippet,
       _finalUrl: crawlResult.finalUrl || targetUrl,
       _originalUrl: targetUrl,
-      _note: "Site access restricted / blocked (HTTP 401/403/429 / Anti-bot) - Marked for Manual Review"
+      _note: "Site access restricted / blocked (HTTP 401/403/429 / Anti-bot) - Marked as Not Working"
     });
   }
 
@@ -1295,13 +1296,22 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.errorKeyword = "Foreign Language";
       result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
       result.errorSnippet = "Non-English Language Without Translation Option (Rule 12)";
-    } else if (crawlData.status === "Manual Review" || crawlData.requiresManualReview || crawlData.isBlocked) {
+    } else if (crawlData.isBlocked || crawlData.httpStatus === 403 || crawlData.httpStatus === 401 || crawlData.httpStatus === 429 || (crawlData.errorKeyword && /Security Check|Anti-bot/i.test(crawlData.errorKeyword)) || (crawlData.reason && /Security Check|Anti-bot|HTTP 403/i.test(crawlData.reason)) || (crawlData.fetchError && /Security Check|Anti-bot|HTTP 403/i.test(crawlData.fetchError))) {
+      result.websiteStatus = "Not Working";
+      result.requiresManualReview = false;
+      result.isBlocked = true;
+      result.errorCategory = "Not Working";
+      result.errorKeyword = "Security Check / Anti-bot";
+      const cleanSnippet = (crawlData.fetchError || crawlData.reason || `Site access restricted / blocked (HTTP ${crawlData.httpStatus || 403} Security Check / Anti-bot)`).replace(/\.?\s*Manual Review required\.?/i, "").trim();
+      result.errorSnippet = cleanSnippet;
+      result.notWorkingReason = cleanSnippet;
+      result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    } else if (crawlData.status === "Manual Review" || crawlData.requiresManualReview) {
       result.websiteStatus = "Manual Review";
       result.requiresManualReview = true;
       if (crawlData.retryRequired) result.retryRequired = true;
-      if (crawlData.isBlocked) result.isBlocked = true;
-      result.errorCategory = crawlData.isBlocked ? "Blocked / WAF Challenge" : "Slow Website / Timeout";
-      result.errorKeyword = crawlData.errorKeyword || (crawlData.isBlocked ? "Security Check / Anti-bot" : "Connection Timeout");
+      result.errorCategory = "Slow Website / Timeout";
+      result.errorKeyword = crawlData.errorKeyword || "Connection Timeout";
       result.errorSnippet = crawlData.reason || "Manual Review required";
       result.notWorkingReason = result.errorSnippet;
     } else if (crawlData.status === "Domain Expired" || crawlData.isDomainExpired) {

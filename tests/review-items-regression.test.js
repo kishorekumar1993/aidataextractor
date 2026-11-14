@@ -148,28 +148,30 @@ async function runAll() {
   });
 
   // =========================================================================
-  // Item 68: Test a blocked website (HTTP 401, 403, 429, Cloudflare challenge -> Manual Review)
+  // Item 68: Test a blocked website (HTTP 401, 403, 429, Cloudflare challenge -> Not Working)
   // =========================================================================
-  await runAsyncTest('Item 68: HTTP 403 / Cloudflare challenge produces Manual Review and isExcluded from error dataset', async () => {
+  await runAsyncTest('Item 68: HTTP 403 / Cloudflare challenge produces Not Working and records to error dataset', async () => {
     const { ctx } = createTestContext();
     const blockedCrawl = {
-      status: 'Manual Review',
+      status: 'Not Working',
       isBlocked: true,
-      requiresManualReview: true,
-      reason: 'HTTP 403 Forbidden',
+      requiresManualReview: false,
+      reason: 'Site access restricted / blocked (HTTP 403 Security Check / Anti-bot)',
       errorKeyword: 'Security Check / Anti-bot',
       finalUrl: 'https://protected-site.com',
       pages: []
     };
 
     const evaluated = ctx.applyStrictInstructions({}, blockedCrawl, { isRestricted: false });
-    assert.strictEqual(evaluated.websiteStatus, 'Manual Review', 'Status must be Manual Review');
+    assert.strictEqual(evaluated.websiteStatus, 'Not Working', 'Status must be Not Working');
     assert.strictEqual(evaluated.isBlocked, true, 'isBlocked must be true');
-    assert.strictEqual(evaluated.requiresManualReview, true, 'requiresManualReview must be true');
+    assert.strictEqual(evaluated.requiresManualReview, false, 'requiresManualReview must be false');
+    assert.strictEqual(evaluated.companyName, '', 'All 13 fields must be empty for Not Working');
 
-    // Error recorder must ignore blocked site
+    // Error recorder must record blocked site
     const recResult = await ctx.recordNonWorkingWebsite(evaluated);
-    assert.strictEqual(recResult.ignored, true, 'Blocked site must be excluded from error records');
+    assert.strictEqual(recResult.success, true, 'Blocked site must be recorded in error records');
+    assert.strictEqual(recResult.record['Website Status'], 'Not Working', 'Status in record must be Not Working');
   });
 
   // =========================================================================
@@ -1020,6 +1022,40 @@ async function runAll() {
     assert.strictEqual(ctx.hasStateInAddress("Industriestrasse 12, Weissenhorn, Bayern", "Germany"), true, "Bayern must evaluate as State Available");
     assert.strictEqual(ctx.evaluateCityQC("Hauptstrasse 10, Berlin", "Germany"), "Available", "Berlin City-State evaluates as City Available");
     assert.strictEqual(ctx.hasStateInAddress("Hauptstrasse 10, Berlin", "Germany"), true, "Berlin City-State evaluates as State Available");
+  });
+
+  // =========================================================================
+  // Item 83: Security Check / Anti-bot (HTTP 403) marked as Not Working (Fashion Alliance UK)
+  // =========================================================================
+  await runAsyncTest('Item 83: Security Check / Anti-bot (HTTP 403) marked as Not Working (Fashion Alliance UK)', async () => {
+    const { ctx } = createTestContext();
+    const fashionAllianceCrawl = {
+      status: 'Not Working',
+      httpStatus: 403,
+      isBlocked: true,
+      requiresManualReview: false,
+      fetchError: 'Site access restricted / blocked (HTTP 403 Security Check / Anti-bot)',
+      reason: 'Site access restricted / blocked (HTTP 403 Security Check / Anti-bot). Manual Review required.',
+      errorKeyword: 'Security Check / Anti-bot',
+      finalUrl: 'http://www.fashionalliance.co.uk/',
+      pages: []
+    };
+
+    const evaluated = ctx.applyStrictInstructions({}, fashionAllianceCrawl, { isRestricted: false });
+    assert.strictEqual(evaluated.websiteStatus, 'Not Working', 'Status must be Not Working for HTTP 403 Security Check / Anti-bot');
+    assert.strictEqual(evaluated.requiresManualReview, false, 'requiresManualReview must be false');
+    assert.strictEqual(evaluated.errorKeyword, 'Security Check / Anti-bot', 'Error keyword must be Security Check / Anti-bot');
+    assert.strictEqual(evaluated.companyName, '', 'Company name must be cleared for Not Working');
+    assert.strictEqual(evaluated.companyAddress, '', 'Company address must be cleared for Not Working');
+    assert.strictEqual(evaluated.emailId, '', 'Email must be cleared for Not Working');
+    assert.strictEqual(evaluated.phoneNumber, '', 'Phone must be cleared for Not Working');
+
+    // Error recorder must record it into persistent non-working storage
+    const recResult = await ctx.recordNonWorkingWebsite(evaluated);
+    assert.strictEqual(recResult.success, true, 'Fashion Alliance 403 must be recorded in non-working records');
+    assert.strictEqual(recResult.record['Website Status'], 'Not Working', 'Status in record must be Not Working');
+    assert.strictEqual(recResult.record['Error Keyword'], 'Security Check / Anti-bot', 'Error Keyword in record must match');
+    assert.strictEqual(recResult.record.URL, 'http://www.fashionalliance.co.uk/', 'URL in record must match');
   });
 
   console.log('\n========================================================');
