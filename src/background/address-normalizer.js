@@ -266,7 +266,7 @@ function romanizeChineseAddress(addr) {
 function stripBlindlyAddedNumber(addr, rawEvidence = "", rawSource = "") {
   if (!addr || !/\bNumber\s+\d+/i.test(addr)) return addr;
   return addr.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    const rawHasNoRegex = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+    const rawHasNoRegex = new RegExp('(?:(?:\\b(?:no|nos|n|nu|nr|nº|n°|numero|num|number|lot\\s*no|plot\\s*no)[.:]?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
     // If rawSource explicitly had No./Number/#/號, preserve it
     if (rawSource && typeof rawSource === "string" && rawHasNoRegex.test(rawSource)) {
       return match;
@@ -293,7 +293,7 @@ function stripExtraWordsFromAddress(addr, rawSource = "") {
 
   // 1. "Number": If addr has "Number <digits>" but rawSource does NOT have "no", "number", "#", "號"
   a = a.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|nº|numero|num|number|lot\\s*no|plot\\s*no)\\.?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+    const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|n|nu|nr|nº|n°|numero|num|number|lot\\s*no|plot\\s*no)[.:]?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
     if (rawHasNo.test(rawSource)) {
       return match;
     }
@@ -302,6 +302,10 @@ function stripExtraWordsFromAddress(addr, rawSource = "") {
 
   // 2. "City": If addr has "<CityName> City" but rawSource has "<CityName>" without "City"
   a = a.replace(/\b((?:(?:New|North|South|East|West|Old|San|Santa|Los|Las|Fort|Port|Saint|St\.)\s+)?[A-Z][a-z0-9\u00C0-\u024F\-]+)\s+City\b/g, (match, cityName) => {
+    // Never strip City from cities where "City" is an integral part of the official city name
+    if (/^(?:Kansas|Salt\s*Lake|Jersey|Carson|Oklahoma|Panama|Ho\s*Chi\s*Minh|Quezon|Cebu|Davao|Angeles|New\s*York|Mexico)$/i.test(cityName)) {
+      return match;
+    }
     const escapedName = cityName.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
     const rawHasCity = new RegExp('\\b' + escapedName + '\\s+(?:city|cty\\.?)\\b', 'i');
     if (rawHasCity.test(rawSource)) {
@@ -457,16 +461,16 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
 
   // 2. Compass directions prefixes
   // (a) Single letter with dot: E., W., N., S. followed by word (e.g. "301 E. Marquardt Drive" -> "301 East Marquardt Drive")
-  a = a.replace(/(^|[\s,])E\.\s+(?=[A-Za-z0-9])/gi, '$1East ');
-  a = a.replace(/(^|[\s,])W\.\s+(?=[A-Za-z0-9])/gi, '$1West ');
-  a = a.replace(/(^|[\s,])N\.\s+(?=[A-Za-z0-9])/gi, '$1North ');
-  a = a.replace(/(^|[\s,])S\.\s+(?=[A-Za-z0-9])/gi, '$1South ');
+  a = a.replace(/(^|[\s,])E\.\s+(?=[A-Za-z]|\d+(?:st|nd|rd|th)\b)/gi, '$1East ');
+  a = a.replace(/(^|[\s,])W\.\s+(?=[A-Za-z]|\d+(?:st|nd|rd|th)\b)/gi, '$1West ');
+  a = a.replace(/(^|[\s,])N\.\s+(?=[A-Za-z]|\d+(?:st|nd|rd|th)\b)/gi, '$1North ');
+  a = a.replace(/(^|[\s,])S\.\s+(?=[A-Za-z]|\d+(?:st|nd|rd|th)\b)/gi, '$1South ');
 
   // (b) Single letter after street number or comma: 301 E Marquardt, 100 N Main, 50 W 44th
-  a = a.replace(/(\b\d+[A-Za-z]?[\s,\-]+)E\b\s+(?=[A-Za-z0-9])/gi, '$1East ');
-  a = a.replace(/(\b\d+[A-Za-z]?[\s,\-]+)W\b\s+(?=[A-Za-z0-9])/gi, '$1West ');
-  a = a.replace(/(\b\d+[A-Za-z]?[\s,\-]+)N\b\s+(?=[A-Za-z0-9])/gi, '$1North ');
-  a = a.replace(/(\b\d+[A-Za-z]?[\s,\-]+)S\b\s+(?=[A-Za-z0-9])/gi, '$1South ');
+  a = a.replace(/(\b\d+[A-Za-z]?[\s,\-]+)E\b\s+(?=[A-Za-z]|\d+(?:st|nd|rd|th)\b)/gi, '$1East ');
+  a = a.replace(/(\b\d+[A-Za-z]?[\s,\-]+)W\b\s+(?=[A-Za-z]|\d+(?:st|nd|rd|th)\b)/gi, '$1West ');
+  a = a.replace(/(\b\d+[A-Za-z]?[\s,\-]+)N\b\s+(?=[A-Za-z]|\d+(?:st|nd|rd|th)\b)/gi, '$1North ');
+  a = a.replace(/(\b\d+[A-Za-z]?[\s,\-]+)S\b\s+(?=[A-Za-z]|\d+(?:st|nd|rd|th)\b)/gi, '$1South ');
   a = a.replace(/(^|,\s*)E\b\s+(?=[A-Z][a-z])/g, '$1East ');
   a = a.replace(/(^|,\s*)W\b\s+(?=[A-Z][a-z])/g, '$1West ');
   a = a.replace(/(^|,\s*)N\b\s+(?=[A-Z][a-z])/g, '$1North ');
@@ -496,11 +500,14 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
 
   // 3. Number, Section, Lane & Alley prefixes (Global full form expansion)
   // Note: Special characters like # and & must be preserved inside address (e.g. Suite #4, Unit #12)
-  a = a.replace(/(^|[,\s])No\.\s*(?=\d)/gi, '$1Number ');
-  a = a.replace(/(^|[,\s])No\b\s*(?=\d)/gi, '$1Number ');
-  a = a.replace(/(^|[,\s])Nos\.?\s*(?=\d)/gi, '$1Number ');
-  a = a.replace(/\blot\s+no\.?\s*(?=\d)/gi, 'Lot Number ');
-  a = a.replace(/\bplot\s+no\.?\s*(?=\d)/gi, 'Plot Number ');
+  a = a.replace(/(^|[,\s])(?:No|Nu|Nr)[.:]\s*(?=\d)/gi, '$1Number ');
+  a = a.replace(/(^|[,\s])N[:]\s*(?=\d)/gi, '$1Number ');
+  a = a.replace(/(^|[,\s])(?:Nº|N°)[.:]?\s*(?=\d)/gi, '$1Number ');
+  a = a.replace(/(^|[,\s])(?:No|Nu)\b\s*(?=\d)/gi, '$1Number ');
+  a = a.replace(/(^|[,\s])Nos[.:]?\s*(?=\d)/gi, '$1Number ');
+  a = a.replace(/(^|[,\s])N\.\s*(?=\d+(?:[-\/]\d+)?\b(?!\s*(?:st|nd|rd|th)\b))/gi, '$1Number ');
+  a = a.replace(/\blot\s+(?:no|nos)[.:]?\s*(?=\d)/gi, 'Lot Number ');
+  a = a.replace(/\bplot\s+(?:no|nos)[.:]?\s*(?=\d)/gi, 'Plot Number ');
   a = a.replace(/(^|[,\s])Sec\.\s*(?=[A-Za-z0-9])/gi, '$1Section ');
   a = a.replace(/(^|[,\s])Sec\b\s*(?=[A-Za-z0-9])/gi, '$1Section ');
   a = a.replace(/\b(Hsinchu|Changhua|Miaoli|Yunlin|Chiayi|Pingtung|Taitung|Hualien|Yilan|Nantou|Kinmen|Penghu|Lienchiang|Matsu)\s+Country\b/gi, "$1 County");
@@ -1305,13 +1312,17 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // ==========================================
   // 18. Türkiye, Romania & Hungary Abbreviations
   // ==========================================
-  if (cLower.includes('türkiye') || cLower.includes('turkiye') || cLower.includes('turkey') || /\b(?:mah\.?|cad\.?|sok\.?|bulv\.?|osb|istanbul|ankara|izmir)\b/i.test(a)) {
-    a = a.replace(/\bcad\b\.?/gi, "Caddesi");
+  if (cLower.includes('türkiye') || cLower.includes('turkiye') || cLower.includes('turkey') || /\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|sokagi|sokağı|bulv?\.?|blv\.?|bulvari|bulvarı|osb|san\.?\s*sit\.?|istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|samsun|denizli|sakarya|mugla|trabzon|silivri)\b/i.test(a)) {
+    a = a.replace(/\b(?:cad|cd)\b\.?/gi, "Caddesi");
     a = a.replace(/\b(?:sok|sk)\b\.?/gi, "Sokak");
-    a = a.replace(/\bbulv?\b\.?/gi, "Bulvari");
+    a = a.replace(/\b(?:bulv?|blv)\b\.?/gi, "Bulvari");
     a = a.replace(/\b(?:mah|mh)\b\.?/gi, "Mahallesi");
+    a = a.replace(/\bmahalle\b/gi, "Mahallesi");
     a = a.replace(/\bosb\b/gi, "Organize Sanayi Bolgesi");
     a = a.replace(/\bsan\.?\s*sit\.?/gi, "Sanayi Sitesi");
+    a = a.replace(/(^|[,\s])(?:\bkat|\bk)[:.]?\s*(\d{1,3})\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
+    a = a.replace(/(^|[,\s])(?:\bdaire|\bd)[:.]?\s*(\d{1,4}[A-Za-z]?)\b/gi, "$1Apartment $2");
+    a = a.replace(/\bblk\b\.?/gi, "Block");
   }
   if (cLower.includes('romania') || /\b(?:bucure[sş]ti|bucharest|jud\.?|bd\.?|cal\.)\b/i.test(a)) {
     a = a.replace(/(^|[,\s])str\.?\s+(?=[A-Za-z\u00C0-\u024F])/gi, "$1Strada ");
@@ -1469,11 +1480,14 @@ function ensureCommaBeforeState(addr) {
   });
 
   // 2. Ensure comma after street types when followed by locality/city/town/state
-  const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso)";
+  const streetSuffixes = "(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Mahallesi|Strasse|Calle|Avenida|Viale|Corso)";
   const nonStreetLookahead = "(?!\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext|Road|Street|Avenue|Lane|Drive|Place|Close|Court|Terrace|Cres|Dr|Rd|St|Ave|Ln|Blvd|Hwy|Ct|Pl)\\b)";
-  const nextWordPattern = "\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)";
+  const nextWordPattern = "\\s+([A-Z][a-z0-9\\u00C0-\\u024F]*\\b)";
   const streetSepRegex = new RegExp(`\\b(${streetSuffixes})${nonStreetLookahead}${nextWordPattern}`, "g");
   a = a.replace(streetSepRegex, "$1, $2");
+
+  // Ensure comma after Number <digits> when followed by town/district/suburb before state/city
+  a = a.replace(/(\bNumber\s+\d+(?:[-/]\d+)?)\s+([A-Z][a-z0-9\u00C0-\u024F]+(?=,\s+[A-Z][a-z0-9\u00C0-\u024F]+))/g, "$1, $2");
 
   // 2a. Ensure comma after directional street suffixes when followed by locality/city
   // e.g. "County Road West Allenton" -> "County Road West, Allenton"
@@ -1655,16 +1669,70 @@ function restoreStateIfOmitted(cleanAddr, rawAddr, country = "") {
   // US check - ONLY if country is United States / USA
   if (cLower.includes("united states") || cLower.includes("usa") || cLower.includes("america")) {
     const usStates = [
-      ["ca", "California"], ["tx", "Texas"], ["ny", "New York"], ["fl", "Florida"],
-      ["il", "Illinois"], ["pa", "Pennsylvania"], ["oh", "Ohio"], ["ga", "Georgia"],
-      ["nc", "North Carolina"], ["mi", "Michigan"], ["nj", "New Jersey"], ["va", "Virginia"],
-      ["wa", "Washington"], ["az", "Arizona"], ["ma", "Massachusetts"], ["co", "Colorado"]
+      ["al", "Alabama"], ["ak", "Alaska"], ["az", "Arizona"], ["ar", "Arkansas"],
+      ["ca", "California"], ["co", "Colorado"], ["ct", "Connecticut"], ["de", "Delaware"],
+      ["fl", "Florida"], ["ga", "Georgia"], ["hi", "Hawaii"], ["id", "Idaho"],
+      ["il", "Illinois"], ["in", "Indiana"], ["ia", "Iowa"], ["ks", "Kansas"],
+      ["ky", "Kentucky"], ["la", "Louisiana"], ["me", "Maine"], ["md", "Maryland"],
+      ["ma", "Massachusetts"], ["mi", "Michigan"], ["mn", "Minnesota"], ["ms", "Mississippi"],
+      ["mo", "Missouri"], ["mt", "Montana"], ["ne", "Nebraska"], ["nv", "Nevada"],
+      ["nh", "New Hampshire"], ["nj", "New Jersey"], ["nm", "New Mexico"], ["ny", "New York"],
+      ["nc", "North Carolina"], ["nd", "North Dakota"], ["oh", "Ohio"], ["ok", "Oklahoma"],
+      ["or", "Oregon"], ["pa", "Pennsylvania"], ["ri", "Rhode Island"], ["sc", "South Carolina"],
+      ["sd", "South Dakota"], ["tn", "Tennessee"], ["tx", "Texas"], ["ut", "Utah"],
+      ["vt", "Vermont"], ["va", "Virginia"], ["wa", "Washington"], ["wv", "West Virginia"],
+      ["wi", "Wisconsin"], ["wy", "Wyoming"], ["dc", "District of Columbia"]
     ];
     for (const [abbr, full] of usStates) {
-      const regRaw = new RegExp(`\\b(?:${abbr}|${full})\\b`, "i");
-      const regClean = new RegExp(`\\b(?:${abbr}|${full})\\b`, "i");
-      if (regRaw.test(rawAddr) && !regClean.test(cleanAddr)) {
+      const regClean = new RegExp(`\\b${full}\\b`, "i");
+      if (regClean.test(cleanAddr)) continue;
+
+      let regRaw;
+      if (["in", "or", "me", "ok", "wa", "al", "oh", "pa", "la", "de", "hi", "id", "il", "ma", "mo"].includes(abbr)) {
+        regRaw = new RegExp(`(?:,\\s*\\b${abbr.toUpperCase()}\\b|\\b${abbr.toUpperCase()}\\b\\s+\\d{5}|\\b${full}\\b)`, "i");
+      } else {
+        regRaw = new RegExp(`\\b(?:${abbr}|${full})\\b`, "i");
+      }
+      if (regRaw.test(rawAddr)) {
         return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${full}`;
+      }
+    }
+  }
+
+  // UK check - ONLY if country is UK / United Kingdom
+  if (cLower.includes("united kingdom") || cLower.includes("uk") || cLower.includes("england") || cLower.includes("scotland") || cLower.includes("wales")) {
+    const ukCounties = [
+      "Greater Manchester", "Greater London", "West Midlands", "West Yorkshire", "South Yorkshire",
+      "Tyne and Wear", "Merseyside", "Berkshire", "Buckinghamshire", "Cambridgeshire", "Cheshire",
+      "Cornwall", "Cumbria", "Derbyshire", "Devon", "Dorset", "Durham", "Essex", "Gloucestershire",
+      "Hampshire", "Hertfordshire", "Kent", "Lancashire", "Leicestershire", "Lincolnshire", "Middlesex",
+      "Norfolk", "Northamptonshire", "Northumberland", "Nottinghamshire", "Oxfordshire", "Shropshire",
+      "Somerset", "Staffordshire", "Suffolk", "Surrey", "East Sussex", "West Sussex", "Warwickshire",
+      "Wiltshire", "Worcestershire", "Bedfordshire"
+    ];
+    for (const countyName of ukCounties) {
+      const regClean = new RegExp(`\\b${countyName.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}\\b`, "i");
+      if (regClean.test(cleanAddr)) continue;
+      const regRaw = new RegExp(`\\b${countyName.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}\\b`, "i");
+      if (regRaw.test(rawAddr)) {
+        return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${countyName}`;
+      }
+    }
+  }
+
+  // Germany check
+  if (cLower.includes("germany") || cLower.includes("deutschland")) {
+    const deStates = [
+      "Baden-Württemberg", "Bayern", "Brandenburg", "Hessen", "Mecklenburg-Vorpommern",
+      "Niedersachsen", "Nordrhein-Westfalen", "Rheinland-Pfalz", "Saarland", "Sachsen",
+      "Sachsen-Anhalt", "Schleswig-Holstein", "Thüringen"
+    ];
+    for (const st of deStates) {
+      const regClean = new RegExp(`\\b${st.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}\\b`, "i");
+      if (regClean.test(cleanAddr)) continue;
+      const regRaw = new RegExp(`\\b${st.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}\\b`, "i");
+      if (regRaw.test(rawAddr)) {
+        return `${cleanAddr.replace(/[,;\s.]+$/, "")}, ${st}`;
       }
     }
   }
@@ -2111,6 +2179,10 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/https?:\/\/[^\s,;]+/gi, " ");
   a = a.replace(/\bwww\.[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}(?:\/[^\s,;]*)?/gi, " ");
 
+  // 8b. Strip embedded phone, tel, mobile, fax, and email fields without truncating trailing address
+  a = a.replace(/[,;\s|•·]*\b(?:Phone|Tel|Telephone|Ph|Mob|Mobile|Cell|Fax|Direct|Toll\s*Free|Customer\s*Service|Support|Hotline|WhatsApp)\b\s*[:：\-–]?\s*(?:\+?\d{1,4}[-.\s]*)?(?:\(?\d{2,5}\)?[-.\s]*){1,4}\d{2,6}\s*(?=[,;|•·\n\r]|$)/gi, "");
+  a = a.replace(/[,;\s|•·]*\b(?:Email|E-mail|Mail)\b\s*[:：\-–]?\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\s*(?=[,;|•·\n\r]|$)/gi, "");
+
   // 9. Strip trailing contact, communication, tax, and hours fields
   a = a.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Ph|Mob|Mobile|Cell|Fax|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|WhatsApp|Postcode|Zip)\b\s*[:：\-–]?.*)$/i, "").trim();
   a = a.replace(/[,;\s]*(?:\b(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[\s\S]*?(?:am|pm).*)$/i, "").trim();
@@ -2176,6 +2248,12 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/^[,;.\s\-_/\\|]+/g, "").trim();
   a = a.replace(/\s+/g, " ");
 
+  // Ensure "Number" is ONLY present if "No." / "No" / "#" / "Nº" / "號" was in the original raw address evidence
+  if (crawlData && typeof stripBlindlyAddedNumber === "function") {
+    const allEv = `${(crawlData.contactPageText || "")} ${(crawlData.footerText || "")} ${((crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" "))}`;
+    a = stripBlindlyAddedNumber(a, allEv, "");
+  }
+
   // Rule: Special character should not start and should not end
   a = a.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
   a = a.replace(/[^\p{L}\p{N})]+$/gu, "").trim();
@@ -2192,7 +2270,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
 function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", country = "", crawlData = null) {
   if (!rawCand) return addr;
   const rawText = typeof rawCand === "object" ? (rawCand.raw || "") : String(rawCand || "");
-  if (!rawText || rawText.length < 5) return addr;
+  if (!rawText || rawText.length < 5 || rawText.length > 350) return addr;
 
   const rawClean = sanitizeRule6CompanyAddress(rawText, companyName, country, crawlData);
   if (!rawClean || rawClean === "Not Available" || rawClean.length < 5) return addr;

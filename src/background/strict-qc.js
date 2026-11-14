@@ -1508,7 +1508,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 6. Company Address: Use Gemini's extracted address directly as source of truth; fall back to website candidates only if empty
   let addr = (result.companyAddress || "").trim();
-  let selectedCandidate = null;
+  let selectedCandidate = result._selectedAddressCandidate || null;
   let rawSource = "";
 
   if (!addr || addr.toLowerCase() === "not available" || addr.length < 6) {
@@ -1555,13 +1555,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (selectedCandidate) {
     rawSource = typeof selectedCandidate === "object" ? selectedCandidate.raw : selectedCandidate;
   }
-  if (!rawSource && crawlData) {
-    rawSource = (crawlData.contactPageText || crawlData.bodyText || crawlData.combinedText || crawlData.mainHtml || "").slice(0, 5000);
-  }
 
-  // Adopt candidate only if candidate itself is a concise, verified full address (never adopt entire page text, and never overwrite AI address)
-  if (!result._isFromAi && selectedCandidate && rawSource && typeof rawSource === "string" && rawSource.length < 350) {
-    if (isFullAddressCandidate(rawSource) && !isFullAddressCandidate(addr)) {
+  // Adopt candidate only if candidate itself is a concise, verified full address (never adopt entire page text, and never overwrite existing valid address)
+  if (!result._isFromAi && (!addr || addr === "Not Available" || addr.length < 6) && selectedCandidate && rawSource && typeof rawSource === "string" && rawSource.length < 350) {
+    if (isFullAddressCandidate(rawSource)) {
       addr = rawSource;
     }
   }
@@ -1664,6 +1661,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         const countryRegex = new RegExp(`\\b${country}\\b`, "gi");
         addr = addr.replace(countryRegex, " ");
       }
+
+      // Strip embedded contact / communication fields early without truncating trailing address
+      addr = addr.replace(/[,;\s|•·]*\b(?:Phone|Tel|Telephone|Ph|Mob|Mobile|Cell|Fax|Direct|Toll\s*Free|Customer\s*Service|Support|Hotline|WhatsApp)\b\s*[:：\-–]?\s*(?:\+?\d{1,4}[-.\s]*)?(?:\(?\d{2,5}\)?[-.\s]*){1,4}\d{2,6}\s*(?=[,;|•·\n\r]|$)/gi, "");
+      addr = addr.replace(/[,;\s|•·]*\b(?:Email|E-mail|Mail)\b\s*[:：\-–]?\s*[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\s*(?=[,;|•·\n\r]|$)/gi, "");
 
       // Strip trailing contact / communication fields early before postal code removal
       addr = addr.replace(/[,;\s]*(?:\b(?:Phone|Tel|Telephone|Email|Fax|Mobile|Direct|Contact|Sales|Toll\s*Free|Customer\s*Service|Support|Hotline|Postcode|Zip)\b\s*[:：\-–]?.*)$/i, "").trim();

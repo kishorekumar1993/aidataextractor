@@ -2,7 +2,7 @@
 
 function isFullAddressCandidate(raw) {
   if (!raw || typeof raw !== "string" || raw.length < 8) return false;
-  const hasStreetOrPremise = /\b(?:street|road|avenue|lane|drive|way|place|court|terrace|boulevard|highway|parkway|crescent|close|walk|row|parade|circuit|square|esplanade|mews|alley|quay|wharf|broadway|bypass|crossing|loop|circle|turnpike|expressway|corridor|promenade|mall|arcade|chase|approach|reach|gardens|green|st\b|rd\b|ave\b|ln\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|cir\b|suite|unit|bldg|building|floor|fl|flr|level|lot|plot|block|factory|shed|warehouse|workshop|facility|premises|compound|office\s*park|business\s*park|trading\s*estate|industrial\s*(?:estate|park|area|zone|district)|science\s*park|technology\s*park|technopark|phase\s*\d+|sector\s*\d+|no\.?\s*\d+|\d+\s*[号號]|strasse|straße|str\b|gasse|weg|platz|ring|allee|damm|chaussee|ufer|rue|avda|av\b|boulevard|bd\b|chemin|route|allée|impasse|cours|passage|chaussée|voie|via|viale|corso|piazza|piazzale|borgo|contrada|vicolo|strada|calle|c\/|paseo|plaza|camino|carretera|pasaje|travesía|ronda|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|zona\s*industrial|zona\s*industriale|zone\s*industrielle|gewerbegebiet|industriegebiet|gewerbepark|industriepark|jalan|jln|jl\b|lorong|lebuh|gang|gg\b|kawasan\s*industri|taman\s*perindustrian|post\s+office\s+box|po\s*box|p\.?o\.?\s*box|pob|gpo\s*box|private\s*bag|postfach|boite\s*postale|apartado\s*postal|apartado\s*de\s*correos|postbus|box\s+\d+|ulica|ul\b|aleja|al\b|plac|rynek|cadde|caddesi|sokak|sokagi|bulvar|bulvari|sanayi|osb)\b/i.test(raw) ||
+  const hasStreetOrPremise = /\b(?:street|road|avenue|lane|drive|way|place|court|terrace|boulevard|highway|parkway|crescent|close|walk|row|parade|circuit|square|esplanade|mews|alley|quay|wharf|broadway|bypass|crossing|loop|circle|turnpike|expressway|corridor|promenade|mall|arcade|chase|approach|reach|gardens|green|st\b|rd\b|ave\b|ln\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|cir\b|suite|unit|bldg|building|floor|fl|flr|level|lot|plot|block|blok|factory|shed|warehouse|workshop|facility|premises|compound|office\s*park|business\s*park|trading\s*estate|industrial\s*(?:estate|park|area|zone|district)|science\s*park|technology\s*park|technopark|phase\s*\d+|sector\s*\d+|no\.?\s*\d+|(?:no|nos|n|nu|nr|nº|n°)[.:]?\s*\d+|\d+\s*[号號]|strasse|straße|str\b|gasse|weg|platz|ring|allee|damm|chaussee|ufer|rue|avda|av\b|boulevard|bd\b|chemin|route|allée|impasse|cours|passage|chaussée|voie|via|viale|corso|piazza|piazzale|borgo|contrada|vicolo|strada|calle|c\/|paseo|plaza|camino|carretera|pasaje|travesía|ronda|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|zona\s*industrial|zona\s*industriale|zone\s*industrielle|gewerbegebiet|industriegebiet|gewerbepark|industriepark|jalan|jln|jl\b|lorong|lebuh|gang|gg\b|kawasan\s*industri|taman\s*perindustrian|post\s+office\s+box|po\s*box|p\.?o\.?\s*box|pob|gpo\s*box|private\s*bag|postfach|boite\s*postale|apartado\s*postal|apartado\s*de\s*correos|postbus|box\s+\d+|ulica|ul\b|aleja|al\b|plac|rynek|cadde|caddesi|cad\b|cd\b|sokak|sokagi|sokağı|sok\b|sk\b|bulvar|bulvari|bulv\b|blv\b|mahalle|mahallesi|mah\b|mh\b|sanayi|osb)\b/i.test(raw) ||
     /(?:大道|大厦|路|街|巷|弄|段|号|號|工业区|工业园|产业园|高新区|科技园|园区|开发区)/.test(raw);
   const hasLocalityOrAdmin = hasStateInAddress(raw, "") ||
     hasCityDesignation(raw) ||
@@ -80,11 +80,14 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   // 1. Premise indicator / street number / named building, works, centre, hall, estate, park
   // 2. Thoroughfare suffix (Street, Road, Ave, Lane, Drive, Boulevard, Highway, Way, Close, Court, Terrace, Crescent, etc.)
   // 3. Or locality/postal code (e.g. 4-6 digit postal code, UK alphanumeric postcodes, state abbreviation with ZIP, or East Asian structural address)
-  const hasPremiseNum = /\b(?:number|no\.?|nos\.?|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?\b/i.test(cleaned) ||
-    /\b(?:lot|plot|unit|suite|ste|bldg|building|floor|level|rm|room|shed|warehouse|workshop|facility|kav|kavling|apt|apartment|phase\s*\d+|sector\s*\d+|po\s*box|post\s*office\s*box|postfach|box)\s+[A-Za-z0-9\-\/]+/i.test(cleaned) ||
+  const hasPremiseNum = /\b(?:number|no|nos|n|nu|nr|nº|n°)[.:]?\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?\b/i.test(cleaned) ||
+    /#\s*\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?\b/i.test(cleaned) ||
+    /\b\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?\b/i.test(cleaned) ||
+    /\b(?:lot|plot|unit|suite|ste|bldg|building|floor|level|rm|room|shed|warehouse|workshop|facility|kav|kavling|apt|apartment|block|blok|phase\s*\d+|sector\s*\d+|po\s*box|post\s*office\s*box|postfach|box)\s+[A-Za-z0-9\-\/]+/i.test(cleaned) ||
+    /\b[A-Za-z0-9]\s+(?:block|blok)\b/i.test(cleaned) ||
     /\b(?:centre|center|house|hall|mill|works|court|lodge|grange|tower|park|estate|chambers|wharf|barn|farm|compound|premises|business\s*park|industrial\s*(?:estate|park|area|zone))\b/i.test(cleaned);
 
-  const hasThoroughfare = /\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|row|walk|mews|passage|grove|view|hill|rise|vale|gate|approach|reach|wharf|quay|broadway|bypass|crossing|loop|circle|turnpike|expressway|corridor|promenade|mall|arcade|chase|gardens|green|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|jl|jln|jalan|gang|gg|taman|lorong|lebuh|komp|komplek|perum|perumahan|dukuh|dk|desa|ds|dusun|dsn|kecamatan|kec|kabupaten|kab|rt\.?\s*\d+|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|apt\b|str\b|strasse|platz|gasse|weg|ring|allee|damm|chaussee|ufer|rue|avda|av\b|bd\b|chemin|route|allée|impasse|cours|quai|chaussée|voie|calle|c\/|paseo|plaza|camino|carretera|pasaje|travesía|ronda|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|zona\s*industrial|zona\s*industriale|zone\s*industrielle|gewerbegebiet|industriegebiet|gewerbepark|industriepark|kawasan\s*industri|taman\s*perindustrian|industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|science\s*park|technology\s*park|technopark|comune|provincia|daerah|mukim|post\s*office\s*box|po\s*box|postfach|postbus|cadde|caddesi|sokak|sokagi|bulvar|bulvari|sanayi|osb|ulica|ul\b|aleja|al\b|plac|rynek)\b/i.test(cleaned);
+  const hasThoroughfare = /\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|row|walk|mews|passage|grove|view|hill|rise|vale|gate|approach|reach|wharf|quay|broadway|bypass|crossing|loop|circle|turnpike|expressway|corridor|promenade|mall|arcade|chase|gardens|green|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|jl|jln|jalan|gang|gg|taman|lorong|lebuh|komp|komplek|perum|perumahan|dukuh|dk|desa|ds|dusun|dsn|kecamatan|kec|kabupaten|kab|rt\.?\s*\d+|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|apt\b|str\b|strasse|platz|gasse|weg|ring|allee|damm|chaussee|ufer|rue|avda|av\b|bd\b|chemin|route|allée|impasse|cours|quai|chaussée|voie|calle|c\/|paseo|plaza|camino|carretera|pasaje|travesía|ronda|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|zona\s*industrial|zona\s*industriale|zone\s*industrielle|gewerbegebiet|industriegebiet|gewerbepark|industriepark|kawasan\s*industri|taman\s*perindustrian|industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|science\s*park|technology\s*park|technopark|comune|provincia|daerah|mukim|post\s*office\s*box|po\s*box|postfach|postbus|cadde|caddesi|cad\b|cd\b|sokak|sokagi|sokağı|sok\b|sk\b|bulvar|bulvari|bulv\b|blv\b|mahalle|mahallesi|mah\b|mh\b|blok\b|sanayi|osb|ulica|ul\b|aleja|al\b|plac|rynek)\b/i.test(cleaned);
 
   const hasLocalityOrPostcode = /\b\d{4,6}\b/.test(cleaned) ||
     /\b[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}\b/i.test(cleaned) ||
@@ -844,8 +847,8 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
     // Full Address Boost: Candidate containing Premise/Street AND Locality/State/Postcode beats fragment
     const hasFullA = isFullAddressCandidate(rawA);
     const hasFullB = isFullAddressCandidate(rawB);
-    if (hasFullA && !hasFullB) pA -= 4.0;
-    else if (hasFullB && !hasFullA) pB -= 4.0;
+    if (hasFullA && !hasFullB) pA -= 15.0;
+    else if (hasFullB && !hasFullA) pB -= 15.0;
 
     // Substring Superseded Rule: If rawB is a complete address containing rawA as a street substring, rawB wins!
     if (rawA.length > 10 && rawB.includes(rawA) && hasFullB && !hasFullA) return 1;
@@ -875,16 +878,18 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
   let bestRaw = getRaw(bestCandidate);
 
   // If bestCandidate is missing structural address components, check if a fuller candidate exists in the list
-  const fuller = candidates.find(c => {
+  for (const c of candidates) {
     const cRaw = getRaw(c);
-    if (cRaw === bestRaw) return false;
-    if (cRaw.toLowerCase().includes(bestRaw.toLowerCase()) && cRaw.length > bestRaw.length) return true;
-    if (isFullAddressCandidate(cRaw) && !isFullAddressCandidate(bestRaw)) return true;
-    return false;
-  });
-  if (fuller) {
-    bestCandidate = fuller;
-    bestRaw = getRaw(fuller);
+    if (cRaw === bestRaw) continue;
+    if (isFullAddressCandidate(cRaw) && !isFullAddressCandidate(bestRaw)) {
+      bestCandidate = c;
+      bestRaw = cRaw;
+    } else if (isFullAddressCandidate(cRaw) && isFullAddressCandidate(bestRaw)) {
+      if (cRaw.toLowerCase().includes(bestRaw.toLowerCase()) && cRaw.length > bestRaw.length) {
+        bestCandidate = c;
+        bestRaw = cRaw;
+      }
+    }
   }
 
   // 3. SOURCE OF TRUTH MANDATE:
@@ -965,8 +970,10 @@ function extractLikelyAddress(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.length < 10 || isJunk(line)) continue;
-    const hasPremise = /\b(?:number|no\.?|#)?\s*\d+[A-Za-z]?(?:[-\/]\d+)?\b/i.test(line) || /\b(?:po\s*box|post\s*office\s*box|postfach|box)\s+\d+\b/i.test(line);
-    const hasStreet = /\b(road|street|avenue|lane|drive|way|boulevard|highway|crescent|close|court|place|terrace|st\b|rd\b|ave\b|dr\b|strasse|calle|rue|via)\b/i.test(line);
+    const hasPremise = /\b(?:number|no|nos|n|nu|nr|nº|n°)[.:]?\s*\d+[A-Za-z]?(?:[-\/]\d+)?\b/i.test(line) ||
+      /#\s*\d+[A-Za-z]?(?:[-\/]\d+)?\b/i.test(line) ||
+      /\b(?:po\s*box|post\s*office\s*box|postfach|box)\s+\d+\b/i.test(line);
+    const hasStreet = /\b(road|street|avenue|lane|drive|way|boulevard|highway|crescent|close|court|place|terrace|st\b|rd\b|ave\b|dr\b|strasse|calle|rue|via|cad\b|cd\b|cadde|caddesi|sok\b|sk\b|sokak|sokagi|sokağı|bulv?\b|blv\b|bulvar|bulvari|mah\b|mh\b|mahalle|mahallesi|osb\b)\b/i.test(line);
     const hasLocOrPost = /\b\d{4,6}\b/.test(line) || (typeof hasStateInAddress === "function" && hasStateInAddress(line, "")) || (typeof evaluateCityQC === "function" && evaluateCityQC(line, "") === "Available");
 
     if (hasPremise && hasStreet && !hasLocOrPost && i + 1 < lines.length) {

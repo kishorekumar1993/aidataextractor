@@ -126,7 +126,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * Named & Memorial Highways / Boulevards / Routes: GAR Highway / G.A.R. Hwy -> Grand Army Of The Republic Highway, MLK Jr Blvd -> Martin Luther King Junior Boulevard, JFK Blvd/Expy -> John F Kennedy Boulevard/Expressway, FDR Dr -> Franklin D Roosevelt Drive, PCH -> Pacific Coast Highway, Co. Rd. -> County Road, State Rte. -> State Route, FM 1960 -> Farm To Market Road 1960, RM -> Ranch To Market Road (Texas), MG Road -> Mahatma Gandhi Road, GT Road -> Grand Trunk Road.
   * English Street / Building / Industrial Terms: St -> Street (but St. before saint/place name -> Saint), Rd -> Road, Ave -> Avenue, Dr -> Drive (but Dr. before person name -> Doctor/Doktor), Blvd -> Boulevard, Pkwy -> Parkway, Expy/Expwy -> Expressway, Fwy -> Freeway, Hwy/Hgwy -> Highway, Ln -> Lane, Aly -> Alley, Ct -> Court, Cir -> Circle, Pl -> Place, Sq -> Square, Ter/Tce -> Terrace, Trl -> Trail, Xing -> Crossing, Byp -> Bypass, Jct -> Junction, Gdns -> Gardens, Hts -> Heights, Vlg -> Village, Vly -> Valley, Mnr -> Manor, Hbr -> Harbor, Spgs -> Springs, Cmns -> Commons, Ste -> Suite, Bldg -> Building, Apt -> Apartment, Rm -> Room, Flr/Fl/5F -> Floor/5th Floor, No. -> Number, Sec -> Section, Twp -> Township, Dist -> District, P.O. Box/GPO Box -> Post Office Box/General Post Office Box, Ind. Est./Indl. Est. -> Industrial Estate, Trdg. Est. -> Trading Estate, SEZ -> Special Economic Zone.
   * States / Provinces / Counties / Cantons Globally: Expand ALL US states (MA -> Massachusetts, TX -> Texas, CA -> California, IL -> Illinois, etc.), Canadian provinces (ON -> Ontario, QC -> Quebec, BC -> British Columbia), Australian states (VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland), UK/Irish counties (Northants -> Northamptonshire, Yorks -> Yorkshire, Co. Durham -> County Durham), Indian states & zones (MH -> Maharashtra, KA -> Karnataka, TN -> Tamil Nadu, GJ -> Gujarat, MIDC -> Maharashtra Industrial Development Corporation, GIDC -> Gujarat Industrial Development Corporation, Opp. -> Opposite, S.No. -> Survey Number), South African provinces (GP -> Gauteng, KZN -> KwaZulu-Natal), Malaysian/Indonesian states (Sgr -> Selangor, Jabar -> Jawa Barat, Jateng -> Jawa Tengah, Jatim -> Jawa Timur), Austrian/Swiss/German states (NÖ -> Niederösterreich, ZH -> Zürich, BW -> Baden-Württemberg), Brazilian/Mexican states (SP -> São Paulo, CDMX -> Ciudad de Mexico).
-  * International Non-English Street & Zone Abbreviations: Germany/Austria/Switzerland (Str. -> Strasse, Pl. -> Platz, Gewerbegebiet), France (Z.I. -> Zone Industrielle, Z.A. -> Zone Artisanale, Bd. -> Boulevard, Imp. -> Impasse, B.P. -> Boite Postale), Spain (C/ -> Calle, Avda. -> Avenida, P.º -> Paseo, Pza. -> Plaza, Pol. Ind. -> Poligono Industrial, Ctra. -> Carretera), Italy (V.le -> Viale, C.so -> Corso, P.zza -> Piazza, Z.I. -> Zona Industriale), Netherlands/Belgium (Str. -> Straat, Wg. -> Weg, Pl. -> Plein, Ind. Terrein -> Industrieterrein), Poland (ul. -> Ulica, al. -> Aleja, pl. -> Plac, os. -> Osiedle), Czechia/Slovakia (ul. -> Ulice/Ulica, nám. -> Namesti), Portugal/Brazil (R. -> Rua, Av. -> Avenida, Rod. -> Rodovia, Pç. -> Praça), Mexico/LatAm (Col. -> Colonia, Fracc. -> Fraccionamiento, Prol. -> Prolongacion, Calz. -> Calzada), Türkiye (Cad. -> Caddesi, Sk./Sok. -> Sokak, Bulv. -> Bulvari, Mah. -> Mahallesi, OSB -> Organize Sanayi Bolgesi), Indonesia (Jl./Jln. -> Jalan, Perum. -> Perumahan, RA. -> Raden Ajeng, Jend. -> Jenderal, RT/RW -> Rukun Tetangga/Rukun Warga), Malaysia/Singapore (Jln. -> Jalan, Lrg. -> Lorong, Tmn. -> Taman, Bdr. -> Bandar, Kg. -> Kampung, Bt. -> Bukit/Batu), Hong Kong/East Asia (N.T. -> New Territories, Kln. -> Kowloon, Pref. -> Prefecture, ETDZ -> Economic and Technological Development Zone), Greece/Nordics/CIS (Od. -> Odos, Leof. -> Leoforos, Ind. omr. -> Industriområde, pr. -> Prospekt, obl. -> Oblast). Remove brackets ()/[].
+  * International Non-English Street & Zone Abbreviations: Germany/Austria/Switzerland (Str. -> Strasse, Pl. -> Platz, Gewerbegebiet), France (Z.I. -> Zone Industrielle, Z.A. -> Zone Artisanale, Bd. -> Boulevard, Imp. -> Impasse, B.P. -> Boite Postale), Spain (C/ -> Calle, Avda. -> Avenida, P.º -> Paseo, Pza. -> Plaza, Pol. Ind. -> Poligono Industrial, Ctra. -> Carretera), Italy (V.le -> Viale, C.so -> Corso, P.zza -> Piazza, Z.I. -> Zona Industriale), Netherlands/Belgium (Str. -> Straat, Wg. -> Weg, Pl. -> Plein, Ind. Terrein -> Industrieterrein), Poland (ul. -> Ulica, al. -> Aleja, pl. -> Plac, os. -> Osiedle), Czechia/Slovakia (ul. -> Ulice/Ulica, nám. -> Namesti), Portugal/Brazil (R. -> Rua, Av. -> Avenida, Rod. -> Rodovia, Pç. -> Praça), Mexico/LatAm (Col. -> Colonia, Fracc. -> Fraccionamiento, Prol. -> Prolongacion, Calz. -> Calzada), Türkiye (Cad./Cd. -> Caddesi, Sk./Sok. -> Sokak, Bulv./Blv. -> Bulvari, Mah./Mh. -> Mahallesi, OSB -> Organize Sanayi Bolgesi, No./N:/No: -> Number), Indonesia (Jl./Jln. -> Jalan, Perum. -> Perumahan, RA. -> Raden Ajeng, Jend. -> Jenderal, RT/RW -> Rukun Tetangga/Rukun Warga), Malaysia/Singapore (Jln. -> Jalan, Lrg. -> Lorong, Tmn. -> Taman, Bdr. -> Bandar, Kg. -> Kampung, Bt. -> Bukit/Batu), Hong Kong/East Asia (N.T. -> New Territories, Kln. -> Kowloon, Pref. -> Prefecture, ETDZ -> Economic and Technological Development Zone), Greece/Nordics/CIS (Od. -> Odos, Leof. -> Leoforos, Ind. omr. -> Industriområde, pr. -> Prospekt, obl. -> Oblast). Remove brackets ()/[].
 - STRIP ONLY: Postal codes (ZIP codes), Country name, and Telephone/Fax numbers.
 - COMMA SEPARATION:
   * Put commas between structural components: [Premise], [Street], [Suburb/Town/City], [State/County].
@@ -697,21 +697,45 @@ function isSeoSloganOrTagline(name) {
   const n = name.trim();
   if (typeof hasCompleteLegalSuffix === "function" && hasCompleteLegalSuffix(n)) return false;
   if (/\b(?:pty\s*ltd|limited|inc|incorporated|llc|gmbh|sdn\s*bhd)\b/i.test(n)) return false;
+
+  // Generic navigation and non-company page names
+  if (/^(?:home(\s+page)?|welcome(\s+to.*)?|about(\s+us|\s+our\s+company)?|contact(\s+us)?|products?(\s*(?:and|&)\s*services?)?|services?|our\s+services?|our\s+products?|overview|index|online\s*store|shop(\s*online)?|catalog|catalogue|privacy\s*policy|terms(\s*(?:and|&)\s*conditions)?|frequently\s*asked\s*questions|faq|blog|news|portfolio|gallery|search|sitemap|logo)$/i.test(n)) {
+    return true;
+  }
+
+  // Promotional slogans & adjectives
   if (/^(?:expert|best|leading|professional|premier|top|specialist|quality|affordable|cheap|reliable|trusted)\b/i.test(n)) {
     return true;
   }
-  if (/\b(?:in\s+(?:canberra|sydney|melbourne|brisbane|perth|adelaide|hobart|darwin|gold\s*coast|newcastle|london|new\s*york|chicago|los\s*angeles|taiwan|australia|singapore|malaysia))\b/i.test(n)) {
+
+  // Geographic context taglines
+  if (/\b(?:in\s+(?:canberra|sydney|melbourne|brisbane|perth|adelaide|hobart|darwin|gold\s*coast|newcastle|london|new\s*york|chicago|los\s*angeles|taiwan|australia|singapore|malaysia|the\s+uk|europe|asia|north\s*america))\b/i.test(n)) {
     return true;
   }
-  if (/^(?:manufacturer|supplier|wholesaler|distributor|maker|installer|builder|contractor)\s+of\b/i.test(n)) {
+
+  // Functional descriptions: "Manufacturer of...", "Supplier of...", "Specialists in..."
+  if (/^(?:(?:leading|premier|trusted|global|quality|custom|reliable|expert)\s+)?(?:manufacturers?|suppliers?|wholesalers?|distributors?|makers?|installers?|builders?|contractors?|fabricators?|producers?|stockists?|exporters?|traders?)\s+(?:of|for|and)\b/i.test(n)) {
     return true;
   }
+  if (/^(?:specialists?|specializing|leaders?|excellence|solutions?|innovations?|experts?|dedicated|custom|high\s*quality|precision|world\s*class|your\s*trusted)\s+in\b/i.test(n)) {
+    return true;
+  }
+  if (/^(?:design|manufacture|production|fabrication|sales?|supply|installation|distribution)\s+(?:and|&)\s+(?:manufacture|production|fabrication|sales?|supply|installation|service|distribution)\s+of\b/i.test(n)) {
+    return true;
+  }
+  if (/^(?:your\s+(?:trusted\s+)?partner|we\s+(?:provide|offer|manufacture|supply|specialize|deliver|create|build))\b/i.test(n)) {
+    return true;
+  }
+
   return false;
 }
 
 function scoreTitleSegment(segment, domainStem, logoText, ogSiteName) {
   const segLower = segment.toLowerCase().trim();
   let score = 0;
+  if (isSeoSloganOrTagline(segment)) {
+    score -= 100;
+  }
   if (/^(?:expert|best|leading|professional|premier|top|specialist|quality|affordable|cheap|reliable|trusted)\b/i.test(segLower)) {
     score -= 50;
   }
@@ -741,14 +765,21 @@ function extractBestBrandFromTitle(title, domain, logoText = "", ogSiteName = ""
     return domain ? toTitleCase(cleanDomainStem(domain)) : "";
   }
   const parts = title.split(/[-–—|:•]/).map(p => p.trim()).filter(Boolean);
-  if (parts.length <= 1) return parts[0] || "";
+  if (parts.length <= 1) {
+    const single = parts[0] || "";
+    if (isSeoSloganOrTagline(single) || /^(?:home|welcome|about\s*us|contact\s*us|products?|services?)$/i.test(single)) {
+      return domain ? toTitleCase(cleanDomainStem(domain)) : "";
+    }
+    return single;
+  }
   const domainStem = cleanDomainStem(domain);
-  let bestPart = parts[0];
+  let bestPart = "";
   let bestScore = -999;
   for (let part of parts) {
     const cleanedPart = part.replace(/^(?:welcome\s+to\s+|welcome\s*[-–—|:•]\s*)/i, "").trim();
     if (/^(?:home(\s+page)?|welcome|about(\s+us)?|contact(\s+us)?|index|official\s*website)$/i.test(cleanedPart)) continue;
     if (/(?:attention required|just a moment|access denied|403 forbidden|404 not found|security check|cloudflare|ddos protection)/i.test(cleanedPart)) continue;
+    if (isSeoSloganOrTagline(cleanedPart)) continue;
     const candidate = cleanedPart || part;
     const s = scoreTitleSegment(candidate, domainStem, logoText, ogSiteName);
     if (s > bestScore) {
@@ -756,7 +787,10 @@ function extractBestBrandFromTitle(title, domain, logoText = "", ogSiteName = ""
       bestPart = candidate;
     }
   }
-  return bestPart;
+  if (!bestPart || bestScore <= -50) {
+    if (domainStem) return toTitleCase(domainStem);
+  }
+  return bestPart || parts[0] || "";
 }
 
 /**
@@ -835,14 +869,12 @@ function heuristicExtraction(crawlData, restrictedCheck) {
 
   // 1. Company Name: prefer official company candidates with legal suffixes matching domain
   let companyName = "";
-  if (typeof preferOfficialCompanyName === "function") {
-    companyName = preferOfficialCompanyName("", crawlData);
-  }
-  if (!companyName && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0) {
-    const domainStem = cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl);
+  const domainStem = cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl);
+
+  if (crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0) {
     for (const cand of crawlData.legalCompanyCandidates) {
       const cleaned = cleanCompanyPrefixesAndSuffixes(cand);
-      if (hasCompleteLegalSuffix(cleaned)) {
+      if (cleaned && !hasCompanyProseNoise(cleaned) && hasCompleteLegalSuffix(cleaned)) {
         const cStem = cleanDomainStem(cleaned.replace(/\b(?:pty|ltd|limited|proprietary|inc|llc|corp|co|gmbh|se)\b/gi, ""));
         if (cStem && (cStem === domainStem || cStem.includes(domainStem) || domainStem.includes(cStem))) {
           companyName = cleaned;
@@ -851,24 +883,59 @@ function heuristicExtraction(crawlData, restrictedCheck) {
       }
     }
   }
+
+  if (!companyName && typeof preferOfficialCompanyName === "function") {
+    companyName = preferOfficialCompanyName("", crawlData);
+  }
+
   if (!companyName && crawlData.copyrightText) {
     const cleanedCopy = cleanCompanyPrefixesAndSuffixes(crawlData.copyrightText);
     if (cleanedCopy && !hasCompanyProseNoise(cleanedCopy) && (hasCompleteLegalSuffix(cleanedCopy) || /\b(ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|se|co\.?)\b/i.test(cleanedCopy))) {
       companyName = cleanedCopy;
     }
   }
+
+  if (!companyName && crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0) {
+    for (const cand of crawlData.legalCompanyCandidates) {
+      const cleaned = cleanCompanyPrefixesAndSuffixes(cand);
+      if (cleaned && !hasCompanyProseNoise(cleaned) && hasCompleteLegalSuffix(cleaned)) {
+        companyName = cleaned;
+        break;
+      }
+    }
+  }
+
   if (!companyName && crawlData.logoText && !isSeoSloganOrTagline(crawlData.logoText)) {
     companyName = cleanCompanyPrefixesAndSuffixes(crawlData.logoText);
   }
+
   if (!companyName && crawlData.title) {
     companyName = cleanCompanyPrefixesAndSuffixes(extractBestBrandFromTitle(crawlData.title, crawlData.finalUrl || crawlData.originalUrl, crawlData.logoText, crawlData.ogSiteName));
   }
-  if (!companyName) {
-    companyName = "";
+
+  // Fallback to domain stem if still empty, generic navigation word, or slogan
+  if (!companyName || isSeoSloganOrTagline(companyName) || /^(?:home(\s+page)?|welcome|about(\s+us)?|contact(\s+us)?|products?(\s*(?:and|&)\s*services?)?|services?)$/i.test(companyName)) {
+    if (domainStem) companyName = toTitleCase(domainStem);
+  }
+
+  // Restore legal corporate designation if omitted
+  if (companyName && typeof restoreLegalSuffixIfOmitted === "function") {
+    companyName = restoreLegalSuffixIfOmitted(companyName, crawlData);
+  }
+
+  // Expand abbreviations in Company Name per Rule 4
+  if (companyName) {
+    companyName = expandCompanyAbbreviations(companyName, "");
+    companyName = cleanCompanyPrefixesAndSuffixes(companyName);
+    companyName = toTitleCase(companyName);
+    companyName = restoreCommaBeforeCorporateSuffix(companyName, crawlData);
+    companyName = restoreOriginalSymbolsInCompanyName(companyName, crawlData);
+    companyName = stripBoundarySpecialChars(companyName);
   }
 
   // 2. Company Address: verified candidate from contact page or footer
   let address = "";
+  let selectedCandidate = null;
   if (crawlData.addressCandidates && crawlData.addressCandidates.length > 0) {
     const verified = typeof verifyAndSelectAddress === "function"
       ? verifyAndSelectAddress("", crawlData.addressCandidates, crawlData)
@@ -876,6 +943,9 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     address = (typeof verified === "object" && verified !== null && verified.address !== undefined)
       ? verified.address
       : (typeof verified === "string" ? verified : "");
+    selectedCandidate = (typeof verified === "object" && verified !== null)
+      ? verified.selectedCandidate
+      : null;
   }
   if (!address || address.toLowerCase() === "not available" || address.length < 6) {
     address = typeof extractLikelyAddress === "function"
@@ -891,17 +961,16 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     country = typeof resolveUkCountryName === "function" ? resolveUkCountryName(country, address, crawlData) : "United Kingdom";
   }
 
-  // Sanitize Company Address per Rule 6
+  // Sanitize Company Address per Rule 6 (using fully normalized companyName and resolved country)
   if (address) {
     address = typeof sanitizeRule6CompanyAddress === "function"
       ? sanitizeRule6CompanyAddress(address, companyName, country, crawlData)
       : address;
   }
 
-  // Expand abbreviations in Company Name per Rule 4
-  if (companyName) {
+  // Re-verify company name abbreviation expansions with resolved country
+  if (companyName && country) {
     companyName = expandCompanyAbbreviations(companyName, country);
-    companyName = cleanCompanyPrefixesAndSuffixes(companyName);
     companyName = toTitleCase(companyName);
     companyName = restoreCommaBeforeCorporateSuffix(companyName, crawlData);
     companyName = restoreOriginalSymbolsInCompanyName(companyName, crawlData);
@@ -1071,7 +1140,8 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     isRestricted: restrictedCheck.isRestricted,
     restrictedReason: restrictedCheck.matchedKeyword,
     isShopCartSite: !!(shopCartCheck && shopCartCheck.detected),
-    shopCartReason: (shopCartCheck && shopCartCheck.reason) || ""
+    shopCartReason: (shopCartCheck && shopCartCheck.reason) || "",
+    _selectedAddressCandidate: selectedCandidate
   };
 }
 

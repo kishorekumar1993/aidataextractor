@@ -207,7 +207,7 @@ const RECOGNIZED_TOWNS = [
   // Middle East
   "dubai", "abu dhabi", "sharjah", "riyadh", "jeddah", "dammam", "khobar", "mecca", "medina",
   "doha", "kuwait city", "manama", "muscat", "sohar", "amman", "beirut", "tehran", "mashhad", "isfahan",
-  "tel aviv", "haifa", "jerusalem", "istanbul", "ankara", "izmir", "bursa", "antalya", "kocaeli", "cairo", "alexandria", "giza",
+  "tel aviv", "haifa", "jerusalem", "istanbul", "ankara", "izmir", "bursa", "antalya", "kocaeli", "silivri", "cairo", "alexandria", "giza",
   // Southeast & South Asia other
   "manila", "quezon city", "cebu", "davao", "bangkok", "chiang mai", "pattaya",
   "ho chi minh city", "hanoi", "da nang", "phnom penh", "vientiane", "yangon",
@@ -518,7 +518,7 @@ const STATE_AND_PROVINCE_NAMES = [
   "istanbul", "ankara", "izmir", "bursa", "antalya", "adana", "konya", "gaziantep", "şanlıurfa", "sanliurfa",
   "kocaeli", "mersin", "diyarbakır", "diyarbakir", "hatay", "manisa", "kayseri", "samsun", "balıkesir", "balikesir",
   "kahramanmaraş", "kahramanmaras", "van", "aydın", "aydin", "denizli", "sakarya", "tekirdağ", "tekirdag", "muğla",
-  "mugla", "eskişehir", "eskisehir", "mardin", "malatya", "trabzon",
+  "mugla", "eskişehir", "eskisehir", "mardin", "malatya", "trabzon", "silivri",
   // Netherlands / Belgium / Switzerland / Austria / Poland
   "north holland", "south holland", "noord holland", "zuid holland", "utrecht", "gelderland",
   "overijssel", "limburg", "noord brabant", "friesland", "groningen", "drenthe", "zeeland",

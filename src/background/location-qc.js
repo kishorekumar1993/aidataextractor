@@ -554,11 +554,14 @@ function isMalaysianLocation(address, country) {
 function isIndonesianLocation(address, country) {
   const c = (country || "").toLowerCase();
   if (/\b(?:indonesia|id)\b/i.test(c)) return true;
-  if (c && !/\b(?:indonesia|id)\b/i.test(c) && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|spain|malaysia)\b/i.test(c)) {
+  if (c && !/\b(?:indonesia|id)\b/i.test(c) && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|spain|malaysia|turkey|türkiye|turkiye|france|netherlands|poland|austria|switzerland|belgium|mexico|brazil|japan|south\s+korea)\b/i.test(c)) {
+    return false;
+  }
+  const a = (address || "").toLowerCase();
+  if (/\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|bulv?\.?|blv\.?|bulvari|osb|san\.?\s*sit\.?|istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|samsun|denizli|sakarya|mugla|trabzon|silivri|turkey|türkiye|turkiye)\b/i.test(a)) {
     return false;
   }
   if (hasIndonesiaAddressSignal(address, country)) return true;
-  const a = (address || "").toLowerCase();
   if (/\b(?:indonesia|republik\s*indonesia)\b/i.test(a)) return true;
   if (/\b(?:jakarta|dki\s*jakarta|jawa\s*barat|jawa\s*tengah|jawa\s*timur|banten|di\s*yogyakarta|yogyakarta|bali|sumatera|kalimantan|sulawesi|papua|maluku|riau|lampung|aceh|nusantara)\b/i.test(a)) return true;
   if (/\b(?:surabaya|bandung|medan|semarang|makassar|palembang|tangerang|depok|bekasi|batam|bogor|pekanbaru|bandar\s*lampung|malang|padang|denpasar|samarinda|banjarmasin|balikpapan)\b/i.test(a)) return true;
@@ -596,6 +599,16 @@ function isSpanishLocation(address, country) {
   if (/\b(?:andaluc[ií]a|catalu[nñ]a|galicia|pa[ií]s\s*vasco|arag[oó]n|asturias|baleares|canarias|cantabria|castilla|extremadura|navarra|rioja)\b/i.test(a)) return true;
   if (/\b(?:ES[-\s]?\d{5}|E[-\s]?\d{5})\b/i.test(a)) return true;
   if (/\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b/.test(a) && (/\b(?:calle|c\/|avenida|avda|paseo|plaza|pol[ií]gono|ctra|carretera)\b/i.test(a))) return true;
+  return false;
+}
+
+function isTurkishLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:t[uü]rki?ye|turkey|tr)\b/i.test(c)) return true;
+  const a = (address || "").toLowerCase();
+  if (/\b(?:t[uü]rki?ye|turkey)\b/i.test(a)) return true;
+  if (/\b(?:istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon|silivri)\b/i.test(a)) return true;
+  if (/\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|bulv?\.?|blv\.?|bulvari|osb|san\.?\s*sit\.?)\b/i.test(a)) return true;
   return false;
 }
 
@@ -991,6 +1004,19 @@ function evaluateCityQC(address, country) {
     }
   }
 
+  // Türkiye City Evaluation:
+  if (isTurkishLocation(cleanAddr, country)) {
+    if (/\bankara\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    if (/\b(?:istanbul|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon|silivri|gebze|corlu|cerkezkoy|kartal|pendik|tuzla|umraniye|kadikoy|besiktas|sisli|fatih|beylikduzu|esenyurt|basaksehir|avcilar|buyukcekmece)\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    if (hasExplicitCityWord(cleanAddr) || /\b(?:ilce|ilcesi|belediye|belediyesi|district|municipality)\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+  }
+
   // South Africa: Suburbs preceding state/province MUST NOT be classified as cities!
   if (isSouthAfricanLocation(cleanAddr, country)) {
     if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
@@ -1151,6 +1177,10 @@ function detectCountryFromAddress(address) {
     return "Canada";
   }
 
+  // Türkiye provinces and cities (check before generic Indonesia signal)
+  if (/\b(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon|silivri)\b/i.test(unaccented)) return "Türkiye";
+  if (/\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|bulv?\.?|blv\.?|bulvari|osb|san\.?\s*sit\.?)\b/i.test(unaccented) && /\b(?:turkey|türkiye|turkiye|istanbul|ankara|izmir|bursa|antalya|adana|konya|silivri)\b/i.test(unaccented)) return "Türkiye";
+
   // Indonesia check MUST run before US 2-letter state code + 5-digit zip fallback
   if (hasIndonesiaAddressSignal(address, "") || (/\b(?:jepara|semarang|surabaya|bandung|bekasi|tangerang|jakarta|jawa|kabupaten|kecamatan|jalan|perumahan)\b/i.test(unaccented) && /,\s*id\s*$/i.test(unaccented))) {
     return "Indonesia";
@@ -1167,7 +1197,7 @@ function detectCountryFromAddress(address) {
   if (/\b(andalucia|cataluna|galicia|pais\s*vasco|aragon|asturias|baleares|canarias|cantabria|castilla|extremadura|navarra|rioja|barcelona|valencia|sevilla|zaragoza|malaga|murcia|alicante|cordoba|valladolid|vigo|gijon|coruna|toledo|vizcaya|bizkaia)\b/i.test(unaccented)) return "Spain";
   if (/\b(maharashtra|karnataka|tamil\s*nadu|gujarat|uttar\s*pradesh|telangana|delhi)\b/i.test(unaccented)) return "India";
   if (/\b(?:taoyuan|hsinchu|miaoli|changhua|nantou|yunlin|chiayi|pingtung|yilan|hualien|taitung|keelung|kinmen|penghu)\s*(?:hsien|county)\b/i.test(unaccented)) return "Taiwan";
-  if (/\b(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon)\b/i.test(unaccented)) return "Türkiye";
+  if (/\b(istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon|silivri)\b/i.test(unaccented)) return "Türkiye";
   if (/\b(selangor|johor|perak|kedah|pahang|negeri\s*sembilan|melaka|malacca|terengganu|kelantan|sabah|sarawak|perlis|wilayah\s*persekutuan|labuan|subang\s*jaya|petaling\s*jaya|shah\s*alam|klang|johor\s*bahru|george\s*town|ipoh|kota\s*kinabalu|kuching|seremban|batu\s*pahat|pasir\s*gudang|iskandar\s*puteri|puchong|cheras|cyberjaya|rawang|kajang|kuantan|alor\s*setar|taiping|sungai\s*petani|bintulu|miri|sibu|sandakan|tawau|butterworth|bukit\s*mertajam|nilai|semenyih)\b/i.test(unaccented)) return "Malaysia";
   if (/\b(penang|pulau\s*pinang)\b/i.test(unaccented) && !/\b(?:penang\s+road|penang\s+street|penang\s+lane)\b/i.test(unaccented)) return "Malaysia";
   if (/\b(jawa\s*barat|jawa\s*tengah|jawa\s*timur|west\s*java|central\s*java|east\s*java|banten|sumatera\s*utara|sumatera\s*barat|sumatera\s*selatan|north\s*sumatra|west\s*sumatra|south\s*sumatra|kalimantan\s*(?:timur|barat|selatan|tengah|utara)?|sulawesi\s*(?:selatan|utara|tengah|tenggara|barat)?|kepulauan\s*riau|bangka\s*belitung|nusa\s*tenggara\s*(?:barat|timur)?|dki\s*jakarta|di\s*yogyakarta|surabaya|bandung|medan|semarang|makassar|palembang|tangerang|tangerang\s*selatan|bekasi|depok|bogor|batam|pekanbaru|bandar\s*lampung|balikpapan|denpasar|samarinda|cikarang|karawang|sidoarjo|gresik|serang|cilegon|solo|surakarta|malang|pontianak|manado|banjarmasin|cimahi|sukabumi|cirebon|tasikmalaya|purwakarta|jepara)\b/i.test(unaccented)) return "Indonesia";

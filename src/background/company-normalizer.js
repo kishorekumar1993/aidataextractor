@@ -93,7 +93,11 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   // 1b. Strip embedded CTA / navigational breadcrumbs if present:
   // e.g. "Aerospace Contact Us Data Plastics Ltd" -> "Data Plastics Ltd"
   name = name.replace(/^.*?\b(?:contact(?:\s+us)?|about(?:\s+us)?|welcome(?:\s+to(?:\s+(?:the|our)\s+(?:official\s+)?(?:website|site|home\s*page|store|portal)(?:\s+of)?)?)?|get\s+in\s+touch(?:\s+with)?|reach\s+us|visit\s+us|find\s+us)\b\s*[:\-–—|•·*\/]?\s*/i, "").trim();
-  name = name.replace(/^(?:(?:[A-Za-z0-9\s]{1,30}\s+[•·|*]\s+)|(?:(?:home|about(?:\s+us)?|contact(?:\s+us)?|products?|services?|shop|store|catalog|news|blog)\s*\/\s+))/i, "").trim();
+  name = name.replace(/^(?:(?:[A-Za-z0-9\s]{1,30}\s+[•·|*]\s+)|(?:(?:home|about(?:\s+us)?|contact(?:\s+us)?|products?|services?|shop|store|catalog|news|blog)\s*[\/|•·\-–—]\s*))/i, "").trim();
+  name = name.replace(/^(?:home|welcome(?:\s+to)?|about\s*us|contact\s*us|products?|services?)\s*[-–—|:•·]\s*/i, "").trim();
+
+  // Strip leading promotional/functional slogans before a separator when a capitalized brand/company follows
+  name = name.replace(/^(?:(?:custom|high\s*quality|precision|leading|trusted|premier|specialist|specialists\s+in|industrial|commercial|global)\s+[A-Za-z0-9\s&,.'\-]+?)\s*[-–—|:•·]\s*(?=[A-Z0-9])/i, "").trim();
 
   // 2. Strip common unwanted leading prefixes (iterative loop to handle chained prefixes like "Submit scroll to top Contact")
   const prefixRegex = /^(?:(?:company\s*information|company\s*details|contact\s*details|company\s*name|legal\s*name|registered\s*name|official\s*name|business\s*name|nazwa\s*firmy|firma|contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+(?:the|our)\s+(?:official\s+)?(?:website|site|home\s*page|store|portal)(?:\s+of)?)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo|facebook|instagram|linkedin|twitter|youtube|pinterest|tiktok|vimeo|social\s*media|follow\s*us|connect\s*with\s*us)\b[\s\-_|:•·,]*)+/i;
@@ -113,10 +117,20 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   name = name.replace(legalSuffixCutoff, "$1");
 
   // 4. Strip trailing SEO taglines even without separator if starts with " - Manufacturer of...", " | Suppliers of..."
-  name = name.replace(/\s*[-–—|:•·]\s*(?:manufacturer|supplier|wholesaler|distributor|timber\s*merchants|specialists|services|official\s*website|home|online\s*store).*$/i, "");
+  name = name.replace(/\s*[-–—|:•·]\s*(?:manufacturer|supplier|wholesaler|distributor|timber\s*merchants|specialists|services|solutions|products|official\s*website|home|online\s*store).*$/i, "");
 
   // 4b. Strip dangling truncated German legal fragment (e.g. "... Systems Ges" truncated from Ges.m.b.H.)
   name = name.replace(/\s+\bGes\.?$/i, "");
+
+  // 4c. Deduplicate repeated corporate suffix words
+  name = name.replace(/\b(Company|Corporation|Limited|Incorporated|Proprietary|Sendirian|Berhad)\s+\1\b/gi, "$1");
+  name = name.replace(/\b(Sendirian\s+Berhad)\s+\1\b/gi, "$1");
+  name = name.replace(/\b(Proprietary\s+Limited)\s+\1\b/gi, "$1");
+
+  // 4d. If name is a bare generic page or navigation word, return empty
+  if (/^(?:home(\s+page)?|welcome|about(\s+us)?|contact(\s+us)?|products?(\s*(?:and|&)\s*services?)?|services?|our\s+services?|our\s+products?|online\s*store|shop|catalog|catalogue|privacy\s*policy|terms|faq|blog|news|logo)$/i.test(name)) {
+    return "";
+  }
 
   // 5. Clean boundary punctuation and special characters per Rule 4
   // Rule: Special character should not start and should not end
@@ -545,7 +559,7 @@ function preferOfficialCompanyName(name, crawlData) {
     }
   }
 
-  if (bestOfficial && bestScore >= 60) {
+  if (bestOfficial && (bestScore >= 60 || (hasCompleteLegalSuffix(bestOfficial) && bestScore > 0))) {
     return cleanCompanyPrefixesAndSuffixes(bestOfficial);
   }
 

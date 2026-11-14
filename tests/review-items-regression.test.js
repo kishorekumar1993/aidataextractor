@@ -761,6 +761,164 @@ async function runAll() {
     assert.strictEqual(nmCheck.isRestricted, false, "Must NOT restrict non-medical devices");
   });
 
+  // =========================================================================
+  // Item 80: Own Crawl Name & Address Formatting Robustness
+  // =========================================================================
+  runTest('Item 80: Own Crawl Name & Address Formatting Robustness (No Slogan Names, Clean Address Components, Embedded Contacts Preserved)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Slogan in Title and "Home" in Logo -> Pick official legal brand
+    const mockCrawlSlogan = {
+      originalUrl: "https://www.acmevalves.com",
+      finalUrl: "https://www.acmevalves.com/",
+      title: "Welcome to | High Quality Valve Solutions | Acme Corp Ltd",
+      logoText: "Home",
+      copyrightText: "Copyright © 2026 Acme Corp Ltd. All Rights Reserved.",
+      legalCompanyCandidates: ["Acme Corp Ltd"],
+      addressCandidates: [
+        {
+          raw: "123 Industrial Parkway, Suite 400, Chicago, IL 60601, USA",
+          source: "contact",
+          isHeadquarters: true
+        }
+      ],
+      phones: ["+1 312 555 0199"],
+      emails: ["sales@acmevalves.com"],
+      combinedText: "Acme Corp Ltd is a manufacturer of industrial valves.",
+      mainHtml: "<html><body><h1>Acme Corp Ltd</h1></body></html>",
+      detectedProductCount: 5,
+      hasCompanyProfile: true
+    };
+
+    const extractedSlogan = ctx.heuristicExtraction(mockCrawlSlogan, { isRestricted: false });
+    const qcSlogan = ctx.applyStrictInstructions(extractedSlogan, mockCrawlSlogan, { isRestricted: false });
+
+    assert.strictEqual(qcSlogan.companyName, "Acme Corporation Limited", "Must reject slogans/nav items and expand Corp Ltd to Corporation Limited");
+    assert.strictEqual(qcSlogan.companyAddress, "123 Industrial Parkway, Suite 400, Chicago, Illinois", "Must expand IL to Illinois, Suite 400, and strip zip code");
+    assert.strictEqual(qcSlogan.state, "Available", "Illinois is state Available");
+    assert.strictEqual(qcSlogan.city, "Available", "Chicago is city Available");
+
+    // 2. Embedded telephone & email in middle of address does NOT truncate trailing city/state
+    const mockCrawlEmbedded = {
+      originalUrl: "https://www.dataplastics.co.uk",
+      finalUrl: "https://www.dataplastics.co.uk/",
+      title: "Custom CNC Machining Services - Data Plastics Ltd",
+      copyrightText: "© 2026 Data Plastics Ltd",
+      legalCompanyCandidates: ["Data Plastics Ltd"],
+      addressCandidates: [
+        {
+          raw: "42 High Street, Tel: +44 161 234 5678, Email: info@dataplastics.co.uk, Manchester, Greater Manchester, M1 1AA, United Kingdom",
+          source: "contact",
+          isHeadquarters: true
+        }
+      ],
+      phones: ["+44 161 234 5678"],
+      emails: ["info@dataplastics.co.uk"],
+      combinedText: "Data Plastics Ltd manufacturer of custom plastics.",
+      mainHtml: "<html><body><p>Precision Moulding</p></body></html>",
+      detectedProductCount: 3,
+      hasCompanyProfile: true
+    };
+
+    const extractedEmbedded = ctx.heuristicExtraction(mockCrawlEmbedded, { isRestricted: false });
+    const qcEmbedded = ctx.applyStrictInstructions(extractedEmbedded, mockCrawlEmbedded, { isRestricted: false });
+
+    assert.strictEqual(qcEmbedded.companyName, "Data Plastics Limited", "Must strip leading slogan from title and expand Ltd to Limited");
+    assert.strictEqual(qcEmbedded.companyAddress, "42 High Street, Manchester, Greater Manchester", "Embedded phone/email must be removed without truncating Manchester, Greater Manchester");
+    assert.strictEqual(qcEmbedded.city, "Available", "Manchester is city Available");
+    assert.strictEqual(qcEmbedded.state, "Available", "Greater Manchester is state/county Available");
+
+    // 3. Full address candidate wins over incomplete fragment with higher default priority
+    const mockCrawlFragment = {
+      originalUrl: "https://www.precisiontools.com",
+      finalUrl: "https://www.precisiontools.com/",
+      title: "Precision Tools Inc.",
+      copyrightText: "Copyright © 2026 Precision Tools Inc.",
+      legalCompanyCandidates: ["Precision Tools Inc."],
+      addressCandidates: [
+        {
+          raw: "London, UK",
+          source: "footer",
+          priority: 1 // default high priority from footer, but incomplete fragment!
+        },
+        {
+          raw: "No. 55 Burnt House Road, Whitley Bay, Tyne and Wear, NE25 9DP, United Kingdom",
+          source: "contact",
+          priority: 6
+        }
+      ],
+      phones: ["+44 191 252 1234"],
+      emails: ["contact@precisiontools.com"],
+      combinedText: "Precision Tools Inc. manufacturer of tools.",
+      mainHtml: "<html><body><p>Tools</p></body></html>",
+      detectedProductCount: 2,
+      hasCompanyProfile: true
+    };
+
+    const extractedFragment = ctx.heuristicExtraction(mockCrawlFragment, { isRestricted: false });
+    const qcFragment = ctx.applyStrictInstructions(extractedFragment, mockCrawlFragment, { isRestricted: false });
+
+    assert.strictEqual(qcFragment.companyAddress, "Number 55 Burnt House Road, Whitley Bay, Tyne And Wear", "Full candidate must win over fragment, No. expands to Number, and postcode/country stripped");
+    assert.strictEqual(qcFragment.city, "Available", "Whitley Bay is city Available");
+    assert.strictEqual(qcFragment.state, "Available", "Tyne and Wear is county/state Available");
+  });
+
+  // =========================================================================
+  // Item 81: Turkish Address Full Expansion & Own Crawl (Balaban Mahallesi Uzungol Cd. C Blok, N:1-2 Silivri, Istanbul)
+  // =========================================================================
+  runTest('Item 81: Turkish Address Full Expansion & Own Crawl (Cd. -> Caddesi, N:1-2 -> Number 1-2, C Blok, Silivri, Istanbul -> Türkiye)', () => {
+    const { ctx } = createTestContext();
+    const rawAddr = "Balaban Mahallesi Uzungol Cd. C Blok, N:1-2 Silivri, Istanbul";
+
+    // 1. isFullAddressCandidate recognition
+    assert.strictEqual(ctx.isFullAddressCandidate(rawAddr), true, 'Turkish thoroughfare, block and number prefix must be recognized as full address');
+
+    // 2. Abbreviation expansion
+    const expanded = ctx.expandAddressAndStateAbbreviations(rawAddr, "Türkiye");
+    assert.strictEqual(expanded, "Balaban Mahallesi Uzungol Caddesi C Blok, Number 1-2 Silivri, Istanbul", 'Cd. must expand to Caddesi and N:1-2 must expand to Number 1-2');
+
+    // 3. Address sanitization & comma punctuation
+    const sanitized = ctx.sanitizeRule6CompanyAddress(rawAddr, "Balaban Makina Sanayi", "Türkiye", { contactPageText: rawAddr, footerText: rawAddr });
+    assert.strictEqual(sanitized, "Balaban Mahallesi, Uzungol Caddesi, C Blok, Number 1-2, Silivri, Istanbul", 'Sanitized address must expand abbreviations and format components cleanly with commas');
+
+    // 4. Country detection must NOT be falsely hijacked by Blok into Indonesia
+    const detectedCountry = ctx.detectCountryFromAddress(rawAddr);
+    assert.strictEqual(detectedCountry, "Türkiye", 'Istanbul address with Blok must resolve to Türkiye, not Indonesia');
+
+    // 5. City and State QC evaluation
+    assert.strictEqual(ctx.evaluateCityQC(sanitized, "Türkiye"), "Available", 'Silivri / Istanbul must evaluate as City Available in Türkiye');
+    assert.strictEqual(ctx.hasStateInAddress(sanitized, "Türkiye"), true, 'Istanbul must evaluate as State Available in Türkiye');
+
+    // 6. End-to-end own crawl extraction and strict QC
+    const mockCrawlTurkish = {
+      originalUrl: "https://www.balabanmakina.com.tr",
+      finalUrl: "https://www.balabanmakina.com.tr/",
+      title: "Balaban Makina Sanayi Ltd. Sti.",
+      contactPageText: rawAddr,
+      footerText: rawAddr,
+      bodyText: rawAddr + " We manufacture custom packaging machinery in our factory in Silivri, Istanbul.",
+      mainHtml: `<html><body><h1>Balaban Makina</h1><p>${rawAddr}</p></body></html>`,
+      crawledPages: [{ url: "https://www.balabanmakina.com.tr/", text: rawAddr + " We manufacture custom packaging machinery." }],
+      detectedProductCount: 3,
+      detectedImageCount: 3,
+      detectedDescCount: 3,
+      emails: ["info@balabanmakina.com.tr"],
+      phones: ["+90 212 727 1234"],
+      addressCandidates: [{ raw: rawAddr, source: "contact" }]
+    };
+
+    const extracted = ctx.heuristicExtraction(mockCrawlTurkish, { isRestricted: false });
+    assert.strictEqual(extracted.countryName, "Türkiye", 'Own crawl must resolve country as Türkiye');
+    assert.strictEqual(extracted.companyAddress, "Balaban Mahallesi, Uzungol Caddesi, C Blok, Number 1-2, Silivri, Istanbul", 'Own crawl must extract fully expanded address');
+
+    const qcResult = ctx.applyStrictInstructions(extracted, mockCrawlTurkish, { isRestricted: false });
+    assert.strictEqual(qcResult.websiteStatus, "Working", 'Website status must be Working');
+    assert.strictEqual(qcResult.countryName, "Türkiye", 'Country name must be Türkiye');
+    assert.strictEqual(qcResult.companyAddress, "Balaban Mahallesi, Uzungol Caddesi, C Blok, Number 1-2, Silivri, Istanbul", 'QC must preserve fully expanded address');
+    assert.strictEqual(qcResult.city, "Available", 'City must be Available');
+    assert.strictEqual(qcResult.state, "Available", 'State must be Available');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
