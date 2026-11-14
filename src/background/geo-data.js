@@ -177,7 +177,7 @@ const RECOGNIZED_TOWNS = [
   "weissenhorn", "ulm", "neu-ulm", "augsburg", "bonn", "karlsruhe", "mannheim", "wiesbaden", "munster", "bielefeld", "aachen", "freiburg", "heidelberg",
   // France
   "paris", "marseille", "lyon", "toulouse", "nice", "nantes", "strasbourg", "montpellier",
-  "bordeaux", "lille", "rennes", "reims", "saint-etienne", "le havre", "toulon", "rixheim", "mulhouse", "colmar", "grenoble", "dijon", "angers", "tours",
+  "bordeaux", "lille", "rennes", "reims", "saint-etienne", "le havre", "toulon", "rixheim", "mulhouse", "colmar", "grenoble", "dijon", "angers", "tours", "aubagne",
   // India
   "mumbai", "delhi", "bangalore", "bengaluru", "hyderabad", "ahmedabad", "chennai", "kolkata",
   "surat", "pune", "jaipur", "lucknow", "kanpur", "nagpur", "indore", "thane", "bhopal",
@@ -495,10 +495,10 @@ const STATE_AND_PROVINCE_NAMES = [
   "puglia", "apulia", "sardegna", "sardinia", "sicilia", "sicily", "toscana", "tuscany",
   "trentino alto adige", "umbria", "valle d aosta", "valle d'aosta", "veneto",
   // Germany states
-  "baden-wurttemberg", "baden württemberg", "bavaria", "bayern", "berlin", "brandenburg",
-  "bremen", "hamburg", "hessen", "hesse", "mecklenburg", "niedersachsen", "lower saxony",
-  "nordrhein westfalen", "north rhine westphalia", "rheinland pfalz", "rhineland palatinate",
-  "saarland", "sachsen", "saxony", "sachsen anhalt", "saxony anhalt", "schleswig holstein",
+  "baden-wurttemberg", "baden-württemberg", "baden württemberg", "bavaria", "bayern", "berlin", "brandenburg",
+  "bremen", "hamburg", "hessen", "hesse", "mecklenburg", "mecklenburg-vorpommern", "niedersachsen", "lower saxony",
+  "nordrhein westfalen", "nordrhein-westfalen", "north rhine westphalia", "north rhine-westphalia", "rheinland pfalz", "rheinland-pfalz", "rhineland palatinate",
+  "saarland", "sachsen", "saxony", "sachsen anhalt", "sachsen-anhalt", "saxony anhalt", "schleswig holstein", "schleswig-holstein",
   "thuringen", "thüringen", "thuringia",
   // New Zealand (Regions / Provinces ONLY - Auckland, Wellington, Nelson, Gisborne are Cities!)
   "canterbury", "otago", "waikato", "bay of plenty", "manawatu", "manawatū", "manawatu-whanganui", "manawatū-whanganui",
@@ -519,6 +519,13 @@ const STATE_AND_PROVINCE_NAMES = [
   "kocaeli", "mersin", "diyarbakır", "diyarbakir", "hatay", "manisa", "kayseri", "samsun", "balıkesir", "balikesir",
   "kahramanmaraş", "kahramanmaras", "van", "aydın", "aydin", "denizli", "sakarya", "tekirdağ", "tekirdag", "muğla",
   "mugla", "eskişehir", "eskisehir", "mardin", "malatya", "trabzon", "silivri",
+  "çanakkale", "canakkale", "edirne", "kırklareli", "kirklareli", "yalova", "düzce", "duzce", "bolu", "zonguldak",
+  "karabük", "karabuk", "bartın", "bartin", "bilecik", "kütahya", "kutahya", "uşak", "usak", "afyonkarahisar",
+  "isparta", "burdur", "aksaray", "karaman", "niğde", "nigde", "nevşehir", "nevsehir", "kırşehir", "kirsehir",
+  "kırıkkale", "kirikkale", "çorum", "corum", "amasya", "tokat", "sivas", "yozgat", "rize", "giresun", "ordu",
+  "artvin", "erzurum", "erzincan", "elazığ", "elazig", "adıyaman", "adiyaman", "batman", "siirt", "şırnak", "sirnak",
+  "hakkari", "ağrı", "agri", "ığdır", "igdir", "kars", "ardahan", "bingöl", "bingol", "bitlis", "muş", "mus",
+  "tunceli", "bayburt", "gümüşhane", "gumushane", "kilis", "osmaniye",
   // Netherlands / Belgium / Switzerland / Austria / Poland
   "north holland", "south holland", "noord holland", "zuid holland", "utrecht", "gelderland",
   "overijssel", "limburg", "noord brabant", "friesland", "groningen", "drenthe", "zeeland",
@@ -533,7 +540,7 @@ const STATE_AND_PROVINCE_NAMES = [
   "veracruz", "chihuahua", "sonora", "coahuila", "tamaulipas", "michoacan", "oaxaca",
   "sao paulo", "rio de janeiro", "minas gerais", "bahia", "parana", "rio grande do sul",
   "pernambuco", "ceara", "para", "santa catarina", "goias", "maranhao", "amazonas",
-  "ontario", "gauteng",
+  "ontario", "gauteng", "western cape", "eastern cape", "northern cape", "kwazulu-natal", "kwazulu natal", "free state", "mpumalanga", "limpopo", "north west",
   // Ireland (26 counties of the Republic of Ireland)
   "dublin", "cork", "galway", "kildare", "meath", "limerick", "kerry", "wicklow",
   "clare", "tipperary", "wexford", "donegal", "louth", "mayo", "kilkenny", "waterford",
@@ -552,6 +559,10 @@ const STATE_AND_PROVINCE_NAMES = [
   "kalimantan utara", "sulawesi selatan", "sulawesi utara", "sulawesi tengah",
   "sulawesi tenggara", "sulawesi barat", "kepulauan riau", "bangka belitung",
   // France departments & regions
+  "ile-de-france", "île-de-france", "auvergne-rhone-alpes", "auvergne-rhône-alpes", "nouvelle-aquitaine", "occitanie",
+  "hauts-de-france", "provence-alpes-cote d'azur", "provence-alpes-côte d'azur", "paca", "grand est", "pays de la loire",
+  "bretagne", "brittany", "normandie", "normandy", "bourgogne-franche-comte", "bourgogne-franche-comté",
+  "centre-val de loire", "corse", "corsica",
   "haut-rhin", "bas-rhin", "rhone", "isere", "nord", "pas-de-calais", "gironde", "herault",
   "loire-atlantique", "ille-et-vilaine", "bouches-du-rhone", "alpes-maritimes", "seine-et-marne",
   "yvelines", "essonne", "hauts-de-seine", "val-de-marne", "val-d'oise",

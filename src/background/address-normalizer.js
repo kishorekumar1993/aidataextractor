@@ -993,7 +993,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\bv\.?\s*d\.?\s*h\b\.?/gi, 'vor der Höhe');
 
   // German Bundesländer abbreviations
-  if (cLower.includes('germany') || cLower.includes('deutschland')) {
+  if (cLower.includes('germany') || cLower.includes('deutschland') || cLower.includes('german')) {
     a = a.replace(/,\s*\b(?:bw)\b\.?/gi, ', Baden-Württemberg');
     a = a.replace(/,\s*\b(?:by)\b\.?/gi, ', Bayern');
     a = a.replace(/,\s*\b(?:bb)\b\.?/gi, ', Brandenburg');
@@ -1133,7 +1133,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // ==========================================
   // 12. France Abbreviations
   // ==========================================
-  if (cLower.includes('france') || /\b(?:rue|avenue|boulevard|cedex|z\.?i\.?|z\.?a\.?c?\.?)\b/i.test(a)) {
+  if (cLower.includes('france') || cLower.includes('french') || /\b(?:rue|avenue|boulevard|cedex|z\.?i\.?|z\.?a\.?c?\.?)\b/i.test(a)) {
     a = a.replace(/\b(?:z\.?i)\b\.?/gi, "Zone Industrielle");
     a = a.replace(/\b(?:z\.?a\.?c)\b\.?/gi, "Zone d'Amenagement Concerte");
     a = a.replace(/\b(?:z\.?a)\b\.?/gi, "Zone Artisanale");
@@ -1141,13 +1141,16 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/(^|[,\s])imp\.?\s+(?=[A-Za-z])/gi, "$1Impasse ");
     a = a.replace(/(^|[,\s])all\.?\s+(?=[A-Za-z])/gi, "$1Allee ");
     a = a.replace(/(^|[,\s])ch\.?\s+(?=[A-Za-z])/gi, "$1Chemin ");
+    a = a.replace(/(^|[,\s])rte\.?\s+(?=[A-Za-z0-9])/gi, "$1Route ");
+    a = a.replace(/(^|[,\s])b[aâ]t\.?\s+(?=[A-Za-z0-9])/gi, "$1Batiment ");
     a = a.replace(/\bb\.?p\.?\s*(?=\d)/gi, "Boite Postale ");
+    a = a.replace(/(^|[,\s])r\.\s+(?=[A-Za-z])/gi, "$1Rue ");
   }
 
   // ==========================================
   // 13. South Africa & India Abbreviations & State/Province Expansions
   // ==========================================
-  if (cLower.includes('south africa')) {
+  if (cLower.includes('south africa') || cLower.includes('southafrica')) {
     a = a.replace(/,\s*\b(?:gp)\b\.?/gi, ", Gauteng");
     a = a.replace(/,\s*\b(?:kzn)\b\.?/gi, ", KwaZulu-Natal");
     a = a.replace(/,\s*\b(?:wc)\b\.?/gi, ", Western Cape");
@@ -1157,6 +1160,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/,\s*\b(?:nw)\b\.?/gi, ", North West");
     a = a.replace(/,\s*\b(?:mp)\b\.?/gi, ", Mpumalanga");
     a = a.replace(/,\s*\b(?:lp)\b\.?/gi, ", Limpopo");
+    a = a.replace(/(^|[,\s])(?:pvt\s*bag|private\s*bag|p\/bag)\s*([A-Za-z0-9]+)?/gi, "$1Private Bag $2");
+    a = a.replace(/\bext\b\.?\s*(?=\d)/gi, "Extension ");
+    a = a.replace(/\bcnr\b\.?\s+(?=[A-Za-z])/gi, "Corner ");
   }
   const isIndiaAddr = cLower.includes('india') || /\b(?:bangalore|bengaluru|mumbai|pune|chennai|hyderabad|delhi|kolkata|ahmedabad|surat|jaipur|noida|gurgaon|gurugram|faridabad|coimbatore|vadodara|rajkot|ludhiana|indore|nagpur|midc|gidc|sidco|riico|maharashtra|karnataka|tamil\s*nadu|gujarat|telangana|uttar\s*pradesh|haryana|punjab|rajasthan)\b/i.test(a);
   if (isIndiaAddr) {
@@ -1312,12 +1318,19 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // ==========================================
   // 18. Türkiye, Romania & Hungary Abbreviations
   // ==========================================
-  if (cLower.includes('türkiye') || cLower.includes('turkiye') || cLower.includes('turkey') || /\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|sokagi|sokağı|bulv?\.?|blv\.?|bulvari|bulvarı|osb|san\.?\s*sit\.?|istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|samsun|denizli|sakarya|mugla|trabzon|silivri)\b/i.test(a)) {
+  if (cLower.includes('türkiye') || cLower.includes('turkiye') || cLower.includes('turkey') || cLower.includes('turkiey') || /\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|sokagi|sokağı|bulv?\.?|blv\.?|bulvari|bulvarı|osb|san\.?\s*sit\.?|istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|samsun|denizli|sakarya|mugla|trabzon|silivri)\b/i.test(a)) {
     a = a.replace(/\b(?:cad|cd)\b\.?/gi, "Caddesi");
     a = a.replace(/\b(?:sok|sk)\b\.?/gi, "Sokak");
     a = a.replace(/\b(?:bulv?|blv)\b\.?/gi, "Bulvari");
     a = a.replace(/\b(?:mah|mh)\b\.?/gi, "Mahallesi");
     a = a.replace(/\bmahalle\b/gi, "Mahallesi");
+    a = a.replace(/\bmyd\b\.?/gi, "Meydani");
+    a = a.replace(/\b(?:ckm|çkm)\b\.?/gi, "Cikmazi");
+    a = a.replace(/\bkvs\b\.?/gi, "Kavsagi");
+    a = a.replace(/\bgct\b\.?/gi, "Gecidi");
+    a = a.replace(/\bi[şs]\s*mrk\b\.?/gi, "Is Merkezi");
+    a = a.replace(/\bsit\b\.?(?!\s*sitesi\b)/gi, "Sitesi");
+    a = a.replace(/\b(?:apt|ap)\b\.?/gi, "Apartmani");
     a = a.replace(/\bosb\b/gi, "Organize Sanayi Bolgesi");
     a = a.replace(/\bsan\.?\s*sit\.?/gi, "Sanayi Sitesi");
     a = a.replace(/(^|[,\s])(?:\bkat|\bk)[:.]?\s*(\d{1,3})\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
@@ -2032,8 +2045,8 @@ function removePostalCodesCarefully(addr) {
   // 5. UK Postcodes (e.g. SW1A 1AA, EC1A 1BB, W1A 0AX, M1 1AE, CM9 4PX)
   a = a.replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/gi, " ");
 
-  // 6. European country-prefixed postal codes (e.g. ES-28014, CZ-60200, DE-80333, FR-75002, PL-00-838)
-  a = a.replace(/\b(?:ES|E|IT|FR|DE|NL|BE|AT|CH|CZ|PL|SE|NO|DK)[-\s]?(?:\d{4,5}|\d{3}\s*\d{2}|\d{2}-\d{3})\b/gi, " ");
+  // 6. European country-prefixed postal codes (e.g. ES-28014, CZ-60200, DE-80333, D-80333, FR-75002, PL-00-838, TR-34570, ZA-2000)
+  a = a.replace(/\b(?:ES|E|IT|FR|DE|D|NL|BE|AT|CH|CZ|PL|SE|NO|DK|TR|ZA)[-\s]?(?:\d{4,5}|\d{3}\s*\d{2}|\d{2}-\d{3})\b/gi, " ");
 
   // 7. Canadian Postcodes (e.g. M5V 2T6, K1A 0B1)
   a = a.replace(/\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/gi, " ");
@@ -2051,7 +2064,7 @@ function removePostalCodesCarefully(addr) {
   a = a.replace(/(,\s*)\b\d{3}\s+\d{2}\b\s*(?=,?\s+[\p{L}])/gu, "$1");
 
   // 12. Postal code directly following State name / abbreviation / province globally
-  const allStatesPostalRegex = "\\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New\\s*Hampshire|New\\s*Jersey|New\\s*Mexico|New\\s*York|North\\s*Carolina|North\\s*Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\\s*Island|South\\s*Carolina|South\\s*Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West\\s*Virginia|Wisconsin|Wyoming|District\\s*Of\\s*Columbia|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC|Ontario|Quebec|British Columbia|Alberta|Gauteng|ON|QC|BC|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo|Selangor|Johor|Penang|Perak|Kedah|Pahang|Negeri Sembilan|Melaka|Terengganu|Kelantan|Sarawak|Sabah|Perlis)\\b[\\s,]*";
+  const allStatesPostalRegex = "\\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New\\s*Hampshire|New\\s*Jersey|New\\s*Mexico|New\\s*York|North\\s*Carolina|North\\s*Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\\s*Island|South\\s*Carolina|South\\s*Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West\\s*Virginia|Wisconsin|Wyoming|District\\s*Of\\s*Columbia|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC|Ontario|Quebec|British Columbia|Alberta|Gauteng|KwaZulu-Natal|Western Cape|Eastern Cape|Northern Cape|Free State|North West|Mpumalanga|Limpopo|ON|QC|BC|Baden-Württemberg|Baden-Wurttemberg|Bayern|Bavaria|Berlin|Brandenburg|Bremen|Hamburg|Hessen|Hesse|Mecklenburg-Vorpommern|Niedersachsen|Lower Saxony|Nordrhein-Westfalen|North Rhine-Westphalia|Rheinland-Pfalz|Rhineland-Palatinate|Saarland|Sachsen|Saxony|Sachsen-Anhalt|Saxony-Anhalt|Schleswig-Holstein|Thüringen|Thuringia|Jawa Barat|Jawa Tengah|Jawa Timur|DKI Jakarta|DI Yogyakarta|Banten|Sumatera Utara|Sumatera Barat|Sumatera Selatan|Kalimantan Timur|Kalimantan Barat|Sulawesi Selatan|Bali|İstanbul|Istanbul|Ankara|İzmir|Izmir|Bursa|Antalya|Adana|Konya|Gaziantep|Kocaeli|Mersin|Diyarbakır|Diyarbakir|Kayseri|Eskişehir|Eskisehir|Samsun|Denizli|Sakarya|Muğla|Mugla|Trabzon|Île-de-France|Ile-de-France|Auvergne-Rhône-Alpes|Nouvelle-Aquitaine|Occitanie|Hauts-de-France|Provence-Alpes-Côte d'Azur|PACA|Grand Est|Pays de la Loire|Bretagne|Normandie|Bourgogne-Franche-Comté|Centre-Val de Loire|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo|Selangor|Johor|Penang|Perak|Kedah|Pahang|Negeri Sembilan|Melaka|Terengganu|Kelantan|Sarawak|Sabah|Perlis)\\b[\\s,]*";
   a = a.replace(new RegExp(`(${allStatesPostalRegex})\\b\\d{4,6}\\b`, "gi"), "$1");
 
   // 13. Postal code before a city/town after comma (e.g. "..., 81750 Masai, Johor", "..., 75002 Paris")
@@ -2059,7 +2072,8 @@ function removePostalCodesCarefully(addr) {
   a = a.replace(/(,\s*)\b\d{4,6}\b\s*(?=,?\s+([\p{L}]+(?:\s+[\p{L}]+)*))/gu, (match, comma, rest) => {
     if (new RegExp(streetSuffixPattern, "iu").test(rest)) return match;
     const preComma = a.slice(0, a.indexOf(match));
-    if (new RegExp(premisePrefixPattern, "iu").test(preComma)) return match;
+    const lastPre = preComma.split(',').pop().trim();
+    if (new RegExp(`(?:^|\\s)${premisePrefixPattern}\\s*$`, "iu").test(lastPre)) return match;
     return comma;
   });
   a = a.replace(/(\b\d+\s+)\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b\s+(?=[\p{L}])/gu, "$1");
@@ -2205,7 +2219,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   }
 
   // 11. Strip country names from address per Rule 6
-  a = a.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|England|Scotland|Wales|Northern\s*Ireland|Canada|Germany|Deutschland|France|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
+  a = a.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|England|Scotland|Wales|Northern\s*Ireland|Canada|Germany|Deutschland|German|France|French|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Turkiey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|Southafrica|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
   a = a.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
   a = a.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
   a = a.replace(/(?:中華民國|台灣|臺灣|中国|中國)/g, " ");
@@ -2218,7 +2232,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   if (resolvedCountry && /united states/i.test(resolvedCountry)) {
     a = a.replace(/[,;\s]+\b(?:USA|US)\b\s*$/i, "").trim();
   } else {
-    a = a.replace(/[,;\s]+\b(?:CA|USA|US|UK|GB|AU|NZ|ZA|DE|FR|ES|IT|IN|CN|PRC|TW|ROC|MY|ID)\b\s*$/i, "").trim();
+    a = a.replace(/[,;\s]+\b(?:CA|USA|US|UK|GB|AU|NZ|ZA|DE|FR|ES|IT|IN|CN|PRC|TW|ROC|MY|ID|SG|TR)\b\s*$/i, "").trim();
   }
 
   // 12. Strip postal codes per Rule 6
@@ -2252,6 +2266,18 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   if (crawlData && typeof stripBlindlyAddedNumber === "function") {
     const allEv = `${(crawlData.contactPageText || "")} ${(crawlData.footerText || "")} ${((crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" "))}`;
     a = stripBlindlyAddedNumber(a, allEv, "");
+  }
+
+  // Deduplicate adjacent identical segments (e.g. "Puchong, Puchong" -> "Puchong")
+  const segs = a.split(/(?<!\d),(?!\d)/).map(s => s.trim()).filter(Boolean);
+  if (segs.length > 1) {
+    const deduped = [];
+    for (let i = 0; i < segs.length; i++) {
+      if (i === 0 || segs[i].toLowerCase() !== segs[i - 1].toLowerCase()) {
+        deduped.push(segs[i]);
+      }
+    }
+    a = deduped.join(', ');
   }
 
   // Rule: Special character should not start and should not end

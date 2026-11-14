@@ -919,6 +919,109 @@ async function runAll() {
     assert.strictEqual(qcResult.state, "Available", 'State must be Available');
   });
 
+  // =========================================================================
+  // Item 82: Comprehensive 7-Country Support (Türkiye, France, Indonesia, Singapore, Malaysia, South Africa, Germany)
+  // =========================================================================
+  runTest('Item 82: Comprehensive 7-Country Support (Türkiye, France, Indonesia, Singapore, Malaysia, South Africa, Germany)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Türkiye
+    const trCo = ctx.expandCompanyAbbreviations("ABC San. ve Tic. Ltd. Şti.");
+    assert.strictEqual(trCo, "ABC Sanayi ve Ticaret Limited Şirketi", "Turkish legal suffix & trade abbreviation expansion");
+    const trCountry = ctx.normalizeCountryName("turkiey");
+    assert.strictEqual(trCountry, "Türkiye", "turkiey alias maps to Türkiye");
+    const trPhone = ctx.cleanPhoneNumber("+90 212 123 4567", "Türkiye");
+    assert.strictEqual(trPhone, "2121234567", "Turkish country code +90 must be stripped");
+    const trAddr = ctx.sanitizeRule6CompanyAddress("Balaban Mh. Uzungol Cd. C Blok, N:1-2 Myd. Silivri, Istanbul, Türkiye", "ABC", "Türkiye");
+    assert.strictEqual(ctx.evaluateCityQC(trAddr, "Türkiye"), "Available", "Silivri / Istanbul must evaluate as City Available");
+    assert.strictEqual(ctx.hasStateInAddress(trAddr, "Türkiye"), true, "Istanbul must evaluate as State Available");
+
+    // 2. France
+    const frCo = ctx.expandCompanyAbbreviations("Societe Industrielle SARL");
+    assert.strictEqual(frCo, "Societe Industrielle Société à Responsabilité Limitée", "French SARL expansion");
+    const frCoSci = ctx.expandCompanyAbbreviations("Immobiliere SCI");
+    assert.strictEqual(frCoSci, "Immobiliere Société Civile Immobilière", "French SCI expansion");
+    const frCountry = ctx.normalizeCountryName("french");
+    assert.strictEqual(frCountry, "France", "french alias maps to France");
+    const frPhone = ctx.cleanPhoneNumber("+33 4 42 18 00 00", "France");
+    assert.strictEqual(frPhone, "442180000", "French country code +33 must be stripped");
+    const frAddr = ctx.sanitizeRule6CompanyAddress("15 Bd. de la Liberte, Z.I. Les Paluds, 13400 Aubagne, France", "Societe", "France");
+    assert.strictEqual(frAddr, "15 Boulevard De La Liberte, Zone Industrielle Les Paluds, Aubagne", "French address abbreviation expansion & postal code/country stripping");
+    assert.strictEqual(ctx.evaluateCityQC(frAddr, "France"), "Available", "Aubagne must evaluate as City Available");
+    assert.strictEqual(ctx.hasStateInAddress("15 Boulevard De La Liberte, Aubagne, Provence-Alpes-Cote d'Azur", "France"), true, "PACA region must evaluate as State Available");
+
+    // 3. Indonesia
+    const idCo = ctx.expandCompanyAbbreviations("PT Maju Jaya Bersama");
+    assert.strictEqual(idCo, "Perseroan Terbatas Maju Jaya Bersama", "Indonesian PT expansion");
+    const idCoCv = ctx.expandCompanyAbbreviations("CV Indah Karya");
+    assert.strictEqual(idCoCv, "Commanditaire Vennootschap Indah Karya", "Indonesian CV expansion");
+    const idCountry = ctx.normalizeCountryName("indonesia");
+    assert.strictEqual(idCountry, "Indonesia", "Indonesia normalization");
+    const idPhone = ctx.cleanPhoneNumber("+62 21 893 1234", "Indonesia");
+    assert.strictEqual(idPhone, "218931234", "Indonesian country code +62 must be stripped");
+    const idAddr = ctx.sanitizeRule6CompanyAddress("Jl. Raya Industri Km 5,5 No. 12, Cikarang, Jawa Barat, Indonesia", "Maju", "Indonesia");
+    assert.strictEqual(idAddr, "Jalan Raya Industri Kilometer 5,5 Number 12, Cikarang, Jawa Barat", "Indonesian Jl/Km/No expansion, decimal comma preservation, country strip");
+    assert.strictEqual(ctx.evaluateCityQC(idAddr, "Indonesia"), "Available", "Cikarang must evaluate as City Available");
+    assert.strictEqual(ctx.hasStateInAddress(idAddr, "Indonesia"), true, "Jawa Barat must evaluate as State Available");
+
+    // 4. Singapore
+    const sgCo = ctx.expandCompanyAbbreviations("Pacific Engineering Pte Ltd");
+    assert.strictEqual(sgCo, "Pacific Engineering Private Limited", "Singapore Pte Ltd expansion");
+    const sgCountry = ctx.normalizeCountryName("republic of singapore");
+    assert.strictEqual(sgCountry, "Singapore", "Republic of Singapore maps to Singapore");
+    const sgPhone = ctx.cleanPhoneNumber("+65 6220 1234", "Singapore");
+    assert.strictEqual(sgPhone, "62201234", "Singapore country code +65 must be stripped");
+    const sgAddr = ctx.sanitizeRule6CompanyAddress("10 Anson Road #08-01 International Plaza, Singapore 079903", "Pacific", "Singapore");
+    assert.strictEqual(sgAddr, "10 Anson Road #08-01 International Plaza", "Singapore 6-digit postal code & country stripped, # preserved");
+    assert.strictEqual(ctx.evaluateCityQC(sgAddr, "Singapore"), "Available", "Singapore City-State evaluates as City Available");
+    assert.strictEqual(ctx.hasStateInAddress(sgAddr, "Singapore"), true, "Singapore City-State evaluates as State Available");
+
+    // 5. Malaysia
+    const myCo = ctx.expandCompanyAbbreviations("Apex Manufacturing Sdn Bhd");
+    assert.strictEqual(myCo, "Apex Manufacturing Sendirian Berhad", "Malaysian Sdn Bhd expansion");
+    const myCountry = ctx.normalizeCountryName("malaysia");
+    assert.strictEqual(myCountry, "Malaysia", "Malaysia normalization");
+    const myPhone = ctx.cleanPhoneNumber("+60 3 8061 1234", "Malaysia");
+    assert.strictEqual(myPhone, "380611234", "Malaysian country code +60 must be stripped");
+    const myAddr = ctx.sanitizeRule6CompanyAddress("No. 25, Jln. Industri 3, Tmn. Perindustrian Puchong, 47100 Puchong, Selangor, Malaysia", "Apex", "Malaysia");
+    assert.strictEqual(myAddr, "Number 25, Jalan Industri 3, Taman Perindustrian, Puchong, Selangor", "Malaysian Jln/Tmn expansion, postal code stripped, deduplicated city");
+    assert.strictEqual(ctx.evaluateCityQC(myAddr, "Malaysia"), "Available", "Puchong must evaluate as City Available");
+    assert.strictEqual(ctx.hasStateInAddress(myAddr, "Malaysia"), true, "Selangor must evaluate as State Available");
+
+    // 6. South Africa
+    const zaCo = ctx.expandCompanyAbbreviations("Transnet SOC Ltd");
+    assert.strictEqual(zaCo, "Transnet State Owned Company Limited", "South African SOC Ltd expansion");
+    const zaCoPty = ctx.expandCompanyAbbreviations("Apex Mining (Pty) Ltd");
+    assert.strictEqual(zaCoPty, "Apex Mining Proprietary Limited", "South African (Pty) Ltd expansion with brackets removed");
+    const zaCountry = ctx.normalizeCountryName("southafrica");
+    assert.strictEqual(zaCountry, "South Africa", "southafrica alias maps to South Africa");
+    const zaCountryRsa = ctx.normalizeCountryName("rsa");
+    assert.strictEqual(zaCountryRsa, "South Africa", "rsa alias maps to South Africa");
+    const zaPhone = ctx.cleanPhoneNumber("+27 11 123 4567", "South Africa");
+    assert.strictEqual(zaPhone, "111234567", "South African country code +27 must be stripped");
+    const zaSuburbAddr = "10 West Street, Sandton, Gauteng";
+    assert.strictEqual(ctx.evaluateCityQC(zaSuburbAddr, "South Africa"), "Not Available", "South African suburb Sandton alone must be City Not Available");
+    assert.strictEqual(ctx.hasStateInAddress(zaSuburbAddr, "South Africa"), true, "Gauteng province must be State Available");
+    const zaCityAddr = "10 West Street, Johannesburg, Gauteng";
+    assert.strictEqual(ctx.evaluateCityQC(zaCityAddr, "South Africa"), "Available", "Johannesburg city must be City Available");
+
+    // 7. Germany
+    const deCo = ctx.expandCompanyAbbreviations("Musterbau GmbH & Co. KG");
+    assert.strictEqual(deCo, "Musterbau Gesellschaft mit beschränkter Haftung & Compagnie Kommanditgesellschaft", "German GmbH & Co. KG expansion with & preserved");
+    const deCountry = ctx.normalizeCountryName("german");
+    assert.strictEqual(deCountry, "Germany", "german alias maps to Germany");
+    const deCountryDeu = ctx.normalizeCountryName("bundesrepublik deutschland");
+    assert.strictEqual(deCountryDeu, "Germany", "bundesrepublik deutschland maps to Germany");
+    const dePhone = ctx.cleanPhoneNumber("+49 7309 1234", "Germany");
+    assert.strictEqual(dePhone, "73091234", "German country code +49 must be stripped");
+    const deAddr = ctx.sanitizeRule6CompanyAddress("Industriestr. 12, 89264 Weissenhorn, Germany", "Musterbau", "Germany");
+    assert.strictEqual(deAddr, "Industriestrasse 12, Weissenhorn", "German Industriestr expansion and 5-digit PLZ/country stripped");
+    assert.strictEqual(ctx.evaluateCityQC(deAddr, "Germany"), "Available", "Weissenhorn must evaluate as City Available");
+    assert.strictEqual(ctx.hasStateInAddress("Industriestrasse 12, Weissenhorn, Bayern", "Germany"), true, "Bayern must evaluate as State Available");
+    assert.strictEqual(ctx.evaluateCityQC("Hauptstrasse 10, Berlin", "Germany"), "Available", "Berlin City-State evaluates as City Available");
+    assert.strictEqual(ctx.hasStateInAddress("Hauptstrasse 10, Berlin", "Germany"), true, "Berlin City-State evaluates as State Available");
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

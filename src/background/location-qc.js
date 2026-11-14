@@ -203,6 +203,9 @@ function hasCapitalInAddress(addr, country) {
   if (/\bmaldives\b/i.test(cLower || lower) && /\bmal[eé]\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "male")) {
     return true;
   }
+  if (/\bsingapore\b/i.test(cLower || lower)) {
+    return true;
+  }
   if (/scotland/i.test(cLower) && /\bedinburgh\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "edinburgh")) return true;
   if (/wales/i.test(cLower) && /\bcardiff\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "cardiff")) return true;
   if (/northern\s*ireland/i.test(cLower) && /\bbelfast\b/i.test(lower) && !isPlaceUsedAsStreetName(lower, "belfast")) return true;
@@ -267,7 +270,7 @@ function hasNamedStateOrProvince(lower) {
   for (const text of targetTexts) {
     for (const name of STATE_AND_PROVINCE_NAMES) {
       if (typeof isPlaceUsedAsStreetName === "function" && isPlaceUsedAsStreetName(text, name)) continue;
-      const escaped = name.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&").replace(/\s+/g, "\\s+");
+      const escaped = name.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&").replace(/[-\s]+/g, "[-–\\s]+");
       if (new RegExp(`\\b${escaped}\\b`, "i").test(text)) return true;
     }
   }
@@ -429,6 +432,41 @@ function hasStateInAddress(addr, country) {
   if (/\b(sheng|xian|zhou)\b/i.test(lower)) return true;
   if (/[\u7701\u7e23\u53bf]/.test(addr)) return true;
 
+  // Singapore City-State rule: State is always Available
+  if (isSingaporeLocation(lower, country)) return true;
+
+  // Germany Bundesländer and City-States (Berlin, Hamburg, Bremen)
+  if (isGermanLocation(lower, country)) {
+    if (/\b(?:berlin|hamburg|bremen)\b/i.test(lower)) return true;
+    if (/\b(?:baden[\s-]w[uü]rttemberg|bayern|bavaria|brandenburg|hessen|hesse|mecklenburg(?:[\s-]vorpommern)?|niedersachsen|lower\s*saxony|nordrhein[\s-]westfalen|north\s*rhine|rheinland[\s-]pfalz|rhineland|saarland|sachsen|saxony|sachsen[\s-]anhalt|schleswig[\s-]holstein|th[uü]ringen|thuringia)\b/i.test(lower)) {
+      return true;
+    }
+  }
+
+  // France Regions & Departments
+  if (isFrenchLocation(lower, country)) {
+    if (/\bparis\b/i.test(lower)) return true;
+    if (/\b(?:[iî]le[\s-]de[\s-]france|auvergne[\s-]rh[oô]ne[\s-]alpes|nouvelle[\s-]aquitaine|occitanie|hauts[\s-]de[\s-]france|provence[\s-]alpes[\s-]c[oô]te\s*d['’]azur|paca|grand[\s-]est|pays[\s-]de[\s-]la[\s-]loire|bretagne|brittany|normandie|normandy|bourgogne[\s-]franche[\s-]comt[eé]|centre[\s-]val[\s-]de[\s-]loire|corse|corsica)\b/i.test(lower)) {
+      return true;
+    }
+  }
+
+  // Türkiye Provinces (İller)
+  if (isTurkishLocation(lower, country)) {
+    if (/\bankara\b/i.test(lower)) return true;
+    if (/\b(?:istanbul|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon|silivri|manisa|aydin|tekirdag|canakkale|balikesir|edirne|yalova|bolu|duzce|hatay|kahramanmaras|van|mardin|malatya)\b/i.test(lower)) {
+      return true;
+    }
+  }
+
+  // South Africa Provinces
+  if (isSouthAfricanLocation(lower, country)) {
+    if (/\b(?:pretoria|cape\s*town|bloemfontein)\b/i.test(lower)) return true;
+    if (/\b(?:gauteng|western\s*cape|eastern\s*cape|kwazulu[\s-]natal|natal|free\s*state|mpumalanga|limpopo|north\s*west|northern\s*cape)\b/i.test(lower)) {
+      return true;
+    }
+  }
+
   return hasNamedStateOrProvince(lower);
 }
 
@@ -513,10 +551,49 @@ function isAustralianLocation(address, country) {
 
 function isSouthAfricanLocation(address, country) {
   const c = (country || "").toLowerCase();
-  if (/\b(?:south\s*africa|za|rsa)\b/i.test(c)) return true;
+  if (/\b(?:south[\s-]*africa|southafrica|za|rsa)\b/i.test(c)) return true;
   const a = (address || "").toLowerCase();
-  if (/\b(?:south\s*africa)\b/i.test(a)) return true;
+  if (/\b(?:south[\s-]*africa|southafrica)\b/i.test(a)) return true;
   if (/\b(?:gauteng|western\s*cape|eastern\s*cape|kwazulu|natal|mpumalanga|free\s*state|limpopo|north\s*west|northern\s*cape)\b/i.test(a)) return true;
+  return false;
+}
+
+function isGermanLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:germany|deutschland|german|de|deu)\b/i.test(c)) return true;
+  if (c && !/\b(?:germany|deutschland|german|de|deu)\b/i.test(c) && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|southafrica|italy|ireland|thailand|singapore|spain|malaysia|turkey|türkiye|turkiye|turkiey|france|netherlands|poland|austria|switzerland|belgium|mexico|brazil|japan|south\s+korea)\b/i.test(c)) {
+    return false;
+  }
+  const a = (address || "").toLowerCase();
+  if (/\b(?:germany|deutschland)\b/i.test(a)) return true;
+  if (/\b(?:baden[\s-]w[uü]rttemberg|bayern|bavaria|berlin|brandenburg|bremen|hamburg|hessen|hesse|mecklenburg|niedersachsen|lower\s*saxony|nordrhein[\s-]westfalen|north\s*rhine|rheinland[\s-]pfalz|saarland|sachsen|saxony|sachsen[\s-]anhalt|schleswig[\s-]holstein|th[uü]ringen)\b/i.test(a)) return true;
+  if (/\b(?:m[uü]nchen|munich|k[oö]ln|cologne|frankfurt|stuttgart|d[uü]sseldorf|leipzig|dortmund|essen|dresden|hannover|n[uü]rnberg|nuremberg|duisburg|bochum|wuppertal|bielefeld|bonn|m[uü]nster|karlsruhe|mannheim|augsburg|wiesbaden|gelsenkirchen|m[oö]nchengladbach|braunschweig|chemnitz|kiel|aachen|halle|magdeburg|freiburg|krefeld|l[uü]beck|oberhausen|erfurt|mainz|rostock|kassel|hagen|hamm|saarbr[uü]cken|potsdam|ludwigshafen|oldenburg|leverkusen|osnabr[uü]ck|solingen|heidelberg|herne|neuss|darmstadt|paderborn|regensburg|ingolstadt|w[uü]rzburg|f[uü]rth|wolfsburg|offenbach|ulm|heilbronn|pforzheim|g[oö]ttingen|bottrop|trier|recklinghausen|reutlingen|bremerhaven|koblenz|bergisch\s*gladbach|jena|remscheid|erlangen|moers|siegen|hildesheim|salzgitter|weissenhorn|weißenhorn)\b/i.test(a)) return true;
+  if (/\b(?:strasse|straße|str\b|platz|gewerbegebiet|industriegebiet|industriepark|postfach)\b/i.test(a) && /\b\d{5}\b/.test(a)) return true;
+  return false;
+}
+
+function isFrenchLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:france|french|fr|fra)\b/i.test(c)) return true;
+  if (c && !/\b(?:france|french|fr|fra)\b/i.test(c) && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|southafrica|germany|deutschland|german|italy|ireland|thailand|singapore|spain|malaysia|turkey|türkiye|turkiye|turkiey|netherlands|poland|austria|switzerland|belgium|mexico|brazil|japan|south\s+korea)\b/i.test(c)) {
+    return false;
+  }
+  const a = (address || "").toLowerCase();
+  if (/\b(?:france)\b/i.test(a)) return true;
+  if (/\b(?:[iî]le[\s-]de[\s-]france|auvergne[\s-]rh[oô]ne[\s-]alpes|nouvelle[\s-]aquitaine|occitanie|hauts[\s-]de[\s-]france|provence[\s-]alpes[\s-]c[oô]te\s*d['’]azur|paca|grand[\s-]est|pays[\s-]de[\s-]la[\s-]loire|bretagne|brittany|normandie|normandy|bourgogne[\s-]franche[\s-]comt[eé]|centre[\s-]val[\s-]de[\s-]loire|corse|corsica)\b/i.test(a)) return true;
+  if (/\b(?:paris|marseille|lyon|toulouse|nice|nantes|strasbourg|montpellier|bordeaux|lille|rennes|reims|saint-etienne|le\s*havre|toulon|grenoble|dijon|angers|nimes|villeurbanne|clermont-ferrand|le\s*mans|aix-en-provence|brest|tours|amiens|limoges|annecy|perpignan|boulogne-billancourt|metz|besancon|orleans|saint-denis|argenteuil|rouen|montreuil|mulhouse|caen|nancy)\b/i.test(a)) return true;
+  if (/\b(?:rue|avenue|boulevard|all[eé]e|impasse|chemin|route|quai|place|cours|cedex|bo[iî]te\s*postale|b\.?p\.?|z\.?i\.?|z\.?a\.?c?\.?)\b/i.test(a) && /\b\d{5}\b/.test(a)) return true;
+  return false;
+}
+
+function isSingaporeLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:singapore|sg|sgp)\b/i.test(c)) return true;
+  const a = (address || "").toLowerCase();
+  if (/\b(?:singapore)\b/i.test(a)) return true;
+  if (/\b(?:singapore\s+\d{6}|\b\d{6}\b)\s*$/i.test(a) && /\b(?:road|rd|street|st|avenue|ave|lane|ln|drive|dr|way|boulevard|blvd|lorong|lor|jalan|jln|bukit|bt|block|blk|industrial\s*park|tech\s*park|international\s*plaza|raffles|orchard|jurong|changi|woodlands|tuas|ang\s*mo\s*kio|bedok|tampines|serangoon|toa\s*payoh|bishan|yishun|clementi|queenstown|bukit\s*(?:batok|panjang|timah|merah))\b/i.test(a)) {
+    return true;
+  }
   return false;
 }
 
@@ -604,10 +681,10 @@ function isSpanishLocation(address, country) {
 
 function isTurkishLocation(address, country) {
   const c = (country || "").toLowerCase();
-  if (/\b(?:t[uü]rki?ye|turkey|tr)\b/i.test(c)) return true;
+  if (/\b(?:t[uü]rki?ye|turkey|turkiey|tr)\b/i.test(c)) return true;
   const a = (address || "").toLowerCase();
-  if (/\b(?:t[uü]rki?ye|turkey)\b/i.test(a)) return true;
-  if (/\b(?:istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon|silivri)\b/i.test(a)) return true;
+  if (/\b(?:t[uü]rki?ye|turkey|turkiey)\b/i.test(a)) return true;
+  if (/\b(?:istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon|silivri|gebze|corlu|cerkezkoy|kartal|pendik|tuzla|umraniye|kadikoy|besiktas|sisli|fatih|beylikduzu|esenyurt|basaksehir|avcilar|buyukcekmece|manisa|aydin|tekirdag|canakkale|balikesir|edirne|yalova|bolu|duzce)\b/i.test(a)) return true;
   if (/\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|bulv?\.?|blv\.?|bulvari|osb|san\.?\s*sit\.?)\b/i.test(a)) return true;
   return false;
 }
@@ -759,6 +836,11 @@ function isNotCitySegment(segment) {
     return true;
   }
 
+  // Country names are NOT city segments (except Singapore city-state)
+  if (/\b(?:france|french|turkey|türkiye|turkiye|turkiey|germany|deutschland|german|south\s*africa|southafrica|indonesia|malaysia|australia|canada|united\s*states|usa|united\s*kingdom|uk|spain|italy|ireland|new\s*zealand|china|taiwan|japan|india)\b/i.test(s)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -766,7 +848,7 @@ function detectCityFromStructure(addr, country = "") {
   if (!addr || typeof addr !== "string") return null;
 
   let clean = addr.trim();
-  clean = clean.replace(/,\s*(?:united\s*kingdom|uk|u\.k\.|great\s*britain|england|scotland|wales|northern\s*ireland|united\s*states(?:\s*of\s*america)?|usa|u\.s\.a\.|canada|australia|germany|deutschland|italy|italia|ireland|new\s*zealand|south\s*africa|china|taiwan|malaysia|singapore|indonesia|thailand|india)\s*$/i, "").trim();
+  clean = clean.replace(/,\s*(?:united\s*kingdom|uk|u\.k\.|great\s*britain|england|scotland|wales|northern\s*ireland|united\s*states(?:\s*of\s*america)?|usa|u\.s\.a\.|canada|australia|germany|deutschland|german|france|french|italy|italia|ireland|new\s*zealand|south\s*africa|southafrica|china|taiwan|malaysia|singapore|indonesia|thailand|india|turkey|türkiye|turkiye|turkiey)\s*$/i, "").trim();
 
   clean = clean.replace(/,\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/gi, "").trim();
   clean = clean.replace(/,\s*\b\d{5}(?:-\d{4})?\b/g, "").trim();
@@ -1015,6 +1097,70 @@ function evaluateCityQC(address, country) {
     if (hasExplicitCityWord(cleanAddr) || /\b(?:ilce|ilcesi|belediye|belediyesi|district|municipality)\b/i.test(cleanAddr)) {
       return "Available";
     }
+    if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+      return "Available";
+    }
+    const structCity = detectCityFromStructure(cleanAddr, country);
+    if (structCity && !isNotCitySegment(structCity)) {
+      return "Available";
+    }
+  }
+
+  // Singapore City Evaluation (City-State: Country is both City and State):
+  if (isSingaporeLocation(cleanAddr, country)) {
+    return "Available";
+  }
+
+  // Germany City Evaluation:
+  if (isGermanLocation(cleanAddr, country)) {
+    if (/\b(?:berlin|hamburg|bremen)\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+      return "Available";
+    }
+    const strippedDE = stripNonAdministrativeCityTerms(cleanAddr)
+      .replace(/\b(?:gewerbegebiet|industriegebiet|industriepark|postfach)\b/gi, " ");
+    if (hasExplicitCityWord(strippedDE) || /\b(?:stadt|gemeinde|kreisstadt|ortsbezirk|town|township|district|municipality)\b/i.test(strippedDE)) {
+      return "Available";
+    }
+    const plzMatch = cleanAddr.match(/\b\d{5}\s+([a-zäöüß\s-]+)/i);
+    if (plzMatch && plzMatch[1]) {
+      const cand = plzMatch[1].split(/[,;\n]/)[0].trim();
+      if (cand.length >= 2 && !isNotCitySegment(cand) && !hasNamedStateOrProvince(cand, "Germany")) {
+        return "Available";
+      }
+    }
+    const structCity = detectCityFromStructure(cleanAddr, country);
+    if (structCity && !isNotCitySegment(structCity) && !hasNamedStateOrProvince(structCity, "Germany")) {
+      return "Available";
+    }
+  }
+
+  // France City Evaluation:
+  if (isFrenchLocation(cleanAddr, country)) {
+    if (/\bparis\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+      return "Available";
+    }
+    const strippedFR = stripNonAdministrativeCityTerms(cleanAddr)
+      .replace(/\b(?:zone\s+industrielle|z\.?i\.?|zone\s+d['’]activit[eé]s?|z\.?a\.?|bo[iî]te\s*postale|b\.?p\.?|cedex)\b/gi, " ");
+    if (hasExplicitCityWord(strippedFR) || /\b(?:ville|commune|arrondissement|m[eé]tropole|town|township|district|municipality)\b/i.test(strippedFR)) {
+      return "Available";
+    }
+    const cpMatch = cleanAddr.match(/\b\d{5}\s+([a-zàâäéèêëîïôöùûüÿçœæ\s-]+)/i);
+    if (cpMatch && cpMatch[1]) {
+      const cand = cpMatch[1].split(/[,;\n]/)[0].trim();
+      if (cand.length >= 2 && !isNotCitySegment(cand) && !hasNamedStateOrProvince(cand, "France")) {
+        return "Available";
+      }
+    }
+    const structCity = detectCityFromStructure(cleanAddr, country);
+    if (structCity && !isNotCitySegment(structCity) && !hasNamedStateOrProvince(structCity, "France")) {
+      return "Available";
+    }
   }
 
   // South Africa: Suburbs preceding state/province MUST NOT be classified as cities!
@@ -1068,7 +1214,7 @@ function detectCountryFromAddress(address) {
 
   // 1. Explicit country mentioned in the physical address text
   if (/\b(?:czech\s*republic|ceska\s*republika|cesko|czechia)\b/i.test(unaccented)) return "Czech Republic";
-  if (/\b(south\s*africa)\b/i.test(unaccented)) return "South Africa";
+  if (/\b(?:south\s*africa|southafrica|rsa)\b/i.test(unaccented)) return "South Africa";
   if (/\b(people['’]?s?\s*republic\s*of\s*china|p\.?r\.?c\.?)\b/i.test(unaccented)) return "China";
   if (/\b(taiwan|republic\s*of\s*china|r\.?o\.?c\.?)\b/i.test(unaccented) || /(?:臺灣|台灣|臺北|台北|新北|桃園|台中|臺中|台南|臺南|高雄|新竹|彰化|苗栗|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江|馬祖|基隆|大里|永康|草堤|湖口|竹北|員林|鹿港|板橋|新莊|中壢|楊梅|龜山|蘆竹|中華民國)/.test(address)) return "Taiwan";
   if (/\b(england)\b/i.test(unaccented)) return "England";
@@ -1085,14 +1231,14 @@ function detectCountryFromAddress(address) {
   if (/\b(united\s*states(?:\s*of\s*america)?|usa|u\.s\.a\.?|u\.s\.?)\b/i.test(unaccented)) return "United States Of America";
   if (/\b(australia)\b/i.test(unaccented)) return "Australia";
   if (/\b(canada)\b/i.test(unaccented)) return "Canada";
-  if (/\b(germany|deutschland)\b/i.test(unaccented)) return "Germany";
+  if (/\b(germany|deutschland|german)\b/i.test(unaccented)) return "Germany";
   if (/\b(india)\b/i.test(unaccented)) return "India";
-  if (/\b(france)\b/i.test(unaccented)) return "France";
+  if (/\b(france|french)\b/i.test(unaccented)) return "France";
   if (/\b(people'?s?\s*republic\s*of\s*china|p\.?r\.?c\.?|china)\b/i.test(unaccented)) return "China";
   if (/\b(japan)\b/i.test(unaccented)) return "Japan";
   if (/\b(north\s*korea|d\.?p\.?r\.?k\.?)\b/i.test(unaccented)) return "North Korea";
   if (/\b(south\s*korea|republic\s*of\s*korea|korea)\b/i.test(unaccented)) return "South Korea";
-  if (/\b(singapore)\b/i.test(unaccented)) return "Singapore";
+  if (/\b(singapore|republic\s*of\s*singapore)\b/i.test(unaccented)) return "Singapore";
   if (/\b(netherlands|nederland|holland)\b/i.test(unaccented)) return "Netherlands";
   if (/\b(?:new\s*zealand|aotearoa)\b/i.test(unaccented) || /,\s*nz\b/i.test(unaccented) || /\bnz\s+\d{4}\b/i.test(unaccented)) return "New Zealand";
   if (/\b(?:malaysia|federation\s*of\s*malaysia|persekutuan\s*malaysia)\b/i.test(unaccented)) return "Malaysia";
@@ -1100,7 +1246,7 @@ function detectCountryFromAddress(address) {
   if (/\b(united\s*arab\s*emirates|uae)\b/i.test(unaccented)) return "United Arab Emirates";
   if (/\b(italy|italia)\b/i.test(unaccented)) return "Italy";
   if (/\b(spain|espana)\b/i.test(unaccented)) return "Spain";
-  if (/\b(turkiye|turkey|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented)) return "Türkiye";
+  if (/\b(turkiye|turkey|turkiey|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented)) return "Türkiye";
   if (/\b(austria|osterreich|oesterreich)\b/i.test(unaccented)) return "Austria";
   if (/\b(switzerland|schweiz|suisse|svizzera)\b/i.test(unaccented)) return "Switzerland";
   if (/\b(croatia|hrvatska)\b/i.test(unaccented)) return "Croatia";

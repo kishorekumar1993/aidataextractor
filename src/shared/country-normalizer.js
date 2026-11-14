@@ -14,7 +14,7 @@ function normalizeCountryName(country) {
   }
 
   // 2. Turkey / Turkiye -> Türkiye (#124 in QC Valid List & Table)
-  if (/\b(?:turkey|turkiye|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented) || /^(?:tr|tur)$/i.test(unaccented)) {
+  if (/\b(?:turkey|turkiye|turkiey|republic\s*of\s*turkiye|republic\s*of\s*turkey)\b/i.test(unaccented) || /^(?:tr|tur)$/i.test(unaccented)) {
     return "Türkiye";
   }
 
@@ -150,12 +150,12 @@ function normalizeCountryName(country) {
   }
 
   // 27. South Africa
-  if (/\b(?:south\s*africa)\b/i.test(unaccented) || /^(?:za|rsa)$/i.test(unaccented)) {
+  if (/\b(?:south[\s-]*africa|southafrica|republic\s*of\s*south\s*africa)\b/i.test(unaccented) || /^(?:za|rsa)$/i.test(unaccented)) {
     return "South Africa";
   }
 
   // 28. Germany
-  if (/\b(?:germany|deutschland)\b/i.test(unaccented) || /^(?:de|deu)$/i.test(unaccented)) {
+  if (/\b(?:germany|deutschland|german|federal\s*republic\s*of\s*germany|bundesrepublik\s*deutschland)\b/i.test(unaccented) || /^(?:de|deu)$/i.test(unaccented)) {
     return "Germany";
   }
 
@@ -175,7 +175,7 @@ function normalizeCountryName(country) {
   }
 
   // 32. Singapore
-  if (/\b(?:singapore)\b/i.test(unaccented) || /^(?:sg|sgp)$/i.test(unaccented)) {
+  if (/\b(?:singapore|republic\s*of\s*singapore)\b/i.test(unaccented) || /^(?:sg|sgp)$/i.test(unaccented)) {
     return "Singapore";
   }
 
@@ -195,7 +195,7 @@ function normalizeCountryName(country) {
   }
 
   // 36. France
-  if (/\b(?:france)\b/i.test(unaccented) || /^(?:fr|fra)$/i.test(unaccented)) {
+  if (/\b(?:france|french|french\s*republic|republique\s*francaise)\b/i.test(unaccented) || /^(?:fr|fra)$/i.test(unaccented)) {
     return "France";
   }
 
@@ -414,10 +414,10 @@ function hasIndonesiaAddressSignal(text, country = "") {
   if (cLower.includes("indonesia")) return true;
   if (!text) return false;
   // If explicitly another known country or text has distinctive Turkish/European signals, do not falsely flag as Indonesia
-  if (cLower && !cLower.includes("indonesia") && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s+africa|germany|italy|ireland|thailand|singapore|spain|malaysia|turkey|türkiye|turkiye|france|netherlands|poland|austria|switzerland|belgium|mexico|brazil|japan|south\s+korea)\b/i.test(cLower)) {
+  if (cLower && !cLower.includes("indonesia") && /\b(?:canada|united\s+states|usa|united\s+kingdom|uk|england|scotland|wales|australia|taiwan|china|india|south\s*africa|southafrica|germany|deutschland|german|italy|ireland|thailand|singapore|spain|malaysia|turkey|türkiye|turkiye|turkiey|france|french|netherlands|poland|austria|switzerland|belgium|mexico|brazil|japan|south\s+korea)\b/i.test(cLower)) {
     return false;
   }
-  if (/\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|bulv?\.?|blv\.?|bulvari|osb|san\.?\s*sit\.?|istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|samsun|denizli|sakarya|mugla|trabzon|silivri|turkey|türkiye|turkiye)\b/i.test(text)) {
+  if (/\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|bulv?\.?|blv\.?|bulvari|osb|san\.?\s*sit\.?|istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|samsun|denizli|sakarya|mugla|trabzon|silivri|turkey|türkiye|turkiye|turkiey)\b/i.test(text)) {
     return false;
   }
   return /\b(?:jalan|jl\.?|jln\.?|gang|gg\.?|komp\.?|kompl\.?|perum\.?|perumahan|kav\.?|kavling|kel\.?|kelurahan|kec\.?|kecamatan|kab\.?|kabupaten|kodya|kotamadya|prov\.?|prop\.?|provinsi|desa|ds\.?|dusun|dsn\.?|dukuh|dk\.?|dkh\.?|lingkungan|lingk\.?|lk\.?|kp\.?|kampung|rukun\s+tetangga|rukun\s+warga|rt\.?\s*\d+(?:\s*[-/,]\s*rw\.?\s*\d+)?|rw\.?\s*\d+|kawasan|kaw\.?\s*ind|mm2100|jababeka|ejip|kiic|cibitung|jepara|pakis\s+aji|batealit|tahunan|mayong|pecangaan|welahan|bangsri|mlonggo|kalinyamatan|nalumsari|tawangmas|jakarta|surabaya|bandung|semarang|medan|tangerang|bekasi|cikarang|karawang|sidoarjo|gresik|pasuruan|malang|solo|surakarta|yogyakarta|bogor|depok|batam|makassar|palembang|denpasar|pekanbaru|balikpapan|serang|cilegon|cirebon|kudus|klaten|sukoharjo|pati|demak|pekalongan|tegal|magelang|salatiga|purwokerto|cilacap|pemalang|mojokerto|kediri|madiun|jambi|padang|banjarmasin|samarinda|pontianak|manado|jawa|central\s+java|west\s+java|east\s+java|north\s+sumatra|west\s+sumatra|south\s+sumatra|south\s+sulawesi|east\s+kalimantan|sumatra|sumatera|kalimantan|sulawesi|banten|bali|aceh|gorontalo|papua|maluku|jateng|jabar|jatim|sumut|sumbar|sumsel|sulsel|sulut|sulteng|sultra|sulbar|kaltim|kalbar|kalsel|kalteng|kalut|kaltara|kepri|malut|ntb|ntt|babel|dki|diy)\b/i.test(text) ||

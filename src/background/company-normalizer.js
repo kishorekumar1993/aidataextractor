@@ -28,7 +28,7 @@ function extractCopyrightCompanyName(html) {
 
 
 const LEGAL_ENTITY_SUFFIX_CORE =
-  "Pty\\.?\\s*Ltd\\.?|Proprietary\\s*Limited|Limited|Ltd\\.?|Inc\\.?|Incorporated|LLC|LLP|PLLC|Corp\\.?|Corporation|Co\\.,?\\s*Ltd\\.?|Company,?\\s*Limited|Pte\\.?\\s*Ltd\\.?|Pvt\\.?\\s*Ltd\\.?|Sdn\\.?\\s*Bhd\\.?|Sendirian\\s*Berhad|Berhad|GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|Ges\\.?\\s*m\\.?\\s*b\\.?\\s*H\\.?|Gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+Haftung|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\\.?L\\.?U\\.?|S\\.?A\\.?U\\.?|S\\.?L\\.?|S\\.?A\\.?|Sociedad\\s*Limitada(?:\\s*Unipersonal)?|Sociedad\\s*An[oó]nima(?:\\s*Unipersonal)?|S\\.?r\\.?l\\.?s?|S\\.?p\\.?A\\.?|Besloten\\s*Vennootschap|Naamloze\\s*Vennootschap|B\\.?V\\.?|N\\.?V\\.?|Tbk\\.?|Terbuka|Sp\\.?\\s*z\\.?\\s*o\\.?\\s*o\\.?|Sp[oó][lł]ka\\s+z\\s+ograniczon[aą]\\s+odpowiedzialno[sś]ci[aą]|Sp\\.?\\s*k\\.?|SARL|SASU?|EURL|SPRL|BVBA|s\\.?r\\.?o\\.?|d\\.?o\\.?o\\.?|Kft\\.?|Zrt\\.?|Ltda\\.?|ApS|Oyj?|SE|Societas\\s+Europaea";
+  "Pty\\.?\\s*Ltd\\.?|Proprietary\\s*Limited|Limited|Ltd\\.?|Inc\\.?|Incorporated|LLC|LLP|PLLC|Corp\\.?|Corporation|Co\\.,?\\s*Ltd\\.?|Company,?\\s*Limited|Pte\\.?\\s*Ltd\\.?|Pvt\\.?\\s*Ltd\\.?|Sdn\\.?\\s*Bhd\\.?|Sendirian\\s*Berhad|Berhad|GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|Ges\\.?\\s*m\\.?\\s*b\\.?\\s*H\\.?|Gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+Haftung|Aktiengesellschaft|AG|Kommanditgesellschaft|KG|PLC|S\\.?L\\.?U\\.?|S\\.?A\\.?U\\.?|S\\.?L\\.?|S\\.?A\\.?|Sociedad\\s*Limitada(?:\\s*Unipersonal)?|Sociedad\\s*An[oó]nima(?:\\s*Unipersonal)?|S\\.?r\\.?l\\.?s?|S\\.?p\\.?A\\.?|Besloten\\s*Vennootschap|Naamloze\\s*Vennootschap|B\\.?V\\.?|N\\.?V\\.?|Tbk\\.?|Terbuka|Sp\\.?\\s*z\\.?\\s*o\\.?\\s*o\\.?|Sp[oó][lł]ka\\s+z\\s+ograniczon[aą]\\s+odpowiedzialno[sś]ci[aą]|Sp\\.?\\s*k\\.?|SARL|SASU?|EURL|SPRL|BVBA|s\\.?r\\.?o\\.?|d\\.?o\\.?o\\.?|Kft\\.?|Zrt\\.?|Ltda\\.?|ApS|Oyj?|SE|Societas\\s+Europaea|A\\.?Ş\\.?|A\\.?S\\.?|Anonim\\s*Şirketi|Anonim\\s*Sirketi|Ltd\\.?\\s*Şti\\.?|Ltd\\.?\\s*Sti\\.?|Limited\\s*Şirketi|Limited\\s*Sirketi|SOC\\s*Ltd\\.?|SOC\\s*Limited|State\\s*Owned\\s*Company\\s*Limited|NPC|Non-Profit\\s*Company|SCI|SNC";
 
 const COMPANY_PROSE_NOISE_RE =
   /\b(?:was|were|is|are|am|been|being|became|become|began|started|transformed|renamed|converted|rebranded|relocated|acquired|merged|operates|provides|offers|produces|manufactures|supplies|distributes|specializes|into|onto|because|although|however|therefore|which|whose|whom)\b/i;
@@ -934,8 +934,16 @@ function expandCompanyAbbreviations(name, country = "") {
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*r[\.\s]*l|sarl)\b\.?/gi, "Société à Responsabilité Limitée");
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s[\.\s]*u|sasu)\b\.?/gi, "Société par Actions Simplifiée Unipersonnelle");
   n = n.replace(/\b(?:s[\.\s]*a[\.\s]*s|sas)\b\.?/gi, "Société par Actions Simplifiée");
+  n = n.replace(/\b(?:s[\.\s]*c[\.\s]*i|sci)\b\.?/gi, "Société Civile Immobilière");
+  n = n.replace(/\b(?:s[\.\s]*n[\.\s]*c|snc)\b\.?/gi, "Société en Nom Collectif");
+  n = n.replace(/\b(?:e[\.\s]*u[\.\s]*r[\.\s]*l|eurl)\b\.?/gi, "Entreprise Unipersonnelle à Responsabilité Limitée");
+  n = n.replace(/\b(?:e[\.\s]*i|ei)\b\.?$/gi, "Entreprise Individuelle");
   n = n.replace(/\b(?:s[\.\s]*p[\.\s]*r[\.\s]*l|sprl)\b\.?/gi, "Société Privée à Responsabilité Limitée");
   n = n.replace(/\b(?:b[\.\s]*v[\.\s]*b[\.\s]*a|bvba)\b\.?/gi, "Besloten Vennootschap met Beperkte Aansprakelijkheid");
+  n = n.replace(/\b(?:st[eé]|ste)\b\.?/gi, "Société");
+  if (/france|french|belgi/i.test(country) || /\bs[\.\s]*a\b\.?$/i.test(n)) {
+    n = n.replace(/\b(?:s[\.\s]*a|sa)\b\.?$/gi, "Société Anonyme");
+  }
 
   // 10. Netherlands & Belgium
   n = n.replace(/\b(?:b[\.\s]*v|bv)\b\.?/gi, "Besloten Vennootschap");
@@ -969,6 +977,9 @@ function expandCompanyAbbreviations(name, country = "") {
   // 15. Australia & South Africa
   n = n.replace(/\bpty[\.\s]*ltd(?:\.|\b)/gi, "Proprietary Limited");
   n = n.replace(/\bpty(?:\.|\b)/gi, "Proprietary");
+  n = n.replace(/\bsoc[\.\s]*ltd\b\.?/gi, "State Owned Company Limited");
+  n = n.replace(/\bsoc[\.\s]*limited\b/gi, "State Owned Company Limited");
+  n = n.replace(/\bnpc\b\.?/gi, "Non-Profit Company");
 
   // 16. Singapore, India, UK
   n = n.replace(/\bpte[\.\s]*ltd(?:\.|\b)/gi, "Private Limited");
@@ -981,6 +992,34 @@ function expandCompanyAbbreviations(name, country = "") {
 
   // 17. Pan-European (SE -> Societas Europaea mandatory expansion per Rule 4)
   n = n.replace(/\b(?:s[\.\s]*e|se)\b\.?(?=\s*[,)]?\s*$)/gi, "Societas Europaea");
+
+  // 17b. Türkiye (Turkey entities & commercial abbreviations)
+  n = n.replace(/\b(?:a[\.\s]*ş|a[\.\s]*s|aş|as)\b\.?(?!\s+(?:de\s+c\.?v\.?))/gi, "Anonim Şirketi");
+  n = n.replace(/\b(?:ltd[\.\s]*şti|ltd[\.\s]*sti|ltdşti|ltdsti)\b\.?/gi, "Limited Şirketi");
+  n = n.replace(/\b(?:koll[\.\s]*şti|koll[\.\s]*sti)\b\.?/gi, "Kolektif Şirketi");
+  n = n.replace(/\b(?:kom[\.\s]*şti|kom[\.\s]*sti)\b\.?/gi, "Komandit Şirketi");
+  n = n.replace(/\bsan\.?\s*(?:ve\s*|\+?\s*|&\s*)tic\.?\s*(?:ltd|şti|sti|a\.?ş|a\.?s)/gi, (m) => {
+    return m.replace(/san\.?\s*(?:ve\s*|\+?\s*|&\s*)tic\.?/i, "Sanayi ve Ticaret ");
+  });
+  n = n.replace(/\bsan\.?\s+(?:ve\s*|\+?\s*|&\s*)tic\b\.?/gi, "Sanayi ve Ticaret");
+  n = n.replace(/\bsan\b\.?\s+(?=ve\b)/gi, "Sanayi ");
+  n = n.replace(/\btic\b\.?\s+(?=ve\b)/gi, "Ticaret ");
+  n = n.replace(/\bith\.?\s*ihr\b\.?/gi, "Ithalat Ihracat");
+  n = n.replace(/\bpaz\b\.?\s+(?=(?:san|tic|ltd|şti|sti|a\.?ş|a\.?s)\b)/gi, "Pazarlama ");
+  n = n.replace(/\btaah\b\.?\s+(?=(?:san|tic|ltd|şti|sti|a\.?ş|a\.?s)\b)/gi, "Taahhut ");
+  n = n.replace(/\btur\b\.?\s+(?=(?:san|tic|ltd|şti|sti|a\.?ş|a\.?s)\b)/gi, "Turizm ");
+  n = n.replace(/\boto\b\.?\s+(?=(?:san|tic|ltd|şti|sti|a\.?ş|a\.?s)\b)/gi, "Otomotiv ");
+  n = n.replace(/\btekst\b\.?\s+(?=(?:san|tic|ltd|şti|sti|a\.?ş|a\.?s)\b)/gi, "Tekstil ");
+  n = n.replace(/\bkim\b\.?\s+(?=(?:san|tic|ltd|şti|sti|a\.?ş|a\.?s)\b)/gi, "Kimya ");
+  n = n.replace(/\bm[üu]h\b\.?\s+(?=(?:san|tic|ltd|şti|sti|a\.?ş|a\.?s)\b)/gi, "Muhendislik ");
+  n = n.replace(/\b[iİı]n[şs]\b\.?\s+(?=(?:san|tic|taah|ltd|şti|sti|a\.?ş|a\.?s)\b)/gi, "Insaat ");
+  n = n.replace(/\bd[ıi]ş\s*tic\b\.?/gi, "Dis Ticaret");
+  if (country && /türkiye|turkiye|turkey|turkiey/i.test(country)) {
+    n = n.replace(/\bsan\b\.?/gi, "Sanayi");
+    n = n.replace(/\btic\b\.?/gi, "Ticaret");
+    n = n.replace(/\bşti\b\.?/gi, "Şirketi");
+    n = n.replace(/\bsti\b\.?/gi, "Şirketi");
+  }
 
   // 18. Common Business, Technical, and Industry Word Abbreviations in Company Names
   // Manufacturing / Makers: Comma preserved only if present in raw text

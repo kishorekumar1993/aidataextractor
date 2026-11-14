@@ -29,21 +29,21 @@ function cleanPhoneNumber(rawPhone, country) {
 
   // Comprehensive map of country calling codes
   const countryCodes = [
-    { match: ["malaysia"], code: "60", minLen: 10 },
-    { match: ["south africa"], code: "27", minLen: 11 },
+    { match: ["malaysia", "my"], code: "60", minLen: 10 },
+    { match: ["south africa", "southafrica", "rsa", "za"], code: "27", minLen: 11 },
     { match: ["australia"], code: "61", minLen: 11 },
     { match: ["united states", "canada", "usa", "america", "jamaica", "bahamas", "barbados", "cayman islands", "dominican republic", "saint lucia", "trinidad and tobago"], code: "1", minLen: 11 },
     { match: ["united kingdom", "northern ireland", "england", "scotland", "wales", "great britain", "uk"], code: "44", minLen: 12 },
     { match: ["taiwan"], code: "886", minLen: 11 },
     { match: ["india"], code: "91", minLen: 12 },
-    { match: ["singapore"], code: "65", minLen: 10 },
+    { match: ["singapore", "sg"], code: "65", minLen: 10 },
     { match: ["china"], code: "86", minLen: 12 },
     { match: ["hong kong"], code: "852", minLen: 11 },
     { match: ["japan"], code: "81", minLen: 11 },
     { match: ["north korea"], code: "850", minLen: 11 },
     { match: ["south korea", "korea"], code: "82", minLen: 11 },
-    { match: ["germany", "deutschland"], code: "49", minLen: 11 },
-    { match: ["france"], code: "33", minLen: 11 },
+    { match: ["germany", "deutschland", "german", "de"], code: "49", minLen: 11 },
+    { match: ["france", "french", "fr"], code: "33", minLen: 11 },
     { match: ["italy", "italia"], code: "39", minLen: 11 },
     { match: ["spain", "españa", "espana"], code: "34", minLen: 11 },
     { match: ["netherlands", "nederland"], code: "31", minLen: 11 },
@@ -59,9 +59,9 @@ function cleanPhoneNumber(rawPhone, country) {
     { match: ["jordan"], code: "962", minLen: 11 },
     { match: ["lebanon"], code: "961", minLen: 11 },
     { match: ["israel"], code: "972", minLen: 12 },
-    { match: ["türkiye", "turkiye", "turkey"], code: "90", minLen: 12 },
+    { match: ["türkiye", "turkiye", "turkey", "turkiey", "tr"], code: "90", minLen: 12 },
     { match: ["new zealand"], code: "64", minLen: 11 },
-    { match: ["indonesia"], code: "62", minLen: 11 },
+    { match: ["indonesia", "id"], code: "62", minLen: 11 },
     { match: ["philippines"], code: "63", minLen: 11 },
     { match: ["thailand"], code: "66", minLen: 11 },
     { match: ["vietnam"], code: "84", minLen: 11 },
@@ -206,7 +206,7 @@ function cleanPhoneNumber(rawPhone, country) {
 
   // Country-specific length validation
   const len = digits.length;
-  if (cLower.includes("south africa")) {
+  if (cLower.includes("south africa") || cLower.includes("southafrica")) {
     if (len !== 9) return "";
   } else if (isNorthAmerica) {
     if (len !== 10) return "";
@@ -228,7 +228,7 @@ function cleanPhoneNumber(rawPhone, country) {
     if (len !== 8) return "";
   } else if (cLower.includes("spain") || cLower.includes("espana") || cLower.includes("españa")) {
     if (len !== 9) return "";
-  } else if (cLower.includes("france")) {
+  } else if (cLower.includes("france") || cLower.includes("french")) {
     if (len !== 9) return "";
   } else {
     if (len < 8 || len > 12) return "";
