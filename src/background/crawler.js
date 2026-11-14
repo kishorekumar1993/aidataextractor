@@ -298,12 +298,16 @@ async function crawlWebsite(targetUrl, options = {}) {
   // Crawl budget: Complete website crawl across all discovered internal pages (Contact, About, Products, Services, Profile, Legal, etc.)
   // When options.maxPages is explicitly specified, respect it; otherwise crawl complete website (up to 50 pages).
   let pagesFetchedCount = 0;
-  const MAX_CRAWL_PAGES = (options.maxPages !== undefined && options.maxPages !== null)
+  let redirectChainInfo = null;
+  const isBudgetExplicit = options.maxPages !== undefined && options.maxPages !== null;
+  const MAX_CRAWL_PAGES = isBudgetExplicit
     ? Number(options.maxPages)
     : (Number(options.crawlPageLimit) || 50);
 
+  const getCrawlBudgetUsed = () => pagesFetchedCount + (isBudgetExplicit && redirectChainInfo ? 1 : 0);
+
   async function safeFetchHtml(urlToFetch, fetchOpts = {}) {
-    if (pagesFetchedCount >= MAX_CRAWL_PAGES) {
+    if (getCrawlBudgetUsed() >= MAX_CRAWL_PAGES) {
       console.log(`[Crawler] Complete website crawl limit reached (${pagesFetchedCount}/${MAX_CRAWL_PAGES}). Skipping: ${urlToFetch}`);
       return null;
     }
@@ -352,7 +356,6 @@ async function crawlWebsite(targetUrl, options = {}) {
 
   // 1. Upfront Multi-Hop 3xx Server-Side Redirect Chain Resolution
   // Follows all 301/302/303/307/308 hops (up to 4 hops budget) to discover the true final destination
-  let redirectChainInfo = null;
   try {
     redirectChainInfo = await resolveRedirectChain(targetUrl, 4, { signal: options.abortSignal });
     if (redirectChainInfo && redirectChainInfo.hops > 0 && redirectChainInfo.finalUrl && redirectChainInfo.finalUrl !== targetUrl) {

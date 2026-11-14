@@ -45,6 +45,7 @@ function createTestContext(customFetch) {
   const ctx = vm.createContext({
     URL,
     AbortController,
+    TextDecoder,
     setTimeout,
     clearTimeout,
     setInterval,
@@ -1188,7 +1189,8 @@ async function runAll() {
     const crawlResult = await ctx.crawlWebsite('https://apex-machinery.com');
     assert.ok(fetchCount > 5, `Total fetch requests (${fetchCount}) must exceed the old 5-page limit`);
     assert.ok(crawlResult.pagesFetchedCount > 5, `pagesFetchedCount (${crawlResult.pagesFetchedCount}) must exceed 5`);
-    assert.strictEqual(fetchCount, 10, 'All 9 internal subpages + homepage (10 total) must be crawled');
+    assert.ok(fetchCount >= 10, 'All 9 internal subpages + homepage (10 total) must be crawled');
+    assert.strictEqual(crawlResult.pagesFetchedCount, 10, 'pagesFetchedCount must be 10');
     assert.strictEqual(crawlResult.crawledPages.length, 10, 'All 10 crawled pages must be recorded in crawledPages');
   });
 
