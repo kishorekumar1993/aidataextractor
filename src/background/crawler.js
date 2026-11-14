@@ -539,42 +539,13 @@ async function crawlWebsite(targetUrl, options = {}) {
       mainHtml = "";
     }
 
-    // Special company intelligence for major redirected corporate domains (e.g. Natuzzi Press Room -> Natuzzi S.p.A.)
-    const destDomainStem = cleanDomainStem(finalUrl).toLowerCase();
+    // For redirected domains, seed generic brand fallback from destination domain if available
     if (redirected) {
-      if (destDomainStem === "natuzzi") {
-        allLegalCandidates.add("Natuzzi S.p.A.");
-        allLegalCandidates.add("Natuzzi");
-        legalCandidateSources["Natuzzi S.p.A."] = finalUrl;
-        copyrightText = "Natuzzi S.p.A.";
-        copyrightSourceUrl = finalUrl;
-        logoText = "Natuzzi";
-        detectedProductCount = 3;
-        detectedImageCount = 3;
-        detectedDescCount = 3;
-        allDiscoveredEmails.add("info@natuzzi.com");
-        addressCandidates.push({ raw: "Via Iazzitiello 47, 70029 Santeramo in Colle, Bari, Italy", priority: 1 });
-        primaryContactUrl = finalUrl;
-      } else if (destDomainStem === "lasermech") {
-        allLegalCandidates.add("Laser Mechanisms, Inc.");
-        allLegalCandidates.add("Laser Mechanisms");
-        legalCandidateSources["Laser Mechanisms, Inc."] = finalUrl;
-        copyrightText = "Laser Mechanisms, Inc.";
-        copyrightSourceUrl = finalUrl;
-        logoText = "Laser Mechanisms";
-        detectedProductCount = 3;
-        detectedImageCount = 3;
-        detectedDescCount = 3;
-        allDiscoveredPhones.add("(248) 474-9480");
-        addressCandidates.push({ raw: "25325 Regency Drive, Novi, Michigan 48375, USA", priority: 1 });
-        primaryContactUrl = finalUrl;
-      } else {
-        const fallbackBrand = toTitleCase(cleanDomainStem(finalUrl));
-        if (fallbackBrand) {
-          allLegalCandidates.add(fallbackBrand);
-          legalCandidateSources[fallbackBrand] = finalUrl;
-          if (!logoText) logoText = fallbackBrand;
-        }
+      const fallbackBrand = toTitleCase(cleanDomainStem(finalUrl));
+      if (fallbackBrand) {
+        allLegalCandidates.add(fallbackBrand);
+        legalCandidateSources[fallbackBrand] = finalUrl;
+        if (!logoText) logoText = fallbackBrand;
       }
     }
 

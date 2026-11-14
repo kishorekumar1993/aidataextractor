@@ -1036,40 +1036,11 @@ function heuristicExtraction(crawlData, restrictedCheck) {
 
   if (isDiffDomain) {
     websiteStatus = "Redirect Site";
-    const destStem = cleanDomainStem(crawlData.finalUrl || "").toLowerCase();
-    if (destStem === "natuzzi") {
-      companyName = "Natuzzi S.p.A.";
-      country = "Italy";
+    if (!companyName || /(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare)/i.test(companyName)) {
+      companyName = toTitleCase(cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl));
+    }
+    if (!inferredBusiness) {
       inferredBusiness = "Manufacturer";
-      address = address || "Via Iazzitiello 47, 70029 Santeramo in Colle, Bari";
-      hasState = true;
-      hasCity = true;
-      prodCount = "3";
-      imgCount = "3";
-      descCount = "3";
-    } else if (destStem === "lasermech") {
-      companyName = "Laser Mechanisms, Inc.";
-      country = "United States Of America";
-      inferredBusiness = "Manufacturer";
-      address = address || "25325 Regency Drive, Novi, Michigan 48375";
-      hasState = true;
-      hasCity = true;
-      prodCount = "3";
-      imgCount = "3";
-      descCount = "3";
-      if (!phoneNumber) phoneNumber = "2484749480";
-    } else {
-      if (!companyName || /(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare)/i.test(companyName)) {
-        companyName = toTitleCase(cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl));
-      }
-      if (!inferredBusiness) {
-        inferredBusiness = "Manufacturer";
-      }
-      if (prodCount === "0") {
-        prodCount = "3";
-        imgCount = "3";
-        descCount = "3";
-      }
     }
   }
 

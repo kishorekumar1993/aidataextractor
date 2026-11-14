@@ -1439,14 +1439,6 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   let country = typeof resolveCountryFromAllEvidence === "function"
     ? resolveCountryFromAllEvidence(result.countryName, result.companyAddress, crawlData)
     : toTitleCase(normalizeCountryName(result.countryName || (result.companyAddress && detectCountryFromAddress(result.companyAddress)) || ""));
-  if (isRedirectSite && (!country || country.toLowerCase() === "not available")) {
-    const destStemForCountry = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "").toLowerCase();
-    if (destStemForCountry === "natuzzi") {
-      country = "Italy";
-    } else if (destStemForCountry === "lasermech") {
-      country = "United States Of America";
-    }
-  }
 
   // 5. Company Name: Extracted and verified from official website evidence, no hardcoding
   let compName = decodeHtmlEntities((result.companyName || "").trim());
@@ -1454,11 +1446,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   compName = cleanCompanyPrefixesAndSuffixes(compName);
   if (!compName || /(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare|ddos protection)/i.test(compName)) {
     const destStemForComp = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "").toLowerCase();
-    if (destStemForComp === "natuzzi") {
-      compName = "Natuzzi S.p.A.";
-    } else if (destStemForComp === "lasermech") {
-      compName = "Laser Mechanisms, Inc.";
-    } else if (destStemForComp) {
+    if (destStemForComp) {
       compName = toTitleCase(destStemForComp);
     }
   }

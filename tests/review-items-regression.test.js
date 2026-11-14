@@ -459,6 +459,104 @@ async function runAll() {
     assert.strictEqual(isAlreadySubmitted('https://example.com/record2'), false, 'Should allow fresh record');
   });
 
+  // =========================================================================
+  // Item 76: No hardcoded company-specific data contamination
+  // Verifies Laser Mechanisms and Natuzzi fixtures are NOT injected into results
+  // =========================================================================
+  runTest('Item 76: No hardcoded company-specific data contamination on redirected or minimal sites', () => {
+    const { ctx } = createTestContext();
+
+    // Case A: Redirect to lasermech domain with blank/minimal HTML
+    const minimalLaserCrawl = {
+      originalUrl: 'https://old-domain.com',
+      finalUrl: 'https://lasermech.com',
+      title: 'Laser Mech - Optical Solutions',
+      mainHtml: '<html><body><h1>Optical Solutions</h1><p>Contact us online.</p></body></html>',
+      bodyText: 'Optical Solutions. Contact us online.',
+      crawledPages: [{ url: 'https://lasermech.com', text: 'Optical Solutions. Contact us online.' }],
+      detectedProductCount: 0,
+      detectedImageCount: 0,
+      detectedDescCount: 0,
+      emails: [],
+      phones: [],
+      addressCandidates: []
+    };
+
+    const laserExtracted = ctx.heuristicExtraction(minimalLaserCrawl, { isRestricted: false });
+    // Verify no fabricated Laser Mechanisms phone, address, or product counts
+    assert.notStrictEqual(laserExtracted.phoneNumber, '2484749480', 'Must not inject hardcoded phone (248) 474-9480');
+    assert.notStrictEqual(laserExtracted.companyAddress, '25325 Regency Drive, Novi, Michigan 48375', 'Must not inject hardcoded Novi address');
+    assert.strictEqual(laserExtracted.companyAddress, '', 'Missing address must remain empty string');
+    assert.strictEqual(laserExtracted.phoneNumber, '', 'Missing phone must remain empty string');
+
+    // Case B: Redirect to natuzzi domain with blank/minimal HTML
+    const minimalNatuzziCrawl = {
+      originalUrl: 'https://old-press.com',
+      finalUrl: 'https://natuzzi.com',
+      title: 'Natuzzi Design',
+      mainHtml: '<html><body><h1>Design Portal</h1></body></html>',
+      bodyText: 'Design Portal',
+      crawledPages: [{ url: 'https://natuzzi.com', text: 'Design Portal' }],
+      detectedProductCount: 0,
+      detectedImageCount: 0,
+      detectedDescCount: 0,
+      emails: [],
+      phones: [],
+      addressCandidates: []
+    };
+
+    const natuzziExtracted = ctx.heuristicExtraction(minimalNatuzziCrawl, { isRestricted: false });
+    assert.notStrictEqual(natuzziExtracted.emailId, 'info@natuzzi.com', 'Must not inject hardcoded email info@natuzzi.com');
+    assert.notStrictEqual(natuzziExtracted.companyAddress, 'Via Iazzitiello 47, 70029 Santeramo in Colle, Bari', 'Must not inject hardcoded Santeramo address');
+    assert.strictEqual(natuzziExtracted.emailId, '', 'Missing email must remain empty string');
+    assert.strictEqual(natuzziExtracted.companyAddress, '', 'Missing address must remain empty string');
+
+    // Apply strict QC and verify country and address remain unpolluted
+    const qcResult = ctx.applyStrictInstructions(laserExtracted, minimalLaserCrawl, { isRestricted: false });
+    assert.ok(!qcResult.companyAddress.includes('Regency Drive'), 'QC result must not contain Regency Drive');
+    assert.ok(!qcResult.companyAddress.includes('Novi'), 'QC result must not contain Novi');
+  });
+
+  // =========================================================================
+  // Item 77: Generic extraction uses actual website data & preserves missing info
+  // =========================================================================
+  runTest('Item 77: Generic extraction uses actual website data & preserves missing info', () => {
+    const { ctx } = createTestContext();
+
+    // Actual company with 1 product and verifiable address from HTML
+    const realCrawl = {
+      originalUrl: 'https://quantum-sensors.de',
+      finalUrl: 'https://quantum-sensors.de',
+      title: 'Quantum Sensors GmbH',
+      mainHtml: `<html><body>
+        <h1>Quantum Sensors GmbH</h1>
+        <p>Manufacturer of high precision photon detectors.</p>
+        <div class="product"><img src="detector.jpg" alt="Photon Detector 500" /><h3>Photon Detector 500</h3><p>Ultra sensitive sensor.</p></div>
+        <footer><p>Quantum Sensors GmbH, Einsteinstrasse 10, 80331 Munich, Germany. Phone: +49 89 12345678</p></footer>
+      </body></html>`,
+      bodyText: 'Quantum Sensors GmbH. Manufacturer of high precision photon detectors. Photon Detector 500. Einsteinstrasse 10, 80331 Munich, Germany.',
+      detectedProductCount: 1,
+      detectedImageCount: 1,
+      detectedDescCount: 1,
+      emails: ['info@quantum-sensors.de'],
+      phones: ['+49 89 12345678'],
+      addressCandidates: [{ raw: 'Einsteinstrasse 10, 80331 Munich, Germany', priority: 1 }],
+      crawledPages: [{ url: 'https://quantum-sensors.de', text: 'Quantum Sensors GmbH...' }]
+    };
+
+    const extracted = ctx.heuristicExtraction(realCrawl, { isRestricted: false });
+    const qcResult = ctx.applyStrictInstructions(extracted, realCrawl, { isRestricted: false });
+
+    // Verify actual data extracted from HTML
+    assert.strictEqual(qcResult.websiteStatus, 'Working');
+    assert.strictEqual(qcResult.companyName, 'Quantum Sensors Gesellschaft Mit Beschränkter Haftung');
+    assert.strictEqual(qcResult.countryName, 'Germany');
+    assert.strictEqual(qcResult.numberOfProducts, '1', 'Must reflect actual product count (1), not defaulted to 3');
+    assert.strictEqual(qcResult.productImages, '1');
+    assert.strictEqual(qcResult.numberOfProductDescriptions, '1');
+    assert.strictEqual(qcResult.secondaryEmailId, '', 'Missing secondary email must remain empty');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
