@@ -10,6 +10,26 @@ function stripBoundarySpecialChars(str) {
 }
 
 /**
+ * Strips HTML tags, script/style blocks, and decodes HTML entities into clean plain text.
+ * Inline formatting tags (strong, b, em, i, span) are stripped without inserting spaces
+ * so that adjacent digits/words (e.g. 979<strong>9) remain intact.
+ */
+function stripHtml(html) {
+  if (!html) return "";
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+    .replace(/<\/?(?:strong|b|em|i|span|u|font|mark|small|sub|sup)[^>]*>/gi, "")
+    .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/address|\/h[1-6])[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/[^\S\r\n]+/g, " ")
+    .replace(/\n\s+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
  * Ensures "Number" is ONLY present if "No.", "No", "NO.", "Nos.", "Nº", "#", or "號" was in the original raw address evidence.
  * Rule: "if No come only expand and do with out coming dont put blankly number"
  */
@@ -50,9 +70,32 @@ function stripTrailingContactWordsFromEmail(email) {
  * and domains starting with www.
  */
 
+function extractDomainStem(urlOrHost) {
+  if (!urlOrHost || typeof urlOrHost !== "string") return "";
+  let host = urlOrHost.trim().toLowerCase();
+  host = host.replace(/^https?:\/\//i, "");
+  try {
+    if (host.includes("://")) {
+      host = new URL("http://" + host).hostname;
+    } else if (host.includes("/")) {
+      host = host.split("/")[0];
+    }
+  } catch (e) { }
+  host = host.replace(/^www\d?\./i, "");
+  host = host.replace(/\.(?:co\.[a-z]{2}|com\.[a-z]{2}|org\.[a-z]{2}|net\.[a-z]{2}|gov\.[a-z]{2}|edu\.[a-z]{2}|[a-z]{2,})$/i, "");
+  host = host.replace(/\.[a-z]{2,}$/i, "");
+  return host.replace(/[^a-z0-9]/g, "");
+}
+
+function cleanDomainStem(url) {
+  return extractDomainStem(url);
+}
+
 function normalizeNameForComparison(name) {
   if (!name || typeof name !== "string") return "";
   return name.toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/\+/g, " and ")
     .replace(/\b(?:pty\.?\s*ltd\.?|proprietary\s*limited|limited|ltd\.?|inc\.?|incorporated|llc|llp|corp\.?|corporation|co\.,\s*ltd\.?|company\s*limited|pte\.?\s*ltd\.?|pvt\.?\s*ltd\.?|sdn\.?\s*bhd\.?|berhad|gmbh|plc|s\.?l\.?u\.?|s\.?a\.?u\.?|s\.?l\.?|s\.?a\.?)\b/gi, " ")
     .replace(/[^a-z0-9]/g, "")
     .trim();

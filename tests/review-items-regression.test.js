@@ -1194,6 +1194,72 @@ async function runAll() {
     assert.strictEqual(crawlResult.crawledPages.length, 10, 'All 10 crawled pages must be recorded in crawledPages');
   });
 
+  // =========================================================================
+  // Item 86: Crawl Time Budget Guard Prevents 28s SW Timeout on Large Websites
+  // =========================================================================
+  await runAsyncTest('Item 86: Crawl time budget guard prevents service worker 28s timeout & properly crawls working sites', async () => {
+    let fetchCount = 0;
+    const mockPages = {
+      'https://www.latchandbatchelor.co.uk/': `
+        <html><head><title>Home - Latch and Batchelor</title></head>
+        <body>
+          <a href="/contact-us/">Contact Us</a>
+          <a href="/products/crane-ropes/">Crane Ropes</a>
+          <a href="/terms/">Terms</a>
+          <p>Wire rope manufacturer in Birmingham</p>
+        </body></html>
+      `,
+      'https://www.latchandbatchelor.co.uk/contact-us/': `
+        <html><head><title>Contact Us - Latch and Batchelor</title></head>
+        <body>
+          <h3>Address:</h3>
+          <p><strong>Latch and Batchelor</strong><br />
+          Hay Mills, Birmingham B25 8DW,<br />
+          West Midlands, United Kingdom</p>
+          <p><strong>Phone:</strong> +44 (0)121 772 979<strong>9<br />
+          <a href="/cdn-cgi/l/email-protection" data-cfemail="7e121c0d1f121b0d3e0916190c110b0e50110c19">[email&#160;protected]</a>
+        </body></html>
+      `,
+      'https://www.latchandbatchelor.co.uk/products/crane-ropes/': `
+        <html><body><h1>Crane Ropes</h1><p>Mining and engineering wire rope products</p><img src="rope1.jpg" alt="Rope 1" /><img src="rope2.jpg" alt="Rope 2" /><img src="rope3.jpg" alt="Rope 3" /></body></html>
+      `,
+      'https://www.latchandbatchelor.co.uk/terms/': `
+        <html><body><p>Terms of business. Division of Webster and Horsfall Ltd.</p></body></html>
+      `
+    };
+
+    const mockFetch = async (url) => {
+      fetchCount++;
+      const uClean = url.split('?')[0].split('#')[0];
+      const html = mockPages[uClean] || '<html><body>Page</body></html>';
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null)
+        },
+        arrayBuffer: async () => Buffer.from(html, 'utf8')
+      };
+    };
+
+    const { ctx } = createTestContext(mockFetch);
+    const crawlResult = await ctx.crawlWebsite('https://www.latchandbatchelor.co.uk/', { maxCrawlTimeMs: 18000 });
+    
+    assert.strictEqual(crawlResult.status, 'Working');
+    assert.strictEqual(crawlResult.requiresManualReview, false);
+    assert.ok(crawlResult.crawledPages.length >= 2, 'Must crawl homepage and contact page');
+
+    const result = await ctx.handleCrawlAndExtract('https://www.latchandbatchelor.co.uk/', 'own_crawl');
+    assert.strictEqual(result.websiteStatus, 'Working', 'Website must be Working, not Not Working');
+    assert.strictEqual(result.companyName, 'Latch And Batchelor', 'Company name must be Latch And Batchelor');
+    assert.strictEqual(result.countryName, 'United Kingdom', 'Country must be United Kingdom');
+    assert.strictEqual(result.companyAddress, 'Hay Mills, Birmingham, West Midlands', 'Address must have postal code and country stripped per Rule 6');
+    assert.strictEqual(result.city, 'Available', 'City must be Available (Birmingham)');
+    assert.strictEqual(result.state, 'Available', 'State must be Available (West Midlands)');
+    assert.strictEqual(result.phoneNumber, '1217729799', 'Phone number must be clean national number with leading 0 stripped');
+    assert.strictEqual(result.emailId, 'lbsales@whgroup.org', 'Cloudflare protected email must be decoded');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

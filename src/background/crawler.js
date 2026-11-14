@@ -304,6 +304,12 @@ async function crawlWebsite(targetUrl, options = {}) {
     ? Number(options.maxPages)
     : (Number(options.crawlPageLimit) || 50);
 
+  // Time budget guard: Ensure crawling respects the service worker lifecycle deadline (28s hard limit in MV3).
+  // Default: 18,000ms (18s). Leaves ~9s for extraction and response before the 28s SW limit.
+  const crawlStartTime = Date.now();
+  const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 18000;
+  const isCrawlTimeExceeded = () => (Date.now() - crawlStartTime) >= MAX_CRAWL_TIME_MS;
+
   const getCrawlBudgetUsed = () => pagesFetchedCount + (isBudgetExplicit && redirectChainInfo ? 1 : 0);
 
   async function safeFetchHtml(urlToFetch, fetchOpts = {}) {
@@ -314,8 +320,15 @@ async function crawlWebsite(targetUrl, options = {}) {
     if (options.abortSignal && options.abortSignal.aborted) {
       return null;
     }
+    const isPriorityContact = fetchOpts.isPriorityContact || false;
+    if (isCrawlTimeExceeded() && !isPriorityContact) {
+      console.log(`[Crawler] Time budget reached (${Date.now() - crawlStartTime}ms >= ${MAX_CRAWL_TIME_MS}ms). Gracefully concluding subpage crawling: ${urlToFetch}`);
+      return null;
+    }
     pagesFetchedCount++;
-    return await fetchDecodedHtml(urlToFetch, { ...fetchOpts, signal: options.abortSignal || fetchOpts.signal });
+    const remainingTime = Math.max(1500, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime));
+    const effectiveTimeout = Math.min(fetchOpts.timeoutMs || 3500, remainingTime);
+    return await fetchDecodedHtml(urlToFetch, { ...fetchOpts, timeoutMs: effectiveTimeout, signal: options.abortSignal || fetchOpts.signal });
   }
 
   let mainRes = null;
@@ -783,16 +796,19 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       };
 
-      const fetchSubpageBatch = async (urls, timeoutMs = 3500, concurrency = 6) => {
+      const fetchSubpageBatch = async (urls, timeoutMs = 3500, concurrency = 6, isPriority = false) => {
         if (!urls || urls.length === 0) return [];
         const results = [];
         for (let i = 0; i < urls.length; i += concurrency) {
           if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
+          if (!isPriority && isCrawlTimeExceeded()) break;
           const chunk = urls.slice(i, i + concurrency);
           const chunkPromises = chunk.map(cUrl => {
             if (pagesFetchedCount >= MAX_CRAWL_PAGES) return Promise.resolve(null);
+            if (!isPriority && isCrawlTimeExceeded()) return Promise.resolve(null);
             return safeFetchHtml(cUrl, {
               timeoutMs,
+              isPriorityContact: isPriority,
               headers: {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "Accept-Language": "en-US,en;q=0.9",
@@ -808,13 +824,15 @@ async function crawlWebsite(targetUrl, options = {}) {
               results.push({ status: "rejected" });
             }
           }
+          if (!isPriority && isCrawlTimeExceeded()) break;
         }
         return results;
       };
 
       // PHASE 1: Fetch dedicated Contact Us page(s) FIRST and wait before checking other pages
+      // Dedicated Contact Us page is the #1 highest priority on the website — always fetch it!
       if (contactPriorityLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
-        const contactResults = await fetchSubpageBatch(contactPriorityLinks, 4000, 6);
+        const contactResults = await fetchSubpageBatch(contactPriorityLinks, 4000, 4, true);
         for (let i = 0; i < contactPriorityLinks.length; i++) {
           const cUrl = contactPriorityLinks[i];
           const settled = contactResults[i];
@@ -826,7 +844,7 @@ async function crawlWebsite(targetUrl, options = {}) {
 
       // PHASE 2: After Contact Us, fetch all remaining subpages across the complete website
       const candidateSubpages = otherTopLinks;
-      if (candidateSubpages.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
+      if (candidateSubpages.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
         const subpageResults = await fetchSubpageBatch(candidateSubpages, 3500, 6);
         for (let i = 0; i < candidateSubpages.length; i++) {
           const cUrl = candidateSubpages[i];
@@ -841,7 +859,7 @@ async function crawlWebsite(targetUrl, options = {}) {
       }
 
       // PHASE 3: Complete Website Deep Pass - Crawl any additional discovered internal links from subpages
-      if (pagesFetchedCount < MAX_CRAWL_PAGES && typeof discoverAllInternalLinks === "function") {
+      if (pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded() && typeof discoverAllInternalLinks === "function") {
         const secondaryLinks = [];
         for (const page of crawledPages) {
           if (!page.html) continue;
@@ -870,7 +888,7 @@ async function crawlWebsite(targetUrl, options = {}) {
       }
       // Double check for secondary email: if fewer than 2 corporate emails discovered so far,
       // concurrently fetch remaining contact, support, privacy, policy, terms, legal, and warranty subpages from contactLinks
-      if (allDiscoveredEmails.size < 2 && contactLinks && contactLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
+      if (allDiscoveredEmails.size < 2 && contactLinks && contactLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
         const remainingCandidates = contactLinks
           .map(l => normalizeCrawlUrl(l, finalUrl))
           .filter(l => l && !fetchedUrls.has(l) && !isIrrelevantUrl(l))
@@ -1277,6 +1295,7 @@ function stripHtml(html) {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+    .replace(/<\/?(?:strong|b|em|i|span|u|font|mark|small|sub|sup)[^>]*>/gi, "")
     .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/address|\/h[1-6])[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
@@ -1759,6 +1778,7 @@ function parseHtmlDetails(html, baseUrl) {
   const phoneLinks = [...html.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
   const waLinks = [...html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\?[^"']*phone=)(\+?\d{8,15})/gi)].map(m => "+" + m[1].replace(/^\+/, ""));
   const cleanHtmlForPhones = cleanHtml
+    .replace(/<\/?(?:strong|b|em|i|span|u|font|mark|small|sub|sup)[^>]*>/gi, "")
     .replace(/\b(?:aria-)?placeholder\s*=\s*"[^"]*"/gi, " ")
     .replace(/\b(?:aria-)?placeholder\s*=\s*'[^']*'/gi, " ");
   const contextPhoneRegex = /(?:(?:tel|telephone|phone|call|mobile|cell|whatsapp|contact|总机|總機|电话|電話|手机|手機|座机|座機)[\s:：]*|(?:bxs:phone-call|fa-phone|fa-mobile)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().-]{7,20})/gi;

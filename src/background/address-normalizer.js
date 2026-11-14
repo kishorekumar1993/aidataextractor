@@ -534,7 +534,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])(\d{1,3})(?:st|nd|rd|th)?\s*(?:Flr?|Floor)\.?\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
   a = a.replace(/(^|[,\s])(?:G\s*\/\s*F\.?|GF\b|Gnd\s*Flr?\.?)/gi, "$1Ground Floor");
   a = a.replace(/(^|[,\s])(?:B\s*\/\s*F\.?|BF\b|Bsmt\b\.?)/gi, "$1Basement Floor");
-  a = a.replace(/(^|[,\s])(?<!\b(?:Blok|Block|Kavling|Kav\.?|Lot|Plot|Unit|Suite|Ste\.?|Apartment|Apt\.?|Tower|Wing|Bay|Dock|Zone|Gate|Section|Sec\.?)\s+)B(\d{1,2})\b/gi, "$1Basement $2");
+  a = a.replace(/(^|[,\s])(?<!\b(?:Blok|Block|Kavling|Kav\.?|Lot|Plot|Unit|Suite|Ste\.?|Apartment|Apt\.?|Tower|Wing|Bay|Dock|Zone|Gate|Section|Sec\.?)\s+)B(\d{1,2})\b(?!\s*\d[A-Z]{2})/gi, "$1Basement $2");
   a = a.replace(/(^|[,\s])Lvl\.?\s*(\d{1,3}|[A-Za-z])/gi, "$1Level $2");
 
   // 4. Administrative abbreviations
@@ -2219,16 +2219,24 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   // Strip loose trailing telephone numbers (e.g. ", +1 217 555 1234", ", 0113 245 6789", ", 0812-3456-7890")
   a = a.replace(/[,;\s]+(?:\+?\d{1,4}[-\s.]*)?(?:\(?\d{2,5}\)?[-\s.]*){2,4}\d{2,6}\s*$/g, "").trim();
 
-  // 10. Detect country and expand abbreviations
+  // 10. Detect country and strip postal codes per Rule 6
   let resolvedCountry = (countryName || "").trim();
   if (!resolvedCountry || resolvedCountry.length < 2) {
     resolvedCountry = (typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(a) : "") || "";
   }
+
+  // Strip postal codes per Rule 6 (before abbreviation expansion so postcodes like B25 8DW don't collide with street/floor abbreviations)
+  if (typeof removePostalCodesCarefully === "function") {
+    a = removePostalCodesCarefully(a);
+  }
+  a = a.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "").trim();
+
+  // 11. Expand abbreviations
   if (typeof expandAddressAndStateAbbreviations === "function") {
     a = expandAddressAndStateAbbreviations(a, resolvedCountry);
   }
 
-  // 11. Strip country names from address per Rule 6
+  // 12. Strip country names from address per Rule 6
   a = a.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|England|Scotland|Wales|Northern\s*Ireland|Canada|Germany|Deutschland|German|France|French|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Turkiey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|Southafrica|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
   a = a.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
   a = a.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
@@ -2245,11 +2253,10 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = a.replace(/[,;\s]+\b(?:CA|USA|US|UK|GB|AU|NZ|ZA|DE|FR|ES|IT|IN|CN|PRC|TW|ROC|MY|ID|SG|TR)\b\s*$/i, "").trim();
   }
 
-  // 12. Strip postal codes per Rule 6
+  // Secondary postal code cleanup
   if (typeof removePostalCodesCarefully === "function") {
     a = removePostalCodesCarefully(a);
   }
-  // Strip loose trailing 3-6 digit postal codes
   a = a.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "").trim();
 
   // 13. Ensure comma before state and format

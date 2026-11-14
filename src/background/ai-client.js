@@ -885,6 +885,22 @@ function heuristicExtraction(crawlData, restrictedCheck) {
     }
   }
 
+  // 1b. Check if logoText or title brand matches the domain stem (Brand takes priority over unrelated third-party legal candidates)
+  if (!companyName && crawlData.logoText && !isSeoSloganOrTagline(crawlData.logoText)) {
+    const lStem = cleanDomainStem(crawlData.logoText);
+    if (lStem && (lStem === domainStem || lStem.includes(domainStem) || domainStem.includes(lStem))) {
+      companyName = cleanCompanyPrefixesAndSuffixes(crawlData.logoText);
+    }
+  }
+
+  if (!companyName && crawlData.title) {
+    const tBrand = extractBestBrandFromTitle(crawlData.title, crawlData.finalUrl || crawlData.originalUrl, crawlData.logoText, crawlData.ogSiteName);
+    const tStem = cleanDomainStem(tBrand);
+    if (tStem && (tStem === domainStem || tStem.includes(domainStem) || domainStem.includes(tStem))) {
+      companyName = cleanCompanyPrefixesAndSuffixes(tBrand);
+    }
+  }
+
   if (!companyName && typeof preferOfficialCompanyName === "function") {
     companyName = preferOfficialCompanyName("", crawlData);
   }

@@ -69,6 +69,11 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     return;
   }
 
+  // Reject pure phone, fax, and company registration lines e.g. "T. 0121 772 9799, F. 0121 766 7692..."
+  if (/^(?:[tf]\.?|tel\.?|telephone|fax|phone)\s*[:：\-–]?\s*\+?\d/i.test(cleaned) && !/\b(road|street|avenue|lane|drive|way|close|court|place|crescent|boulevard|highway|park|estate|mill|mills|works|house|building|suite|unit|block|cd\b|cad\b|sok\b|mah\b)\b/i.test(cleaned)) {
+    return;
+  }
+
   // Reject opening hours / business hours strings (e.g. "Monday to Saturday - 9.00 AM to 5.30 PM CT")
   if (/\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\s+(?:to|-|through)\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i.test(cleaned) ||
     /\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*(?:to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i.test(cleaned)) {
@@ -85,7 +90,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     /\b\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?\b/i.test(cleaned) ||
     /\b(?:lot|plot|unit|suite|ste|bldg|building|floor|level|rm|room|shed|warehouse|workshop|facility|kav|kavling|apt|apartment|block|blok|phase\s*\d+|sector\s*\d+|po\s*box|post\s*office\s*box|postfach|box)\s+[A-Za-z0-9\-\/]+/i.test(cleaned) ||
     /\b[A-Za-z0-9]\s+(?:block|blok)\b/i.test(cleaned) ||
-    /\b(?:centre|center|house|hall|mill|works|court|lodge|grange|tower|park|estate|chambers|wharf|barn|farm|compound|premises|business\s*park|industrial\s*(?:estate|park|area|zone))\b/i.test(cleaned);
+    /\b(?:centre|center|house|houses|hall|halls|mill|mills|works|court|courts|lodge|lodges|grange|tower|towers|park|parks|estate|estates|chambers|wharf|wharves|quay|quays|barn|barns|farm|farms|compound|compounds|premises|business\s*park|industrial\s*(?:estate|park|area|zone))\b/i.test(cleaned);
 
   const hasThoroughfare = /\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|row|walk|mews|passage|grove|view|hill|rise|vale|gate|approach|reach|wharf|quay|broadway|bypass|crossing|loop|circle|turnpike|expressway|corridor|promenade|mall|arcade|chase|gardens|green|pde|cct|cres|cl|ct|pl|tce|via|corso|viale|piazza|jl|jln|jalan|gang|gg|taman|lorong|lebuh|komp|komplek|perum|perumahan|dukuh|dk|desa|ds|dusun|dsn|kecamatan|kec|kabupaten|kab|rt\.?\s*\d+|st\b|rd\b|ave\b|dr\b|blvd\b|ln\b|hwy\b|apt\b|str\b|strasse|platz|gasse|weg|ring|allee|damm|chaussee|ufer|rue|avda|av\b|bd\b|chemin|route|allée|impasse|cours|quai|chaussée|voie|calle|c\/|paseo|plaza|camino|carretera|pasaje|travesía|ronda|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|zona\s*industrial|zona\s*industriale|zone\s*industrielle|gewerbegebiet|industriegebiet|gewerbepark|industriepark|kawasan\s*industri|taman\s*perindustrian|industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|science\s*park|technology\s*park|technopark|comune|provincia|daerah|mukim|post\s*office\s*box|po\s*box|postfach|postbus|cadde|caddesi|cad\b|cd\b|sokak|sokagi|sokağı|sok\b|sk\b|bulvar|bulvari|bulv\b|blv\b|mahalle|mahallesi|mah\b|mh\b|blok\b|sanayi|osb|ulica|ul\b|aleja|al\b|plac|rynek)\b/i.test(cleaned);
 
@@ -97,14 +102,21 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     /\b(?:leicestershire|nottinghamshire|derbyshire|staffordshire|warwickshire|worcestershire|northamptonshire|lincolnshire|yorkshire|lancashire|cheshire|cumbria|durham|northumberland|gloucestershire|oxfordshire|cambridgeshire|bedfordshire|hertfordshire|buckinghamshire|berkshire|surrey|kent|sussex|essex|norfolk|suffolk|devon|cornwall|somerset|dorset|wiltshire|hampshire|shropshire|herefordshire|middlesex)\b/i.test(cleaned) ||
     /\b(?:town|township|district|city|province|county|hsien|state|borough|municipality|shire)\b/i.test(cleaned) ||
     (typeof detectCountryFromAddress === "function" && !!detectCountryFromAddress(cleaned)) ||
-    evaluateCityQC(cleaned, "") === "Available" ||
-    hasStateInAddress(cleaned, "");
+    (typeof evaluateCityQC === "function" && evaluateCityQC(cleaned, "") === "Available") ||
+    (typeof hasStateInAddress === "function" && hasStateInAddress(cleaned, ""));
 
   const hasChineseAddressStructure = /(?:[0-9一二三四五六七八九十]+[号號]|大道|大厦|大廈|路|街|巷|弄|工业区|工業區|工业园|工業園|产业园|產業園|开发区|開發區|科技园|科技園|高新区|高新區|园区|園區|楼|樓|栋|棟|室|城|[省市区縣县鄉镇鎭])/.test(cleaned);
+
+  const hasFullPostalLocation = hasLocalityOrPostcode && (
+    (typeof detectCountryFromAddress === "function" && !!detectCountryFromAddress(cleaned)) ||
+    (typeof evaluateCityQC === "function" && evaluateCityQC(cleaned, "") === "Available") ||
+    (typeof hasStateInAddress === "function" && hasStateInAddress(cleaned, ""))
+  ) && (/\b[A-Z]{1,2}\d[A-Z0-9]?\s*\d[A-Z]{2}\b/i.test(cleaned) || /\b\d{4,6}\b/.test(cleaned));
 
   const isValidStructure = (hasPremiseNum && hasThoroughfare) ||
     (hasThoroughfare && hasLocalityOrPostcode) ||
     (hasPremiseNum && hasLocalityOrPostcode) ||
+    hasFullPostalLocation ||
     hasChineseAddressStructure;
 
   if (!isValidStructure) {

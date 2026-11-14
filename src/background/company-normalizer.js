@@ -158,6 +158,9 @@ function extractLegalCandidatesFromHtml(html) {
     let candidateToClean = rawCand.replace(/^(?:and|or|by|for|with|from|including|between|the|to|at|arises|into|as)\s+/i, "").trim();
     const cleaned = cleanCompanyPrefixesAndSuffixes(candidateToClean || rawCand);
     if (!cleaned || hasCompanyProseNoise(cleaned)) return;
+    // Reject bare legal entity suffixes without an actual business name (e.g. "Limited", "Ltd", "Incorporated")
+    const isBareSuffix = new RegExp(`^(?:${LEGAL_ENTITY_SUFFIX_CORE})\\.?$`, "i").test(cleaned);
+    if (isBareSuffix) return;
     // Reject third-party job portals, HR platforms, web hosts, CMS, analytics, payment gateways
     if (/\b(?:Dayforce|Ceridian|Workday|BambooHR|Zenefits|Paychex|ADP|UltiPro|Greenhouse|Lever|Jobvite|SmartRecruiters|iCIMS|WordPress|Shopify|Wix|Squarespace|Cloudflare|Google|Facebook|Meta|Twitter|LinkedIn|Instagram|YouTube|Adobe|Salesforce|PayPal|Stripe)\b/i.test(cleaned)) {
       return;
@@ -560,6 +563,13 @@ function preferOfficialCompanyName(name, crawlData) {
   }
 
   if (bestOfficial && (bestScore >= 60 || (hasCompleteLegalSuffix(bestOfficial) && bestScore > 0))) {
+    if (curMatchesDomain) {
+      const bestNorm = normalizeNameForComparison(bestOfficial);
+      const bestMatchesDomain = dStemNorm && (bestNorm.includes(dStemNorm) || dStemNorm.includes(bestNorm));
+      if (!bestMatchesDomain) {
+        return cleanCompanyPrefixesAndSuffixes(current);
+      }
+    }
     return cleanCompanyPrefixesAndSuffixes(bestOfficial);
   }
 
