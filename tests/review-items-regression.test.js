@@ -726,6 +726,41 @@ async function runAll() {
     assert.ok(promptText.includes("Restricted - Reject"));
   });
 
+  // =========================================================================
+  // Item 79: False Positive Prevention: "non-food-approved" (Riverjars) & "Diners Club" payment (Surya Brasil)
+  // =========================================================================
+  runTest('Item 79: False Positive Prevention: non-food applications & Diners Club credit card payment methods', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Riverjars case: "non-food-approved applications"
+    const riverjarsSnippet = "ic, if requested. These are suitable for non-food-approved applications. Additionally, we are...";
+    const rCheck = ctx.detectRestrictedKeywordsSingle(riverjarsSnippet, "", "https://www.riverjars.com/");
+    assert.strictEqual(rCheck.isRestricted, false, "Must NOT restrict 'non-food-approved applications'");
+    const rFormatted = ctx.formatRestrictedValidationResult(rCheck, "https://www.riverjars.com/");
+    assert.strictEqual(rFormatted.restricted, false);
+    assert.strictEqual(rFormatted.classification, "False Positive");
+    assert.strictEqual(rFormatted.final_decision, "Do Not Reject");
+
+    // 2. Surya Brasil case: "Diners Club" payment method in footer
+    const suryaSnippet = "...stercard Visa Elo Hypercard American Express Diners Club © 2026, Surya Brasil Com tecnologi...";
+    const sCheck = ctx.detectRestrictedKeywordsSingle(suryaSnippet, "", "https://suryabrasil.com/");
+    assert.strictEqual(sCheck.isRestricted, false, "Must NOT restrict 'Diners Club' credit card payment method");
+    const sFormatted = ctx.formatRestrictedValidationResult(sCheck, "https://suryabrasil.com/");
+    assert.strictEqual(sFormatted.restricted, false);
+    assert.strictEqual(sFormatted.classification, "False Positive");
+    assert.strictEqual(sFormatted.final_decision, "Do Not Reject");
+
+    // 3. Packaging jars & containers for food/non-food
+    const packagingSnippet = "Manufacturer of glass jars, plastic bottles, and closures suitable for food and non-food storage.";
+    const pCheck = ctx.detectRestrictedKeywordsSingle(packagingSnippet, "", "https://packagingsupplier.com");
+    assert.strictEqual(pCheck.isRestricted, false, "Must NOT restrict packaging container manufacturer");
+
+    // 4. Non-medical equipment
+    const nonMedSnippet = "Our non-medical monitoring devices are designed for general industrial temperature logging.";
+    const nmCheck = ctx.detectRestrictedKeywordsSingle(nonMedSnippet, "", "https://templogger.com");
+    assert.strictEqual(nmCheck.isRestricted, false, "Must NOT restrict non-medical devices");
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

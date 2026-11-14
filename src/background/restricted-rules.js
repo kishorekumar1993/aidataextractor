@@ -42,7 +42,7 @@ const RESTRICTED_PATTERNS = [
     label: "Alcohol & Breweries"
   },
   {
-    pattern: /\b(?:food\s*(?:processing\s*plant|manufacturing|production|manufacturer|producer|packaging\s*facility|wholesaler|supplier|distributor|company|products\s*producer)|commercial\s*bakery|catering\s*services?|restaurants?|bistros?|cafes?|eateries|diner|diners|snack\s*foods?\s*(?:manufacturer|producer|supplier)|dairy\s*products?\s*(?:processing|manufacturer|producer|supplier)|meat\s*processing|poultry\s*processing|seafood\s*processing|edible\s*oils?\s*refinery|confectionery\s*manufacturer|(?:non-alcoholic\s+|soft\s+drink\s+)?beverage\s*(?:manufacturer|producer|bottler|bottling))\b/i,
+    pattern: /\b(?:food\s*(?:processing\s*plant|manufacturing|production|manufacturer|producer|packaging\s*facility|wholesaler|supplier|distributor|company|products\s*producer)|commercial\s*bakery|catering\s*services?|restaurants?|bistros?|cafes?|eateries|(?:roadside\s*diner|american\s*diner|diner\s*restaurant)|snack\s*foods?\s*(?:manufacturer|producer|supplier)|dairy\s*products?\s*(?:processing|manufacturer|producer|supplier)|meat\s*processing|poultry\s*processing|seafood\s*processing|edible\s*oils?\s*refinery|confectionery\s*manufacturer|(?:non-alcoholic\s+|soft\s+drink\s+)?beverage\s*(?:manufacturer|producer|bottler|bottling))\b/i,
     label: "Food & Beverages"
   },
   {
@@ -191,12 +191,37 @@ function sanitizeContextText(text) {
     .replace(/\b(?:air|utility|machine|slitter|guillotine|rotary|doctor)\s*knives?\b/gi, " ")
     .replace(/\b(?:rotary|slitter|circular|machine|industrial|machinery|saw|cutter|guillotine|granulator|pelletizer|shear|planer|doctor|wiper|turbine|fan)\s*blades?\b/gi, " ")
     .replace(/\bair\s*knife\s*(?:system|systems|drying|nozzle|nozzles|blower|blowers)?\b/gi, " ")
-    .replace(/\b(?:chemical|chemically|marine|food)\s*(?:grade|resistance|resistant|proof|inert|inertness|compatibility|safe|approved)\b/gi, " ")
+    .replace(/\b(?:chemical|chemically|marine|food)\s*(?:grade|resistance|resistant|proof|inert|inertness|compatibility|safe|approved|contact)\b/gi, " ")
+    .replace(/\b(?:food[-–\s]*(?:grade|contact|approved|safe|packaging|containers?|storage|use|applications?|compatibility))\b/gi, " ")
     .replace(/\bresistant\s+to\s+chemicals?\b/gi, " ")
     .replace(/\bisopropyl\s+alcohol\b/gi, " ");
 
+  // 5b. Sanitize "non-" phrases (non-food, non-medical, non-military, non-chemical, etc.)
+  cleanText = cleanText
+    .replace(/\bnon[-–\s]+foods?(?:[-–\s]+(?:approved|grade|contact|safe|applications?|use|purposes?|items?|products?|packaging|containers?|bottles?|jars?|plastics?|materials?|areas?|zones?|manufacturing|production))?\b/gi, " ")
+    .replace(/\b(?:not\s+(?:for|intended\s+for|suitable\s+for|approved\s+for)\s+(?:food|human\s+consumption))\b/gi, " ")
+    .replace(/\b(?:non-food|non\s+food)\b/gi, " ")
+    .replace(/\bnon[-–\s]+medical(?:[-–\s]+(?:grade|use|applications?|devices?|equipment|supplies|products?|purposes?))?\b/gi, " ")
+    .replace(/\bnon[-–\s]+clinical\b/gi, " ")
+    .replace(/\bnon[-–\s]+pharmaceutical\b/gi, " ")
+    .replace(/\bnon[-–\s]+military\b/gi, " ")
+    .replace(/\bnon[-–\s]+defen[cs]e\b/gi, " ")
+    .replace(/\bnon[-–\s]+weapon\b/gi, " ")
+    .replace(/\bnon[-–\s]+hazardous\b/gi, " ")
+    .replace(/\bnon[-–\s]+toxic\b/gi, " ")
+    .replace(/\bnon[-–\s]+chemical\b/gi, " ")
+    .replace(/\bnon[-–\s]+animal\b/gi, " ")
+    .replace(/\bnon[-–\s]+alcoholic\b/gi, " ");
+
+  // 5c. Sanitize payment card brands & footer payment icons (Diners Club, Visa, Mastercard, Elo, Hipercard, Amex, etc.)
+  cleanText = cleanText
+    .replace(/\bdiners?\s*club(?:\s*(?:international|card|cards|credit\s*card))?\b/gi, " ")
+    .replace(/\b(?:mastercard|visa|elo|hipercard|hypercard|american\s*express|amex|diners?\s*club|discover|jcb|unionpay|aura|cabal|carnet|bancontact)\b/gi, " ")
+    .replace(/\b(?:payment\s*(?:methods?|options?|gateways?|icons?|types?)|accepted\s*(?:cards?|payments?)|we\s*accept|cards?\s*accepted)[\s\S]{0,200}?\bdiners?\b/gi, " ")
+    .replace(/\b(?:credit|debit)\s*cards?[\s\S]{0,100}?\bdiners?\b/gi, " ");
+
   // 6. Component applications & served industry clause
-  cleanText = cleanText.replace(/\b(?:connectors?|cables?|machining|tooling|components?|parts?|fasteners?|systems?|solutions?|gears?|valves?|pumps?|gaskets?|seals?|packings?|rubbers?|plastics?|flanges?|fittings?|pipes?|tubes?|tubing|motors?|actuators?|sensors?|instruments?|switches?|panels?|tanks?|vessels?|boilers?|compressors?|blowers?|fans?|bearings?|springs?|bushings?|shafts?|couplings?|hoses?|belts?|chains?|filters?|filtration|materials?)\s+(?:for|in|to)\s+[^.\n;]+?(?=[.\n;]|$)/gi, (match) => {
+  cleanText = cleanText.replace(/\b(?:connectors?|cables?|machining|tooling|components?|parts?|fasteners?|systems?|solutions?|gears?|valves?|pumps?|gaskets?|seals?|packings?|rubbers?|plastics?|flanges?|fittings?|pipes?|tubes?|tubing|motors?|actuators?|sensors?|instruments?|switches?|panels?|tanks?|vessels?|boilers?|compressors?|blowers?|fans?|bearings?|springs?|bushings?|shafts?|couplings?|hoses?|belts?|chains?|filters?|filtration|materials?|containers?|packaging|jars?|bottles?|caps?|closures?|boxes?|cartons?|vials?|pouches?|tins?|cans?|pallets?|trays?)\s+(?:for|in|to)\s+[^.\n;]+?(?=[.\n;]|$)/gi, (match) => {
     if (/(?:aerospace|aircraft|aviation|military|defense|defence|medical|pharmaceutical|hospital|marine|ships?|boats?|vessels?|chemical|food|beverage)/i.test(match)) {
       return " ";
     }
@@ -205,6 +230,8 @@ function sanitizeContextText(text) {
 
   // 6b. Multi-industry served clauses and "used in / applied in" phrases
   cleanText = cleanText
+    .replace(/\b(?:suitable|used|applied|utilized|designed|recommended|engineered|ideal|intended)\s+(?:for|in)\s+(?:food|beverage|non-food|chemical|marine|medical|pharmaceutical|aerospace|defense|defence)[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:food|beverage)\s*(?:storage|packaging|containers?|bottles?|jars?|wrapping|boxes?|cartons?|handling|contact|grade)\b/gi, " ")
     .replace(/\b(?:(?:our|these)?\s*(?:products?|goods|components?|materials?|supplies|equipment|machinery|solutions?|parts?|services?)\s+(?:are\s+)?(?:mainly\s+|widely\s+|commonly\s+)?(?:used|applied|utilized|suitable|designed|recommended|engineered)\s+(?:for|in)\s+[^.\n;]+?(?=[.\n;]|$))/gi, " ")
     .replace(/\b(?:used|applied|serving)\s+(?:in|for|to)\s+(?:marine|industrial|chemical|food|beverage|pharmaceutical|medical|aerospace|automotive|defence|defense|military|offshore|oil|gas|refinery)[^.\n;]*?(?=[.\n;]|$)/gi, " ")
     .replace(/(?:(?:^|[\r\n])\s*(?:industries|markets|sectors|applications?)\s*[:\-–]|(?:\b(?:target|key|served)\s+(?:industries|markets|sectors)\s*[:\-–])|(?:\b(?:industries|markets|sectors|applications?)\s+(?:we\s+serve|served|supported)\s*[:\-–]))[^.\n;]+?(?=[.\n;]|$)/gi, " ")
@@ -315,7 +342,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Food",
     category: "Food & Beverages",
     label: "Food & Beverages",
-    regex: /\b(?:(?<!(?:pet|puppy|dog|cat|animal|fish)\s+)foods?|baker(?:y|ies)|catering|restaurants?|bistros?|cafes?|eater(?:y|ies)|(?<!alcoholic\s+)beverages?|edible|confectioner(?:y|ies)|dairy\s*(?:products?|processing)|meat\s*(?:products?|processing)|poultry\s*processing|seafood\s*(?:products?|processing)|food\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|products?|ingredients?|processing|packaging|wholesal(?:er|ers)|export(?:er|ers)|distributor|catalog(?:ue)?)|snacks?\s*(?:manufactur(?:er|ing)|producer)|diner|diners)\b/i
+    regex: /\b(?:(?<!(?:pet|puppy|dog|cat|animal|fish|non)[-\s]+)foods?|baker(?:y|ies)|catering|restaurants?|bistros?|cafes?|eater(?:y|ies)|(?<!alcoholic\s+)beverages?|edible|confectioner(?:y|ies)|dairy\s*(?:products?|processing)|meat\s*(?:products?|processing)|poultry\s*processing|seafood\s*(?:products?|processing)|food\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|products?|ingredients?|processing|packaging|wholesal(?:er|ers)|export(?:er|ers)|distributor|catalog(?:ue)?)|snacks?\s*(?:manufactur(?:er|ing)|producer)|(?:roadside\s*diner|american\s*diner|diner\s*restaurant))\b/i
   },
   {
     id: 5,
