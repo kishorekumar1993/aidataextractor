@@ -207,8 +207,10 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
     ? normalizeExtractionMode(requestedExtractionMode || settings.extractionMode || (typeof DEFAULT_EXTRACTION_MODE !== "undefined" ? DEFAULT_EXTRACTION_MODE : "ai_first"))
     : "ai_first";
 
-  // Step 1: Deep crawl homepage, framesets, contact pages, footer, JSON-LD & map endpoints
-  crawlResult = await crawlWebsite(targetUrl);
+  // Step 1: Deep crawl complete website across all pages, framesets, contact, products, footer, JSON-LD
+  crawlResult = await crawlWebsite(targetUrl, {
+    maxPages: settings.maxPages || settings.crawlPageLimit || undefined
+  });
 
   // If website returned HTTP 401/403/429, anti-bot challenge, or blocked status:
   // User Instruction: Security Check / Anti-bot (HTTP 403) marked as Not Working
@@ -1833,6 +1835,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
   }
 
+  // Restore authentic address symbols (such as '+' in "Units 3 + 4") if AI or normalization expanded them to "And" or "Plus"
+  if (result.companyAddress && result.companyAddress !== "Not Available" && typeof restoreOriginalSymbolsInCompanyAddress === "function") {
+    result.companyAddress = restoreOriginalSymbolsInCompanyAddress(result.companyAddress, crawlData);
+  }
+
   // 7. State: Validated based on presence of State / County / Province / Prefecture / Hsien / Region or Capital
   if (!addr || addr.length < 8 || addr.toLowerCase() === "not available") {
     result.state = "Not Available";
@@ -2032,7 +2039,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       if (key === "companyName") {
         result[key] = stripBoundarySpecialChars(result[key]);
       } else {
-        result[key] = result[key].replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N})]+$/gu, "").trim();
+        let v = result[key].trim();
+        while (/^[^\p{L}\p{N}]+|[^\p{L}\p{N})]+$/u.test(v)) {
+          v = v.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N})]+$/gu, "").trim();
+        }
+        result[key] = v;
       }
     }
   }

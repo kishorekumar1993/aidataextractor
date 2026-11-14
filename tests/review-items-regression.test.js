@@ -1058,6 +1058,140 @@ async function runAll() {
     assert.strictEqual(recResult.record.URL, 'http://www.fashionalliance.co.uk/', 'URL in record must match');
   });
 
+  // =========================================================================
+  // Item 84: Address Unwanted Expansion Fix & Boundary Special Characters Removal
+  // =========================================================================
+  await runAsyncTest('Item 84: Address Unwanted Expansion Fix & Boundary Special Characters Removal', async () => {
+    const { ctx } = createTestContext();
+
+    // 1. Melrose Packaging UK address - raw candidate has "Units 3 + 4"
+    const rawMelroseAddr = 'Units 3 + 4\nSt. Martins Way\nBedford\nBedfordshire\nMK42 0LF\nUK';
+    const sanitizedMelrose = ctx.sanitizeRule6CompanyAddress(rawMelroseAddr, 'Melrose Packaging Limited', 'United Kingdom');
+    assert.strictEqual(
+      sanitizedMelrose,
+      'Units 3 + 4 Saint Martins Way, Bedford, Bedfordshire',
+      'Must preserve "+" in Units 3 + 4, expand St. to Saint, add comma before Bedfordshire, and strip postal code/UK'
+    );
+
+    // 2. Reconcile / Restore address symbol when AI output expanded "+" to "And"
+    const mockCrawlMelrose = {
+      originalUrl: 'http://www.melrosepackaging.co.uk/',
+      finalUrl: 'http://www.melrosepackaging.co.uk/',
+      addressCandidates: [{ raw: rawMelroseAddr }],
+      contactPageText: rawMelroseAddr,
+      renderedText: 'Melrose Packaging Limited Units 3 + 4 St. Martins Way Bedford Bedfordshire MK42 0LF UK',
+      bodyText: 'Melrose Packaging Limited manufacture bespoke polythene bags and packaging solutions.'
+    };
+    const aiOutputWithUnwantedExpansion = {
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: '* Melrose Packaging Ltd *',
+      countryName: 'United Kingdom',
+      companyAddress: 'Units 3 And 4 Saint Martins Way, Bedford, Bedfordshire',
+      emailId: 'sales@melrosepackaging.co.uk',
+      phoneNumber: '1234841144',
+      numberOfProducts: '2',
+      productImages: '2',
+      numberOfProductDescriptions: '2',
+      _isFromAi: true
+    };
+    const evaluatedMelrose = ctx.applyStrictInstructions(aiOutputWithUnwantedExpansion, mockCrawlMelrose, {});
+    assert.strictEqual(
+      evaluatedMelrose.companyAddress,
+      'Units 3 + 4 Saint Martins Way, Bedford, Bedfordshire',
+      'Must restore "+" from raw evidence and avoid unwanted expansion into "And"'
+    );
+    assert.strictEqual(
+      evaluatedMelrose.companyName,
+      'Melrose Packaging Limited',
+      'Must strip leading/trailing "*" and expand Ltd to Limited'
+    );
+    assert.strictEqual(evaluatedMelrose.countryName, 'United Kingdom');
+    assert.strictEqual(evaluatedMelrose.state, 'Available', 'Bedfordshire must be recognized as State Available');
+    assert.strictEqual(evaluatedMelrose.city, 'Available', 'Bedford must be recognized as City Available');
+
+    // 3. Rule 4: Special characters must not start and must not end on Company Names
+    const boundaryTestCases = [
+      { input: '- Acme Corp -', expected: 'Acme Corporation' },
+      { input: '• Smith & Jones •', expected: 'Smith & Jones' },
+      { input: '"Alpha Beta Ltd."', expected: 'Alpha Beta Limited' },
+      { input: '© Global Tech Ltd. ™ !', expected: 'Global Technology Limited' },
+      { input: '+ Plus Electronics Ltd +', expected: 'Plus Electronics Limited' },
+      { input: 'R/C Electronics Ltd.', expected: 'R/C Electronics Limited' }
+    ];
+
+    for (const { input, expected } of boundaryTestCases) {
+      const mockCrawl = {
+        originalUrl: 'http://example.com/',
+        finalUrl: 'http://example.com/',
+        bodyText: 'Industrial manufacturer producing components.'
+      };
+      const aiMock = {
+        websiteStatus: 'Working',
+        businessType: 'Manufacturer',
+        companyProfile: 'Available',
+        companyName: input,
+        countryName: 'United Kingdom',
+        companyAddress: '100 High Street, Bedford, Bedfordshire',
+        emailId: 'info@example.com',
+        phoneNumber: '12345678',
+        numberOfProducts: '2',
+        productImages: '2',
+        numberOfProductDescriptions: '2',
+        _isFromAi: true
+      };
+      const res = ctx.applyStrictInstructions(aiMock, mockCrawl, {});
+      assert.strictEqual(res.companyName, expected, `Boundary special chars must be stripped from "${input}"`);
+    }
+  });
+
+  // =========================================================================
+  // Item 85: Complete Website Crawl (No 5-Page Restriction)
+  // =========================================================================
+  await runAsyncTest('Item 85: Complete Website Crawl (No 5-Page Restriction)', async () => {
+    let fetchCount = 0;
+    const fetchedUrlsList = [];
+    const mockHtml = `
+      <html>
+        <head><title>Apex Machinery Co., Ltd.</title></head>
+        <body>
+          <a href="/contact">Contact</a>
+          <a href="/about-us">About Us</a>
+          <a href="/company-profile">Company Profile</a>
+          <a href="/products">Products</a>
+          <a href="/products/cnc-machines">CNC Machines</a>
+          <a href="/products/milling">Milling</a>
+          <a href="/services">Services</a>
+          <a href="/locations">Locations</a>
+          <a href="/terms">Terms</a>
+          <p>Apex Machinery manufactures industrial machinery. 123 Factory Lane, Manchester.</p>
+        </body>
+      </html>
+    `;
+
+    const mockFetch = async (url) => {
+      fetchCount++;
+      fetchedUrlsList.push(url);
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null)
+        },
+        arrayBuffer: async () => Buffer.from(mockHtml, 'utf8')
+      };
+    };
+
+    const { ctx } = createTestContext(mockFetch);
+    // When called normally (complete website crawl), it must crawl beyond the old 5-page limit
+    const crawlResult = await ctx.crawlWebsite('https://apex-machinery.com');
+    assert.ok(fetchCount > 5, `Total fetch requests (${fetchCount}) must exceed the old 5-page limit`);
+    assert.ok(crawlResult.pagesFetchedCount > 5, `pagesFetchedCount (${crawlResult.pagesFetchedCount}) must exceed 5`);
+    assert.strictEqual(fetchCount, 10, 'All 9 internal subpages + homepage (10 total) must be crawled');
+    assert.strictEqual(crawlResult.crawledPages.length, 10, 'All 10 crawled pages must be recorded in crawledPages');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

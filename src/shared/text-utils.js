@@ -2,7 +2,11 @@
 
 function stripBoundarySpecialChars(str) {
   if (!str || typeof str !== "string") return "";
-  return str.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").replace(/\s+/g, " ").trim();
+  let s = str.trim();
+  while (/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/u.test(s)) {
+    s = s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").trim();
+  }
+  return s.replace(/\s+/g, " ").trim();
 }
 
 /**

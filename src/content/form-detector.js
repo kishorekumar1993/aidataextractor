@@ -812,7 +812,9 @@
       if (elements.companyName && data.companyName) {
         let formattedName = String(data.companyName).trim();
         // Rule: Special character should not start and should not end
-        formattedName = formattedName.replace(/^[^\p{L}\p{N}]+/gu, "").replace(/[^\p{L}\p{N}]+$/gu, "").trim();
+        while (/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/u.test(formattedName)) {
+          formattedName = formattedName.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").trim();
+        }
         if (setInputValue(elements.companyName, formattedName)) {
           highlightField(elements.companyName);
           filledCount++;

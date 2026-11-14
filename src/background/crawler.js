@@ -295,14 +295,16 @@ async function crawlWebsite(targetUrl, options = {}) {
   let detectedDescCount = 0;
   let logoText = "";
 
-  // Global crawl budget counter: maximum 5 HTTP page fetches per website (Item 13 & Test 70)
-  // Options cannot override this ceiling beyond 5
+  // Crawl budget: Complete website crawl across all discovered internal pages (Contact, About, Products, Services, Profile, Legal, etc.)
+  // When options.maxPages is explicitly specified, respect it; otherwise crawl complete website (up to 50 pages).
   let pagesFetchedCount = 0;
-  const MAX_CRAWL_PAGES = Math.min(Number(options.maxPages) || 5, 5);
+  const MAX_CRAWL_PAGES = (options.maxPages !== undefined && options.maxPages !== null)
+    ? Number(options.maxPages)
+    : (Number(options.crawlPageLimit) || 50);
 
   async function safeFetchHtml(urlToFetch, fetchOpts = {}) {
     if (pagesFetchedCount >= MAX_CRAWL_PAGES) {
-      console.log(`[Crawler] Global 5-page crawl limit reached (${pagesFetchedCount}/${MAX_CRAWL_PAGES}). Skipping: ${urlToFetch}`);
+      console.log(`[Crawler] Complete website crawl limit reached (${pagesFetchedCount}/${MAX_CRAWL_PAGES}). Skipping: ${urlToFetch}`);
       return null;
     }
     if (options.abortSignal && options.abortSignal.aborted) {
@@ -627,7 +629,7 @@ async function crawlWebsite(targetUrl, options = {}) {
       const otherTopLinks = [];
       const seenPaths = new Set();
 
-      // Identify dedicated Contact Us URLs first
+      // (1) Dedicated Contact Us URLs first (All discovered, no artificial limit)
       for (const link of contactLinks) {
         if (fetchedUrls.has(link) || !isDedicatedContactUrl(link)) continue;
         try {
@@ -636,11 +638,10 @@ async function crawlWebsite(targetUrl, options = {}) {
           seenPaths.add(uPath);
           contactPriorityLinks.push(link);
           fetchedUrls.add(link);
-          if (contactPriorityLinks.length >= 2) break;
         } catch (e) { }
       }
 
-      // (a) Next: restricted hints (max 1)
+      // (2) Restricted Category Hint URLs
       for (const item of productCandidates.filter(c => c.isRestrictedHint)) {
         try {
           const uPath = new URL(item.url).pathname.toLowerCase().replace(/\/$/, "");
@@ -648,12 +649,11 @@ async function crawlWebsite(targetUrl, options = {}) {
             seenPaths.add(uPath);
             otherTopLinks.push(item.url);
             fetchedUrls.add(item.url);
-            break;
           }
         } catch (e) { }
       }
 
-      // (a2) High Priority: Dedicated Industries / Markets / Applications page (max 1)
+      // (3) Dedicated Industries / Markets / Applications URLs
       for (const link of contactLinks) {
         if (fetchedUrls.has(link)) continue;
         if (/(?:industr|market|application|sector)/i.test(link)) {
@@ -663,14 +663,12 @@ async function crawlWebsite(targetUrl, options = {}) {
               seenPaths.add(uPath);
               otherTopLinks.push(link);
               fetchedUrls.add(link);
-              break;
             }
           } catch (e) { }
         }
       }
 
-      // (b) Next: non-contact About / Profile / Support links (max 2)
-      let otherContactCount = 0;
+      // (4) About / Profile / Company Overview / Facility / Team URLs
       for (const link of contactLinks) {
         if (fetchedUrls.has(link)) continue;
         try {
@@ -679,12 +677,10 @@ async function crawlWebsite(targetUrl, options = {}) {
           seenPaths.add(uPath);
           otherTopLinks.push(link);
           fetchedUrls.add(link);
-          otherContactCount++;
-          if (otherContactCount >= 2) break;
         } catch (e) { }
       }
 
-      // (c) Next: top product/catalog link (max 1)
+      // (5) All Product, Catalog, Category, and Service URLs
       for (const item of productCandidates.filter(c => !c.isRestrictedHint)) {
         if (fetchedUrls.has(item.url)) continue;
         try {
@@ -693,8 +689,21 @@ async function crawlWebsite(targetUrl, options = {}) {
           seenPaths.add(uPath);
           otherTopLinks.push(item.url);
           fetchedUrls.add(item.url);
-          break;
         } catch (e) { }
+      }
+
+      // (6) All other internal navigation links on the website
+      if (typeof discoverAllInternalLinks === "function") {
+        for (const link of discoverAllInternalLinks(mainHtml, finalUrl)) {
+          if (fetchedUrls.has(link)) continue;
+          try {
+            const uPath = new URL(link).pathname.toLowerCase().replace(/\/$/, "");
+            if (seenPaths.has(uPath)) continue;
+            seenPaths.add(uPath);
+            otherTopLinks.push(link);
+            fetchedUrls.add(link);
+          } catch (e) { }
+        }
       }
 
       const recordSubpageContent = (cUrl, cText, { includeAddresses = true, includeProfileText = true } = {}) => {
@@ -771,23 +780,30 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       };
 
-      const fetchSubpageBatch = async (urls, timeoutMs = 3500) => {
+      const fetchSubpageBatch = async (urls, timeoutMs = 3500, concurrency = 6) => {
         if (!urls || urls.length === 0) return [];
         const results = [];
-        for (const cUrl of urls) {
+        for (let i = 0; i < urls.length; i += concurrency) {
           if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
-          const res = await safeFetchHtml(cUrl, {
-            timeoutMs,
-            headers: {
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-              "Accept-Language": "en-US,en;q=0.9",
-              "Referer": finalUrl
-            }
+          const chunk = urls.slice(i, i + concurrency);
+          const chunkPromises = chunk.map(cUrl => {
+            if (pagesFetchedCount >= MAX_CRAWL_PAGES) return Promise.resolve(null);
+            return safeFetchHtml(cUrl, {
+              timeoutMs,
+              headers: {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": finalUrl
+              }
+            });
           });
-          if (res) {
-            results.push({ status: "fulfilled", value: res });
-          } else {
-            results.push({ status: "rejected" });
+          const chunkSettled = await Promise.allSettled(chunkPromises);
+          for (const s of chunkSettled) {
+            if (s.status === "fulfilled" && s.value) {
+              results.push({ status: "fulfilled", value: s.value });
+            } else {
+              results.push({ status: "rejected" });
+            }
           }
         }
         return results;
@@ -795,7 +811,7 @@ async function crawlWebsite(targetUrl, options = {}) {
 
       // PHASE 1: Fetch dedicated Contact Us page(s) FIRST and wait before checking other pages
       if (contactPriorityLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
-        const contactResults = await fetchSubpageBatch(contactPriorityLinks, 4000);
+        const contactResults = await fetchSubpageBatch(contactPriorityLinks, 4000, 6);
         for (let i = 0; i < contactPriorityLinks.length; i++) {
           const cUrl = contactPriorityLinks[i];
           const settled = contactResults[i];
@@ -805,10 +821,10 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       }
 
-      // PHASE 2: After Contact Us, fetch About / Profile / Product subpages
-      const candidateSubpages = otherTopLinks.slice(0, 3);
+      // PHASE 2: After Contact Us, fetch all remaining subpages across the complete website
+      const candidateSubpages = otherTopLinks;
       if (candidateSubpages.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
-        const subpageResults = await fetchSubpageBatch(candidateSubpages, 3500);
+        const subpageResults = await fetchSubpageBatch(candidateSubpages, 3500, 6);
         for (let i = 0; i < candidateSubpages.length; i++) {
           const cUrl = candidateSubpages[i];
           const settled = subpageResults[i];
@@ -817,6 +833,35 @@ async function crawlWebsite(targetUrl, options = {}) {
 
           if (cRes && cRes.ok && cRes.html) {
             recordSubpageContent(cRes.url || cUrl, cRes.html, { includeAddresses: true, includeProfileText: true });
+          }
+        }
+      }
+
+      // PHASE 3: Complete Website Deep Pass - Crawl any additional discovered internal links from subpages
+      if (pagesFetchedCount < MAX_CRAWL_PAGES && typeof discoverAllInternalLinks === "function") {
+        const secondaryLinks = [];
+        for (const page of crawledPages) {
+          if (!page.html) continue;
+          const subLinks = discoverAllInternalLinks(page.html, finalUrl);
+          for (const sUrl of subLinks) {
+            if (fetchedUrls.has(sUrl)) continue;
+            try {
+              const uPath = new URL(sUrl).pathname.toLowerCase().replace(/\/$/, "");
+              if (seenPaths.has(uPath)) continue;
+              seenPaths.add(uPath);
+              fetchedUrls.add(sUrl);
+              secondaryLinks.push(sUrl);
+            } catch (e) { }
+          }
+        }
+        if (secondaryLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
+          const secondaryResults = await fetchSubpageBatch(secondaryLinks, 3500, 6);
+          for (let i = 0; i < secondaryLinks.length; i++) {
+            const sUrl = secondaryLinks[i];
+            const settled = secondaryResults[i];
+            if (settled && settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
+              recordSubpageContent(settled.value.url || sUrl, settled.value.html, { includeAddresses: true, includeProfileText: true });
+            }
           }
         }
       }
@@ -1165,6 +1210,49 @@ function discoverProductAndCatalogLinks(html, baseUrl) {
 
   candidates.sort((a, b) => b.score - a.score);
   return candidates;
+}
+
+/**
+ * Discovers all valid internal HTML navigation links on the same domain for complete website crawling.
+ * Filters out binary files, images, documents, mailto:, javascript:, and anchors.
+ */
+function discoverAllInternalLinks(html, baseUrl) {
+  if (!html || !baseUrl) return [];
+  const links = [];
+  const seen = new Set();
+  const linkRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>/gi;
+  let match;
+
+  let baseHost = "";
+  try {
+    baseHost = new URL(baseUrl).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch (e) {
+    return [];
+  }
+
+  while ((match = linkRegex.exec(html)) !== null) {
+    const raw = (match[1] || "").trim();
+    if (!raw || /^(?:javascript:|mailto:|tel:|#|data:|whatsapp:)/i.test(raw)) continue;
+    if (isIrrelevantUrl(raw.toLowerCase())) continue;
+    if (/\.(?:pdf|zip|rar|tar|gz|7z|exe|dmg|apk|jpg|jpeg|png|gif|svg|webp|ico|mp4|mp3|avi|mov|wmv|doc|docx|xls|xlsx|ppt|pptx|css|js)$/i.test(raw.split(/[?#]/)[0])) continue;
+
+    try {
+      const resolved = new URL(raw, baseUrl);
+      const linkHost = resolved.hostname.replace(/^www\./i, "").toLowerCase();
+      if (linkHost !== baseHost && !linkHost.endsWith("." + baseHost)) {
+        continue;
+      }
+      resolved.hash = "";
+      const cleanUrl = resolved.href;
+      const pathKey = resolved.pathname.toLowerCase().replace(/\/$/, "");
+      if (!seen.has(pathKey)) {
+        seen.add(pathKey);
+        links.push(cleanUrl);
+      }
+    } catch (e) { }
+  }
+
+  return links;
 }
 
 function extractFooterText(html) {

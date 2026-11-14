@@ -445,6 +445,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // Preserve ampersand inside address (normalize spacing, do not replace with 'and')
   a = a.replace(/\s*&\s*/g, " & ");
 
+  // Preserve plus sign inside unit/premise/building numbers (e.g. "Units 3 + 4", do not expand to "And" or "Plus")
+  a = a.replace(/(\b(?:Units?|Suites?|Blocks?|Plots?|Lots?|Rooms?|Nos?\.?|Numbers?|\d+)\s*)\s*\+\s*(?=\d+|[A-Za-z]\b)/gi, "$1+ ");
+
   // 1. "St" as "Saint" in city, place, or street names (e.g. St Louis, Port St Lucie, St. James Road, St. Patrick Street)
   a = a.replace(/\b(?:port\s+|mount\s+)?st\.?\s+(lucie|louis|paul|petersburg|cloud|albans|kilda|george|john|johns|john's|andrews|charles|joseph|moritz|leonards|marys|mary's|peters|helens|ives|clair|james|patrick|thomas|martin|francis|anne|anne's|catherine|michael|jude|stephen|christopher|anthony|lawrence|luke|mark|matthew|david|nicholas|polten|pölten|gallen|johann|veit|anton)\b/gi, function (m, p) {
     if (/^port/i.test(m)) return "Port Saint " + p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
@@ -1486,9 +1489,16 @@ function ensureCommaBeforeState(addr) {
 
   // 1. Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
   // Only if NOT ALREADY followed by a comma!
-  const premiseRegex = /(^|[,\s])\b(lot|plot|unit|suite|ste|bldg|building|floor|fl|flr|level|block|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+(\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?|[A-Za-z](?:\d+)?)(?:\s*(?:&|and)\s*(\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?|[A-Za-z]))?\s*(?!,)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi;
-  a = a.replace(premiseRegex, (match, p1, type, val1, val2) => {
-    const fullVal = val2 ? `${val1} and ${val2}` : val1;
+  const premiseRegex = /(^|[,\s])\b(lot|lots|plot|plots|unit|units|suite|suites|ste|bldg|bldgs|building|buildings|floor|fl|flr|level|block|blocks|blk|apartment|apt|flat|shed|sheds|warehouse|factory|kav|kavling)\s+(\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?|[A-Za-z](?:\d+)?)(?:\s*(&|\+|and|,)\s*(\d+[A-Za-z]?(?:[-\/]\d+[A-Za-z]?)?|[A-Za-z]))?\s*(?!,)\s+(?=(?:no\.?|nos\.?|number|#)?\s*[A-Za-z0-9])/gi;
+  a = a.replace(premiseRegex, (match, p1, type, val1, joiner, val2) => {
+    let joinerStr = "";
+    if (val2) {
+      if (joiner === "+") joinerStr = ` + ${val2}`;
+      else if (joiner === "&") joinerStr = ` & ${val2}`;
+      else if (joiner && joiner.toLowerCase() === "and") joinerStr = ` and ${val2}`;
+      else joinerStr = `, ${val2}`;
+    }
+    const fullVal = `${val1}${joinerStr}`;
     return `${p1}${type} ${fullVal}, `;
   });
 
@@ -1592,7 +1602,7 @@ function ensureCommaBeforeState(addr) {
     // New Zealand Regions
     "Canterbury", "Waikato", "Bay of Plenty", "Otago", "Hawke's Bay", "Hawkes Bay", "Taranaki", "Southland", "Northland", "Marlborough", "Tasman", "West Coast", "Manawatu",
     // UK Counties
-    "Essex", "Kent", "Surrey", "Lancashire", "Yorkshire", "Cheshire", "Hampshire", "Berkshire", "Hertfordshire", "Middlesex", "Gloucestershire", "Warwickshire", "Devon", "Dorset", "Somerset", "Oxfordshire", "Cambridgeshire", "Buckinghamshire", "Staffordshire", "Derbyshire", "Nottinghamshire", "Lincolnshire", "Northamptonshire", "Norfolk", "Suffolk", "Wiltshire", "Worcestershire", "Cornwall", "Cumbria", "Northumberland",
+    "Essex", "Kent", "Surrey", "Lancashire", "Yorkshire", "Cheshire", "Hampshire", "Berkshire", "Hertfordshire", "Middlesex", "Gloucestershire", "Warwickshire", "Devon", "Dorset", "Somerset", "Oxfordshire", "Cambridgeshire", "Buckinghamshire", "Staffordshire", "Derbyshire", "Nottinghamshire", "Lincolnshire", "Northamptonshire", "Norfolk", "Suffolk", "Wiltshire", "Worcestershire", "Cornwall", "Cumbria", "Northumberland", "Bedfordshire", "Greater Manchester", "Greater London", "West Midlands", "West Yorkshire", "South Yorkshire", "Tyne and Wear", "Merseyside", "East Sussex", "West Sussex", "County Durham", "Durham", "Herefordshire", "Rutland", "Isle of Wight", "Shropshire",
     // India States
     "Maharashtra", "Karnataka", "Tamil Nadu", "Gujarat", "Uttar Pradesh", "Telangana", "Andhra Pradesh", "Punjab", "Haryana", "Rajasthan", "Madhya Pradesh", "West Bengal", "Bihar", "Kerala", "Odisha", "Jharkhand", "Assam", "Delhi",
     // Malaysia States
@@ -2284,7 +2294,67 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
   a = a.replace(/[^\p{L}\p{N})]+$/gu, "").trim();
 
+  // Restore authentic symbols (e.g. '+' in "Units 3 + 4") if AI or parser expanded them to "And" or "Plus"
+  if (crawlData && typeof restoreOriginalSymbolsInCompanyAddress === "function") {
+    a = restoreOriginalSymbolsInCompanyAddress(a, crawlData);
+  }
+
   return a || "Not Available";
+}
+
+/**
+ * Restores authentic symbols in companyAddress (such as '+', '&', '#', '/')
+ * if AI or heuristic normalization converted them to words (e.g. "Units 3 + 4" converted to "Units 3 And 4" or "Units 3 Plus 4").
+ */
+function restoreOriginalSymbolsInCompanyAddress(addr, crawlData) {
+  if (!addr || typeof addr !== "string" || addr === "Not Available") return addr;
+  if (!crawlData) return addr;
+
+  const evidenceSources = [
+    ...(crawlData.addressCandidates || []).map(c => typeof c === "object" ? (c.raw || "") : String(c || "")),
+    ...(crawlData.detectedAddresses || []),
+    crawlData.dedicatedContactText,
+    crawlData.contactPageText,
+    crawlData.contactHtml,
+    crawlData.footerText,
+    crawlData.renderedText,
+    crawlData.bodyText,
+    crawlData.mainHtml
+  ].filter(Boolean);
+
+  if (evidenceSources.length === 0) return addr;
+  const combinedEvidence = evidenceSources.join(" ");
+  const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  let a = addr;
+
+  // 1. Restore '+' between digits, premises, or letters (e.g. "Units 3 And 4" -> "Units 3 + 4", "3 Plus 4" -> "3 + 4")
+  // Rule: Do NOT expand '+' between unit/premise/building numbers to "And" or "Plus"
+  a = a.replace(/\b([A-Za-z0-9]+)\s+(?:And|Plus)\s+([A-Za-z0-9]+)\b/gi, (match, left, right) => {
+    // Check if raw evidence explicitly contains left + right with '+' sign
+    const plusRegex = new RegExp(`(?:\\b|[^a-zA-Z0-9])${escRe(left)}\\s*\\+\\s*${escRe(right)}(?:\\b|[^a-zA-Z0-9])`, "i");
+    if (plusRegex.test(combinedEvidence)) {
+      return `${left} + ${right}`;
+    }
+    // Check if evidence has "Units? <left> + <right>" or premise prefix
+    const unitPlusRegex = new RegExp(`(?:units?|suites?|blocks?|plots?|lots?|rooms?|nos?\.?|numbers?)\\s*${escRe(left)}\\s*\\+\\s*${escRe(right)}\\b`, "i");
+    if (unitPlusRegex.test(combinedEvidence)) {
+      return `${left} + ${right}`;
+    }
+    // Check if raw evidence has '&' instead
+    const ampRegex = new RegExp(`(?:\\b|[^a-zA-Z0-9])${escRe(left)}\\s*&\\s*${escRe(right)}(?:\\b|[^a-zA-Z0-9])`, "i");
+    if (ampRegex.test(combinedEvidence)) {
+      return `${left} & ${right}`;
+    }
+    // Check if raw evidence has '/' instead
+    const slashRegex = new RegExp(`(?:\\b|[^a-zA-Z0-9])${escRe(left)}\\s*\\/\\s*${escRe(right)}(?:\\b|[^a-zA-Z0-9])`, "i");
+    if (slashRegex.test(combinedEvidence)) {
+      return `${left}/${right}`;
+    }
+    return match;
+  });
+
+  return a;
 }
 
 /**
@@ -2307,6 +2377,14 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
   const normRaw = norm(rawClean);
 
   if (normAi === normRaw) return addr;
+
+  // Case 0: Symbol preservation reconciliation - if normAi matches normRaw when omitting unwanted expanded words ("and", "plus"),
+  // and rawClean contains authentic symbols ('+', '&', '#', '/'), return rawClean to restore authentic symbols!
+  const normAiNoAnd = normAi.replace(/\b(?:and|plus)\b/g, "").replace(/\s+/g, " ").trim();
+  const normRawNoAnd = normRaw.replace(/\b(?:and|plus)\b/g, "").replace(/\s+/g, " ").trim();
+  if (normAiNoAnd === normRawNoAnd && /[+&#/]/.test(rawClean)) {
+    return rawClean;
+  }
 
   // Case 1: Raw candidate has trailing components missing from addr (e.g. City / County / State / District / Township)
   // e.g. addr: "Number 159, Yongke East Road, Yongkang District"
