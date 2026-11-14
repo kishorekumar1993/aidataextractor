@@ -310,19 +310,42 @@
 
       AIExt.renderPreview(data);
       const fillReport = AIExt.fillFormFields(data);
-      if (data.websiteStatus === "Not Working") {
-        const notWorkingShort = data.isShopCartSite ? "Shopping Cart" : (data.isDisallowedBusinessType ? "Disallowed Type" : "Not Working");
+
+      const isZeroProdUnverifiable = !data._isFromAi && (String(data.numberOfProducts || "").trim() === "0" || data.numberOfProducts === 0) &&
+        (!data.companyAddress || data.companyAddress === "Not Available" || !data.companyAddress.trim()) &&
+        (!data.emailId || !data.emailId.trim()) &&
+        (!data.phoneNumber || !data.phoneNumber.trim());
+
+      const isNonWorking = (data.websiteStatus &&
+        data.websiteStatus !== "Working" &&
+        data.websiteStatus !== "Redirect Site" &&
+        data.websiteStatus !== "Redirect") ||
+        isZeroProdUnverifiable ||
+        !!data.requiresManualReview ||
+        !!data.retryRequired ||
+        !!data.timedOut ||
+        !!data.fetchError ||
+        data.websiteStatus === "Manual Review" ||
+        data.isProhibitedSite ||
+        data.isRestricted ||
+        data.isShopCartSite ||
+        data.isDisallowedBusinessType ||
+        data.businessType === "Restricted Site";
+
+      if (isNonWorking) {
+        const notWorkingShort = data.isShopCartSite ? "Shopping Cart" : (data.isDisallowedBusinessType ? "Disallowed Type" : (data.websiteStatus || "Not Working"));
         if (typeof AIExt.setQuickBtnState === "function") {
           AIExt.setQuickBtnState("marked_not_working", `🚫 Not Working (${notWorkingShort})`);
         }
         if (typeof AIExt.showFloatingToast === "function") {
           AIExt.showFloatingToast(`🚫 Not Working (${data.notWorkingReason || notWorkingShort}) -> All fields cleared`, "not_working", 3500);
         }
+        const reasonText = data.notWorkingReason || data.reason || data.fetchError || data.errorSnippet || "Site issue or non-working status";
         const msg = data.isShopCartSite
           ? `⚠️ Online Purchase / Shopping Cart detected (${data.shopCartReason || "Shopping Cart"}). Status set to Not Working.`
           : (data.isDisallowedBusinessType
             ? `⚠️ ${data.disallowedReason || "Business Type outside allowed scope (Manufacturer to Wholesaler only)"}. Status set to Not Working.`
-            : `⚠️ Website Status set to Not Working (all other fields cleared).`);
+            : `⚠️ Website Status set to Not Working (${reasonText}). All other fields cleared.`);
 
         if (state.autoQueueEnabled || state.autoSubmitNotWorkingEnabled) {
           const delay = state.autoQueueEnabled ? 500 : 1500;

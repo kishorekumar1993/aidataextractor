@@ -704,10 +704,11 @@
 
     // Item 47: Only allow confirmed Not Working records
     if (!state.isBatchNotWorkingActive && !state.isExplicitNotWorkingSubmit) {
-      const curData = state.cachedExtractedData || state.currentNotWorkingData;
-      if (curData && curData.websiteStatus && curData.websiteStatus !== "Not Working") {
-        console.warn(`[AI Assistant] Refusing to auto-submit: Status is '${curData.websiteStatus}', not confirmed 'Not Working'.`);
-        AIExt.updateStatus(`⚠️ Review required for status '${curData.websiteStatus}'. Auto-submit skipped.`, "warning");
+      const curData = state.currentNotWorkingData || state.cachedExtractedData;
+      const isWorking = curData && (curData.websiteStatus === "Working" || curData.websiteStatus === "Redirect Site") && !curData.requiresManualReview && !curData.retryRequired && !curData.isProhibitedSite && !curData.isRestricted && !curData.isShopCartSite && !curData.isDisallowedBusinessType;
+      if (isWorking) {
+        console.warn(`[AI Assistant] Refusing to auto-submit: Status is 'Working'.`);
+        AIExt.updateStatus(`⚠️ Review required for Working site. Auto-submit skipped.`, "warning");
         return false;
       }
     }

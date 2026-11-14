@@ -1260,6 +1260,126 @@ async function runAll() {
     assert.strictEqual(result.emailId, 'lbsales@whgroup.org', 'Cloudflare protected email must be decoded');
   });
 
+  // =========================================================================
+  // Item 87: Any issue/error/manual review/non-working condition marks
+  // Website Status dropdown as "Not Working" and clears all other fields
+  // =========================================================================
+  await runAsyncTest('Item 87: Any issue, error, timeout, or non-working status marks "Not Working" in form status dropdown', async () => {
+    const mockStatusSelect = {
+      tagName: 'SELECT',
+      id: 'selectWebsiteStatus',
+      value: 'Working',
+      selectedIndex: 0,
+      options: [
+        { value: 'Working', text: 'Working' },
+        { value: 'Not Working', text: 'Not Working' },
+        { value: 'Domain Expired', text: 'Domain Expired' },
+        { value: 'Non English', text: 'Non English' },
+        { value: 'Under Construction', text: 'Under Construction' },
+        { value: 'Flash Site', text: 'Flash Site' },
+        { value: 'Redirect Site', text: 'Redirect Site' }
+      ],
+      dispatchEvent: () => {},
+      classList: { add: () => {}, remove: () => {} },
+      style: {}
+    };
+
+    const mockCompanyInput = {
+      tagName: 'INPUT',
+      id: 'companyName',
+      value: 'Stale Company Name',
+      classList: { add: () => {}, remove: () => {} },
+      style: {},
+      dispatchEvent: () => {}
+    };
+
+    const cCtx = vm.createContext({
+      window: { location: { href: 'http://testportal.com/dataextraction' } },
+      document: {
+        location: { href: 'http://testportal.com/dataextraction' },
+        title: 'Test Portal',
+        body: { querySelectorAll: () => [], appendChild: () => {}, removeChild: () => {} },
+        createElement: () => ({ style: {}, classList: { add: () => {}, remove: () => {} }, appendChild: () => {}, addEventListener: () => {} }),
+        getElementById: (id) => {
+          if (id === 'selectWebsiteStatus' || id === 'website-status') return mockStatusSelect;
+          if (id === 'companyName') return mockCompanyInput;
+          return null;
+        },
+        querySelector: (sel) => {
+          if (sel.includes('selectWebsiteStatus') || sel.includes('status')) return mockStatusSelect;
+          if (sel.includes('company')) return mockCompanyInput;
+          return null;
+        },
+        querySelectorAll: () => [mockStatusSelect, mockCompanyInput],
+        addEventListener: () => {}
+      },
+      Event: function () {},
+      setTimeout: (fn) => { fn(); return 1; },
+      clearTimeout: () => {},
+      setInterval: () => 1,
+      clearInterval: () => {},
+      URL
+    });
+    cCtx.globalThis = cCtx;
+
+    const files = [
+      'src/content/state.js',
+      'src/content/messaging.js',
+      'src/content/queue-automation.js',
+      'src/content/overlay-ui.js',
+      'src/content/form-detector.js'
+    ];
+    for (const rel of files) {
+      const p = path.join(rootDir, rel);
+      vm.runInContext(fs.readFileSync(p, 'utf8'), cCtx, { filename: rel });
+    }
+
+    const ext = cCtx.__AI_EXTENSION__;
+
+    // 1. Timeout / Manual Review
+    mockStatusSelect.value = 'Working';
+    mockCompanyInput.value = 'Existing Co';
+    ext.fillFormFields({
+      websiteStatus: 'Manual Review',
+      requiresManualReview: true,
+      retryRequired: true,
+      fetchError: 'Website took longer than 28 seconds to respond'
+    });
+    assert.strictEqual(mockStatusSelect.value, 'Not Working', 'Timeout / Manual Review must mark status as Not Working');
+    assert.strictEqual(mockCompanyInput.value, '', 'Other fields must be cleared on Not Working');
+
+    // 2. Domain Expired
+    mockStatusSelect.value = 'Working';
+    mockCompanyInput.value = 'Existing Co';
+    ext.fillFormFields({
+      websiteStatus: 'Domain Expired',
+      errorKeyword: 'Domain Expired'
+    });
+    assert.strictEqual(mockStatusSelect.value, 'Not Working', 'Domain Expired must mark status as Not Working');
+    assert.strictEqual(mockCompanyInput.value, '', 'Other fields must be cleared on Domain Expired');
+
+    // 3. Non English
+    mockStatusSelect.value = 'Working';
+    mockCompanyInput.value = 'Existing Co';
+    ext.fillFormFields({
+      websiteStatus: 'Non English',
+      errorKeyword: 'Foreign Language'
+    });
+    assert.strictEqual(mockStatusSelect.value, 'Not Working', 'Non English must mark status as Not Working');
+    assert.strictEqual(mockCompanyInput.value, '', 'Other fields must be cleared on Non English');
+
+    // 4. Prohibited Category / Disallowed
+    mockStatusSelect.value = 'Working';
+    mockCompanyInput.value = 'Existing Co';
+    ext.fillFormFields({
+      websiteStatus: 'Not Working',
+      businessType: 'Restricted Site',
+      isProhibitedSite: true
+    });
+    assert.strictEqual(mockStatusSelect.value, 'Not Working', 'Prohibited site must mark status as Not Working');
+    assert.strictEqual(mockCompanyInput.value, '', 'Other fields must be cleared on Prohibited site');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

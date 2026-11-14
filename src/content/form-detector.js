@@ -350,6 +350,19 @@
         }
       }
 
+      // 1c. Not Working alias matching (supports "Not Working", "not working", "not-working", etc.)
+      if (matchedIndex === -1 && (targetClean.includes("not working") || targetClean.includes("notworking"))) {
+        for (let i = 0; i < element.options.length; i++) {
+          const opt = element.options[i];
+          const val = (opt.value || "").trim().toLowerCase();
+          const txt = (opt.text || "").trim().toLowerCase();
+          if (val.includes("not working") || txt.includes("not working") || val.includes("notworking") || txt.includes("notworking") || val === "not working" || txt === "not working") {
+            matchedIndex = i;
+            break;
+          }
+        }
+      }
+
       // 2. Symbolic & Numeric mapping (Supports 0, 1, 2, 3 options as in https://kishorekumar1993.github.io/dataextraction/)
       if (matchedIndex === -1) {
         for (let i = 0; i < element.options.length; i++) {
@@ -708,15 +721,25 @@
 
     // CRITICAL QC RULE:
     // When Website Status is NOT "Working" and NOT "Redirect Site" (Not Working, Non English, Flash, Domain Expired, or prohibited category detected),
-    // select the respective status and clear/leave empty ALL other fields!
+    // select "Not Working" in status and clear/leave empty ALL other fields!
     // NOTE: "Redirect Site" is a WORKING website that redirected to a new domain (Rule 13).
     // All 14 fields MUST be filled with the company data from the final redirected URL!
     const isNonWorkingStatus = (data.websiteStatus &&
       data.websiteStatus !== "Working" &&
       data.websiteStatus !== "Redirect Site" &&
-      data.websiteStatus !== "Redirect") || isZeroProdUnverifiable;
+      data.websiteStatus !== "Redirect") ||
+      isZeroProdUnverifiable ||
+      !!data.requiresManualReview ||
+      !!data.retryRequired ||
+      !!data.timedOut ||
+      !!data.fetchError ||
+      data.websiteStatus === "Manual Review";
     if (isNonWorkingStatus || isProhibitedOrRestricted) {
-      const targetStatus = (isProhibitedOrRestricted || isZeroProdUnverifiable) ? "Not Working" : (data.websiteStatus || "Not Working");
+      // User Mandate: "if any think come means mark as not working in status"
+      // If ANY issue, error, timeout, manual review, anti-bot, connection error,
+      // domain expired, non-english, under construction, flash, prohibited category,
+      // or zero products unverified comes, mark the status as "Not Working" in the portal dropdown!
+      const targetStatus = "Not Working";
       if (elements.websiteStatus) {
         if (setSelectValue(elements.websiteStatus, targetStatus)) {
           highlightField(elements.websiteStatus);
@@ -725,10 +748,8 @@
       }
 
       // Display detailed Not Working Study Card & reason
-      if (targetStatus === "Not Working" || isNonWorkingStatus) {
-        state.currentNotWorkingData = data;
-        AIExt.showNotWorkingStudyCard(data);
-      }
+      state.currentNotWorkingData = Object.assign({}, data, { websiteStatus: "Not Working" });
+      AIExt.showNotWorkingStudyCard(data);
 
       // Check auto-submit toggle: Auto-submit if user enabled auto-queue OR auto-submit Not Working
       if (targetStatus === "Not Working") {
@@ -745,7 +766,9 @@
           if (state.pendingAutoSubmitTimer) clearTimeout(state.pendingAutoSubmitTimer);
           state.pendingAutoSubmitTimer = setTimeout(() => {
             state.pendingAutoSubmitTimer = null;
-            AIExt.autoSubmitNotWorking(currentUrl);
+            if (typeof AIExt.autoSubmitNotWorking === "function") {
+              AIExt.autoSubmitNotWorking(currentUrl);
+            }
           }, delay);
         } else {
           // Auto-submit is OFF so user can review and study
