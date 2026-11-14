@@ -55,20 +55,23 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Manual Review: Anti-bot challenge (Cloudflare/Access Denied) or ambiguous access.
 - Supplier with 0 Displayed Products: An operational physical supplier with no displayed product catalog is classified as "Supplier" with product count "0" and marked "Working" (submitted as Non-Paid). Do NOT mark 0 products as Not Working if company is an operational supplier!
 - If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason. If "Working", set "notWorkingReason" to "".
-- CRITICAL RULE NOTE 2 - PROHIBITED / RESTRICTED CATEGORIES:
-  * Strictly Prohibited Categories:
-    1. Porn and adult content
-    2. Medicine, medical, and hospitals
-    3. Food and food products
-    4. Weapons, knives, and firearms
-    5. Defence and military
-    6. Aircraft, aviation, and aerospace
-    7. Marine, ships, and boats
-    8. Chemicals and chemical products
-    9. Alcohol and alcoholic beverages
-    10. Animals and animal-related products
+- CRITICAL RULE NOTE 2 - PROHIBITED / RESTRICTED CATEGORIES (13 STRICTLY PROHIBITED CATEGORIES):
+  * The 13 Strictly Prohibited Categories:
+    Category 1: Porn & Adult (Pornographic sites/videos, adult entertainment, sexually explicit content/services, adult products)
+    Category 2: Medicine & Medical (Medicine manufacturers/suppliers/distributors, pharmaceuticals, medical equipment/devices/supplies, medical treatments)
+    Category 3: Hospital & Healthcare (Hospitals, clinics, healthcare centres, nursing homes, diagnostic labs, healthcare providers, hospital equipment/supplies)
+    Category 4: Food (Food manufacturers/suppliers, food products/ingredients, meat, seafood, dairy, bakery, beverages, food processing/wholesalers)
+    Category 5: Weapons & Knives (Weapons manufacturers/suppliers, knives, swords, daggers, blades, firearms, ammunition, military/defence weapons, tactical gear)
+    Category 6: Defence (Defence manufacturers/contractors, military equipment/technology, military vehicles/systems, defence services)
+    Category 7: Aircraft & Aviation (Aircraft manufacturers/suppliers, aircraft components/spares, aviation products, airlines, aircraft MRO)
+    Category 8: Aerospace (Aerospace manufacturers/suppliers, spacecraft, satellites, rocket and propulsion systems, aerospace engineering equipment)
+    Category 9: Marine (Marine equipment/products, marine manufacturers/suppliers, marine engineering, marine navigation and propulsion equipment)
+    Category 10: Ship & Shipbuilding (Ship manufacturers/shipbuilders, ship repair/maintenance, ship components, shipbuilding equipment, vessels, boats)
+    Category 11: Chemical (Chemical manufacturers/suppliers, industrial chemicals, chemical raw materials, hazardous chemicals, chemical distribution/catalogues)
+    Category 12: Alcohol (Alcohol manufacturers/suppliers, beer, wine, liquor businesses, alcoholic beverage distributors/production)
+    Category 13: Animals (Animal trading/supply, live animal sales, animal breeding, animal product manufacturers/suppliers, wildlife trading)
   * CRITICAL MANDATE: A website must be rejected if the business genuinely belongs to or sells products/services in any restricted category anywhere in the content. Incidental selling or mentions of these restricted activities on any page (About, Footer, Blog, FAQ, images) are NOT exempt.
-  * CONTEXTUAL EXCLUSIONS (NOT RESTRICTED): Distinguish genuine prohibited category operations from unrelated contextual mentions! An industrial machinery manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, knife gate valves, connectors for aerospace applications, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business.
+  * CONTEXTUAL EXCLUSIONS (NOT RESTRICTED - FALSE POSITIVES): Distinguish genuine prohibited category operations from unrelated contextual mentions! An industrial machinery manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, knife gate valves, connectors for aerospace applications, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business.
   * When a genuine restricted category business/product is detected, you MUST set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
 
 2. BUSINESS TYPE:
@@ -1217,5 +1220,305 @@ async function testAiProviderKey({ provider = "gemini", apiKey = "", modelName =
 
 async function testGeminiApiKey(apiKey, modelName = DEFAULT_MODEL) {
   return testAiProviderKey({ provider: "gemini", apiKey, modelName });
+}
+
+/**
+ * Builds the official Strict Website Restricted Category Detection & QC Validation Prompt.
+ */
+function buildRestrictedCategoryPrompt(crawlData, siteUrl = "") {
+  const url = siteUrl || crawlData.finalUrl || crawlData.originalUrl || "";
+  const compactSlice = (text, maxLen) => String(text || "").replace(/\s+/g, " ").trim().slice(0, maxLen);
+  const bodyText = compactSlice(crawlData.bodyText, 3500);
+  const contactText = compactSlice(crawlData.contactPageText || crawlData.dedicatedContactText, 1500);
+  const profileText = compactSlice(crawlData.profilePageText, 1500);
+  const footerText = compactSlice(crawlData.footerText, 800);
+  const renderedText = compactSlice(crawlData.renderedText, 1500);
+
+  return `# Strict Website Restricted Category Detection & QC Validation Prompt
+
+## 1. Role
+You are a strict website eligibility and restricted-category validation engine.
+Your responsibility is to identify websites that are related to prohibited business categories or contain restricted products, services, images, or content.
+
+Primary instruction: Do not work on websites related to any restricted category listed below. If a website is genuinely related to a restricted category, reject it even if the restricted content appears on only one page, in a product listing, in an image, in a menu, or in another section of the website.
+Do not extract company information or products from restricted websites.
+
+## 2. Restricted Categories
+The following 13 categories are strictly prohibited:
+
+### Category 1: Porn & Adult
+- Pornographic websites and videos.
+- Adult entertainment businesses.
+- Sexually explicit content or services.
+- Pornographic products and services.
+- Explicit sexual images or videos.
+
+### Category 2: Medicine & Medical
+- Medicine manufacturers, suppliers, traders, and distributors.
+- Pharmaceutical products and businesses.
+- Medical equipment and medical device businesses.
+- Medical supplies and healthcare product manufacturers.
+- Medical treatment products and services.
+- Medical-related product catalogues.
+
+### Category 3: Hospital & Healthcare
+- Hospitals and clinics.
+- Healthcare centres.
+- Nursing homes.
+- Medical laboratories and diagnostic centres.
+- Healthcare service providers.
+- Hospital equipment and hospital supply businesses.
+
+### Category 4: Food
+- Food manufacturers and suppliers.
+- Food products and ingredients.
+- Meat, seafood, dairy, bakery, and beverage food businesses.
+- Food processing and packaging.
+- Food wholesalers, exporters, and distributors.
+- Food-related product catalogues.
+
+### Category 5: Weapons & Knives
+- Weapons manufacturers and suppliers.
+- Knives, swords, daggers, and blades.
+- Firearms and ammunition.
+- Military weapons and weapon accessories.
+- Defence weapons and tactical equipment.
+- Weapon repair and maintenance businesses.
+
+### Category 6: Defence
+- Defence manufacturers and suppliers.
+- Military equipment and military technology.
+- Defence contractors and defence products.
+- Military vehicles and systems.
+- Defence-related manufacturing and services.
+
+### Category 7: Aircraft & Aviation
+- Aircraft manufacturers and suppliers.
+- Aircraft components and spare parts.
+- Aviation equipment and products.
+- Airlines and aviation businesses.
+- Aircraft maintenance and repair.
+- Aircraft-related manufacturing.
+
+### Category 8: Aerospace
+- Aerospace manufacturers and suppliers.
+- Spacecraft and satellite manufacturing.
+- Aerospace components and materials.
+- Rocket and propulsion systems.
+- Aerospace engineering products and equipment.
+
+### Category 9: Marine
+- Marine equipment and products.
+- Marine manufacturers and suppliers.
+- Marine engineering and maintenance.
+- Marine navigation and propulsion equipment.
+- Marine industry-related product catalogues.
+
+### Category 10: Ship & Shipbuilding
+- Ship manufacturers and shipbuilders.
+- Ship repair and maintenance.
+- Ship components and spare parts.
+- Shipbuilding equipment.
+- Vessels, boats, and marine transportation products.
+
+### Category 11: Chemical
+- Chemical manufacturers and suppliers.
+- Industrial chemical products.
+- Chemical raw materials.
+- Hazardous chemical products.
+- Chemical processing and chemical distribution.
+- Chemical product catalogues.
+
+### Category 12: Alcohol
+- Alcohol manufacturers and suppliers.
+- Beer, wine, and liquor businesses.
+- Alcoholic beverage distributors and exporters.
+- Alcohol production and processing.
+- Alcohol-related product catalogues.
+
+### Category 13: Animals
+- Animal trading and animal supply businesses.
+- Live animal sales.
+- Animal breeding and commercial animal businesses.
+- Animal product manufacturers and suppliers.
+- Animal-related product catalogues.
+- Wildlife trading businesses.
+
+## 3. Website-Wide Validation
+Check all accessible website sections: Homepage, About Us, Products, Services, Categories, Product detail pages, Image galleries, Downloads and catalogues, Contact Us, Footer, and navigation menus.
+Check visible text, product names, descriptions, image filenames, image ALT text, image titles, and actual image content when available.
+If any accessible section confirms that the website is genuinely related to a restricted category, reject the entire website.
+
+## 4. Strict Keyword and Image Detection
+Search for category-related keywords and images. If a restricted product or category is confirmed anywhere on the website, classify the website as Restricted.
+
+## 5. False-Positive Prevention
+Do not reject a website merely because a restricted word appears in an unrelated context.
+- "Adult learning", "adult education", "adult students", "responsible adult", "adult of legal age" in terms/policies is not pornography.
+- "Medical attention" in an unrelated safety disclaimer is not a medical business.
+- "Food for thought" is not a food business; machinery/conveyors/packaging supplied to food plants is not a food business.
+- "Chemical reaction" in educational text, or "chemical-resistant" materials/coatings/tanks is not a chemical manufacturer.
+- "Animal kingdom" as an idiom, or "cruelty-free / not tested on animals" or "safe for animals" is not animal trading/sales.
+- "Defence against cyber attacks" or "pest defense" is not military defence.
+- "We ship worldwide", "shipping policy", "family ownership", "partnership" is not shipbuilding.
+- "Knife-edge technology", "knife gate valves", or machine slitter blades is not a knife product.
+- "Aircraft mode", "aircraft-grade aluminum" or titanium fasteners used in aircraft is not an aircraft manufacturer.
+- "Whiskey Creek" as a project location or color name is not alcohol.
+
+Important distinction:
+- A genuine restricted product, image, service, or business relationship is sufficient for rejection.
+- An incidental word, metaphor, unrelated sentence, served-industry mention, or material resistance claim is NOT sufficient by itself.
+- Evaluate images in context. Do not reject an unrelated image merely because its filename or ALT text contains a matching keyword.
+
+## 6. Decision Rules
+Use these decisions:
+1. Restricted – Reject: A restricted product, service, image, or business activity is confirmed anywhere on the accessible website.
+2. False Positive – Do Not Reject: A keyword appears only in an unrelated context and no restricted business activity or content is confirmed.
+3. Manual Review: Evidence is unclear, an image cannot be identified, a page cannot be accessed, or a keyword match cannot be verified.
+4. Not Working: Use only when the website is genuinely inaccessible under the website-status rules. Never use this status just because a restricted keyword was found.
+
+If a restricted category is confirmed, stop extraction immediately and do not collect company details or product information.
+
+## 7. Evidence Requirements
+For every restricted rejection, return:
+- Website URL.
+- Restricted category.
+- Exact source page URL.
+- Exact matching product, service, or content.
+- Image URL, if applicable.
+- Evidence type: Business Activity / Product / Service / Image / Website Content.
+- Short explanation of why it qualifies.
+- Final QC decision.
+
+Never invent evidence or claim to have inspected an image or page that was not actually accessible.
+
+## 8. Required JSON Output
+Return valid JSON only:
+
+When restricted:
+{
+  "website_url": "${url}",
+  "website_status": "Working",
+  "restricted": true,
+  "restricted_category": "Category Name",
+  "classification": "Restricted - Reject",
+  "evidence_type": "Product",
+  "matched_keyword": "keyword",
+  "matched_text": "context snippet",
+  "source_url": "https://...",
+  "image_url": "https://... or empty string",
+  "reason": "explanation",
+  "final_decision": "Reject",
+  "manual_review_required": false
+}
+
+When false positive:
+{
+  "website_url": "${url}",
+  "website_status": "Working",
+  "restricted": false,
+  "restricted_category": null,
+  "classification": "False Positive",
+  "evidence_type": "Website Content",
+  "matched_keyword": "keyword",
+  "matched_text": "context snippet",
+  "source_url": "https://...",
+  "image_url": "",
+  "reason": "explanation",
+  "final_decision": "Do Not Reject",
+  "manual_review_required": false
+}
+
+When unclear evidence:
+{
+  "website_url": "${url}",
+  "website_status": "Working",
+  "restricted": null,
+  "restricted_category": "Category Name",
+  "classification": "Manual Review",
+  "evidence_type": "Image",
+  "matched_keyword": "keyword",
+  "matched_text": "context snippet",
+  "source_url": "https://...",
+  "image_url": "",
+  "reason": "explanation",
+  "final_decision": "Manual Review",
+  "manual_review_required": true
+}
+
+## 9. Final Mandatory Instructions
+- Apply all restricted categories consistently across the entire accessible website.
+- Do not work on confirmed restricted websites.
+- Do not extract products or company information from restricted websites.
+- Do not reject websites based only on isolated keyword matches.
+- Do not ignore genuine restricted products or images just because the homepage is unrelated.
+- Do not invent evidence.
+- Accuracy and evidence-based classification are mandatory.
+
+WEBSITE DATA FOR VALIDATION:
+Website URL: ${url}
+Title: ${crawlData.title || "(None)"}
+${contactText ? `Contact Page Content:\n${contactText}\n\n` : ""}${profileText ? `About Page Content:\n${profileText}\n\n` : ""}${footerText ? `Footer Content:\n${footerText}\n\n` : ""}${renderedText ? `Rendered DOM:\n${renderedText}\n\n` : ""}Main Body Content:
+${bodyText}
+`;
+}
+
+/**
+ * Validates a website's restricted-category compliance via AI using the strict prompt.
+ */
+async function validateRestrictedCategoryWithAi(crawlData, aiConfig = {}, crawlStartTime = 0) {
+  const prompt = buildRestrictedCategoryPrompt(crawlData);
+  const cfg = {
+    apiKey: aiConfig.apiKey || "",
+    provider: (aiConfig.provider || "gemini").toLowerCase(),
+    model: aiConfig.model || "gemini-2.5-flash"
+  };
+
+  if (!cfg.apiKey) {
+    const localCheck = typeof detectRestrictedKeywords === "function"
+      ? detectRestrictedKeywords(crawlData.bodyText, crawlData.mainHtml, crawlData.crawledPages)
+      : { isRestricted: false };
+    return typeof formatRestrictedValidationResult === "function"
+      ? formatRestrictedValidationResult(localCheck, crawlData.finalUrl || crawlData.originalUrl)
+      : localCheck;
+  }
+
+  try {
+    let rawResultText = "";
+    if (cfg.provider === "gemini") {
+      const candidateModels = [cfg.model, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+      rawResultText = await callGeminiExtractionApi({
+        apiKey: cfg.apiKey,
+        candidateModels,
+        prompt,
+        crawlStartTime
+      });
+    } else {
+      const candidateModels = [cfg.model, "llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+      rawResultText = await callOpenAiCompatibleApi({
+        providerLabel: cfg.provider.toUpperCase(),
+        endpoint: cfg.endpoint || "https://api.groq.com/openai/v1/chat/completions",
+        apiKey: cfg.apiKey,
+        candidateModels,
+        prompt,
+        crawlStartTime
+      });
+    }
+
+    const parsed = parseAiJsonPayload(rawResultText);
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
+  } catch (err) {
+    console.warn("[AI Assistant] AI restricted category validation error:", err.message);
+  }
+
+  // Fallback to heuristic validation
+  const localCheck = typeof detectRestrictedKeywords === "function"
+    ? detectRestrictedKeywords(crawlData.bodyText, crawlData.mainHtml, crawlData.crawledPages)
+    : { isRestricted: false };
+  return typeof formatRestrictedValidationResult === "function"
+    ? formatRestrictedValidationResult(localCheck, crawlData.finalUrl || crawlData.originalUrl)
+    : localCheck;
 }
 

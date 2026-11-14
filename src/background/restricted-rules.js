@@ -105,18 +105,19 @@ function getEvidencePagePriority(url = "", pageTitle = "") {
  * before contextual application analysis.
  */
 const CANDIDATE_CATEGORY_KEYWORDS = [
-  { label: "Adult & Porn", regex: /\b(?:porn(?:o|ography|ographic)?|adult|sex|escort|brothel|erotic|erotica)\b/i },
-  { label: "Weapons, Armor & Knives", regex: /\b(?:weapons?|firearms?|rifles?|guns?|knives|knife|ammunition)\b/i },
-  { label: "Defence & Military", regex: /\b(?:military|defence|defense|armed\s*forces)\b/i },
-  { label: "Aviation & Airlines", regex: /\b(?:aircraft|airplane|airlines?|aviation)\b/i },
-  { label: "Aerospace", regex: /\b(?:aerospace|spacecraft|satellite)\b/i },
+  { label: "Porn & Adult", regex: /\b(?:porn(?:o|ography|ographic)?|adult|sex|escort|brothel|erotic|erotica)\b/i },
+  { label: "Medicine & Medical", regex: /\b(?:medical|medicine|pharmaceuticals?|prescription\s*drugs?)\b/i },
+  { label: "Hospital & Healthcare", regex: /\b(?:hospitals?|clinics?|patient\s*care|healthcare|nursing\s*homes?)\b/i },
+  { label: "Food", regex: /\b(?:food|bakery|catering|restaurant|eatery|beverages?|dairy|meat|poultry|seafood)\b/i },
+  { label: "Weapons & Knives", regex: /\b(?:weapons?|firearms?|rifles?|guns?|knives|knife|ammunition|swords?|daggers?|blades?)\b/i },
+  { label: "Defence", regex: /\b(?:military|defence|defense|armed\s*forces|tactical\s*armaments?)\b/i },
+  { label: "Aircraft & Aviation", regex: /\b(?:aircraft|airplane|airlines?|aviation|avionics|helicopters?)\b/i },
+  { label: "Aerospace", regex: /\b(?:aerospace|spacecraft|satellite|rocket\s*propulsion)\b/i },
   { label: "Marine", regex: /\b(?:marine|maritime|naval)\b/i },
-  { label: "Ships & Boats", regex: /\b(?:ship|ships|shipyard|shipbuilding|boat|boats|vessel|vessels|yacht|yachts)\b/i },
-  { label: "Chemicals & Petrochemicals", regex: /\b(?:chemicals?|petrochemicals?|solvents?)\b/i },
-  { label: "Medicine, Medical & Hospital", regex: /\b(?:medical|medicine|hospital|pharmaceuticals?|clinic)\b/i },
-  { label: "Food & Beverages", regex: /\b(?:food|bakery|catering|restaurant|eatery)\b/i },
-  { label: "Alcohol & Breweries", regex: /\b(?:alcohol|brewery|breweries|distillery|distilleries|wine|beer|whiskey|whisky|liquor)\b/i },
-  { label: "Animals & Pets", regex: /\b(?:animals?|pets?|puppy|puppies|dogs?|cats?|livestock|cattle)\b/i }
+  { label: "Ship & Shipbuilding", regex: /\b(?:ship|ships|shipyard|shipbuilding|boat|boats|vessel|vessels|yacht|yachts)\b/i },
+  { label: "Chemical", regex: /\b(?:chemicals?|petrochemicals?|solvents?|hazardous\s*chemicals?)\b/i },
+  { label: "Alcohol", regex: /\b(?:alcohol|brewery|breweries|distillery|distilleries|wine|beer|whiskey|whisky|liquor|spirits)\b/i },
+  { label: "Animals", regex: /\b(?:animals?|pets?|puppy|puppies|dogs?|cats?|livestock|cattle)\b/i }
 ];
 
 function sanitizeContextText(text) {
@@ -188,6 +189,7 @@ function sanitizeContextText(text) {
     .replace(/\b(?:waterjet|inkjet|hydrojet)\b/gi, " ")
     .replace(/\b(?:knife\s*gate\s*valves?|knife\s*valves?|machine\s*knives?|slitter\s*knives?|circular\s*knives?|guillotine\s*knives?|rotary\s*knives?|granulator\s*knives?|pelletizer\s*knives?|chipper\s*knives?|shear\s*knives?|planer\s*knives?|jointer\s*knives?|industrial\s*knives?|doctor\s*blades?|utility\s*knives?|utility\s*knife\s*blades?)\b/gi, " ")
     .replace(/\b(?:air|utility|machine|slitter|guillotine|rotary|doctor)\s*knives?\b/gi, " ")
+    .replace(/\b(?:rotary|slitter|circular|machine|industrial|machinery|saw|cutter|guillotine|granulator|pelletizer|shear|planer|doctor|wiper|turbine|fan)\s*blades?\b/gi, " ")
     .replace(/\bair\s*knife\s*(?:system|systems|drying|nozzle|nozzles|blower|blowers)?\b/gi, " ")
     .replace(/\b(?:chemical|chemically|marine|food)\s*(?:grade|resistance|resistant|proof|inert|inertness|compatibility|safe|approved)\b/gi, " ")
     .replace(/\bresistant\s+to\s+chemicals?\b/gi, " ")
@@ -271,108 +273,246 @@ function sanitizeContextText(text) {
   return cleanText;
 }
 
-// Official Strict Restriction Policy Categories (10 Strictly Prohibited Categories):
-// 1. Porn and adult content
-// 2. Medicine, medical, and hospitals
-// 3. Food and food products
-// 4. Weapons, knives, and firearms
-// 5. Defence and military
-// 6. Aircraft, aviation, and aerospace
-// 7. Marine, ships, and boats
-// 8. Chemicals and chemical products
-// 9. Alcohol and alcoholic beverages
-// 10. Animals and animal-related products
+// Official Strict Restriction Policy Categories (13 Strictly Prohibited Categories):
+// Category 1: Porn & Adult
+// Category 2: Medicine & Medical
+// Category 3: Hospital & Healthcare
+// Category 4: Food
+// Category 5: Weapons & Knives
+// Category 6: Defence
+// Category 7: Aircraft & Aviation
+// Category 8: Aerospace
+// Category 9: Marine
+// Category 10: Ship & Shipbuilding
+// Category 11: Chemical
+// Category 12: Alcohol
+// Category 13: Animals
 
 const STRICT_OFFICIAL_CATEGORIES = [
   {
+    id: 1,
+    officialCategory: "Porn & Adult",
     category: "Adult & Porn",
     label: "Adult & Porn",
-    officialCategory: "Porn and adult content",
     regex: /\b(?:porn(?:o|ography|ographic)?|adults?|sex|escorts?|brothels?|erotica?|sensual\s*massage|strip\s*clubs?|adult\s*toys?|dildos?|vibrators?|fetish(?:es)?|onlyfans)\b/i
   },
   {
+    id: 2,
+    officialCategory: "Medicine & Medical",
     category: "Medicine, Medical & Hospital",
     label: "Medicine, Medical & Hospital",
-    officialCategory: "Medicine, medical, and hospitals",
-    regex: /\b(?:medicines?|medical|hospitals?|pharmaceuticals?|pharmac(?:y|ies)|clinics?|physicians?|doctors?|patient\s*care|prescription\s*drugs?)\b/i
+    regex: /\b(?:medicines?|pharmaceuticals?|pharmac(?:y|ies)|prescription\s*drugs?|medical\s*(?:equipment|devices?|supplies|treatment|products?|catalog(?:ue)?|instruments?|implants?|technology|diagnostic\s*tools?)|medicine\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|trader|distributor|production|formulation|sales|store))\b/i
   },
   {
-    category: "Weapons, Armor & Knives",
-    label: "Weapons, Armor & Knives",
-    officialCategory: "Weapons, knives, and firearms",
-    regex: /\b(?:weapons?|firearms?|rifles?|guns?|handguns?|pistols?|shotguns?|knif(?:e|es)?|knives|ammunition|munitions?|daggers?|swords?|machetes?|switchblades?|bayonets?)\b/i
+    id: 3,
+    officialCategory: "Hospital & Healthcare",
+    category: "Medicine, Medical & Hospital",
+    label: "Medicine, Medical & Hospital",
+    regex: /\b(?:hospitals?|clinics?|healthcare\s*(?:centres?|centers?|services?|providers?|facilities)|nursing\s*homes?|medical\s*(?:laborator(?:y|ies)|labs?|diagnostic\s*centers?|imaging\s*centers?)|patient\s*care|urgent\s*care|outpatient\s*clinic|surgery\s*center|physicians?|doctors?|hospital\s*(?:equipment|suppl(?:ies|ier|iers)|furniture|beds?))\b/i
   },
   {
-    category: "Defence & Military",
-    label: "Defence & Military",
-    officialCategory: "Defence and military",
-    regex: /\b(?:defen[cs]es?|military|armed\s*forces|tactical\s*armaments?|artillery)\b/i
-  },
-  {
-    category: "Aerospace",
-    label: "Aerospace",
-    officialCategory: "Aircraft, aviation, and aerospace",
-    regex: /\b(?:aerospace)\b/i
-  },
-  {
-    category: "Aviation & Airlines",
-    label: "Aviation & Airlines",
-    officialCategory: "Aircraft, aviation, and aerospace",
-    regex: /\b(?:aircrafts?|airplanes?|aeroplanes?|aviation|airlines?|helicopters?|spacecrafts?|avionics)\b/i
-  },
-  {
-    category: "Marine",
-    label: "Marine",
-    officialCategory: "Marine, ships, and boats",
-    regex: /\b(?:marine|maritime|naval)\b/i
-  },
-  {
-    category: "Ships & Boats",
-    label: "Ships & Boats",
-    officialCategory: "Marine, ships, and boats",
-    regex: /\b(?:ships?|boats?|vessels?|yachts?|shipyards?|shipbuilding|ferr(?:y|ies)|tugboats?|barges?)\b/i
-  },
-  {
-    category: "Chemicals & Petrochemicals",
-    label: "Chemicals & Petrochemicals",
-    officialCategory: "Chemicals and chemical products",
-    regex: /\b(?:chemicals?|petrochemicals?|solvents?|agrochemicals?|pesticides?)\b/i
-  },
-  {
-    category: "Alcohol & Breweries",
-    label: "Alcohol & Breweries",
-    officialCategory: "Alcohol and alcoholic beverages",
-    regex: /\b(?:alcohol|alcoholic|brewer(?:y|ies)|distiller(?:y|ies)|wines?|winer(?:y|ies)|beers?|whiskey|whisky|liquor|spirits)\b/i
-  },
-  {
-    category: "Animals & Pets",
-    label: "Animals & Pets",
-    officialCategory: "Animals and animal-related products",
-    regex: /\b(?:animals?|pets?|pupp(?:y|ies)|dogs?|cats?(?!\s*[-_.]?\s*(?:no\b|num|#|code|part|id|class|rating|group|ref|item|type|section|3\b|5\b|5e\b|6\b|6a\b|7\b|7a\b|8\b|cables?|cabling))|livestock|cattle|horses?|poultry|swine|pigs?|veterinar(?:y|ian))\b/i
-  },
-  {
+    id: 4,
+    officialCategory: "Food",
     category: "Food & Beverages",
     label: "Food & Beverages",
-    officialCategory: "Food and food products",
-    regex: /\b(?:foods?|baker(?:y|ies)|catering|restaurants?|bistros?|cafes?|eater(?:y|ies)|beverages?|edible|confectioner(?:y|ies)|dairy|meat|poultry|seafood|snacks?|cuisine)\b/i
+    regex: /\b(?:(?<!(?:pet|puppy|dog|cat|animal|fish)\s+)foods?|baker(?:y|ies)|catering|restaurants?|bistros?|cafes?|eater(?:y|ies)|(?<!alcoholic\s+)beverages?|edible|confectioner(?:y|ies)|dairy\s*(?:products?|processing)|meat\s*(?:products?|processing)|poultry\s*processing|seafood\s*(?:products?|processing)|food\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|products?|ingredients?|processing|packaging|wholesal(?:er|ers)|export(?:er|ers)|distributor|catalog(?:ue)?)|snacks?\s*(?:manufactur(?:er|ing)|producer)|diner|diners)\b/i
+  },
+  {
+    id: 5,
+    officialCategory: "Weapons & Knives",
+    category: "Weapons, Armor & Knives",
+    label: "Weapons, Armor & Knives",
+    regex: /\b(?:weapons?|firearms?|rifles?|guns?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|knif(?:e|es)|knives|pocket\s*knives?|folding\s*knives?|hunting\s*knives?|tactical\s*knives?|combat\s*knives?|custom\s*knives?|survival\s*knives?|throwing\s*knives?|fixed\s*blade\s*knives?|handmade\s*knives?|switchblades?|bayonets?|machetes?|daggers?|swords?|bowie\s*knives?|(?:combat|tactical|fixed|custom|hunting|survival|throwing|weapon|knife|sword|dagger)\s*blades?|tactical\s*equipment|weapon\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|trader|dealer|repair|accessories))\b/i
+  },
+  {
+    id: 6,
+    officialCategory: "Defence",
+    category: "Defence & Military",
+    label: "Defence & Military",
+    regex: /\b(?:defen[cs]e\s*(?:contractors?|manufactur(?:er|ing)|suppl(?:ier|ies)|products?|equipment|systems?|technology|industry)|military\s*(?:equipment|technology|vehicles?|systems?|defence|defense|armaments?|artillery|contractors?)|armed\s*forces|tactical\s*armaments|combat\s*vehicles?|missile\s*systems?|ministry\s*of\s*defence|department\s*of\s*defense|defence\s*forces?|national\s*defen[cs]e|homeland\s*defen[cs]e|air\s*defen[cs]e|naval\s*defen[cs]e)\b/i
+  },
+  {
+    id: 7,
+    officialCategory: "Aircraft & Aviation",
+    category: "Aviation & Airlines",
+    label: "Aviation & Airlines",
+    regex: /\b(?:aircrafts?|airplanes?|aeroplanes?|aviation|airlines?|commercial\s*aviation|aviation\s*(?:equipment|products?|services?|charter)|passenger\s*flights?|airline\s*(?:tickets?|flights?|carrier|company)|aircraft\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|components?|spare\s*parts?|equipment|products?|maintenance|repair|overhaul|mro)|avionics|helicopters?\s*(?:charter|services?|manufactur(?:er|ing))|flight\s*booking|aircraft\s*leasing)\b/i
+  },
+  {
+    id: 8,
+    officialCategory: "Aerospace",
+    category: "Aerospace",
+    label: "Aerospace",
+    regex: /\b(?:aerospace\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|contractor|components?|materials?|engineering|products?|equipment)|spacecraft|satellite\s*manufactur(?:er|ing)|rocket\s*(?:and\s+)?propulsion(?:\s*systems?)?|launch\s*vehicles?|space\s*exploration\s*technology)\b/i
+  },
+  {
+    id: 9,
+    officialCategory: "Marine",
+    category: "Marine",
+    label: "Marine",
+    regex: /\b(?:marine\s*(?:equipment|products?|manufactur(?:er|ing)|suppl(?:ier|ies)|engineering|maintenance|navigation|propulsion(?:\s*equipment)?|industry(?:-related)?|operations?|catalog(?:ue)?)|maritime\s*(?:equipment|navigation|logistics|shipping|security|charter)|naval\s*(?:operations|dockyard|base|propulsion))\b/i
+  },
+  {
+    id: 10,
+    officialCategory: "Ship & Shipbuilding",
+    category: "Ships & Boats",
+    label: "Ships & Boats",
+    regex: /\b(?:shipyards?|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|ship\s*(?:manufactur(?:er|ing)|components?|spare\s*parts?|maintenance)|shipbuilding\s*equipment|vessels?\s*(?:builder|building|construction|manufactur(?:er|ing))|commercial\s*vessels?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|naval\s*ships?|yachts?\s*builder|ferr(?:y|ies)|tugboats?|barges?|marine\s*transportation\s*products?)\b/i
+  },
+  {
+    id: 11,
+    officialCategory: "Chemical",
+    category: "Chemicals & Petrochemicals",
+    label: "Chemicals & Petrochemicals",
+    regex: /\b(?:chemicals?\s*(?:manufactur(?:er|ing)|producer|production|suppl(?:ier|ies)|distributor|distribution|trading|trader|wholesal(?:er|ers)|export(?:er|ers)|raw\s*materials?|products?|processing|catalog(?:ue)?)|petrochemicals?\s*(?:refinery|manufactur(?:er|ing)|plant|producer|supplier|distributor)|solvents?\s*(?:manufactur(?:er|ing)|producer|supplier|distributor)|industrial\s*chemicals?|hazardous\s*chemicals?|toxic\s*chemicals?|chemical\s*raw\s*materials?|specialty\s*chemicals?|bulk\s*chemicals?|fine\s*chemicals?|agrochemicals?|pesticides?)\b/i
+  },
+  {
+    id: 12,
+    officialCategory: "Alcohol",
+    category: "Alcohol & Breweries",
+    label: "Alcohol & Breweries",
+    regex: /\b(?:alcohol\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|production|processing|distributor|export(?:er|ers)|catalog(?:ue)?)|alcoholic\s*beverages?|brewer(?:y|ies)|craft\s*brewery|microbrewery|distiller(?:y|ies)|wines?\s*(?:producer|maker|making|cellar|business)|winer(?:y|ies)|vineyards?|beers?\s*(?:manufactur(?:er|ing)|producer|brewing)|liquor\s*(?:store|shop|business)|spirits\s*(?:distiller|distillery|manufactur(?:er|ing)|producer)|whiskey|whisky|vodka|rum|gin|tequila|brandy)\b/i
+  },
+  {
+    id: 13,
+    officialCategory: "Animals",
+    category: "Animals & Pets",
+    label: "Animals & Pets",
+    regex: /\b(?:animal\s*(?:trading|suppl(?:y|ies|ier|iers)|breeding|commercial|products?\s*manufactur(?:er|ing)|products?\s*suppl(?:ier|ies)|catalog(?:ue)?)|live\s*animal\s*sales?|wildlife\s*trading|pupp(?:y|ies)\s*(?:for\s*sale|mill|breeder|breeding)|dogs?\s*(?:breeder|breeding|for\s*sale)|cats?\s*(?:breeder|breeding|for\s*sale)(?!\s*[-_.]?\s*(?:no\b|num|#|code|part|id|class|rating|group|ref|item|type|section|3\b|5\b|5e\b|6\b|6a\b|7\b|7a\b|8\b|cables?|cabling))|kittens\s*for\s*sale|animal\s*shelter|livestock\s*(?:farming|producer|breeding|trade|market|sales?)|cattle\s*farming|poultry\s*farming|pig\s*farming|commercial\s*slaughterhouse|pet\s*(?:shop|store|boutique|supplies|accessories|food|breeding))\b/i
   }
 ];
+
+function extractEvidenceTypeAndImage(html = "", matchedKw = "", pageUrl = "") {
+  let evidenceType = "Website Content";
+  let imageUrl = null;
+
+  if (!matchedKw) return { evidenceType, imageUrl };
+
+  const rawHtml = String(html || "");
+  const kwLower = String(matchedKw).toLowerCase();
+
+  // 1. Check if matched inside <img> tag
+  if (rawHtml) {
+    const imgMatches = [...rawHtml.matchAll(/<img\s+[^>]*>/gi)];
+    for (const m of imgMatches) {
+      const tag = m[0];
+      if (tag.toLowerCase().includes(kwLower)) {
+        evidenceType = "Image";
+        const srcMatch = tag.match(/(?:src|data-src)=["']([^"']+)["']/i);
+        if (srcMatch && srcMatch[1]) {
+          const rawSrc = srcMatch[1].trim();
+          imageUrl = (typeof ensureAbsoluteUrl === "function" && pageUrl) ? ensureAbsoluteUrl(rawSrc, pageUrl) : rawSrc;
+        }
+        return { evidenceType, imageUrl };
+      }
+    }
+  }
+
+  // 2. Check if product catalog / product listing
+  const normUrl = String(pageUrl || "").toLowerCase();
+  if (/(?:products?|catalog|catalogue|shop|item|model|parts?)/i.test(normUrl) ||
+      /<(?:div|section|article|li)[^>]+(?:class|id)=["'][^"']*(?:product|catalog|item)[^"']*["']/i.test(rawHtml)) {
+    evidenceType = "Product";
+    return { evidenceType, imageUrl };
+  }
+
+  // 3. Check if service
+  if (/(?:services?|capabilities|solutions|repairs?|maintenance)/i.test(normUrl)) {
+    evidenceType = "Service";
+    return { evidenceType, imageUrl };
+  }
+
+  // 4. Check if corporate overview / business activity
+  if (/(?:about|profile|company|overview|what-we-do)/i.test(normUrl) ||
+      /\b(?:we\s+(?:are|manufacture|produce|supply|distribute|export)|our\s+(?:company|business|mission|factory))\b/i.test(rawHtml)) {
+    evidenceType = "Business Activity";
+    return { evidenceType, imageUrl };
+  }
+
+  return { evidenceType, imageUrl };
+}
+
+function formatRestrictedValidationResult(check, websiteUrl = "", websiteStatus = "Working") {
+  if (!check || !check.isRestricted) {
+    if (check && (check.requiresManualReview || check.classification === "MANUAL_REVIEW")) {
+      return {
+        website_url: websiteUrl || check.sourceUrl || check.matched_page || "",
+        website_status: websiteStatus,
+        restricted: null,
+        restricted_category: check.official_category || check.restricted_category || check.category || "",
+        classification: "Manual Review",
+        evidence_type: check.evidence_type || "Website Content",
+        matched_keyword: check.matchedKeyword || check.matched_keyword || "",
+        matched_text: check.snippet || check.matched_context || "",
+        source_url: check.sourceUrl || check.matched_page || "",
+        image_url: check.image_url || "",
+        reason: check.reason || "Ambiguous restricted category indicator requires human verification",
+        final_decision: "Manual Review",
+        manual_review_required: true
+      };
+    }
+    return {
+      website_url: websiteUrl || (check && (check.sourceUrl || check.matched_page)) || "",
+      website_status: websiteStatus,
+      restricted: false,
+      restricted_category: null,
+      classification: "False Positive",
+      evidence_type: (check && check.evidence_type) || "Website Content",
+      matched_keyword: (check && (check.matchedKeyword || check.matched_keyword)) || "",
+      matched_text: (check && (check.snippet || check.matched_context)) || "",
+      source_url: (check && (check.sourceUrl || check.matched_page)) || "",
+      image_url: (check && check.image_url) || "",
+      reason: (check && check.reason) || "No genuine restricted business activity or content confirmed",
+      final_decision: "Do Not Reject",
+      manual_review_required: false
+    };
+  }
+
+  return {
+    website_url: websiteUrl || check.sourceUrl || check.matched_page || "",
+    website_status: websiteStatus,
+    restricted: true,
+    restricted_category: check.official_category || check.restricted_category || check.category || "",
+    classification: "Restricted - Reject",
+    evidence_type: check.evidence_type || "Website Content",
+    matched_keyword: check.matchedKeyword || check.matched_keyword || "",
+    matched_text: check.snippet || check.matched_context || "",
+    source_url: check.sourceUrl || check.matched_page || "",
+    image_url: check.image_url || "",
+    reason: check.reason || `Restricted Category Detected: ${check.official_category || check.category}`,
+    final_decision: "Reject",
+    manual_review_required: false
+  };
+}
 
 function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
   let imgAttributes = typeof extractImageAttributes === "function" ? extractImageAttributes(html) : "";
   let combined = ((text || "") + " " + imgAttributes).trim();
   if (!combined) {
     return {
+      website_url: pageUrl || "",
+      website_status: "Working",
+      restricted: false,
+      restricted_category: null,
+      official_category: null,
+      category_id: null,
+      classification: "NO_RESTRICTED_CATEGORY",
+      strict_classification: "False Positive",
+      evidence_type: "Website Content",
+      matched_keyword: "",
+      matched_text: "",
+      source_url: pageUrl || "",
+      image_url: "",
+      reason: "No content provided",
+      final_decision: "Do Not Reject",
+      manual_review_required: false,
+
       isRestricted: false,
       is_restricted: false,
-      classification: "NO_RESTRICTED_CATEGORY",
-      restricted_category: "",
-      matched_keyword: "",
       matched_page: pageUrl || "",
       matched_context: "",
       business_activity: "",
       confidence: 1.0,
-      reason: "No content provided",
       category: "",
       matchedKeyword: null,
       sourceUrl: pageUrl || "",
@@ -398,21 +538,37 @@ function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
       const snippet = extractContextSnippet(rawClean, matchedKw);
       const exactLink = typeof findExactEvidenceLink === "function" ? findExactEvidenceLink(html, matchedKw, null, pageUrl) : pageUrl;
       const resolvedUrl = exactLink || pageUrl || "";
+      const { evidenceType, imageUrl } = extractEvidenceTypeAndImage(html, matchedKw, resolvedUrl);
       return {
+        // Section 8 Schema Fields:
+        website_url: pageUrl || "",
+        website_status: "Working",
+        restricted: true,
+        restricted_category: item.category,
+        official_category: item.officialCategory,
+        category_id: item.id,
+        classification: "GENUINE_RESTRICTED",
+        strict_classification: "Restricted - Reject",
+        evidence_type: evidenceType,
+        matched_keyword: matchedKw,
+        matched_text: snippet,
+        source_url: resolvedUrl,
+        image_url: imageUrl || "",
+        reason: `Prohibited Category Detected: ${item.officialCategory || item.category} ("${matchedKw}")`,
+        final_decision: "Reject",
+        manual_review_required: false,
+
+        // Backward compatibility fields:
         isRestricted: true,
         is_restricted: true,
-        classification: "GENUINE_RESTRICTED",
-        restricted_category: item.category,
-        matched_keyword: matchedKw,
-        matched_page: resolvedUrl,
-        matched_context: snippet,
-        business_activity: `Restricted Category: ${item.category}`,
-        confidence: 1.0,
-        reason: `Prohibited Category Detected: ${item.category} ("${matchedKw}")`,
         category: item.label,
         matchedKeyword: matchedKw,
         sourceUrl: resolvedUrl,
-        snippet: snippet
+        snippet: snippet,
+        matched_page: resolvedUrl,
+        matched_context: snippet,
+        business_activity: `Restricted Category: ${item.officialCategory || item.category}`,
+        confidence: 1.0
       };
     }
   }
@@ -430,36 +586,63 @@ function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
       const snippet = extractContextSnippet(rawClean, matchedKw);
       const exactLink = typeof findExactEvidenceLink === "function" ? findExactEvidenceLink(html, matchedKw, null, pageUrl) : pageUrl;
       const resolvedUrl = exactLink || pageUrl || "";
+      const { evidenceType, imageUrl } = extractEvidenceTypeAndImage(html, matchedKw, resolvedUrl);
       return {
+        website_url: pageUrl || "",
+        website_status: "Working",
+        restricted: true,
+        restricted_category: label,
+        official_category: label,
+        category_id: null,
+        classification: "GENUINE_RESTRICTED",
+        strict_classification: "Restricted - Reject",
+        evidence_type: evidenceType,
+        matched_keyword: matchedKw,
+        matched_text: snippet,
+        source_url: resolvedUrl,
+        image_url: imageUrl || "",
+        reason: `Prohibited Category Detected: ${label} ("${matchedKw}")`,
+        final_decision: "Reject",
+        manual_review_required: false,
+
         isRestricted: true,
         is_restricted: true,
-        classification: "GENUINE_RESTRICTED",
-        restricted_category: label,
-        matched_keyword: matchedKw,
-        matched_page: resolvedUrl,
-        matched_context: snippet,
-        business_activity: `Restricted Category: ${label}`,
-        confidence: 1.0,
-        reason: `Prohibited Category Detected: ${label} ("${matchedKw}")`,
         category: label,
         matchedKeyword: matchedKw,
         sourceUrl: resolvedUrl,
-        snippet: snippet
+        snippet: snippet,
+        matched_page: resolvedUrl,
+        matched_context: snippet,
+        business_activity: `Restricted Category: ${label}`,
+        confidence: 1.0
       };
     }
   }
 
   return {
+    website_url: pageUrl || "",
+    website_status: "Working",
+    restricted: false,
+    restricted_category: null,
+    official_category: null,
+    category_id: null,
+    classification: "NO_RESTRICTED_CATEGORY",
+    strict_classification: "False Positive",
+    evidence_type: "Website Content",
+    matched_keyword: "",
+    matched_text: "",
+    source_url: pageUrl || "",
+    image_url: "",
+    reason: "No relevant restricted business detected",
+    final_decision: "Do Not Reject",
+    manual_review_required: false,
+
     isRestricted: false,
     is_restricted: false,
-    classification: "NO_RESTRICTED_CATEGORY",
-    restricted_category: "",
-    matched_keyword: "",
     matched_page: pageUrl || "",
     matched_context: "",
     business_activity: "",
     confidence: 1.0,
-    reason: "No relevant restricted business detected",
     category: "",
     matchedKeyword: null,
     sourceUrl: pageUrl || "",
@@ -493,16 +676,29 @@ function detectRestrictedKeywords(text, html = "", crawledPages = []) {
   }
 
   return {
+    website_url: fallbackUrl || "",
+    website_status: "Working",
+    restricted: false,
+    restricted_category: null,
+    official_category: null,
+    category_id: null,
+    classification: "NO_RESTRICTED_CATEGORY",
+    strict_classification: "False Positive",
+    evidence_type: "Website Content",
+    matched_keyword: "",
+    matched_text: "",
+    source_url: fallbackUrl || "",
+    image_url: "",
+    reason: "No relevant restricted business detected",
+    final_decision: "Do Not Reject",
+    manual_review_required: false,
+
     isRestricted: false,
     is_restricted: false,
-    classification: "NO_RESTRICTED_CATEGORY",
-    restricted_category: "",
-    matched_keyword: "",
     matched_page: "",
     matched_context: "",
     business_activity: "",
     confidence: 1.0,
-    reason: "No relevant restricted business detected",
     category: "",
     matchedKeyword: null,
     sourceUrl: "",

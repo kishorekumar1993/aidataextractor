@@ -660,6 +660,72 @@ async function runAll() {
     assert.strictEqual(qcResult.secondaryEmailId, '', 'Missing secondary email must remain empty');
   });
 
+  // =========================================================================
+  // Item 78: Strict 13 Restricted Categories Detection & Section 8 JSON Schema
+  // =========================================================================
+  runTest('Item 78: Strict 13 Restricted Categories Detection & Section 8 JSON Schema', () => {
+    const { ctx } = createTestContext();
+
+    const sample13Cases = [
+      { id: 1, name: "Porn & Adult", text: "Adult entertainment store with adult movies and videos.", url: "https://adultzone.com" },
+      { id: 2, name: "Medicine & Medical", text: "Wholesale distributor of pharmaceutical medicine products and medical supplies.", url: "https://medisupply.com" },
+      { id: 3, name: "Hospital & Healthcare", text: "Private hospital and outpatient healthcare clinic offering diagnostic care.", url: "https://cityhospital.com" },
+      { id: 4, name: "Food", text: "Commercial bakery manufacturing bread and food products.", url: "https://bestbakery.com" },
+      { id: 5, name: "Weapons & Knives", text: "Custom manufacturer of tactical combat knives, folding knives, and daggers.", url: "https://bladeknives.com" },
+      { id: 6, name: "Defence", text: "Defense contractor providing military combat vehicles and military technology.", url: "https://defencetech.com" },
+      { id: 7, name: "Aircraft & Aviation", text: "Commercial airline providing passenger flights and aviation services.", url: "https://skylines.com" },
+      { id: 8, name: "Aerospace", text: "Aerospace manufacturer specializing in rocket propulsion and satellite manufacturing.", url: "https://orbitallaunch.com" },
+      { id: 9, name: "Marine", text: "Supplier of marine equipment and marine navigation systems.", url: "https://marinegear.com" },
+      { id: 10, name: "Ship & Shipbuilding", text: "Commercial shipyard constructing cargo ships, passenger vessels, and tugboats.", url: "https://shipyardbuilders.com" },
+      { id: 11, name: "Chemical", text: "Industrial chemical manufacturer producing bulk solvents and raw materials.", url: "https://chemworks.com" },
+      { id: 12, name: "Alcohol", text: "Craft beer brewery and alcoholic beverage producer.", url: "https://craftbrewery.com" },
+      { id: 13, name: "Animals", text: "Live animal sales and purebred puppy breeding kennel.", url: "https://puppybreeder.com" }
+    ];
+
+    for (const c of sample13Cases) {
+      const check = ctx.detectRestrictedKeywordsSingle(c.text, "", c.url);
+      assert.strictEqual(check.isRestricted, true, `Category ${c.id} (${c.name}) must be restricted`);
+      const formatted = ctx.formatRestrictedValidationResult(check, c.url);
+      assert.strictEqual(formatted.restricted, true);
+      assert.strictEqual(formatted.classification, "Restricted - Reject");
+      assert.strictEqual(formatted.final_decision, "Reject");
+      assert.strictEqual(formatted.manual_review_required, false);
+      assert.strictEqual(formatted.website_url, c.url);
+      assert.ok(formatted.reason.length > 5);
+      assert.ok(formatted.matched_keyword.length > 0);
+    }
+
+    // False Positive test
+    const fpCheck = ctx.detectRestrictedKeywordsSingle("Adult education center for adult learners", "", "https://adultlearning.edu");
+    assert.strictEqual(fpCheck.isRestricted, false);
+    const fpFormatted = ctx.formatRestrictedValidationResult(fpCheck, "https://adultlearning.edu");
+    assert.strictEqual(fpFormatted.restricted, false);
+    assert.strictEqual(fpFormatted.restricted_category, null);
+    assert.strictEqual(fpFormatted.classification, "False Positive");
+    assert.strictEqual(fpFormatted.final_decision, "Do Not Reject");
+    assert.strictEqual(fpFormatted.manual_review_required, false);
+
+    // Manual Review test
+    const mrFormatted = ctx.formatRestrictedValidationResult({
+      requiresManualReview: true,
+      category: "Medicine & Medical",
+      reason: "Image appears to show medical device but description is missing"
+    }, "https://ambiguous-device.com");
+    assert.strictEqual(mrFormatted.restricted, null);
+    assert.strictEqual(mrFormatted.classification, "Manual Review");
+    assert.strictEqual(mrFormatted.final_decision, "Manual Review");
+    assert.strictEqual(mrFormatted.manual_review_required, true);
+
+    // Build prompt test
+    const promptText = ctx.buildRestrictedCategoryPrompt({
+      originalUrl: "https://example.com",
+      bodyText: "Sample text"
+    });
+    assert.ok(promptText.includes("Category 1: Porn & Adult"));
+    assert.ok(promptText.includes("Category 13: Animals"));
+    assert.ok(promptText.includes("Restricted - Reject"));
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
