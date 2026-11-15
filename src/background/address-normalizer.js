@@ -2238,7 +2238,8 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/[,;\s]*(?:\b(?:cin|gstin|gst|tin|vat|tax\s*id|ein|abn|acn|cif|nif|siret|siren|kvk|hrb|uid|registration\s*no|reg\s*no|company\s*number|co\s*reg)\b\s*[:：\-–]?\s*[A-Za-z0-9\-\/]+.*)$/i, "").trim();
   a = a.replace(/[,;\s]*(?:\b(?:copyright|all\s*rights\s*reserved|privacy\s*policy|terms\s*(?:and|&)\s*conditions|terms\s*of\s*use)\b.*)$/i, "").trim();
 
-  // Strip loose trailing telephone numbers (e.g. ", +1 217 555 1234", ", 0113 245 6789", ", 0812-3456-7890")
+  // Strip loose trailing telephone numbers (e.g. ", +886-2-29954088", ", +1 217 555 1234", ", 0113 245 6789", ", 0812-3456-7890")
+  a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
   a = a.replace(/[,;\s]+(?:\+?\d{1,4}[-\s.]*)?(?:\(?\d{2,5}\)?[-\s.]*){2,4}\d{2,6}\s*$/g, "").trim();
 
   // 10. Detect country and strip postal codes per Rule 6
@@ -2252,6 +2253,8 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = removePostalCodesCarefully(a);
   }
   a = a.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "").trim();
+  // Strip loose trailing telephone numbers exposed after country stripping
+  a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
 
   // 11. Expand abbreviations
   if (typeof expandAddressAndStateAbbreviations === "function") {
@@ -2280,6 +2283,8 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = removePostalCodesCarefully(a);
   }
   a = a.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "").trim();
+  // Strip loose trailing telephone numbers exposed after country stripping
+  a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
 
   // 13. Ensure comma before state and format
   if (typeof ensureCommaBeforeState === "function") {

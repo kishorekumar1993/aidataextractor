@@ -330,6 +330,11 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
             lastError = new Error(`Gemini authorization error ${response.status}: ${errText}`);
             return { parsed: null, authError: lastError.message, lastError };
           }
+          if (response.status === 404) {
+            console.warn(`[AI Assistant] Gemini model ${modelToTry} not found (HTTP 404). Trying next model...`);
+            lastError = new Error(`Gemini model ${modelToTry} not found (HTTP 404)`);
+            break;
+          }
           if (response.status === 400) {
             const retryCtrl = new AbortController();
             const retryTimer = setTimeout(() => retryCtrl.abort(), 5000);
@@ -626,7 +631,8 @@ async function analyzeWithAi(crawlData, aiConfig = {}, restrictedCheck = null, c
   }
 
   const prompt = buildExtractionPrompt(crawlData, false);
-  const candidateModels = Array.from(new Set([normalized.model || DEFAULT_MODEL, ...GEMINI_MODELS])).filter(Boolean).slice(0, 2);
+  const verifiedGeminiFallbacks = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"];
+  const candidateModels = Array.from(new Set([normalized.model || DEFAULT_MODEL, ...GEMINI_MODELS, ...verifiedGeminiFallbacks])).filter(Boolean).slice(0, 5);
   const { parsed, activeModel } = await callGeminiExtractionApi({
     apiKey,
     candidateModels,
