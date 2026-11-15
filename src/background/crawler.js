@@ -305,9 +305,9 @@ async function crawlWebsite(targetUrl, options = {}) {
     : (Number(options.crawlPageLimit) || 50);
 
   // Time budget guard: Ensure crawling respects the service worker lifecycle deadline (28s hard limit in MV3).
-  // Default: 18,000ms (18s). Leaves ~9s for extraction and response before the 28s SW limit.
+  // Default: 8,500ms (8.5s) for responsive user feedback and ample AI time budget.
   const crawlStartTime = Date.now();
-  const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 18000;
+  const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 8500;
   const isCrawlTimeExceeded = () => (Date.now() - crawlStartTime) >= MAX_CRAWL_TIME_MS;
 
   const getCrawlBudgetUsed = () => pagesFetchedCount + (isBudgetExplicit && redirectChainInfo ? 1 : 0);
@@ -321,13 +321,13 @@ async function crawlWebsite(targetUrl, options = {}) {
       return null;
     }
     const isPriorityContact = fetchOpts.isPriorityContact || false;
-    if (isCrawlTimeExceeded() && !isPriorityContact) {
+    if (isCrawlTimeExceeded() && (!isPriorityContact || pagesFetchedCount >= 3)) {
       console.log(`[Crawler] Time budget reached (${Date.now() - crawlStartTime}ms >= ${MAX_CRAWL_TIME_MS}ms). Gracefully concluding subpage crawling: ${urlToFetch}`);
       return null;
     }
     pagesFetchedCount++;
-    const remainingTime = Math.max(1500, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime));
-    const effectiveTimeout = Math.min(fetchOpts.timeoutMs || 3500, remainingTime);
+    const remainingTime = Math.max(500, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime));
+    const effectiveTimeout = Math.min(fetchOpts.timeoutMs || 2500, remainingTime);
     return await fetchDecodedHtml(urlToFetch, { ...fetchOpts, timeoutMs: effectiveTimeout, signal: options.abortSignal || fetchOpts.signal });
   }
 
@@ -829,10 +829,22 @@ async function crawlWebsite(targetUrl, options = {}) {
         return results;
       };
 
+      const hasCoreDataAcquired = () => {
+        const hasAddr = addressCandidates.length > 0 && addressCandidates.some(c => {
+          const raw = (typeof c === "object" ? c.raw : c) || "";
+          return raw.length >= 8 && (/\b(?:street|road|avenue|lane|drive|way|blvd|suite|unit|floor|park|zone|box|po\s*box|no\.?|number|\d{2,})\b/i.test(raw));
+        });
+        const hasEmail = allDiscoveredEmails.size > 0;
+        const hasPhone = dedicatedContactPhones.size > 0 || allDiscoveredPhones.size > 0;
+        const hasProducts = detectedProductCount >= 3 || detectedImageCount >= 3;
+        const hasName = allLegalCandidates.size > 0 || (copyrightText && hasCompleteLegalSuffix(copyrightText));
+        return hasAddr && hasEmail && hasPhone && hasProducts && hasName;
+      };
+
       // PHASE 1: Fetch dedicated Contact Us page(s) FIRST and wait before checking other pages
       // Dedicated Contact Us page is the #1 highest priority on the website — always fetch it!
       if (contactPriorityLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
-        const contactResults = await fetchSubpageBatch(contactPriorityLinks, 4000, 4, true);
+        const contactResults = await fetchSubpageBatch(contactPriorityLinks, 3000, 4, true);
         for (let i = 0; i < contactPriorityLinks.length; i++) {
           const cUrl = contactPriorityLinks[i];
           const settled = contactResults[i];
@@ -842,10 +854,19 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       }
 
-      // PHASE 2: After Contact Us, fetch all remaining subpages across the complete website
-      const candidateSubpages = otherTopLinks;
+      // Fast-exit if core data already fully acquired after Phase 1
+      const isEarlyComplete = hasCoreDataAcquired();
+      if (isEarlyComplete) {
+        console.log(`[Crawler] ⚡ All 14 fields data signals fully acquired after Phase 1 (${pagesFetchedCount} pages). Concluding crawl early!`);
+      }
+
+      // PHASE 2: After Contact Us, fetch remaining priority subpages (filtering out zero-value calculators, videos, tools)
+      const candidateSubpages = isEarlyComplete ? [] : otherTopLinks.filter(u => {
+        return !/(?:calculator|calc|video|movie|film|photo|gallery|media|timeline|event|webinar|news|blog|article|tag|press|tool|tools|faq|login|signin|register|signup|cart|checkout|basket|pay|sitemap)/i.test(u);
+      }).slice(0, 10);
+
       if (candidateSubpages.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
-        const subpageResults = await fetchSubpageBatch(candidateSubpages, 3500, 6);
+        const subpageResults = await fetchSubpageBatch(candidateSubpages, 2500, 6);
         for (let i = 0; i < candidateSubpages.length; i++) {
           const cUrl = candidateSubpages[i];
           const settled = subpageResults[i];
@@ -858,8 +879,8 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       }
 
-      // PHASE 3: Complete Website Deep Pass - Crawl any additional discovered internal links from subpages
-      if (pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded() && typeof discoverAllInternalLinks === "function") {
+      // PHASE 3: Complete Website Deep Pass - Only run if core data still missing and budget allows
+      if (!hasCoreDataAcquired() && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded() && typeof discoverAllInternalLinks === "function") {
         const secondaryLinks = [];
         for (const page of crawledPages) {
           if (!page.html) continue;
@@ -876,7 +897,7 @@ async function crawlWebsite(targetUrl, options = {}) {
           }
         }
         if (secondaryLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
-          const secondaryResults = await fetchSubpageBatch(secondaryLinks, 3500, 6);
+          const secondaryResults = await fetchSubpageBatch(secondaryLinks, 2500, 6);
           for (let i = 0; i < secondaryLinks.length; i++) {
             const sUrl = secondaryLinks[i];
             const settled = secondaryResults[i];
