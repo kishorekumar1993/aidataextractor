@@ -294,6 +294,17 @@ function finalizeParsedAiResult(parsed, crawlData) {
     }
   }
 
+  if (parsed.addressClassification) {
+    const cls = parsed.addressClassification;
+    if (cls.localityCategory === "Unincorporated Neighborhood/Suburb/Industrial Estate" || cls.localityCategory === "None") {
+      parsed.city = "Not Available";
+    } else if (cls.localityCategory === "National Capital City") {
+      parsed.city = "Available";
+      parsed.state = "Available";
+    }
+    delete parsed.addressClassification;
+  }
+
   if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {
     const hasProd = parsed.numberOfProducts !== undefined && parsed.numberOfProducts !== null && String(parsed.numberOfProducts).trim() !== "";
     const hasImg = parsed.productImages !== undefined && parsed.productImages !== null && String(parsed.productImages).trim() !== "";
@@ -350,7 +361,10 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
                 temperature: 0,
                 maxOutputTokens: 1024,
                 responseMimeType: "application/json",
-                responseSchema: GEMINI_RESPONSE_SCHEMA
+                responseSchema: GEMINI_RESPONSE_SCHEMA,
+                thinkingConfig: {
+                  thinkingBudget: 0
+                }
               }
             })
           });

@@ -127,7 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Load existing settings with chrome.storage.local priority and sync fallback
   loadSettingsFromStorage([
     "aiProvider", "apiKey", "groqApiKey", "model", "extractionMode",
-    "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled"
+    "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled", "crawlMode"
   ], (res) => {
     if (extractionModeSelect) {
       extractionModeSelect.value = res.extractionMode || "ai_first";
@@ -140,7 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
     populateModelsForProvider("gemini", savedModelsByProvider.gemini);
 
     toggleStrictFilter.checked = res.strictFilter !== undefined ? res.strictFilter : true;
-    const isAutoQueue = res.crawlMode === "auto" || res.crawlMode === "continuous" || (res.autoQueueEnabled !== undefined ? !!res.autoQueueEnabled : false);
+    const isAutoQueue = res.crawlMode === "auto" || res.crawlMode === "continuous" || (res.crawlMode === undefined && res.autoQueueEnabled !== undefined ? !!res.autoQueueEnabled : false);
     if (toggleAutoQueue) {
       toggleAutoQueue.checked = isAutoQueue;
     }
@@ -154,7 +154,7 @@ document.addEventListener("DOMContentLoaded", () => {
       toggleFloatingWidget.checked = res.showFloatingWidget !== undefined ? res.showFloatingWidget : true;
     }
     if (toggleInlineBtn) {
-      toggleInlineBtn.checked = res.showInlineBtn !== undefined ? res.showInlineBtn : true;
+      toggleInlineBtn.checked = res.showInlineBtn !== undefined ? !!res.showInlineBtn : false;
     }
   });
 

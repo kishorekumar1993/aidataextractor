@@ -209,7 +209,8 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
 
   // Step 1: Deep crawl complete website across all pages, framesets, contact, products, footer, JSON-LD
   crawlResult = await crawlWebsite(targetUrl, {
-    maxPages: settings.maxPages || settings.crawlPageLimit || undefined
+    maxPages: settings.maxPages || settings.crawlPageLimit || undefined,
+    maxCrawlTimeMs: extractionMode === "own_crawl" ? 18000 : 13000
   });
 
   // If website returned HTTP 401/403/429, anti-bot challenge, or blocked status:
@@ -1081,17 +1082,29 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     // 5. State & City: Evaluate based on complete reconciled address (Rules 7 & 8)
     const apiState = normalizeAvailability(result.state);
     const apiCity = normalizeAvailability(result.city);
+    const stateDetected = hasStateInAddress(result.companyAddress, country);
+    const cityDetected = evaluateCityQC(result.companyAddress, country);
+
     if (apiState && apiCity) {
-      result.state = apiState;
-      result.city = apiCity;
+      // Rule 8: If AI returned "Available" for City, but strict QC detects known suburb,
+      // unincorporated neighborhood, or missing city -> override to "Not Available"
+      if (apiCity === "Available" && cityDetected === "Not Available") {
+        result.city = "Not Available";
+      } else {
+        result.city = apiCity;
+      }
+
+      // Rule 7: If AI returned "Available" for State, but strict QC detects no state/region -> override to "Not Available"
+      if (apiState === "Available" && !stateDetected && !(typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country))) {
+        result.state = "Not Available";
+      } else {
+        result.state = apiState;
+      }
     } else if (!result.companyAddress || result.companyAddress.toLowerCase() === "not available") {
       result.state = apiState || "Not Available";
       result.city = apiCity || "Not Available";
     } else {
-      const stateDetected = hasStateInAddress(result.companyAddress, country);
       result.state = stateDetected ? "Available" : (apiState || "Not Available");
-
-      const cityDetected = evaluateCityQC(result.companyAddress, country);
       result.city = (cityDetected === "Available") ? "Available" : (apiCity || "Not Available");
     }
 

@@ -21,10 +21,10 @@
   });
 
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true, autoQueueEnabled: false, crawlMode: "manual", autoSubmitNotWorkingEnabled: false, extractionMode: "ai_first" }, (res) => {
+    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: false, autoQueueEnabled: false, crawlMode: "manual", autoSubmitNotWorkingEnabled: false, extractionMode: "ai_first" }, (res) => {
       if (res) {
         state.showFloatingWidget = res.showFloatingWidget !== false;
-        state.showInlineBtn = res.showInlineBtn !== false;
+        state.showInlineBtn = res.showInlineBtn === true;
         state.extractionMode = res.extractionMode || "ai_first";
         if (res.crawlMode !== undefined) {
           state.autoQueueEnabled = res.crawlMode === "auto" || res.crawlMode === "continuous";

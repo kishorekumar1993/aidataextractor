@@ -71,8 +71,12 @@
           };
 
           if (chrome.storage.sync) {
-            chrome.storage.sync.get({ autoQueueEnabled: false }, (syncRes) => {
-              state.autoQueueEnabled = syncRes ? !!syncRes.autoQueueEnabled : state.autoQueueEnabled;
+            chrome.storage.sync.get({ autoQueueEnabled: false, crawlMode: "manual" }, (syncRes) => {
+              if (syncRes && syncRes.crawlMode) {
+                state.autoQueueEnabled = syncRes.crawlMode === "auto" || syncRes.crawlMode === "continuous";
+              } else if (syncRes) {
+                state.autoQueueEnabled = !!syncRes.autoQueueEnabled;
+              }
               resumePipeline(state.autoQueueEnabled);
             });
           } else {

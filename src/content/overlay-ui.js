@@ -17,7 +17,7 @@
       if (w) w.style.display = "none";
     }
 
-    if (state.showInlineBtn !== false) {
+    if (state.showInlineBtn === true) {
       injectInlineQuickButton();
       const b = document.getElementById("ai-quick-btn");
       if (b) {
@@ -27,7 +27,13 @@
       }
     } else {
       const b = document.getElementById("ai-quick-btn");
-      if (b) b.style.display = "none";
+      if (b) {
+        try { b.remove(); } catch (e) { }
+      }
+      const c = document.getElementById("ai-inline-btn-container");
+      if (c) {
+        try { c.remove(); } catch (e) { }
+      }
     }
 
     updateDetectedUrlDisplay();
@@ -985,6 +991,19 @@
   }
 
   function injectInlineQuickButton() {
+    // If inline button is disabled (default per user preference: "not inside my app"), strictly do not inject
+    if (state.showInlineBtn !== true) {
+      const oldContainer = document.getElementById("ai-inline-btn-container");
+      if (oldContainer) {
+        try { oldContainer.remove(); } catch (e) {}
+      }
+      const existing = document.getElementById("ai-quick-btn");
+      if (existing) {
+        try { existing.remove(); } catch (e) {}
+      }
+      return;
+    }
+
     // Clean up any stray container if previously injected
     const oldContainer = document.getElementById("ai-inline-btn-container");
     if (oldContainer) {

@@ -163,6 +163,31 @@ const GEMINI_RESPONSE_SCHEMA = {
       type: "STRING",
       description: "CRITICAL MANDATE - FULL PHYSICAL ADDRESS: You MUST take the COMPLETE FULL physical address with ALL available structural components from the website: Premise / Building Name / Office Park / Suite / Unit / Floor / Level / Block / Lot / Plot / Factory / Workshop / Survey Number, Industrial Estate / Business Park / Zone, Street Number and Street Name, Suburb / Locality / Neighborhood / Village, Town / Township / Sub-district / District, City, and State / Province / Territory / County / Region. NEVER return an incomplete or partial address (NEVER return only a street name or omit premise/suite/suburb/city/state). Format in Title Case where EVERY single word starts with a Capital letter (e.g. 'Suite 260, 2021 Guadalupe Street, Austin, Texas' or '15 Telford Way, Kettering, Northamptonshire' or '5th Floor, Office Park, Number 535, Qingshuiqiao Road, Hi-Tech Zone, Ningbo' or '40 Sarah Street, Campbellfield, Victoria' or 'Via Del Gregge, 220, Lonate Pozzolo, Varese'). CRITICAL QC RULE - NO EXTRA WORDS: Retain all authentic address words that appear on the website; do not invent or add words not present (e.g. if 'Number' or 'No.' is not written on the website, STRICTLY DO NOT add 'Number' before bare street numbers like 'Via Del Gregge, 220' or '40 Sarah Street'; if 'City' is not written, DO NOT add 'City'; if 'District' is not written, DO NOT add 'District'). MANDATORY FULL FORM EXPANSION: You MUST expand all abbreviations to full form globally (5/F. or 5/F or 5F -> 5th Floor, 1/F -> 1st Floor, 2/F -> 2nd Floor, 3/F -> 3rd Floor, G/F -> Ground Floor, B/F -> Basement Floor, Lvl -> Level, No./N:/No: -> Number, St. -> Street, Rd. -> Road, Ave. -> Avenue, Dr. -> Drive, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Flr. -> Floor, Rm. -> Room, Dept. -> Department, Apt. -> Apartment, POB -> Post Office Box, Cd./Cad. -> Caddesi, Sok./Sk. -> Sokak, Bulv./Blv. -> Bulvari, Mah./Mh. -> Mahallesi). Strip country name and postal codes. Empty string \"\" if websiteStatus is not Working."
     },
+    addressClassification: {
+      type: "OBJECT",
+      description: "Mandatory structural step-by-step evaluation of companyAddress before selecting state and city.",
+      properties: {
+        localityName: {
+          type: "STRING",
+          description: "The primary locality or neighborhood word extracted from companyAddress (e.g. 'Northwoods', 'Chicago', 'Oakleigh South', 'Mulhouse', 'Taipei')."
+        },
+        localityCategory: {
+          type: "STRING",
+          enum: [
+            "Official City/Town/District/Municipality",
+            "National Capital City",
+            "Unincorporated Neighborhood/Suburb/Industrial Estate",
+            "None"
+          ],
+          description: "Classification of localityName. MUST be 'Unincorporated Neighborhood/Suburb/Industrial Estate' for residential subdivisions, unincorporated communities, suburbs, industrial estates, or business parks (e.g. Northwoods, Campbellfield, Rowville, Oakleigh South, Mascot, Sandton, Penrose, Trafford Park)."
+        },
+        regionWord: {
+          type: "STRING",
+          description: "The explicit State, Province, County, Prefecture, Canton, or Region word explicitly present in companyAddress (e.g. 'Illinois', 'Victoria', 'Haut-Rhin', 'Texas'). Empty string if no region word is explicitly written."
+        }
+      },
+      required: ["localityName", "localityCategory", "regionWord"]
+    },
     state: {
       type: "STRING",
       enum: ["Available", "Not Available"],
@@ -208,6 +233,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     "companyName",
     "countryName",
     "companyAddress",
+    "addressClassification",
     "state",
     "city",
     "emailId",
