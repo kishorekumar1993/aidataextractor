@@ -1755,6 +1755,71 @@ async function runAll() {
     assert.ok(!cleanedPin.includes('75201'), `Must strip ZIP code 75201, got: ${cleanedPin}`);
   });
 
+  runTest('Item 95: Address format and component sequence preservation across websites (no inversion/reordering)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Street before Suite on website (kochma.com test case: 106 Northpoint Pkwy Suite 400 Acworth GA 30102)
+    const crawlData1 = {
+      originalUrl: 'https://www.kochma.com',
+      finalUrl: 'https://www.kochma.com',
+      status: 'Working',
+      companyName: 'Koch Machinery',
+      addressCandidates: [
+        { raw: '106 Northpoint Pkwy Suite 400\nAcworth GA 30102', isHeadquarters: true }
+      ]
+    };
+
+    // Even if AI returned premise inverted (Suite 400 first)
+    const aiResult1 = {
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Koch Machinery',
+      countryName: 'United States Of America',
+      companyAddress: 'Suite 400, 106 Northpoint Parkway, Acworth, Georgia',
+      state: 'Available',
+      city: 'Available',
+      _isFromAi: true
+    };
+
+    const qcResult1 = ctx.applyStrictInstructions(aiResult1, crawlData1);
+    assert.strictEqual(
+      qcResult1.companyAddress,
+      '106 Northpoint Parkway, Suite 400, Acworth, Georgia',
+      'Must preserve street-first sequence as on website and not invert Suite to beginning'
+    );
+
+    // 2. Suite before Street on website (e.g. Suite 260, 2021 Guadalupe Street, Austin TX 78705)
+    const crawlData2 = {
+      originalUrl: 'https://www.example.com',
+      finalUrl: 'https://www.example.com',
+      status: 'Working',
+      companyName: 'Example Corp',
+      addressCandidates: [
+        { raw: 'Suite 260, 2021 Guadalupe Street\nAustin TX 78705', isHeadquarters: true }
+      ]
+    };
+
+    const aiResult2 = {
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Example Corp',
+      countryName: 'United States Of America',
+      companyAddress: 'Suite 260, 2021 Guadalupe Street, Austin, Texas',
+      state: 'Available',
+      city: 'Available',
+      _isFromAi: true
+    };
+
+    const qcResult2 = ctx.applyStrictInstructions(aiResult2, crawlData2);
+    assert.strictEqual(
+      qcResult2.companyAddress,
+      'Suite 260, 2021 Guadalupe Street, Austin, Texas',
+      'Must preserve suite-first sequence when website writes suite first'
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

@@ -1064,6 +1064,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
     }
 
+    // Reconcile with authentic website evidence to preserve original format, sequence, and symbols
+    if (addr && addr !== "Not Available" && bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
+      addr = reconcileAddressWithRawEvidence(addr, bestRaw, result.companyName, country, crawlData);
+    }
+
     if (addr && addr !== "Not Available") {
       addr = typeof sanitizeRule6CompanyAddress === "function"
         ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData)

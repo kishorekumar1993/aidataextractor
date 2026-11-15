@@ -793,9 +793,13 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     ];
 
     for (const [abbr, full] of usAbbreviations) {
-      // Must be preceded by comma and space, or space and directly followed by 5-digit zip:
-      // e.g. ", IL" or ", IL 60090" or " IL 60090"
-      const regComma = new RegExp(`(,\\s*)\\b${abbr}\\b\\.?(?=[,\\s]|$|\\s*\\d{5})|(\\s+)\\b${abbr}\\b\\.?(?=\\s*\\d{5})`, "i");
+      // Must be preceded by comma and space, or space and directly followed by 5-digit zip,
+      // or at the end of address for unambiguous state codes (e.g. "Acworth GA"):
+      // e.g. ", IL" or ", IL 60090" or " IL 60090" or "Acworth GA"
+      const isAmbiguousWord = ["in", "or", "me", "ok", "wa", "al", "oh", "pa", "la", "de", "hi", "id", "il", "ma", "mo"].includes(abbr);
+      const regComma = isAmbiguousWord
+        ? new RegExp(`(,\\s*)\\b${abbr}\\b\\.?(?=[,\\s]|$|\\s*\\d{5})|(\\s+)\\b${abbr}\\b\\.?(?=\\s*\\d{5})`, "i")
+        : new RegExp(`(,\\s*)\\b${abbr}\\b\\.?(?=[,\\s]|$|\\s*\\d{5})|(\\s+)\\b${abbr}\\b\\.?(?=\\s*\\d{5}|\\s*$)`, "i");
       a = a.replace(regComma, (match, p1, p2) => {
         if (p1) return `, ${full} `;
         return ` ${full} `;
@@ -2249,7 +2253,12 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     resolvedCountry = (typeof detectCountryFromAddress === "function" ? detectCountryFromAddress(a) : "") || "";
   }
 
-  // Strip postal codes per Rule 6 (before abbreviation expansion so postcodes like B25 8DW don't collide with street/floor abbreviations)
+  // Pre-expand abbreviations so state abbreviations followed by postal codes (e.g. "GA 30102" -> "Georgia 30102") expand cleanly
+  if (typeof expandAddressAndStateAbbreviations === "function") {
+    a = expandAddressAndStateAbbreviations(a, resolvedCountry);
+  }
+
+  // Strip postal codes per Rule 6
   // MUST NEVER strip Post Office Box numbers (e.g. "Post Office Box 261619" must be retained)!
   if (typeof removePostalCodesCarefully === "function") {
     a = removePostalCodesCarefully(a);
@@ -2258,7 +2267,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   // Strip loose trailing telephone numbers exposed after country stripping
   a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
 
-  // 11. Expand abbreviations
+  // 11. Secondary pass of abbreviation expansion after postal code removal
   if (typeof expandAddressAndStateAbbreviations === "function") {
     a = expandAddressAndStateAbbreviations(a, resolvedCountry);
   }
@@ -2419,6 +2428,15 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
   const normAiNoAnd = normAi.replace(/\b(?:and|plus)\b/g, "").replace(/\s+/g, " ").trim();
   const normRawNoAnd = normRaw.replace(/\b(?:and|plus)\b/g, "").replace(/\s+/g, " ").trim();
   if (normAiNoAnd === normRawNoAnd && /[+&#/]/.test(rawClean)) {
+    return rawClean;
+  }
+
+  // Case 0b: Sequence preservation - if AI rearranged the authentic sequence of the website
+  // (e.g. AI inverted "106 Northpoint Parkway, Suite 400" to "Suite 400, 106 Northpoint Parkway"),
+  // return rawClean to strictly preserve the authentic format and sequence as written on the website!
+  const sortedAi = normAi.split(" ").filter(Boolean).sort().join(" ");
+  const sortedRaw = normRaw.split(" ").filter(Boolean).sort().join(" ");
+  if (sortedAi === sortedRaw) {
     return rawClean;
   }
 
