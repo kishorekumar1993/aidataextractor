@@ -1528,6 +1528,29 @@ async function runAll() {
     assert.ok(['Available', 'Not Available'].includes(countyAddr.state));
   });
 
+  runTest('Item 90: GDPR / Statutory Privacy Policy "sex life / sexual orientation" false positive prevention (Fabrikat UK)', () => {
+    const { ctx } = createTestContext();
+    const privacyText = 'Special categories of personal data such as race, ethnicity, religious or philosophical beliefs, sex life, sexual orientation, political opinions, trade union membership.';
+    const checkPrivacy = ctx.detectRestrictedKeywords(
+      'Fabrikat Nottingham Limited. Manufacturer of street lighting columns, brackets, and pedestrian guardrails. ' + privacyText,
+      '<html><body><h1>Fabrikat Lighting Manufacturer</h1><p>' + privacyText + '</p></body></html>',
+      [
+        { url: 'https://www.fabrikat.co.uk/', text: 'Fabrikat Nottingham Limited. Manufacturer of street lighting columns.' },
+        { url: 'https://www.fabrikat.co.uk/privacy-policy/', text: privacyText }
+      ]
+    );
+    assert.strictEqual(checkPrivacy.isRestricted, false, 'GDPR privacy policy statutory sex life mention must not trigger Adult & Porn rejection');
+
+    // Genuine sex shop / adult novelty site must still be rejected
+    const checkAdult = ctx.detectRestrictedKeywords(
+      'Online Adult Novelty Store. Premium adult toys, vibrators, and sex shop novelties.',
+      '<html><body><h1>Adult Novelties</h1></body></html>',
+      [{ url: 'https://adultnovelty.com', text: 'Online Adult Novelty Store. Premium adult toys, vibrators, and sex shop novelties.' }]
+    );
+    assert.strictEqual(checkAdult.isRestricted, true, 'Genuine sex shop / adult novelty must be rejected');
+    assert.strictEqual(checkAdult.category, 'Adult & Porn');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

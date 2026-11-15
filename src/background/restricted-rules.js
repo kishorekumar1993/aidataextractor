@@ -105,7 +105,7 @@ function getEvidencePagePriority(url = "", pageTitle = "") {
  * before contextual application analysis.
  */
 const CANDIDATE_CATEGORY_KEYWORDS = [
-  { label: "Porn & Adult", regex: /\b(?:porn(?:o|ography|ographic)?|adult|sex|escort|brothel|erotic|erotica)\b/i },
+  { label: "Porn & Adult", regex: /\b(?:porn(?:o|ography|ographic)?|adult|sex\s*(?:shop|store|worker|work|trade|industry|club|dolls?|toys?|cam|chat|video|service|show|entertainment|novelty|novelties|dating|products?)|cyber\s*sex|phone\s*sex|explicit\s*sex|escort|brothel|erotic|erotica)\b/i },
   { label: "Medicine & Medical", regex: /\b(?:medical|medicine|pharmaceuticals?|prescription\s*drugs?)\b/i },
   { label: "Hospital & Healthcare", regex: /\b(?:hospitals?|clinics?|patient\s*care|healthcare|nursing\s*homes?)\b/i },
   { label: "Food", regex: /\b(?:food|bakery|catering|restaurant|eatery|beverages?|dairy|meat|poultry|seafood)\b/i },
@@ -244,8 +244,15 @@ function sanitizeContextText(text) {
     .replace(/\b(?:for|in|at|to)\s+(?:the\s+)?(?:hospitals?|clinics?|medical\s*centers?|healthcare\s*facilities?|nursing\s*homes?)\s*(?:and|&|or|,)\s*(?:schools?|universities?|offices?|hotels?|commercial|residential|industrial|retail|airports?)\b/gi, " ")
     .replace(/\b(?:schools?|universities?|offices?|hotels?|commercial|residential|industrial|retail|airports?)\s*(?:and|&|or|,)\s*(?:hospitals?|clinics?|medical\s*centers?|healthcare\s*facilities?|nursing\s*homes?)\b/gi, " ");
 
-  // 7. Adult false positives (learners, education, children, furniture, pricing, privacy)
+  // 7. Adult false positives (learners, education, children, furniture, pricing, privacy, GDPR, statutory policies)
   cleanText = cleanText
+    .replace(/\b(?:sex\s*life|sexual\s*orientation|sexual\s*identity|sexual\s*health|sexuality)\b/gi, " ")
+    .replace(/\b(?:discrimination\s+(?:based\s+on|on\s+the\s+basis\s+of|on\s+grounds\s+of|by|against)|regardless\s+of|irrespective\s+of|protected\s+by|free\s+from\s+discrimination\s+on\s+grounds\s+of|equal\s+opportunity\s+(?:employer|policy)?|without\s+regard\s+to|protected\s+characteristics?\s*[:\-–]?)[^.\n;]{0,120}?\bsex\b[^.\n;]{0,120}?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:race|color|colour|ethnicity|ethnic\s*origin|origin|nationality|national\s*origin|religion|creed|age|disability|marital\s*status|civil\s*partnership|pregnancy|maternity|gender|gender\s*identity|gender\s*reassignment|sexual\s*orientation)[,\s]+(?:and|&|or|,)?\s*sex\b/gi, " ")
+    .replace(/\bsex[,\s]+(?:and|&|or|,)?\s*(?:gender|race|color|colour|ethnicity|ethnic\s*origin|origin|nationality|religion|creed|age|disability|marital\s*status|pregnancy|sexual\s*orientation)\b/gi, " ")
+    .replace(/\b(?:sex\s*discrimination(?:\s*act)?|biological\s*sex|assigned\s*sex|opposite\s*sex|same\s*sex|either\s*sex|both\s*sexes|all\s*sexes|single\s*sex)\b/gi, " ")
+    .replace(/\b(?:philosophical\s+beliefs|trade\s+union\s+membership|genetic\s+data|biometric\s+data|health\s+data)[,\s]+(?:and|&|or|,)?\s*sex\s*life\b/gi, " ")
+    .replace(/\b(?:essex|sussex|middlesex|wessex|east\s+sussex|west\s+sussex)\b/gi, " ")
     .replace(/\b(?:young|older|mature|elderly|all)\s+adults?\b/gi, " ")
     .replace(/\badult\s*(?:learners?|students?|children|life|audience|education|outdoor\s*furniture|furniture|tables?|benches?|chairs?|bicycles?|bikes?|watches?|apparel|clothing|shoes?|sizes?|sizing|swim|swimming|camps?|campers?|supervision|literacy|population|health|mental\s*health|care|medicine|patients?|volunteers?|staff|leaders?|advisors?|programs?|courses?|classes?|admissions?|diapers?|bibs?|incontinence|living|guardians?|relatives?|survivors?|immunization|vaccines?)\b/gi, " ")
     .replace(/\b(?:per|rates?\s+per|pricing\s+for|tickets?\s+for|cost\s+per|admit|admission\s+for|ages?\s+for)\s+adults?\b/gi, " ")
@@ -321,7 +328,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Porn & Adult",
     category: "Adult & Porn",
     label: "Adult & Porn",
-    regex: /\b(?:porn(?:o|ography|ographic)?|adults?|sex|escorts?|brothels?|erotica?|sensual\s*massage|strip\s*clubs?|adult\s*toys?|dildos?|vibrators?|fetish(?:es)?|onlyfans)\b/i
+    regex: /\b(?:porn(?:o|ography|ographic)?|adults?|sex\s*(?:shop|store|worker|work|trade|industry|club|dolls?|toys?|cam|chat|video|service|show|entertainment|novelty|novelties|dating|products?)|cyber\s*sex|phone\s*sex|explicit\s*sex|escorts?|brothels?|erotica?|sensual\s*massage|strip\s*clubs?|adult\s*toys?|dildos?|vibrators?|fetish(?:es)?|onlyfans)\b/i
   },
   {
     id: 2,
