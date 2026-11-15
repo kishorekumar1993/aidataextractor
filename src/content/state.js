@@ -75,6 +75,11 @@
             AIExt.stopAutoQueuePipeline("Auto-queue disabled");
           }
         }
+        if (changes.autoSubmitNotWorkingEnabled !== undefined) {
+          state.autoSubmitNotWorkingEnabled = !!changes.autoSubmitNotWorkingEnabled.newValue;
+          const notWorkingToggle = document.getElementById("ai-auto-submit-notworking-toggle");
+          if (notWorkingToggle) notWorkingToggle.checked = state.autoSubmitNotWorkingEnabled;
+        }
         if (typeof AIExt.ensureAiCrawlButtonsVisible === "function") {
           AIExt.ensureAiCrawlButtonsVisible();
         }

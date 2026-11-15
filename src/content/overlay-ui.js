@@ -985,19 +985,18 @@
   }
 
   function injectInlineQuickButton() {
-    const existing = document.getElementById("ai-inline-btn-container") || document.getElementById("ai-quick-btn");
-    if (existing && document.body && document.body.contains(existing)) {
-      updateInlineControlsVisibility();
-      return;
-    }
-    if (existing && (!document.body || !document.body.contains(existing))) {
-      try { existing.remove(); } catch (e) { }
-    }
-
     // Clean up any stray container if previously injected
     const oldContainer = document.getElementById("ai-inline-btn-container");
     if (oldContainer) {
       try { oldContainer.remove(); } catch (e) {}
+    }
+
+    const existing = document.getElementById("ai-quick-btn");
+    if (existing && document.body && document.body.contains(existing)) {
+      return;
+    }
+    if (existing && (!document.body || !document.body.contains(existing))) {
+      try { existing.remove(); } catch (e) { }
     }
 
     // 1. Look for btnClickHere or text "click here"

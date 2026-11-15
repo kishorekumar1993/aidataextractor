@@ -118,11 +118,8 @@
   function recordSubmissionInLedger(url) {
     if (!url) return;
     const norm = url.trim().toLowerCase().replace(/\/+$/, "");
+    state.submissionLedger = state.submissionLedger || new Set();
     state.submissionLedger.add(norm);
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      const list = Array.from(state.submissionLedger).slice(-200);
-      chrome.storage.local.set({ submissionLedger: list });
-    }
   }
 
   function isAlreadySubmitted(url) {
@@ -742,10 +739,11 @@
    */
   function autoSubmitNotWorking(specificUrl) {
     const submittedUrl = specificUrl || (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "");
+    const normSubmitted = (submittedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
 
-    // Item 51: Ledger duplicate prevention (skip check if explicitly submitted by user button or batch)
-    if (submittedUrl && !state.isBatchNotWorkingActive && !state.isExplicitNotWorkingSubmit && isAlreadySubmitted(submittedUrl)) {
-      console.warn(`[AI Assistant] URL '${submittedUrl}' was already submitted. Skipping auto-submit to prevent duplicate.`);
+    // In-flight duplicate prevention: avoid double-clicking submit in rapid succession for the same URL
+    if (state.isSubmittingInProgress && state.activeSubmittingUrl === normSubmitted) {
+      console.log(`[AI Assistant] Auto-submit already in progress for '${submittedUrl}'. Waiting for portal response.`);
       return false;
     }
 
@@ -754,7 +752,7 @@
       const curData = state.currentNotWorkingData || state.cachedExtractedData;
       const isWorking = curData && (curData.websiteStatus === "Working" || curData.websiteStatus === "Redirect Site") && !curData.requiresManualReview && !curData.retryRequired && !curData.isProhibitedSite && !curData.isRestricted && !curData.isShopCartSite && !curData.isDisallowedBusinessType;
       if (isWorking) {
-        console.warn(`[AI Assistant] Refusing to auto-submit: Status is 'Working'.`);
+        console.log(`[AI Assistant] Refusing to auto-submit: Status is 'Working'.`);
         AIExt.updateStatus(`⚠️ Review required for Working site. Auto-submit skipped.`, "warning");
         return false;
       }
@@ -770,6 +768,13 @@
     if (submittedUrl) {
       recordSubmissionInLedger(submittedUrl);
     }
+    state.isSubmittingInProgress = true;
+    state.activeSubmittingUrl = normSubmitted;
+    setTimeout(() => {
+      state.isSubmittingInProgress = false;
+      state.activeSubmittingUrl = "";
+    }, 3500);
+
     console.log(`[AI Assistant] Auto-submitting 'Not Working' record for: ${submittedUrl || "current form"}...`);
 
     // Ensure pipeline state is preserved across form submission reload!
@@ -785,8 +790,6 @@
         });
       }
     }
-
-    const normSubmitted = (submittedUrl || "").trim().toLowerCase().replace(/\/+$/, "");
 
     const doSubmit = () => {
       const submitBtn = findSubmitButton();
@@ -959,13 +962,14 @@
   // Item 50: Validate persisted state before resuming
   function initPersistedBatchState() {
     if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return;
-    chrome.storage.local.get(["batchNotWorking", "submissionLedger"], (res) => {
-      if (res && res.submissionLedger && Array.isArray(res.submissionLedger)) {
-        state.submissionLedger = new Set(res.submissionLedger);
-      } else {
-        state.submissionLedger = state.submissionLedger || new Set();
+    try {
+      if (typeof chrome.storage.local.remove === "function") {
+        chrome.storage.local.remove(["submissionLedger"], () => {});
       }
+    } catch (e) {}
+    state.submissionLedger = state.submissionLedger || new Set();
 
+    chrome.storage.local.get(["batchNotWorking"], (res) => {
       if (res && res.batchNotWorking) {
         const bn = res.batchNotWorking;
         const now = Date.now();
