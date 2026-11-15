@@ -1293,7 +1293,7 @@ function detectCountryFromAddress(address) {
   }
 
   // 2. Definitive administrative regions/towns explicitly appearing in physical address
-  if (/\b(?:prague|praha|brno|ostrava|plzen|olomouc|liberec|ceske\s*budejovice|hradec\s*kralove|usti\s*nad\s*labem|pardubice|zlin|havirov|kladno|most|karvina|opava|frydek-mistek)\b/i.test(unaccented)) {
+  if (/\b(?:prague|praha|brno|ostrava|plzen|olomouc|liberec|ceske\s*budejovice|hradec\s*kralove|usti\s*nad\s*labem|pardubice|zlin|havirov|kladno|karvina|opava|frydek-mistek)\b/i.test(unaccented)) {
     return "Czech Republic";
   }
   if (/\b(?:taoyuan\s*hsien|taoyuan|yangmei|taipei|new\s*taipei|kaohsiung|taichung|tainan|hsinchu|changhua|chiayi|miaoli|nantou|yunlin|pingtung|yilan|hualien|taitung|keelung|kinmen|penghu|lienchiang|matsu|yongkang|zhongli|banqiao|xinzhuang|zhonghe|yonghe|xindian|tucheng|luzhou|xizhi|shulin|sanxia|yingge|wugu|taishan|linkou|tamsui|dali|taiping|fengyuan|shalu|wuqi|houli|tanzi|wuri|lukang|yuanlin|zhubei|zhudong|hukou|toufen|zhunan)\b/i.test(unaccented)) {

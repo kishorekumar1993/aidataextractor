@@ -297,6 +297,17 @@ function extractEmbeddedScriptAddresses(html, targetList, pageUrl = "") {
         addAddressCandidate(targetList, m[1], "jsonld", false, "contact", pageUrl);
       }
     }
+    // Embedded map script addresses (e.g. Google Maps Infobox / Fusion map objects: addresses: [{"address":"1915 W. Fullerton Ave.<br />Chicago, IL 60614" ...
+    if (/addresses\s*:\s*\[|\bmap_type\b/i.test(content)) {
+      const mapObjRegex = /["']?(?:address|street_address|formatted_address)["']?\s*:\s*["']([^"']{8,180})["']/gi;
+      let mom;
+      while ((mom = mapObjRegex.exec(content)) !== null) {
+        const rawMapAddr = stripHtml(mom[1]).replace(/\\n|\\r/g, " ").replace(/\\(["'\\])/g, "$1").trim();
+        if (rawMapAddr.length > 8 && !/^[-\d.,\s]+$/.test(rawMapAddr) && !/^(?:roadmap|hybrid|satellite|terrain)$/i.test(rawMapAddr)) {
+          addAddressCandidate(targetList, rawMapAddr, "map", false, "contact", pageUrl, "Embedded Map Script");
+        }
+      }
+    }
   }
 }
 
@@ -427,6 +438,16 @@ function extractMetaAddresses(html, targetList, pageUrl = "") {
       addAddressCandidate(targetList, m[1].trim(), "contact", false, "general", pageUrl);
     }
   }
+
+  // Meta description containing address signal (e.g. "We are located at 1915 W. Fullerton Ave. Chicago, IL 60614...")
+  const metaDescRegex = /<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']*?\b(?:located\s+(?:at|in)|our\s+(?:address|location)\s+is|address\s*[:：\-–])\s*([^"'.]{10,140}\b\d{5}\b[^"']*?))["']/gi;
+  let mdm;
+  while ((mdm = metaDescRegex.exec(html)) !== null) {
+    const rawDescAddr = mdm[2] || mdm[1];
+    if (rawDescAddr && rawDescAddr.trim().length > 8) {
+      addAddressCandidate(targetList, rawDescAddr.trim(), "contact", false, "general", pageUrl);
+    }
+  }
 }
 
 function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageUrl = "") {
@@ -533,6 +554,17 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     const raw = stripHtml(cmm[1]);
     const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
+      addAddressCandidate(targetList, combinedBlock, defaultSource, false, "contact", pageUrl);
+    }
+  }
+
+  // 4c. Icon-labeled list item contents (e.g. Avada / Fusion / Elementor checklist with fa-home / fa-building / fa-map)
+  const iconListRegex = /<(?:li|div)[^>]*class=["'][^"']*(?:fusion-li-item|contact-item|address-item|elementor-icon-list-item)[^"']*["'][^>]*>[\s\S]*?(?:fa-home|fa-building|fa-map-marker|fa-map-pin|fa-compass|icon-home|icon-location)[\s\S]*?<(?:div|p|span)[^>]*class=["'][^"']*(?:fusion-li-item-content|item-content|elementor-icon-list-text|content)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|p|span)>/gi;
+  let ilm;
+  while ((ilm = iconListRegex.exec(processedHtml)) !== null) {
+    const raw = stripHtml(ilm[1]);
+    const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    if (combinedBlock.length > 8 && !/^(?:phone|call|email|fax)\b/i.test(combinedBlock)) {
       addAddressCandidate(targetList, combinedBlock, defaultSource, false, "contact", pageUrl);
     }
   }
