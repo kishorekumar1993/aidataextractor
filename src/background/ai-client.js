@@ -109,40 +109,101 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Use standard full English names for ALL countries globally (Afghanistan, Albania, Algeria, Andorra, Angola, Argentina, Armenia, Australia, Austria, Azerbaijan, Bahamas, Bahrain, Bangladesh, Barbados, Belarus, Belgium, Belize, Bhutan, Bolivia, Botswana, Brazil, Brunei Darussalam, Bulgaria, Cambodia, Canada, Cayman Islands, China, Colombia, Costa Rica, Croatia, Cyprus, Czech Republic, Denmark, Dominican Republic, Egypt, Estonia, Ethiopia, Fiji, Finland, France, Germany, Ghana, Greece, Greenland, Guatemala, Guyana, Hong Kong, Hungary, Iceland, India, Indonesia, Iran, Iraq, Ireland, Israel, Italy, Jamaica, Japan, Jordan, Kazakhstan, Kenya, Kuwait, Latvia, Lebanon, Liechtenstein, Lithuania, Luxembourg, Madagascar, Malaysia, Maldives, Malta, Mauritius, Mexico, Moldova, Mongolia, Morocco, Mozambique, Myanmar, Namibia, Nepal, Netherlands, New Zealand, Nicaragua, Nigeria, North Korea, North Macedonia, Norway, Oman, Pakistan, Panama, Papua New Guinea, Paraguay, Peru, Philippines, Poland, Portugal, Qatar, Romania, Russia, Rwanda, Saint Lucia, Samoa, Saudi Arabia, Serbia, Seychelles, Sierra Leone, Singapore, Slovakia, Slovenia, South Africa, South Korea, Spain, Sri Lanka, Sudan, Suriname, Sweden, Switzerland, Syria, Taiwan, Tanzania, Thailand, Trinidad and Tobago, Tunisia, Türkiye, Uganda, Ukraine, United Arab Emirates, United Kingdom, United States Of America, Uruguay, Uzbekistan, Vanuatu, Vietnam, Zambia, Zimbabwe).
 - If omitted on website, infer country from social media or address city/state/postcode globally.
 
-6. COMPANY ADDRESS (CRITICAL QC MANDATE - NO MISSING ITEMS):
-- FULL PHYSICAL HEADQUARTERS ADDRESS: Include premise/building/suite/unit/floor/level/lot/block/estate/park, street number, street name, section, lane, alley, village, suburb/town, district, city, and state/county/province.
-- CRITICAL - NO MISSING ITEMS / NEVER TRUNCATE:
-  * NEVER DROP CITY, DISTRICT, TOWNSHIP, COUNTY, OR STATE AT THE END OF companyAddress! Even though State and City have their own separate fields, companyAddress MUST contain the entire complete physical address ending with City, District, Township, County, State, or Province. (For example: "No.159, Yongke E. Rd., Yongkang Dist., Tainan City 710, Taiwan" MUST be extracted as "Number 159, Yongke East Road, Yongkang District, Tainan City". NEVER stop at "Yongkang District"!).
-  * NEVER DROP PREMISE / BUILDING / UNIT / SUITE / FLOOR / LEVEL / ESTATE: Retain Unit, Suite, Floor, Level, Building, Block, Plot, Industrial Estate / Park, Business Park at the beginning or middle.
-  * NEVER DROP INTERMEDIATE DIVISIONS: Retain Section, Lane, Alley, Village, Suburb, Town, District.
-  * ONLY STRIP: Postal codes (ZIP codes), Country name, and Telephone/Fax numbers.
-- CRITICAL HIGH PRIORITY RULE - NEVER INVENT OR ADD THE UNWANTED EXTRA WORD "Number":
-  * ABSOLUTELY NEVER INSERT "Number" IN FRONT OF BARE STREET NUMBERS!
-  * If the website says "Via Del Gregge, 220, Lonate Pozzolo, Varese" -> output "Via Del Gregge, 220, Lonate Pozzolo, Varese" (STRICTLY NEVER write "Via Del Gregge, Number 220"!).
-  * If the website says "40 Sarah Street" -> output "40 Sarah Street" (STRICTLY NEVER write "Number 40 Sarah Street"!).
-  * If the website says "604 Progress Drive" -> output "604 Progress Drive" (STRICTLY NEVER write "Number 604 Progress Drive"!).
-  * ONLY expand to "Number" when "No.", "No", "Nos.", or "#" was EXPLICITLY AND LITERALLY WRITTEN on the website (e.g. "No. 159, Yongke East Road" -> "Number 159, Yongke East Road"; "Plot No. 45" -> "Plot Number 45"). If "No." is NOT written on the website, NEVER add "Number"!
-- STRICT NO EXTRA WORDS RULE: Retain authentic address words from the website. Absolutely NEVER invent, insert, or add extra words not present on the website (e.g. NEVER add "Number", "City", "District", "Township", or "County" if not written).
-- NEVER expand special characters or symbols into words: Absolutely NEVER convert "+" to "And" or "Plus" (e.g. "Units 3 + 4" MUST stay "Units 3 + 4", NEVER output "Units 3 And 4" or "Units 3 Plus 4"), NEVER convert "&" to "And", NEVER convert "#" to "Number". Authentic symbols inside premise/unit numbers MUST be preserved exactly as written on the website!
-- STRICT PRESERVATION: NEVER drop leading street/building numbers (e.g. "12110 Best Place" -> keep 12110; "40 Sarah Street" -> keep 40).
-- ASIAN & TAIWAN FLOOR & SUB-UNIT NOTATION (CRITICAL FORMAT RULE):
-  * Floor sub-divisions with hyphen (e.g. "6F-1", "6F.-1", "6F - 1", "6F之1", "6樓之1", "6/F-1") MUST ALWAYS be formatted with ordinal floor and hyphenated sub-unit (e.g. "6th Floor-1", "10th Floor-2", "2nd Floor-5").
-  * ABSOLUTELY NEVER convert hyphenated floor sub-divisions into separate unit clauses! (STRICTLY NEVER output "6th Floor, unit 1", "6th Floor, Unit 1", "6th Floor, Room 1", or "Floor 6, Unit 1"!).
-  * The correct standard format is "6th Floor-1", preserving the hyphenated sub-unit directly attached to Floor.
-- EXPAND ALL ABBREVIATIONS GLOBALLY (MANDATORY FOR ALL 135+ COUNTRIES):
+6. COMPANY ADDRESS (CRITICAL QC MANDATE — 12 MANDATORY RULES):
+- RULE 1. HEADQUARTERS PRIORITY AND ADDRESS SELECTION:
+  * Extract the official physical headquarters address.
+  * Give priority in this strict order:
+    1. Explicitly identified Global Headquarters / Corporate Headquarters.
+    2. Explicitly identified Head Office.
+    3. Main Office, if no headquarters or head office is identified.
+    4. Registered Office, only when no physical headquarters or head office is available.
+  * Do not select a branch, warehouse, factory, showroom, dealer, or regional office when a headquarters address is available.
+  * Never assume the first address displayed on the website is the headquarters.
+
+- RULE 2. STRICT WEBSITE SOURCE VERIFICATION:
+  * Extract addresses only from the official company website.
+  * Check Contact Us, About Us, Company Profile, Corporate Information, Footer, and Headquarters pages.
+  * Do not use Google Maps, search engine snippets, business directories, third-party websites, or external databases to complete an address.
+  * Every extracted address component must have supporting evidence on the official website.
+  * Never use external information to fill missing address components.
+
+- RULE 3. MULTIPLE ADDRESS LINES:
+  * When an address is displayed across multiple lines, combine all relevant address lines into one complete companyAddress.
+  * Preserve the original component sequence.
+  * Do not omit building names, suite numbers, street names, localities, districts, cities, or states.
+  * Do not duplicate components when the same address appears in multiple sections.
+
+- RULE 4. MULTIPLE HEADQUARTERS OR OFFICE ADDRESSES:
+  * If the website explicitly identifies multiple headquarters, determine whether one is designated as the global or principal headquarters.
+  * Prefer the explicitly designated global headquarters.
+  * If no principal headquarters can be established, do not arbitrarily select one. Flag the ambiguity for QC review.
+  * Never combine components from different office addresses into one address.
+
+- RULE 5. ADDRESS COMPLETENESS VALIDATION:
+  * Before returning companyAddress, verify:
+    - Premise / building / unit / suite / floor information is retained when provided.
+    - Street number and street name are retained.
+    - All intermediate divisions are retained (Section, Lane, Alley, Village, Suburb, Town, District).
+    - Locality, suburb, town, district, city, county, and state/province are retained whenever explicitly provided.
+    - Post Office Box numbers are retained (e.g. "Post Office Box 261619").
+    - Only permitted postal codes (ZIP codes), country names, and telephone/fax numbers are removed.
+    - The address is not accidentally truncated at a comma, line break, or extraction boundary.
+
+- RULE 6. AMBIGUOUS ABBREVIATIONS:
+  * Expand an abbreviation only when its meaning is supported by the country, language, address context, and surrounding words.
+  * Never expand an ambiguous abbreviation based on guesswork.
+  * Do not convert genuine building, industrial park, street, plot, block, or unit identifiers into unrelated words.
+  * If the meaning cannot be reliably established, preserve the original abbreviation and flag it for QC review.
   * Named & Memorial Highways / Boulevards / Routes: GAR Highway / G.A.R. Hwy -> Grand Army Of The Republic Highway, MLK Jr Blvd -> Martin Luther King Junior Boulevard, JFK Blvd/Expy -> John F Kennedy Boulevard/Expressway, FDR Dr -> Franklin D Roosevelt Drive, PCH -> Pacific Coast Highway, Co. Rd. -> County Road, State Rte. -> State Route, FM 1960 -> Farm To Market Road 1960, RM -> Ranch To Market Road (Texas), MG Road -> Mahatma Gandhi Road, GT Road -> Grand Trunk Road.
-  * English Street / Building / Industrial Terms: St -> Street (but St. before saint/place name -> Saint), Rd -> Road, Ave -> Avenue, Dr -> Drive (but Dr. before person name -> Doctor/Doktor), Blvd -> Boulevard, Pkwy -> Parkway, Expy/Expwy -> Expressway, Fwy -> Freeway, Hwy/Hgwy -> Highway, Ln -> Lane, Aly -> Alley, Ct -> Court, Cir -> Circle, Pl -> Place, Sq -> Square, Ter/Tce -> Terrace, Trl -> Trail, Xing -> Crossing, Byp -> Bypass, Jct -> Junction, Gdns -> Gardens, Hts -> Heights, Vlg -> Village, Vly -> Valley, Mnr -> Manor, Hbr -> Harbor, Spgs -> Springs, Cmns -> Commons, Ste -> Suite, Bldg -> Building, Apt -> Apartment, Rm -> Room, Flr/Fl/5F -> Floor/5th Floor, 6F-1 / 6F.-1 / 6F之1 / 6樓之1 -> 6th Floor-1 (NEVER "6th Floor, unit 1" or "Floor 6, unit 1"!), No. -> Number, Sec -> Section, Twp -> Township, Dist -> District, P.O. Box/GPO Box -> Post Office Box/General Post Office Box, Ind. Est./Indl. Est. -> Industrial Estate, Trdg. Est. -> Trading Estate, SEZ -> Special Economic Zone.
   * States / Provinces / Counties / Cantons Globally: Expand ALL US states (MA -> Massachusetts, TX -> Texas, CA -> California, IL -> Illinois, etc.), Canadian provinces (ON -> Ontario, QC -> Quebec, BC -> British Columbia), Australian states (VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland), UK/Irish counties (Northants -> Northamptonshire, Yorks -> Yorkshire, Co. Durham -> County Durham), Indian states & zones (MH -> Maharashtra, KA -> Karnataka, TN -> Tamil Nadu, GJ -> Gujarat, MIDC -> Maharashtra Industrial Development Corporation, GIDC -> Gujarat Industrial Development Corporation, Opp. -> Opposite, S.No. -> Survey Number), South African provinces (GP -> Gauteng, KZN -> KwaZulu-Natal), Malaysian/Indonesian states (Sgr -> Selangor, Jabar -> Jawa Barat, Jateng -> Jawa Tengah, Jatim -> Jawa Timur), Austrian/Swiss/German states (NÖ -> Niederösterreich, ZH -> Zürich, BW -> Baden-Württemberg), Brazilian/Mexican states (SP -> São Paulo, CDMX -> Ciudad de Mexico).
+
+- RULE 7. POSTAL CODE IDENTIFICATION:
+  * Remove postal codes, ZIP codes, and PIN codes wherever they appear in the address.
+  * Do not remove street numbers, building numbers, plot numbers, unit numbers, or Post Office Box numbers.
+  * Never classify a number as a postal code merely because it appears at the end of an address.
+  * Use the country's postal code format and address context to distinguish postal codes from other numbers.
+
+- RULE 8. NON-ENGLISH ADDRESS HANDLING:
+  * Preserve the original language and authentic proper names of streets, buildings, industrial parks, and localities.
+  * Expand recognizable local-language abbreviations into their official full forms when unambiguous (e.g. Str. -> Strasse, ul. -> Ulica, C/ -> Calle, Jl. -> Jalan, Cad. -> Caddesi).
+  * Do not translate proper names into English.
+  * Do not invent English administrative labels that are absent from the source.
+  * Preserve original diacritics and language-specific characters.
   * International Non-English Street & Zone Abbreviations: Germany/Austria/Switzerland (Str. -> Strasse, Pl. -> Platz, Gewerbegebiet), France (Z.I. -> Zone Industrielle, Z.A. -> Zone Artisanale, Bd. -> Boulevard, Imp. -> Impasse, B.P. -> Boite Postale), Spain (C/ -> Calle, Avda. -> Avenida, P.º -> Paseo, Pza. -> Plaza, Pol. Ind. -> Poligono Industrial, Ctra. -> Carretera), Italy (V.le -> Viale, C.so -> Corso, P.zza -> Piazza, Z.I. -> Zona Industriale), Netherlands/Belgium (Str. -> Straat, Wg. -> Weg, Pl. -> Plein, Ind. Terrein -> Industrieterrein), Poland (ul. -> Ulica, al. -> Aleja, pl. -> Plac, os. -> Osiedle), Czechia/Slovakia (ul. -> Ulice/Ulica, nám. -> Namesti), Portugal/Brazil (R. -> Rua, Av. -> Avenida, Rod. -> Rodovia, Pç. -> Praça), Mexico/LatAm (Col. -> Colonia, Fracc. -> Fraccionamiento, Prol. -> Prolongacion, Calz. -> Calzada), Türkiye (Cad./Cd. -> Caddesi, Sk./Sok. -> Sokak, Bulv./Blv. -> Bulvari, Mah./Mh. -> Mahallesi, OSB -> Organize Sanayi Bolgesi, No./N:/No: -> Number), Indonesia (Jl./Jln. -> Jalan, Perum. -> Perumahan, RA. -> Raden Ajeng, Jend. -> Jenderal, RT/RW -> Rukun Tetangga/Rukun Warga), Malaysia/Singapore (Jln. -> Jalan, Lrg. -> Lorong, Tmn. -> Taman, Bdr. -> Bandar, Kg. -> Kampung, Bt. -> Bukit/Batu), Hong Kong/East Asia (N.T. -> New Territories, Kln. -> Kowloon, Pref. -> Prefecture, ETDZ -> Economic and Technological Development Zone), Greece/Nordics/CIS (Od. -> Odos, Leof. -> Leoforos, Ind. omr. -> Industriområde, pr. -> Prospekt, obl. -> Oblast). Remove brackets ()/[].
-- CRITICAL MANDATE - POST OFFICE BOX: DO NOT REMOVE Post Office Box numbers (P.O. Box / PO Box / Post Office Box <number> / POB / Boite Postale / Apartado Postal / Postfach / Postbus). You MUST enter and retain the Post Office Box with its number, expanding the abbreviation to "Post Office Box <number>" (e.g. "Post Office Box 261619").
-- STRIP ONLY: Pincode / Postal codes (ZIP codes), Country name, and Telephone/Fax numbers. Post Office Box numbers MUST NOT BE REMOVED!
-- CRITICAL MANDATE - PRESERVE ORIGINAL SEQUENCE & FORMAT (UNIVERSAL FOR ALL WEBSITES):
-  * STRICTLY PRESERVE THE AUTHENTIC SEQUENCE of address components exactly as written on the website!
-  * ABSOLUTELY NEVER REARRANGE, SHUFFLE, OR INVERT address parts!
-  * If the website writes Street before Suite/Unit/Premise (e.g. "106 Northpoint Pkwy Suite 400" or "2021 Guadalupe Street, Suite 260"), you MUST KEEP the street first: "106 Northpoint Parkway, Suite 400" (STRICTLY NEVER invert to "Suite 400, 106 Northpoint Parkway"!).
-  * If the website writes Suite/Premise before Street (e.g. "Suite 400, 106 Northpoint Pkwy"), KEEP the suite first: "Suite 400, 106 Northpoint Parkway".
-  * Respect the natural flow and order from the website across ALL countries: do NOT artificially reorder premises, street names, building numbers, or localities.
-  * Only strip postal codes, telephone/fax, and country names, and expand abbreviations to full form. Every other component must remain in its original relative sequence!
+
+- RULE 9. ADDRESS NORMALIZATION:
+  * Normalize only spelling, capitalization, recognized abbreviations, and comma separation.
+  * Never change the actual physical location or meaning.
+  * Never replace an official street name with an assumed alternative.
+  * Never change the original sequence of address components.
+  * Never remove meaningful symbols, building identifiers, or address numbers (e.g. "Units 3 + 4" MUST stay "Units 3 + 4", never convert "+" to "And" or "Plus").
+
+- RULE 10. ADDRESS UNAVAILABLE HANDLING:
+  * If the official website does not provide a verifiable physical headquarters address, return the prescribed unavailable value ("Not Available" or empty string "" if non-working).
+  * Do not substitute a branch address, social media address, directory address, or guessed address.
+  * If the website provides an incomplete address, extract only the verified components and flag the missing information according to the QC output rules.
+
+- RULE 11. CROSS-PAGE ADDRESS CONSISTENCY:
+  * Compare address information found on Contact Us, About Us, Corporate Information, and Footer pages.
+  * If the same headquarters address appears in multiple places, consolidate the information without duplication.
+  * If conflicting addresses appear, prioritize the explicitly designated headquarters and flag unresolved conflicts.
+  * Never merge different addresses into one.
+
+- RULE 12. FINAL ADDRESS EVIDENCE CHECK:
+  * Before finalizing the output, verify every component against the official website:
+    - No invented words.
+    - No missing address components.
+    - No dropped leading numbers.
+    - No dropped trailing administrative divisions.
+    - No incorrectly expanded abbreviations.
+    - No removed Post Office Box numbers.
+    - No rearranged address components.
+    - No accidental inclusion of postal codes, country names, or phone/fax numbers.
+
+- CRITICAL HIGH PRIORITY FORMATTING RULES:
+  * NEVER INVENT OR ADD THE WORD "Number" IN FRONT OF BARE STREET NUMBERS: If website says "40 Sarah Street", output "40 Sarah Street" (never "Number 40 Sarah Street"). ONLY expand to "Number" when "No.", "No", "Nos.", or "#" was literally written on the website (e.g. "No. 159" -> "Number 159").
+  * ASIAN & TAIWAN FLOOR & SUB-UNIT NOTATION: Floor sub-divisions with hyphen (e.g. "6F-1", "6F.-1", "6F - 1", "6F之1", "6樓之1", "6/F-1") MUST ALWAYS be formatted with ordinal floor and hyphenated sub-unit: "6th Floor-1" (STRICTLY NEVER output "6th Floor, unit 1" or "Floor 6, unit 1").
+  * COMMA SEPARATION: Put commas between distinct structural components while strictly preserving their original order from the website. ALWAYS put a comma before State/Province (e.g. "Oakleigh South, Victoria", "Cincinnati, Ohio"). Address MUST NOT end with a comma or period.
 - COMMA SEPARATION:
   * Put commas between distinct structural components while strictly preserving their original order from the website (e.g. "106 Northpoint Parkway, Suite 400, Acworth, Georgia" or "Suite 260, 2021 Guadalupe Street, Austin, Texas").
   * ALWAYS put a comma before State/Province (e.g. "Oakleigh South, Victoria", "Cincinnati, Ohio", "Kettering, Northamptonshire", "Acworth, Georgia").
@@ -330,7 +391,7 @@ function finalizeParsedAiResult(parsed, crawlData) {
 async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlStartTime = 0 }) {
   let lastError = null;
   for (const modelToTry of candidateModels) {
-    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) {
+    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 25000) {
       console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting AI calls.`);
       break;
     }
@@ -339,7 +400,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
 
     // Recheck loop: if attempt 1 fails, recheck again before switching candidate models
     for (let attempt = 1; attempt <= 2; attempt++) {
-      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) break;
+      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 25000) break;
       try {
         const abortCtrl = new AbortController();
         const timeoutPerModel = (modelToTry === candidateModels[0]) ? (attempt === 1 ? 8500 : 5000) : 4500;
@@ -674,8 +735,10 @@ async function analyzeWithAi(crawlData, aiConfig = {}, restrictedCheck = null, c
   }
 
   const prompt = buildExtractionPrompt(crawlData, false);
+  const reqModel = normalized.model || DEFAULT_MODEL;
   const verifiedGeminiFallbacks = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"];
-  const candidateModels = Array.from(new Set([normalized.model || DEFAULT_MODEL, ...GEMINI_MODELS, ...verifiedGeminiFallbacks])).filter(Boolean).slice(0, 5);
+  // Prioritize requested model, followed immediately by active production Gemini models
+  const candidateModels = Array.from(new Set([reqModel, ...verifiedGeminiFallbacks, ...GEMINI_MODELS])).filter(Boolean).slice(0, 5);
   const { parsed, activeModel } = await callGeminiExtractionApi({
     apiKey,
     candidateModels,

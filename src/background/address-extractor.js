@@ -132,39 +132,62 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   const nonLatinLetters = (cleaned.match(/[\u4e00-\u9fa5\u3040-\u30ff\u0e00-\u0e7f\u0400-\u04ff\u0600-\u06ff]/g) || []).length;
   const isEnglish = latinLetters >= 4 && latinLetters >= nonLatinLetters;
 
-  // Location Context & Priority hierarchy:
-  // Contact Us Page HQ (Tier 0.5) > Contact Us Page Operational (Tier 0.8) > Homepage/Other HQ (Tier 1.0) > Operational/Homepage (Tier 2.0) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7) > Registered Office (Tier 8) > Branch (Tier 8.5) > Distributor/Dealer (Tier 9)
-  const isRegisteredOffice = /\b(?:registered\s*office|registered\s*in\b|company\s*registration\b|domicilio\s*social|registered\s*agent|legal\s*address|statutory\s*office)\b/i.test(rawText + " " + contextText);
-  const hasHqKeyword = !isRegisteredOffice && (
-    /\b(?:headquarters|head\s*office|corporate\s*office|main\s*office|principal\s*office|hq|main\s*factory|main\s*plant|main\s*facility|sede\s*central|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(rawText + " " + contextText) ||
-    /(?:總公司|总公司|總部|总部|本公司|集團總部|集团总部|總廠|总厂|本廠|本厂|本部|本社|本店)/i.test(rawText + " " + contextText) ||
+  // Location Context & Priority hierarchy (Rule 1: Headquarters Priority & Address Selection):
+  // 1. Explicit Global/Corporate HQ (Tier 0.2/0.4)
+  // 2. Head Office (Tier 0.5/0.7)
+  // 3. Main Office (Tier 0.7/0.9)
+  // Contact Us Operational (Tier 0.8) > Homepage/Operational (Tier 2.0) > Profile (Tier 3) > JSON-LD (Tier 4) > Map (Tier 5) > Footer (Tier 6) > General (Tier 7)
+  // 4. Registered Office (Tier 8.0 - only when no physical HQ is available)
+  // Branch / Warehouse / Showroom / Dealer (Tier 8.5/9.0 - never selected over HQ)
+  const combinedContext = (rawText + " " + contextText + " " + (pageUrl || "")).toLowerCase();
+  const isRegisteredOffice = /\b(?:registered\s*office|registered\s*in\b|company\s*registration\b|domicilio\s*social|registered\s*agent|legal\s*address|statutory\s*office)\b/i.test(combinedContext);
+
+  const hasGlobalHqKeyword = !isRegisteredOffice && (
+    /\b(?:global\s+(?:headquarters|hq)|corporate\s+(?:headquarters|hq)|world\s+(?:headquarters|hq)|principal\s+headquarters)\b/i.test(combinedContext) ||
+    /(?:集團總部|集团总部|全球總部|全球总部)/i.test(combinedContext)
+  );
+
+  const hasHeadOfficeKeyword = !isRegisteredOffice && (
+    /\b(?:head\s*office|headquarters|hq|h\.q\.)\b/i.test(combinedContext) ||
+    /(?:總公司|总公司|總部|总部|本公司|本社|本店)/i.test(combinedContext) ||
     isHq || source === "headquarters"
   );
+
+  const hasMainOfficeKeyword = !isRegisteredOffice && (
+    /\b(?:main\s*office|central\s*office|corporate\s*office|principal\s*office|main\s*factory|main\s*plant|main\s*facility|sede\s*central|oficinas?\s*central(?:es)?|sede\s*principal|oficina\s*principal)\b/i.test(combinedContext) ||
+    /(?:總廠|总厂|本廠|本厂|本部)/i.test(combinedContext)
+  );
+
+  const hasHqKeyword = hasGlobalHqKeyword || hasHeadOfficeKeyword || hasMainOfficeKeyword;
 
   const isDedicatedContactSource = (source === "contact" || /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|kontakt|contacto|contactenos|contatti|contactez|contato|hubungi|kontak|impressum)/i.test(pageUrl || "")) && source !== "homepage";
   const isOperationalContact = isDedicatedContactSource || /\b(?:showroom|factory|plant|workshop|store|visiting|our\s+location)\b/i.test(contextText);
 
-  // Only demote explicit secondary/branch offices (NEVER treat manufacturing plants, factories, warehouses, or units as branches!)
-  const hasBranchKeyword = /\b(?:branch(?:\s*office)?|regional\s*office|overseas\s*office|sales\s*office|subsidiary|sucursal|delegaci[oó]n|filiale|filial)\b/i.test(rawText + " " + contextText) ||
-    /(?:海外子公司|全资子公司|控股子公司|子公司|海外办事处|办事处|辦事處|国内分公司|分公司|分處|分处|營業所|营业所|經銷商|经销商)/i.test(rawText + " " + contextText) ||
+  // Demote explicit branch/warehouse/showroom/dealers (never select over HQ)
+  const hasBranchKeyword = /\b(?:branch(?:\s*office)?|regional\s*office|overseas\s*office|sales\s*office|subsidiary|sucursal|delegaci[oó]n|filiale|filial|warehouse|showroom|dealer)\b/i.test(combinedContext) ||
+    /(?:海外子公司|全资子公司|控股子公司|子公司|海外办事处|办事处|辦事處|国内分公司|分公司|分處|分处|營業所|营业所|經銷商|经销商)/i.test(combinedContext) ||
     locationType === "branch" || source === "branch";
   const hasDistributorKeyword = /\b(?:distributors?|dealers?|stockists?|resellers?|partners?)\b/i.test(pageUrl) || source === "distributor" || locationType === "distributor";
 
   let basePriority = 7;
   let locType = locationType || "general";
 
-  if (isDedicatedContactSource && hasHqKeyword) {
-    basePriority = 0.5;
+  if (hasGlobalHqKeyword) {
+    basePriority = isDedicatedContactSource ? 0.2 : 0.4;
+    locType = "headquarters";
+    isHq = true;
+  } else if (hasHeadOfficeKeyword) {
+    basePriority = isDedicatedContactSource ? 0.5 : 0.7;
+    locType = "headquarters";
+    isHq = true;
+  } else if (hasMainOfficeKeyword) {
+    basePriority = isDedicatedContactSource ? 0.7 : 0.9;
     locType = "headquarters";
     isHq = true;
   } else if (isDedicatedContactSource) {
     basePriority = 0.8;
     locType = "contact";
     isHq = false;
-  } else if (hasHqKeyword) {
-    basePriority = 1.0;
-    locType = "headquarters";
-    isHq = true;
   } else if (source === "homepage" || isOperationalContact) {
     basePriority = 2.0;
     locType = source === "homepage" ? "homepage" : "operational_contact";
@@ -183,14 +206,14 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     locType = "footer";
   }
 
-  // Legal Registered Office is strictly demoted so operational contact addresses and showrooms always take precedence
+  // Legal Registered Office is strictly demoted (Tier 4 priority - only when no physical HQ is available)
   if (isRegisteredOffice && !hasHqKeyword) {
-    basePriority = 8;
+    basePriority = 8.0;
     locType = "registered_office";
     isHq = false;
   }
 
-  // Deprioritize explicit branch offices if not marked as Headquarters
+  // Deprioritize explicit branch offices / warehouses / showrooms if not marked as Headquarters
   if (hasBranchKeyword && !hasHqKeyword) {
     basePriority = 8.5;
     locType = "branch";
@@ -199,7 +222,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
 
   // Deprioritize third-party reseller / distributor addresses if not marked as Headquarters
   if (hasDistributorKeyword && !hasHqKeyword) {
-    basePriority = 9;
+    basePriority = 9.0;
     locType = "distributor";
     isHq = false;
   }
@@ -528,8 +551,9 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
     const beforeText = processedHtml.slice(Math.max(0, am.index - 500), am.index);
     const ctx = getContext(beforeText, defaultSource);
     const raw = stripHtml(am[1]);
-    if (raw.length > 10) {
-      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
+    const combinedBlock = raw.replace(/\n+/g, ", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    if (combinedBlock.length > 10) {
+      addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
   }
 

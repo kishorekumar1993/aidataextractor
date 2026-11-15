@@ -370,7 +370,8 @@ async function crawlWebsite(targetUrl, options = {}) {
   // 1. Upfront Multi-Hop 3xx Server-Side Redirect Chain Resolution
   // Follows all 301/302/303/307/308 hops (up to 4 hops budget) to discover the true final destination
   try {
-    redirectChainInfo = await resolveRedirectChain(targetUrl, 4, { signal: options.abortSignal });
+    const redirectTimeout = Math.min(2500, Math.max(1000, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
+    redirectChainInfo = await resolveRedirectChain(targetUrl, 4, { signal: options.abortSignal, timeoutMs: redirectTimeout });
     if (redirectChainInfo && redirectChainInfo.hops > 0 && redirectChainInfo.finalUrl && redirectChainInfo.finalUrl !== targetUrl) {
       if (isRedirectDomain(targetUrl, redirectChainInfo.finalUrl)) {
         redirected = true;
@@ -386,8 +387,9 @@ async function crawlWebsite(targetUrl, options = {}) {
 
   try {
     if (!mainRes) {
+      const mainTimeout = Math.min(4000, Math.max(1000, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
       mainRes = await safeFetchHtml(finalUrl, {
-        timeoutMs: 8000,
+        timeoutMs: mainTimeout,
         headers: {
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }
@@ -397,7 +399,7 @@ async function crawlWebsite(targetUrl, options = {}) {
     // If HTTP failed, returned 403, 400, 0, empty HTML, or anti-bot challenge:
     // Automatically try protocol swap (http <-> https), www toggle, and root homepage fallback
     let isMainFailed = !mainRes || !mainRes.ok || mainRes.status === 0 || !mainRes.html || mainRes.html.trim().length === 0 || isAntiBotChallenge(mainRes.html, mainRes.status);
-    if (isMainFailed && pagesFetchedCount < MAX_CRAWL_PAGES) {
+    if (isMainFailed && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
       const fallbackUrls = [];
       const urlToFallback = finalUrl || targetUrl;
       if (/^http:\/\//i.test(urlToFallback)) {
@@ -419,9 +421,10 @@ async function crawlWebsite(targetUrl, options = {}) {
 
       const targetFallbacks = fallbackUrls.slice(0, 2);
       for (const altUrl of targetFallbacks) {
-        if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
+        if (pagesFetchedCount >= MAX_CRAWL_PAGES || isCrawlTimeExceeded()) break;
+        const altTimeout = Math.min(2500, Math.max(800, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
         const res = await safeFetchHtml(altUrl, {
-          timeoutMs: 5000,
+          timeoutMs: altTimeout,
           headers: {
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
           }
@@ -957,7 +960,7 @@ async function crawlWebsite(targetUrl, options = {}) {
     // High-speed smart social check: ONLY if NO email was discovered on the website at all,
     // check company's official Facebook/LinkedIn pages sequentially with tight 1.5s timeout.
     const socialCandidates = [companySocials.facebook, companySocials.linkedin].filter(Boolean);
-    if (allDiscoveredEmails.size === 0 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
+    if (allDiscoveredEmails.size === 0 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
       for (const socialUrl of socialCandidates) {
         if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
         const normSocial = normalizeCrawlUrl(socialUrl);

@@ -628,11 +628,11 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       extractedData._extractionSource = "own_crawl_fallback";
       extractedData._extractionMode = "ai_first";
       extractedData._isFromAi = false;
-    } else if (elapsedBeforeAi > 23000) {
-      // Crawl took longer than 23s (approaching Chrome SW 28s limit) - fast-path to own crawl to avoid channel timeout
+    } else if (elapsedBeforeAi > 25000) {
+      // Crawl took longer than 25s (approaching Chrome SW 28s limit) - fast-path to own crawl to avoid channel timeout
       console.warn(`[AI Assistant] Crawl took ${elapsedBeforeAi}ms. Fast-pathing to Own Crawl fallback to prevent timeout.`);
       extractedData = heuristicExtraction(crawlResult, restrictedCheck);
-      extractedData._note = "Own Crawl (AI Fallback: Crawl took >23s, fast-path to prevent timeout)";
+      extractedData._note = "Own Crawl (AI Fallback: Crawl took >25s, fast-path to prevent timeout)";
       extractedData._extractionSource = "own_crawl_fallback";
       extractedData._extractionMode = "ai_first";
       extractedData._isFromAi = false;

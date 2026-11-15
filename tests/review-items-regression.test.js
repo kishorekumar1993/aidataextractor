@@ -1820,6 +1820,72 @@ async function runAll() {
     );
   });
 
+  runTest('Item 96: 12 Additional Critical Company Address QC Rules & Headquarters Priority Hierarchy', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Rule 1: Headquarters Priority (Global HQ > Head Office > Main Office > Registered Office; branch never selected over HQ)
+    const targetCandidates = [];
+    ctx.addAddressCandidate(targetCandidates, 'Branch Office: 100 Industrial Road, Chicago, Illinois', 'branch', false, 'branch', 'https://example.com/locations');
+    ctx.addAddressCandidate(targetCandidates, 'Registered Office: 50 Legal Way, Dover, Delaware', 'legal', false, 'registered_office', 'https://example.com/legal');
+    ctx.addAddressCandidate(targetCandidates, 'Main Office: 200 Commerce Way, Dallas, Texas', 'contact', false, 'general', 'https://example.com/contact');
+    ctx.addAddressCandidate(targetCandidates, 'Head Office: 300 Executive Parkway, Atlanta, Georgia', 'contact', true, 'headquarters', 'https://example.com/contact');
+    ctx.addAddressCandidate(targetCandidates, 'Global Headquarters: 500 Corporate Boulevard, New York, New York', 'contact', true, 'headquarters', 'https://example.com/contact');
+
+    // Sort by priority (lowest number = highest priority)
+    targetCandidates.sort((a, b) => a.priority - b.priority);
+    assert.ok(targetCandidates[0].raw.includes('500 Corporate Boulevard'), `Priority 1 must be Global Headquarters, got: ${targetCandidates[0].raw}`);
+    assert.ok(targetCandidates[1].raw.includes('300 Executive Parkway'), `Priority 2 must be Head Office, got: ${targetCandidates[1].raw}`);
+    assert.ok(targetCandidates[2].raw.includes('200 Commerce Way'), `Priority 3 must be Main Office, got: ${targetCandidates[2].raw}`);
+    assert.ok(targetCandidates[3].raw.includes('50 Legal Way'), `Priority 4 must be Registered Office fallback, got: ${targetCandidates[3].raw}`);
+    assert.ok(targetCandidates[4].raw.includes('100 Industrial Road'), `Branch Office must be lowest priority, got: ${targetCandidates[4].raw}`);
+
+    // 2. Rule 3: Multi-line address combination in HTML
+    const htmlWithAddress = '<address>Suite 500<br>700 Innovation Way<br>Sunnyvale, California 94086</address>';
+    const extractedList = [];
+    ctx.extractHtmlAddresses(htmlWithAddress, extractedList, 'contact', 'https://example.com/contact');
+    assert.ok(extractedList.length > 0, 'Must extract from <address> tag');
+    const combined = extractedList[0].raw;
+    assert.ok(combined.includes('Suite 500'), 'Must retain Suite 500');
+    assert.ok(combined.includes('700 Innovation Way'), 'Must retain 700 Innovation Way');
+    assert.ok(combined.includes('Sunnyvale, California'), 'Must retain Sunnyvale, California');
+
+    // 3. Rule 5 & 7: Postal code removed without removing street number or PO Box number
+    const addrWithBox = 'Post Office Box 1234, 456 Main Street, Suite 200, Austin, Texas 78701, United States Of America';
+    const cleaned = ctx.sanitizeRule6CompanyAddress(addrWithBox, 'Test Corp', 'United States Of America');
+    assert.ok(cleaned.includes('Post Office Box 1234'), `Must retain Post Office Box 1234, got: ${cleaned}`);
+    assert.ok(cleaned.includes('456 Main Street'), `Must retain street number 456, got: ${cleaned}`);
+    assert.ok(!cleaned.includes('78701'), `Must strip postal code 78701, got: ${cleaned}`);
+    assert.ok(!cleaned.includes('United States Of America'), `Must strip country name, got: ${cleaned}`);
+
+    // 4. Rule 8: Non-English proper names & diacritics preserved
+    const frenchAddr = '15 Rue De La Paix, 75002 Paris, France';
+    const cleanedFr = ctx.sanitizeRule6CompanyAddress(frenchAddr, 'Societe Exemple', 'France');
+    assert.ok(cleanedFr.includes('Rue De La Paix'), `Must preserve French street name, got: ${cleanedFr}`);
+
+    // 5. Rule 9: Authentic symbols preserved (e.g. '+' never converted to 'And' or 'Plus')
+    const symbolAddr = 'Units 3 + 4, Industrial Park, Birmingham, West Midlands';
+    const cleanedSym = ctx.sanitizeRule6CompanyAddress(symbolAddr, 'Industrial Co', 'United Kingdom');
+    assert.ok(cleanedSym.includes('Units 3 + 4'), `Must preserve '+' symbol in Units 3 + 4, got: ${cleanedSym}`);
+    assert.ok(!cleanedSym.includes('Units 3 And 4') && !cleanedSym.includes('Units 3 Plus 4'), `Must not convert '+' to 'And' or 'Plus'`);
+
+    // 6. Rule 10: Address Unavailable Handling
+    const unavailableAi = {
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Virtual Services',
+      countryName: 'United States Of America',
+      companyAddress: 'Not Available',
+      state: 'Not Available',
+      city: 'Not Available',
+      _isFromAi: true
+    };
+    const qcUnavail = ctx.applyStrictInstructions(unavailableAi, { addressCandidates: [] });
+    assert.strictEqual(qcUnavail.companyAddress, 'Not Available', 'Must return Not Available when no physical address exists');
+    assert.strictEqual(qcUnavail.state, 'Not Available');
+    assert.strictEqual(qcUnavail.city, 'Not Available');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
