@@ -905,15 +905,6 @@ function evaluateCityQC(address, country) {
     cleanAddr = ensureCommaBeforeState(cleanAddr);
   }
 
-  // New Taipei City rule: Must remain Not Available unless a qualifying administrative area is separately identified
-  if (isNewTaipeiCity(cleanAddr)) {
-    const addrWithoutNTC = cleanAddr.replace(/\bnew\s*taipei(\s*city)?\b/gi, " ");
-    if (hasCityDesignation(addrWithoutNTC) || hasRecognizedPlaceName(addrWithoutNTC, RECOGNIZED_TOWNS)) {
-      return "Available";
-    }
-    return "Not Available";
-  }
-
   // Capital City Rule: (If a country's capital is mentioned in the address, then both City and State are considered available.)
   if (hasCapitalInAddress(cleanAddr, country)) {
     return "Available";

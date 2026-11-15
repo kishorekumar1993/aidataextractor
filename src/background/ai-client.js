@@ -140,13 +140,45 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * Address MUST NOT end with a comma or period.
 
 7. STATE & CITY QC RULES (ALL COUNTRIES WORLDWIDE - EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
-- MANDATORY CAPITAL RULE: If a country's capital city is mentioned in companyAddress (e.g. Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
-- State: (County, Province, Prefecture) MUST be considered as State. Mark "Available" ONLY IF a State, County, Province, Prefecture, Territory, Canton, Oblast, Voivodeship, Governorate, Emirate, Region, or the country's Capital City is LITERALLY WRITTEN inside companyAddress (excluding street labels like "County Road"). Do NOT guess or infer a state if none appears in companyAddress! (Example: "28 Rue Zuber, Rixheim" -> State: "Not Available"; "Number 228, Baoshun Road, East District, Chiayi City" -> State: "Not Available").
-- City:
-  * (Town, District, Municipality) MUST be considered as City. Mark "Available" ONLY if an official recognized City, Town, District, Municipality, Township, Commune, or Borough across ANY country worldwide is written in companyAddress (e.g. Melbourne, Sydney, London, Chicago, Austin, Park Hills, Heanor, Rixheim, Jepara, Zurich, Zagreb, Doha, Karachi, Bogota, Nairobi, Bucharest).
-  * CRITICAL: A SUBURB IS NOT A CITY! Suburbs/industrial zones alone without a recognized city/town/district/municipality (e.g. Campbellfield, Rowville, Oakleigh South, Sandton, Penrose, Trafford Park, MM2100 Industrial Town) -> mark "city": "Not Available"!
-  * GEOGRAPHIC NORMALIZATION: Recognized UK town localities (e.g. "Heanor Gate" -> Heanor, Derbyshire) qualify as City: "Available".
-  * TAIWAN RULE: Only Taipei City (capital) or an explicit County/Hsien/Province (e.g. "Changhua County", "Taoyuan County") has State: "Available". County-administered / provincial cities without "County"/"Hsien" (e.g. "Changhua City", "Chiayi City", "Hsinchu City", "Hualien City", "Taichung City", "Kaohsiung City", "Tainan City", "New Taipei City") MUST be State: "Not Available" and City: "Available".
+
+### STATE — MANDATORY QC RULE:
+- State is a dropdown field with only two permitted options:
+  - "Available"
+  - "Not Available"
+- If the State name is explicitly mentioned in the company address, select "Available".
+- If the State name is not mentioned in the company address, select "Not Available".
+- IMPORTANT: The following administrative divisions (County, Province, Prefecture) must also be considered as State:
+  - County
+  - Province
+  - Prefecture
+- Therefore, if a County, Province, or Prefecture name is explicitly mentioned in the company address, select "Available".
+- CAPITAL CITY RULE — MANDATORY:
+  - If a country's capital city is mentioned as the company's location in the company address (e.g. Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
+  - This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
+- Do not guess or infer a State from the City, postal code, country, or other information.
+- Do not treat street names, building names, industrial estates, or business park names as State names (e.g. "County Road" or "State Highway" is a street name, NOT a State).
+- Evaluate this field strictly using the company address extracted from the official company website.
+- Final output: Return only "Available" or "Not Available".
+
+### 8. CITY — MANDATORY QC RULE:
+- City is a dropdown field with only two permitted options:
+  - "Available"
+  - "Not Available"
+- If the City name is explicitly mentioned in the company address, select "Available".
+- If the City name is not mentioned in the company address, select "Not Available".
+- IMPORTANT: The following administrative/locality divisions (Town, District, Municipality) must also be considered as City:
+  - Town
+  - District
+  - Municipality
+- Therefore, if a Town, District, or Municipality name is explicitly mentioned in the company address, select "Available".
+- CAPITAL CITY RULE — MANDATORY:
+  - If a country's capital city is mentioned as the company's location in the company address, BOTH "city": "Available" AND "state": "Available"!
+  - This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
+- Do not guess or infer a City from the State, postal code, country, or other information.
+- Do not automatically treat suburbs, neighborhoods, industrial estates, or business parks as Cities unless they qualify as an officially recognized City, Town, District, or Municipality (e.g. Campbellfield, Rowville, Oakleigh South, Sandton, Penrose, Trafford Park are suburbs -> mark "Not Available").
+- Do not treat street names, building names, or company names as City names (e.g. "District Road", "Town Street", "City Road" are street names -> mark "Not Available").
+- Evaluate this field strictly using the company address extracted from the official company website.
+- Final output: Return only "Available" or "Not Available".
 
 8. EMAIL ID & SECONDARY EMAIL ID:
 - Primary Email: Official general contact or sales inbox (e.g. sales@, info@, contact@, enquiry@).

@@ -1431,6 +1431,93 @@ async function runAll() {
       'Should normalize "10F-2" to "10th Floor-2"');
   });
 
+  runTest('Item 89: Mandatory City and State QC Rules (Town/District/Municipality/Capital -> City/State Available)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Explicit Town, District, Municipality -> City: Available
+    assert.strictEqual(ctx.evaluateCityQC('10 High Street, Heanor Town, Derbyshire', 'United Kingdom'), 'Available', 'Explicit Town must be City Available');
+    assert.strictEqual(ctx.evaluateCityQC('6th Floor-1, Number 27, Sanchong District, New Taipei City', 'Taiwan'), 'Available', 'District & City must be City Available');
+    assert.strictEqual(ctx.evaluateCityQC('15 Victoria Street, Sedibeng Municipality, Gauteng', 'South Africa'), 'Available', 'Municipality must be City Available');
+
+    // 2. Capital City Rule: Capital city in address makes BOTH City and State Available
+    const capTaipei = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: '123 Zhongxiao East Road, Taipei City',
+      countryName: 'Taiwan'
+    }, {}, {});
+    assert.strictEqual(capTaipei.city, 'Available', 'Capital Taipei City -> City Available');
+    assert.strictEqual(capTaipei.state, 'Available', 'Capital Taipei City -> State Available');
+
+    const capTokyo = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: '1-1 Marunouchi, Tokyo',
+      countryName: 'Japan'
+    }, {}, {});
+    assert.strictEqual(capTokyo.city, 'Available', 'Capital Tokyo -> City Available');
+    assert.strictEqual(capTokyo.state, 'Available', 'Capital Tokyo -> State Available');
+
+    const capParis = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: '10 Rue de Rivoli, Paris',
+      countryName: 'France'
+    }, {}, {});
+    assert.strictEqual(capParis.city, 'Available', 'Capital Paris -> City Available');
+    assert.strictEqual(capParis.state, 'Available', 'Capital Paris -> State Available');
+
+    const capWashington = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: '500 Pennsylvania Avenue, Washington D.C.',
+      countryName: 'United States Of America'
+    }, {}, {});
+    assert.strictEqual(capWashington.city, 'Available', 'Capital Washington D.C. -> City Available');
+    assert.strictEqual(capWashington.state, 'Available', 'Capital Washington D.C. -> State Available');
+
+    // 3. County, Province, Prefecture -> State: Available
+    const countyAddr = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: '15 Industrial Park, Kettering, Northamptonshire',
+      countryName: 'United Kingdom'
+    }, {}, {});
+    assert.strictEqual(countyAddr.state, 'Available', 'Northamptonshire county -> State Available');
+    assert.strictEqual(countyAddr.city, 'Available', 'Kettering town -> City Available');
+
+    const provinceAddr = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: '100 Main Road, Limpopo Province',
+      countryName: 'South Africa'
+    }, {}, {});
+    assert.strictEqual(provinceAddr.state, 'Available', 'Explicit Province -> State Available');
+
+    const prefAddr = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: '50 Commerce Way, Kanagawa Prefecture',
+      countryName: 'Japan'
+    }, {}, {});
+    assert.strictEqual(prefAddr.state, 'Available', 'Explicit Prefecture -> State Available');
+
+    // 4. Street name with "County Road", "State Highway", "District Road" must NOT trigger State/City
+    assert.strictEqual(ctx.hasStateInAddress('100 County Road 42, Unknown Village', 'United States Of America'), false, 'County Road must NOT trigger State');
+    assert.strictEqual(ctx.hasStateInAddress('55 State Highway 1, Unknown Village', 'New Zealand'), false, 'State Highway must NOT trigger State');
+    assert.strictEqual(ctx.evaluateCityQC('10 District Road, Unknown Suburb', 'Australia'), 'Not Available', 'District Road must NOT trigger City');
+
+    // 5. Suburb only without recognized City/Town/District/Municipality -> City: Not Available
+    assert.strictEqual(ctx.evaluateCityQC('40 Sarah Street, Campbellfield, Victoria', 'Australia'), 'Not Available', 'Campbellfield suburb only -> City Not Available');
+    assert.strictEqual(ctx.evaluateCityQC('12 Industrie Road, Penrose', 'New Zealand'), 'Not Available', 'Penrose suburb only -> City Not Available');
+
+    // 6. Final output must STRICTLY be only "Available" or "Not Available"
+    assert.ok(['Available', 'Not Available'].includes(capTaipei.city));
+    assert.ok(['Available', 'Not Available'].includes(capTaipei.state));
+    assert.ok(['Available', 'Not Available'].includes(countyAddr.city));
+    assert.ok(['Available', 'Not Available'].includes(countyAddr.state));
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

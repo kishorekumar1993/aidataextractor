@@ -1095,6 +1095,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.city = (cityDetected === "Available") ? "Available" : (apiCity || "Not Available");
     }
 
+    // CAPITAL CITY RULE — MANDATORY:
+    // If a country's capital city is mentioned as the company's location in the company address,
+    // BOTH fields must be selected as:
+    // - City: "Available"
+    // - State: "Available"
+    // This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
+    if (result.companyAddress && result.companyAddress.length >= 3 && result.companyAddress.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country)) {
+      result.city = "Available";
+      result.state = "Available";
+    }
+
     // 6. Email ID & Secondary Email ID: Take from API; fall back to crawl ONLY if empty/invalid
     result.emailId = stripTrailingContactWordsFromEmail(String(result.emailId || "").trim().toLowerCase());
     if (result.emailId && (!isValidCorporateEmail(result.emailId) || isUnwantedEmail(result.emailId))) {
@@ -1322,7 +1333,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.errorKeyword = "Domain Expired";
       result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
       result.errorSnippet = "Domain Expired or Server returned HTTP 404 Not Found (Rule 1)";
-    } else if (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working") {
+    } else if (crawlData && (crawlData.mainHtml !== undefined || crawlData.status || crawlData.fetchError) && (!crawlData.mainHtml || crawlData.mainHtml.trim().length === 0 || crawlData.status === "Not Working")) {
       result.websiteStatus = (crawlData.status && crawlData.status !== "Working") ? crawlData.status : "Not Working";
       result.errorCategory = crawlData.fetchError ? "Unreachable / Timeout" : "No Business Content";
       result.errorKeyword = crawlData.fetchError ? "Connection Failed" : "No Verifiable Content";
@@ -1841,7 +1852,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
 
   // 7. State: Validated based on presence of State / County / Province / Prefecture / Hsien / Region or Capital
-  if (!addr || addr.length < 8 || addr.toLowerCase() === "not available") {
+  if (!addr || addr.length < 5 || addr.toLowerCase() === "not available") {
     result.state = "Not Available";
   } else {
     result.state = hasStateInAddress(addr, country) ? "Available" : "Not Available";
@@ -1849,7 +1860,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 8. City: Evaluated STRICTLY per City QC Rule (Only explicit City, Town, Township, District, Municipality)
   // CRITICAL QC RULE: "Subhurb is consider as city if subhurb was coming means its should mark not available its not city"
-  if (!addr || addr.length < 8 || addr.toLowerCase() === "not available" || addr === "Not Available") {
+  if (!addr || addr.length < 5 || addr.toLowerCase() === "not available" || addr === "Not Available") {
     result.city = "Not Available";
   } else {
     const qcCity = evaluateCityQC(addr, country);
@@ -1858,6 +1869,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     } else {
       result.city = "Available";
     }
+  }
+
+  // CAPITAL CITY RULE — MANDATORY:
+  // If a country's capital city is mentioned as the company's location in the company address,
+  // BOTH fields must be selected as:
+  // - City: "Available"
+  // - State: "Available"
+  // This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
+  if (addr && addr.length >= 3 && addr.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(addr, country)) {
+    result.city = "Available";
+    result.state = "Available";
   }
 
   // 9. Email ID & 10. Secondary Email ID (Strict Grounding & Anti-Hallucination)
