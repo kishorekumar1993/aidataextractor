@@ -1071,33 +1071,29 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.companyAddress = addr || "Not Available";
 
-    // 5. State & City: Evaluate based on complete reconciled address (Rules 7 & 8)
+    // 5. State & City: In AI mode, strictly take AI values directly from API response!
+    // Never override AI's "Available" or "Not Available" with local heuristics.
     const apiState = normalizeAvailability(result.state);
     const apiCity = normalizeAvailability(result.city);
-    const stateDetected = hasStateInAddress(result.companyAddress, country);
-    const cityDetected = evaluateCityQC(result.companyAddress, country);
 
-    if (apiState && apiCity) {
-      // Rule 8: If AI returned "Available" for City, but strict QC detects known suburb,
-      // unincorporated neighborhood, or missing city -> override to "Not Available"
-      if (apiCity === "Available" && cityDetected === "Not Available") {
-        result.city = "Not Available";
-      } else {
-        result.city = apiCity;
-      }
-
-      // Rule 7: If AI returned "Available" for State, but strict QC detects no state/region -> override to "Not Available"
-      if (apiState === "Available" && !stateDetected && !(typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country))) {
-        result.state = "Not Available";
-      } else {
-        result.state = apiState;
-      }
-    } else if (!result.companyAddress || result.companyAddress.toLowerCase() === "not available") {
-      result.state = apiState || "Not Available";
-      result.city = apiCity || "Not Available";
+    // Set State: prioritize AI value, only evaluate from address if AI left it empty
+    if (apiState) {
+      result.state = apiState;
+    } else if (result.companyAddress && result.companyAddress.toLowerCase() !== "not available") {
+      const stateDetected = hasStateInAddress(result.companyAddress, country);
+      result.state = stateDetected ? "Available" : "Not Available";
     } else {
-      result.state = stateDetected ? "Available" : (apiState || "Not Available");
-      result.city = (cityDetected === "Available") ? "Available" : (apiCity || "Not Available");
+      result.state = "Not Available";
+    }
+
+    // Set City: prioritize AI value, only evaluate from address if AI left it empty
+    if (apiCity) {
+      result.city = apiCity;
+    } else if (result.companyAddress && result.companyAddress.toLowerCase() !== "not available") {
+      const cityDetected = evaluateCityQC(result.companyAddress, country);
+      result.city = (cityDetected === "Available") ? "Available" : "Not Available";
+    } else {
+      result.city = "Not Available";
     }
 
     // CAPITAL CITY RULE — MANDATORY:
@@ -1135,6 +1131,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.phoneNumber = cleanPhoneNumber(result.phoneNumber, result.countryName);
 
     // 8. Product counts: Take directly from API; mirror across all 3 fields. DO NOT recompute from crawl unless completely missing.
+    result.productImages = result.productImages || result.numberOfProductImages;
     const hasApiProd = result.numberOfProducts !== undefined && result.numberOfProducts !== null && String(result.numberOfProducts).trim() !== "";
     const hasApiImg = result.productImages !== undefined && result.productImages !== null && String(result.productImages).trim() !== "";
     const hasApiDesc = result.numberOfProductDescriptions !== undefined && result.numberOfProductDescriptions !== null && String(result.numberOfProductDescriptions).trim() !== "";

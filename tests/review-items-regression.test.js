@@ -1696,6 +1696,45 @@ async function runAll() {
     assert.strictEqual(finalResult.numberOfProductDescriptions, '2');
   });
 
+  runTest('Item 93: In AI mode, strictly preserve AI City & State without heuristic override (asdw.net / East Brunswick test case)', () => {
+    const { ctx } = createTestContext();
+
+    const aiOutput = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      notWorkingReason: '',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'All Seasons Window & Door',
+      countryName: 'United States Of America',
+      companyAddress: '28 Edgeboro Road, East Brunswick, New Jersey',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'customer@asdw.net',
+      secondaryEmailId: '',
+      phoneNumber: '7322387100',
+      numberOfProducts: '3',
+      numberOfProductImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    const finalResult = ctx.applyStrictInstructions(aiOutput, {}, {});
+
+    assert.strictEqual(finalResult.websiteStatus, 'Working', 'Website Status must be Working');
+    assert.strictEqual(finalResult.businessType, 'Manufacturer', 'Business Type must be Manufacturer');
+    assert.strictEqual(finalResult.companyProfile, 'Available', 'Company Profile must be Available');
+    assert.strictEqual(finalResult.companyName, 'All Seasons Window & Door', 'Company Name must be All Seasons Window & Door');
+    assert.strictEqual(finalResult.countryName, 'United States Of America', 'Country must be United States Of America');
+    assert.strictEqual(finalResult.companyAddress, '28 Edgeboro Road, East Brunswick, New Jersey', 'Address must be preserved');
+    assert.strictEqual(finalResult.state, 'Available', 'State must be Available');
+    assert.strictEqual(finalResult.city, 'Available', 'City must be Available as provided by AI (not overridden to Not Available)');
+    assert.strictEqual(finalResult.emailId, 'customer@asdw.net', 'Email must be customer@asdw.net');
+    assert.strictEqual(finalResult.phoneNumber, '7322387100', 'Phone number must be 7322387100');
+    assert.strictEqual(finalResult.numberOfProducts, '3', 'Products must be 3');
+    assert.strictEqual(finalResult.productImages, '3', 'Product images must be 3');
+    assert.strictEqual(finalResult.numberOfProductDescriptions, '3', 'Product descriptions must be 3');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

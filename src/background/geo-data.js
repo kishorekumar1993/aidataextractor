@@ -127,6 +127,7 @@ const RECOGNIZED_TOWNS = [
   "sheffield", "newcastle", "nottingham", "cardiff", "belfast", "cambridge", "oxford", "coventry",
   "leicester", "southampton", "aberdeen", "plymouth", "swansea", "dundee", "norwich",
   // United States cities / towns
+  "east brunswick", "new brunswick", "south brunswick", "brunswick",
   "morgan hill", "rock hill", "chapel hill", "cherry hill", "sanborn", "beaverton",
   "new york", "los angeles", "chicago", "houston", "phoenix", "philadelphia", "san antonio",
   "san diego", "dallas", "san jose", "austin", "jacksonville", "fort worth", "columbus",

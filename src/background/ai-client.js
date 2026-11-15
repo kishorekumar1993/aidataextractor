@@ -289,6 +289,9 @@ function finalizeParsedAiResult(parsed, crawlData) {
   // DO NOT alter or strip words from AI address using crawl fragments.
 
   if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {
+    if ((parsed.productImages === undefined || parsed.productImages === null || String(parsed.productImages).trim() === "") && parsed.numberOfProductImages) {
+      parsed.productImages = parsed.numberOfProductImages;
+    }
     if (parsed.productImages !== undefined && parsed.productImages !== null && String(parsed.productImages).trim() !== "") {
       parsed.productImages = normalizeCountValue(parsed.productImages);
     }
