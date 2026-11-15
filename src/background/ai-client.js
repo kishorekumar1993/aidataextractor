@@ -262,29 +262,20 @@ function finalizeParsedAiResult(parsed, crawlData) {
     parsed.secondaryEmailId = "";
   }
 
+  // Fall back to crawl emails ONLY if AI returned completely empty email
   const crawlEmails = (crawlData && Array.isArray(crawlData.emails) ? crawlData.emails : []).map(e => String(e).trim().toLowerCase());
   if ((!parsed.emailId || !parsed.emailId.trim()) && crawlEmails.length > 0) {
     parsed.emailId = crawlEmails.find(e => isValidCorporateEmail(e)) || crawlEmails[0] || "";
-  }
-  if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) && crawlEmails.length > 1) {
-    const second = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
-    parsed.secondaryEmailId = second || "";
-  }
-  if (parsed.secondaryEmailId && parsed.emailId && parsed.secondaryEmailId.trim().toLowerCase() === parsed.emailId.trim().toLowerCase()) {
-    parsed.secondaryEmailId = "";
-  }
-  if (parsed.companyAddress && typeof parsed.companyAddress === "string" && typeof stripBlindlyAddedNumber === "function") {
-    const rawCands = (crawlData && Array.isArray(crawlData.addressCandidates))
-      ? crawlData.addressCandidates.map(c => typeof c === "object" ? c.raw : c).join(" ")
-      : "";
-    parsed.companyAddress = stripBlindlyAddedNumber(parsed.companyAddress, rawCands, rawCands);
+    if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) && crawlEmails.length > 1) {
+      const second = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
+      parsed.secondaryEmailId = second || "";
+    }
   }
 
-  if (parsed.phoneNumber) {
-    if (typeof cleanPhoneNumber === "function") {
-      parsed.phoneNumber = cleanPhoneNumber(parsed.phoneNumber, parsed.countryName);
-    }
-  } else if (crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
+  // Clean domestic phone number; fall back to crawl phone ONLY if AI returned completely empty
+  if (parsed.phoneNumber && typeof cleanPhoneNumber === "function") {
+    parsed.phoneNumber = cleanPhoneNumber(parsed.phoneNumber, parsed.countryName);
+  } else if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
     for (const p of crawlData.phones) {
       const cl = typeof cleanPhoneNumber === "function" ? cleanPhoneNumber(p, parsed.countryName) : p;
       if (cl) {
@@ -294,26 +285,22 @@ function finalizeParsedAiResult(parsed, crawlData) {
     }
   }
 
-  if (parsed.addressClassification) {
-    const cls = parsed.addressClassification;
-    if (cls.localityCategory === "Unincorporated Neighborhood/Suburb/Industrial Estate" || cls.localityCategory === "None") {
-      parsed.city = "Not Available";
-    } else if (cls.localityCategory === "National Capital City") {
-      parsed.city = "Available";
-      parsed.state = "Available";
-    }
-    delete parsed.addressClassification;
-  }
+  // Mandatory user rule: When AI extracts address, TAKE AI ADDRESS DIRECTLY.
+  // DO NOT alter or strip words from AI address using crawl fragments.
 
   if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {
-    const hasProd = parsed.numberOfProducts !== undefined && parsed.numberOfProducts !== null && String(parsed.numberOfProducts).trim() !== "";
-    const hasImg = parsed.productImages !== undefined && parsed.productImages !== null && String(parsed.productImages).trim() !== "";
-    const hasDesc = parsed.numberOfProductDescriptions !== undefined && parsed.numberOfProductDescriptions !== null && String(parsed.numberOfProductDescriptions).trim() !== "";
-    if (!hasProd || !hasImg || !hasDesc) {
-      const ownCrawlProdCount = computeOwnCrawlProductCount(crawlData);
-      if (!hasProd) parsed.numberOfProducts = hasImg ? normalizeCountValue(parsed.productImages) : ownCrawlProdCount;
-      if (!hasImg) parsed.productImages = hasProd ? normalizeCountValue(parsed.numberOfProducts) : ownCrawlProdCount;
-      if (!hasDesc) parsed.numberOfProductDescriptions = hasImg ? normalizeCountValue(parsed.productImages) : ownCrawlProdCount;
+    if (parsed.productImages !== undefined && parsed.productImages !== null && String(parsed.productImages).trim() !== "") {
+      parsed.productImages = normalizeCountValue(parsed.productImages);
+    }
+    if (parsed.numberOfProducts !== undefined && parsed.numberOfProducts !== null && String(parsed.numberOfProducts).trim() !== "") {
+      parsed.numberOfProducts = normalizeCountValue(parsed.numberOfProducts);
+    } else if (parsed.productImages) {
+      parsed.numberOfProducts = parsed.productImages;
+    }
+    if (parsed.numberOfProductDescriptions !== undefined && parsed.numberOfProductDescriptions !== null && String(parsed.numberOfProductDescriptions).trim() !== "") {
+      parsed.numberOfProductDescriptions = normalizeCountValue(parsed.numberOfProductDescriptions);
+    } else if (parsed.productImages) {
+      parsed.numberOfProductDescriptions = parsed.productImages;
     }
   } else {
     parsed.numberOfProducts = "";
@@ -361,10 +348,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
                 temperature: 0,
                 maxOutputTokens: 1024,
                 responseMimeType: "application/json",
-                responseSchema: GEMINI_RESPONSE_SCHEMA,
-                thinkingConfig: {
-                  thinkingBudget: 0
-                }
+                responseSchema: GEMINI_RESPONSE_SCHEMA
               }
             })
           });

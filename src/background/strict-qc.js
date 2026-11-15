@@ -1048,7 +1048,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.countryName = country;
 
-    // 4. Company Address: Take directly from API with safe Rule 6 cleanup. Strictly preserve AI address; NEVER overwrite with local crawl raw candidates!
+    // 4. Company Address: Take directly from API with safe Rule 6 cleanup.
+    // Mandatory user rule: In AI mode, TAKE AI DATA ONLY. Strictly preserve AI address; NEVER overwrite or corrupt with local crawl fragments!
     let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
     const aiAddrMatch = resolveBestAddressCandidateAndSource(addr, crawlData);
     const selectedAiCandidate = aiAddrMatch.candidate || (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates[0]) || null;
@@ -1067,15 +1068,6 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       addr = typeof sanitizeRule6CompanyAddress === "function"
         ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData)
         : toTitleCase(addr);
-
-      // Strip extra word "Number" if "No." / "No" / "#" / "號" was not in authentic raw evidence
-      const allAiEvidence = (bestRaw || "") + " " + (crawlData && Array.isArray(crawlData.addressCandidates) ? crawlData.addressCandidates.map(c => typeof c === "object" ? c.raw : c).join(" ") : "") + " " + (crawlData && crawlData.contactPageText ? crawlData.contactPageText.slice(0, 1500) : "");
-      if (typeof stripBlindlyAddedNumber === "function") {
-        addr = stripBlindlyAddedNumber(addr, allAiEvidence, bestRaw);
-      }
-      if (bestRaw && typeof stripExtraWordsFromAddress === "function") {
-        addr = stripExtraWordsFromAddress(addr, bestRaw);
-      }
     }
     result.companyAddress = addr || "Not Available";
 
@@ -1119,16 +1111,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.state = "Available";
     }
 
-    // 6. Email ID & Secondary Email ID: Take from API; fall back to crawl ONLY if empty/invalid
+    // 6. Email ID & Secondary Email ID: Take from API directly. DO NOT combine crawl emails.
     result.emailId = stripTrailingContactWordsFromEmail(String(result.emailId || "").trim().toLowerCase());
     if (result.emailId && (!isValidCorporateEmail(result.emailId) || isUnwantedEmail(result.emailId))) {
       result.emailId = "";
-    }
-    if (!result.emailId && crawlData && Array.isArray(crawlData.emails) && crawlData.emails.length > 0) {
-      const validPrim = crawlData.emails
-        .map(e => stripTrailingContactWordsFromEmail(String(e || "").trim().toLowerCase()))
-        .find(e => e && isValidCorporateEmail(e) && !isUnwantedEmail(e));
-      if (validPrim) result.emailId = validPrim;
     }
 
     result.secondaryEmailId = stripTrailingContactWordsFromEmail(String(result.secondaryEmailId || "").trim().toLowerCase());
@@ -1144,37 +1130,28 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     )) {
       result.secondaryEmailId = "";
     }
-    if (!result.secondaryEmailId && crawlData && Array.isArray(crawlData.emails) && crawlData.emails.length > 0) {
-      const primLower = (result.emailId || "").toLowerCase();
-      const distinctCand = crawlData.emails.find(e => {
-        const eClean = stripTrailingContactWordsFromEmail(String(e || "").trim().toLowerCase());
-        return eClean && eClean !== primLower && eClean !== ("mailto" + primLower) && isValidCorporateEmail(eClean) && !isUnwantedEmail(eClean);
-      });
-      if (distinctCand) {
-        result.secondaryEmailId = stripTrailingContactWordsFromEmail(distinctCand.trim().toLowerCase());
-      }
-    }
 
-    // 7. Phone Number: Take from API (cleaned via calling-code & toll-free rules); fall back to crawl ONLY if empty/invalid
+    // 7. Phone Number: Take from API directly (cleaned via calling-code & toll-free rules). DO NOT combine crawl phones.
     result.phoneNumber = cleanPhoneNumber(result.phoneNumber, result.countryName);
-    if (!result.phoneNumber && crawlData && crawlData.phones && crawlData.phones.length > 0) {
-      for (const cand of crawlData.phones) {
-        const cleaned = cleanPhoneNumber(cand, result.countryName);
-        if (cleaned) {
-          result.phoneNumber = cleaned;
-          break;
-        }
-      }
-    }
 
-    // 8. Product counts: Take directly from API; fall back to own crawl ONLY if API left them empty
+    // 8. Product counts: Take directly from API; mirror across all 3 fields. DO NOT recompute from crawl unless completely missing.
     const hasApiProd = result.numberOfProducts !== undefined && result.numberOfProducts !== null && String(result.numberOfProducts).trim() !== "";
     const hasApiImg = result.productImages !== undefined && result.productImages !== null && String(result.productImages).trim() !== "";
     const hasApiDesc = result.numberOfProductDescriptions !== undefined && result.numberOfProductDescriptions !== null && String(result.numberOfProductDescriptions).trim() !== "";
-    const fallbackProdCount = (!hasApiProd || !hasApiImg || !hasApiDesc) ? computeOwnCrawlProductCount(crawlData) : "";
-    result.productImages = hasApiImg ? normalizeCountValue(result.productImages) : fallbackProdCount;
-    result.numberOfProducts = hasApiProd ? normalizeCountValue(result.numberOfProducts) : (hasApiImg ? result.productImages : fallbackProdCount);
-    result.numberOfProductDescriptions = hasApiDesc ? normalizeCountValue(result.numberOfProductDescriptions) : (hasApiImg ? result.productImages : fallbackProdCount);
+    if (hasApiImg) {
+      result.productImages = normalizeCountValue(result.productImages);
+      result.numberOfProducts = hasApiProd ? normalizeCountValue(result.numberOfProducts) : result.productImages;
+      result.numberOfProductDescriptions = hasApiDesc ? normalizeCountValue(result.numberOfProductDescriptions) : result.productImages;
+    } else if (hasApiProd) {
+      result.numberOfProducts = normalizeCountValue(result.numberOfProducts);
+      result.productImages = result.numberOfProducts;
+      result.numberOfProductDescriptions = hasApiDesc ? normalizeCountValue(result.numberOfProductDescriptions) : result.numberOfProducts;
+    } else {
+      const fallbackProdCount = computeOwnCrawlProductCount(crawlData);
+      result.productImages = fallbackProdCount;
+      result.numberOfProducts = fallbackProdCount;
+      result.numberOfProductDescriptions = fallbackProdCount;
+    }
 
     populateEvidenceAndSourceLinks(result, crawlData, selectedAiCandidate, bestRaw);
     return result;

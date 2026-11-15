@@ -1551,6 +1551,151 @@ async function runAll() {
     assert.strictEqual(checkAdult.category, 'Adult & Porn');
   });
 
+  runTest('Item 91: United States Of America Mandatory QC Rules (County/Province/Prefecture -> State; Town/District/Municipality -> City; Capital Rule)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. County considered as State:
+    const usaCounty = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Orange County Components LLC',
+      countryName: 'United States Of America',
+      companyAddress: '100 Innovation Way, Orange County',
+      productImages: '3'
+    }, {}, {});
+    assert.strictEqual(usaCounty.state, 'Available', 'Orange County must be considered as State Available');
+
+    const usaCookCounty = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Cook County Precision Inc',
+      countryName: 'United States Of America',
+      companyAddress: '450 North Michigan Avenue, Cook County',
+      productImages: '3'
+    }, {}, {});
+    assert.strictEqual(usaCookCounty.state, 'Available', 'Cook County must be considered as State Available');
+
+    // 2. Town / District / Municipality considered as City:
+    const usaDistrict = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Midwest Fabrication LLC',
+      countryName: 'United States Of America',
+      companyAddress: '200 Logistics Drive, Elgin District, Illinois',
+      productImages: '3'
+    }, {}, {});
+    assert.strictEqual(usaDistrict.city, 'Available', 'District must be considered as City Available');
+    assert.strictEqual(usaDistrict.state, 'Available', 'Illinois is State Available');
+
+    const usaTown = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Carolina Metals Corp',
+      countryName: 'United States Of America',
+      companyAddress: '15 Main Street, Cary Town, North Carolina',
+      productImages: '3'
+    }, {}, {});
+    assert.strictEqual(usaTown.city, 'Available', 'Town must be considered as City Available');
+    assert.strictEqual(usaTown.state, 'Available', 'North Carolina is State Available');
+
+    const usaMuni = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Pennsylvania Castings Inc',
+      countryName: 'United States Of America',
+      companyAddress: '88 Foundry Road, Bethel Park Municipality, Pennsylvania',
+      productImages: '3'
+    }, {}, {});
+    assert.strictEqual(usaMuni.city, 'Available', 'Municipality must be considered as City Available');
+    assert.strictEqual(usaMuni.state, 'Available', 'Pennsylvania is State Available');
+
+    // 3. Capital City Rule:
+    const usaCapital = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Federal Systems LLC',
+      countryName: 'United States Of America',
+      companyAddress: '1200 K Street NW, Washington',
+      productImages: '3'
+    }, {}, {});
+    assert.strictEqual(usaCapital.city, 'Available', 'Capital Washington must have City Available');
+    assert.strictEqual(usaCapital.state, 'Available', 'Capital Washington must have State Available');
+
+    const usaCapitalDC = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Potomac Defense Inc',
+      countryName: 'United States Of America',
+      companyAddress: '1600 Pennsylvania Avenue, Washington D.C.',
+      productImages: '3'
+    }, {}, {});
+    assert.strictEqual(usaCapitalDC.city, 'Available', 'Capital Washington D.C. must have City Available');
+    assert.strictEqual(usaCapitalDC.state, 'Available', 'Capital Washington D.C. must have State Available');
+
+    // 4. Suburb without City -> City: Not Available, State: Available
+    const usaSuburb = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Midwest Automation Corp',
+      countryName: 'United States Of America',
+      companyAddress: '27W705 Hickory Lane, Northwoods, Illinois',
+      productImages: '3'
+    }, {}, {});
+    assert.strictEqual(usaSuburb.city, 'Not Available', 'Northwoods is unincorporated neighborhood -> City Not Available');
+    assert.strictEqual(usaSuburb.state, 'Available', 'Illinois is State Available');
+  });
+
+  runTest('Item 92: Pure AI extraction mode (TAKE AI DATA ONLY - zero crawl heuristic combining)', () => {
+    const { ctx } = createTestContext();
+
+    // When AI provides structured data, DO NOT combine or overwrite with crawl heuristic data:
+    const aiOutput = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Alpha Precision Manufacturing Limited',
+      countryName: 'United States Of America',
+      companyAddress: '500 Enterprise Way, Elgin, Illinois',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'info@alphaprecision.com',
+      secondaryEmailId: '',
+      phoneNumber: '8475551234',
+      numberOfProducts: '2',
+      productImages: '2',
+      numberOfProductDescriptions: '2'
+    };
+
+    // Crawl data has conflicting/unwanted items (different email, secondary email from footer, different phone, raw address fragment, 3 detected products)
+    const noisyCrawlData = {
+      emails: ['info@alphaprecision.com', 'webmaster@externalhost.com', 'developer@marketing.org'],
+      phones: ['+1 800 555 9999', '3125550000'],
+      addressCandidates: [{ raw: '500 Enterprise Way', source: 'footer' }],
+      detectedProductCount: 5,
+      detectedImageCount: 5
+    };
+
+    const finalResult = ctx.applyStrictInstructions(aiOutput, noisyCrawlData, {});
+
+    // Verification:
+    assert.strictEqual(finalResult.companyAddress, '500 Enterprise Way, Elgin, Illinois', 'Must retain AI address without stripping words from raw crawl candidates');
+    assert.strictEqual(finalResult.emailId, 'info@alphaprecision.com', 'Must retain pure AI email');
+    assert.strictEqual(finalResult.secondaryEmailId, '', 'Must NOT backfill secondary email from crawl footer/webmaster emails');
+    assert.strictEqual(finalResult.phoneNumber, '8475551234', 'Must NOT overwrite AI phone with crawl phone');
+    assert.strictEqual(finalResult.numberOfProducts, '2', 'Must retain AI product count (2) and NOT recalculate to 3 from crawl count (5)');
+    assert.strictEqual(finalResult.productImages, '2');
+    assert.strictEqual(finalResult.numberOfProductDescriptions, '2');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

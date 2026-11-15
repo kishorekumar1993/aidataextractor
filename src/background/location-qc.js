@@ -370,6 +370,35 @@ function hasStateInAddress(addr, country) {
     return false;
   }
 
+  // United States strict rule:
+  // Note: (County, Province, Prefecture) should be considered as State.
+  // (If a country’s capital is mentioned in the address, then both City and State are considered available.)
+  // - Capital: Washington / Washington D.C. / District of Columbia -> State: Available
+  // - Explicit County, Province, Prefecture -> State: Available
+  // - Any of the 50 US States (full name or official abbreviation with ZIP/comma) -> State: Available
+  const isUS = isUnitedStatesLocation(lower, country);
+  if (isUS) {
+    if (hasCapitalInAddress(lower, country) || /\b(?:washington\s*d\.?c\.?|district\s*of\s*columbia)\b/i.test(lower)) {
+      return true;
+    }
+    const strippedRoadsUS = lower
+      .replace(/\bcounty\s+(?:road|rd\.?|highway|hwy\.?|route|rte\.?|line|ln\.?|street|st\.?|avenue|ave\.?|drive|dr\.?|way)\b/gi, " ")
+      .replace(/\bstate\s+(?:road|rd\.?|highway|hwy\.?|route|rte\.?|line|street|st\.?)\b/gi, " ");
+    if (/\b(?:county|province|prefecture)\b/i.test(strippedRoadsUS)) {
+      return true;
+    }
+    if (/\bco\.?\s+(?!ltd\b|limited\b|inc\b|corp\b|llc\b)[a-z]{3,}\b/i.test(strippedRoadsUS) ||
+        /\b(?!limited\b|ltd\b|inc\b|corp\b|llc\b)[a-z]{3,}\s+co\.?\b(?=[,\s]|$)/i.test(strippedRoadsUS)) {
+      return true;
+    }
+    const US_STATE_CODES_STR = "al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy";
+    if (new RegExp(`\\b(?:${US_STATE_CODES_STR})\\s+\\d{5}(?:-\\d{4})?\\b`, "i").test(lower)) return true;
+    if (new RegExp(`,\\s*(?:${US_STATE_CODES_STR})(?:\\s*,|\\s*\\d{5}|\\s*$)`, "i").test(lower)) return true;
+    if (new RegExp(`^(?:${US_STATE_CODES_STR})(?:\\s+\\d{5}(?:-\\d{4})?)?$`, "i").test(lower.trim())) return true;
+    if (hasNamedStateOrProvince(lower)) return true;
+    return false;
+  }
+
   // Country official capital city exception (both City and State are considered available)
   if (hasCapitalInAddress(lower, country)) return true;
 
@@ -1016,16 +1045,18 @@ function evaluateCityQC(address, country) {
   }
 
   // United States City Evaluation (Strict QC Rule):
-  // Note: (Town, Township, Borough, Municipality, Village) should be considered as City.
+  // Note: (Town, District, Municipality) should be considered as City.
+  // (If a country’s capital is mentioned in the address, then both City and State are considered available.)
   // Standard US address format: [Street Address], [City/Town], [State] [ZIP]
   if (isUnitedStatesLocation(cleanAddr, country)) {
-    // 1. Capital Rule: Washington D.C. in address -> City: Available
-    if (/\b(?:washington\s*d\.?c\.?|district\s*of\s*columbia)\b/i.test(cleanAddr)) {
+    // 1. Capital Rule: Washington D.C. in address -> City: Available (and State: Available)
+    if (hasCapitalInAddress(cleanAddr, country) || /\b(?:washington\s*d\.?c\.?|district\s*of\s*columbia)\b/i.test(cleanAddr)) {
       return "Available";
     }
-    // 2. Explicit City, Town, Township, Borough, Municipality, Village designation
+    // 2. Explicit City, Town, District, Municipality, Township, Borough, Village designation
+    // Note: (Town, District, Municipality) should be considered as City.
     const strippedUS = stripNonAdministrativeCityTerms(cleanAddr);
-    if (hasExplicitCityWord(strippedUS) || /\b(?:town|township|borough|municipality|village)\b/i.test(strippedUS)) {
+    if (hasExplicitCityWord(strippedUS) || /\b(?:town|township|district|municipality|borough|village)\b/i.test(strippedUS)) {
       return "Available";
     }
     // 3. Recognized US Cities / Towns
