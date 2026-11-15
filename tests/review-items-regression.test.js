@@ -1735,6 +1735,26 @@ async function runAll() {
     assert.strictEqual(finalResult.numberOfProductDescriptions, '3', 'Product descriptions must be 3');
   });
 
+  runTest('Item 94: Post Office Box numbers must NOT be removed from company address; pincodes only are removed', () => {
+    const { ctx } = createTestContext();
+
+    const rawAddrWithPobox = 'MO 0253, Jebel Ali Free Zone, PO Box 261619, Dubai, United Arab Emirates';
+    const cleaned = ctx.sanitizeRule6CompanyAddress(rawAddrWithPobox, 'Gulf Worldwide Distribution FZE', 'United Arab Emirates');
+
+    assert.ok(cleaned.includes('Post Office Box 261619'), `Must retain Post Office Box 261619, got: ${cleaned}`);
+    assert.ok(!cleaned.includes('United Arab Emirates'), `Must strip country name, got: ${cleaned}`);
+
+    // Verify trailing PO Box is also preserved
+    const trailingPobox = 'Unit 4, Industrial Area, Dubai, Post Office Box 82314';
+    const cleanedTrailing = ctx.sanitizeRule6CompanyAddress(trailingPobox, 'Orient Star Parts', 'United Arab Emirates');
+    assert.ok(cleanedTrailing.includes('Post Office Box 82314'), `Must retain trailing Post Office Box 82314, got: ${cleanedTrailing}`);
+
+    // Verify actual postal codes / pincodes ARE still stripped
+    const withPincode = '123 Main Street, Dallas, Texas 75201, United States Of America';
+    const cleanedPin = ctx.sanitizeRule6CompanyAddress(withPincode, 'Acme Corp', 'United States Of America');
+    assert.ok(!cleanedPin.includes('75201'), `Must strip ZIP code 75201, got: ${cleanedPin}`);
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

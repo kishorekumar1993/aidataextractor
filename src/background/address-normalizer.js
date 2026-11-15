@@ -2057,7 +2057,7 @@ function removePostalCodesCarefully(addr) {
   let a = addr;
 
   const streetSuffixPattern = "\\b(?:street|road|avenue|lane|drive|way|place|court|terrace|boulevard|highway|parkway|crescent|close|walk|row|parade|circuit|square|esplanade|mews|alley|st|rd|ave|ln|dr|pl|ct|tce|blvd|hwy|pkwy|cres|cl|sq|strasse|straße|str|rue|via|viale|calle|ulica|ul|namesti|náměstí|avenida|avda|jalan|jl)\\b";
-  const premisePrefixPattern = "\\b(?:suite|unit|bldg|building|floor|fl|rm|room|dept|apartment|apt|flat|lot|plot|block|blk|level|shed|warehouse|factory|p\\.?o\\.?\\s*box|no\\.?|nos\\.?|number|#)\\b";
+  const premisePrefixPattern = "\\b(?:suite|unit|bldg|building|floor|fl|rm|room|dept|apartment|apt|flat|lot|plot|block|blk|level|shed|warehouse|factory|p\\.?o\\.?\\s*box|post\\s*office\\s*box|gpo\\s*box|box|no\\.?|nos\\.?|number|#)\\b";
 
   // 1. Explicitly labeled postal codes (e.g. 'Zip 45241, 12110 Best Place', 'Postal Code: 30543', 'PLZ: 80333', 'PSČ: 602 00', 'CP: 28013')
   a = a.replace(/(?:^|[\s,]+)(?:zip(?:\s*code)?|postal(?:\s*code)?|postcode|pincode|pin|plz|cap|cp|cedex|psč|psc)\s*[:#\-]?\s*(?:\d{4,6}|\d{3}\s*\d{2}|\d{2}-\d{3})[\s,]+/gi, ", ");
@@ -2114,8 +2114,9 @@ function removePostalCodesCarefully(addr) {
   a = a.replace(/(\b(?:City|District|Township|County|Hsien|Province|Region|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
 
   // 15. Postal code at the very end of the address string (e.g. "... Campbellfield 3061", "... Mumbai - 400001", or "... Cincinnati, Ohio 45241")
-  a = a.replace(/[\s,\-]+(?:\bpin(?:\s*code)?\b[\s:#\-]*)?\b(?:\d{4,6}|\d{3}\s*\d{2}|\d{2}-\d{3})\b(?:\s*[.,]?\s*)$/gi, "");
-  a = a.replace(/\s*-\s*\b\d{4,6}\b(?=[\s,]|$)/g, "");
+  // MUST NEVER strip Post Office Box numbers (e.g. "Post Office Box 261619" must be retained)!
+  a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+(?:\bpin(?:\s*code)?\b[\s:#\-]*)?\b(?:\d{4,6}|\d{3}\s*\d{2}|\d{2}-\d{3})\b(?:\s*[.,]?\s*)$/gi, "");
+  a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)\s*-\s*\b\d{4,6}\b(?=[\s,]|$)/gi, "");
 
   // 16. Strip trailing telephone / fax numbers from address string (e.g. "... Park Hills, Missouri 800.633.6775")
   a = a.replace(/(?:,\s*|\s+)(?:tel|phone|call|toll[-\s]*free)?\s*(?:\+?\d{1,3}[-.\s]*)?\(?\d{3}\)?[-.\s]+\d{3}[-.\s]+\d{4}\s*$/gi, "");
@@ -2249,10 +2250,11 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   }
 
   // Strip postal codes per Rule 6 (before abbreviation expansion so postcodes like B25 8DW don't collide with street/floor abbreviations)
+  // MUST NEVER strip Post Office Box numbers (e.g. "Post Office Box 261619" must be retained)!
   if (typeof removePostalCodesCarefully === "function") {
     a = removePostalCodesCarefully(a);
   }
-  a = a.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "").trim();
+  a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
   // Strip loose trailing telephone numbers exposed after country stripping
   a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
 
@@ -2278,11 +2280,11 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = a.replace(/[,;\s]+\b(?:CA|USA|US|UK|GB|AU|NZ|ZA|DE|FR|ES|IT|IN|CN|PRC|TW|ROC|MY|ID|SG|TR)\b\s*$/i, "").trim();
   }
 
-  // Secondary postal code cleanup
+  // Secondary postal code cleanup (preserving Post Office Box numbers)
   if (typeof removePostalCodesCarefully === "function") {
     a = removePostalCodesCarefully(a);
   }
-  a = a.replace(/[\s,\-]+\b\d{3,6}\b\s*$/g, "").trim();
+  a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
   // Strip loose trailing telephone numbers exposed after country stripping
   a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
 
