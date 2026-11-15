@@ -77,8 +77,8 @@ function normalizeProviderAndModel(rawProvider, apiKey, requestedModel = "") {
     /^gemini-|^grok-/i.test(reqMod) ||
     /gpt-oss|llama-3\.3-70b|mixtral|gemma2/i.test(reqMod);
   const modelValidForProvider = effectiveProvider === "groq"
-      ? !isInvalidGroqModel
-      : (reqMod && /^gemini-/i.test(reqMod));
+    ? !isInvalidGroqModel
+    : (reqMod && /^gemini-/i.test(reqMod));
   return {
     provider: effectiveProvider,
     label: cfg.label,
@@ -166,14 +166,13 @@ const GEMINI_RESPONSE_SCHEMA = {
     state: {
       type: "STRING",
       enum: ["Available", "Not Available"],
-      description: "Available ONLY IF a State, Province, County, Territory, Prefecture, Canton, Oblast, Voivodeship, Governorate, Emirate, Region, or National Capital City word is LITERALLY PRESENT in companyAddress across any country worldwide. Do NOT guess or infer state from external knowledge if no state/region word is written in companyAddress (e.g. '28 Rue Zuber, Rixheim' has no state/region written -> MUST be 'Not Available')."
+      description: "MUST be 'Available' ONLY IF regionWord is non-empty OR localityCategory is 'National Capital City'; otherwise MUST be 'Not Available'. Do NOT guess or infer from city/ZIP/country, and do NOT treat street names (e.g. 'County Road', 'Victoria Street') or trailing suburbs/cities as a State."
     },
     city: {
       type: "STRING",
       enum: ["Available", "Not Available"],
-      description: "Available if an official City, Town, Township, District, Municipality, Commune, Borough, or recognized town locality (e.g. Heanor Gate -> town of Heanor, Rixheim, Mulhouse, Zurich, Zagreb, Doha, Nairobi) is present in companyAddress across any country worldwide; else Not Available. Note: Suburbs/industrial estates alone without a recognized city/town (e.g. Campbellfield, Rowville, Mascot, Sandton) are Not Available."
-    },
-    emailId: {
+      description: "MUST be 'Available' ONLY IF localityCategory is 'Official City/Town/District/Municipality' or 'National Capital City'; if localityCategory is 'Unincorporated Neighborhood/Suburb/Industrial Estate' or 'None', MUST be 'Not Available'."
+    }, emailId: {
       type: "STRING",
       description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook)."
     },

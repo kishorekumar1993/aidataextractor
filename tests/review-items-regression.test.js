@@ -1510,6 +1510,16 @@ async function runAll() {
     // 5. Suburb only without recognized City/Town/District/Municipality -> City: Not Available
     assert.strictEqual(ctx.evaluateCityQC('40 Sarah Street, Campbellfield, Victoria', 'Australia'), 'Not Available', 'Campbellfield suburb only -> City Not Available');
     assert.strictEqual(ctx.evaluateCityQC('12 Industrie Road, Penrose', 'New Zealand'), 'Not Available', 'Penrose suburb only -> City Not Available');
+    assert.strictEqual(ctx.evaluateCityQC('27w705 Hickory Lane, Northwoods, Illinois', 'United States Of America'), 'Not Available', 'Northwoods subdivision only -> City Not Available');
+
+    const northwoodsQc = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: '27w705 Hickory Lane, Northwoods, Illinois',
+      countryName: 'United States Of America'
+    }, {}, {});
+    assert.strictEqual(northwoodsQc.state, 'Available', 'Illinois is state Available');
+    assert.strictEqual(northwoodsQc.city, 'Not Available', 'Northwoods is neighborhood/subdivision only -> City Not Available');
 
     // 6. Final output must STRICTLY be only "Available" or "Not Available"
     assert.ok(['Available', 'Not Available'].includes(capTaipei.city));

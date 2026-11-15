@@ -822,7 +822,7 @@ function isNotCitySegment(segment) {
   }
 
   // Industrial / commercial parks / zones / estates & suburb markers
-  if (/\b(?:industrial\s*(?:estate|park|area|zone|district|town)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park|suburb|neighborhood|neighbourhood|hamlet|chinatown|downtown)\b/i.test(s)) {
+  if (/\b(?:industrial\s*(?:estate|park|area|zone|district|town)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park|suburb|neighborhood|neighbourhood|subdivision|sub-division|subdiv\.?|hamlet|chinatown|downtown)\b/i.test(s)) {
     return true;
   }
 
@@ -1016,14 +1016,14 @@ function evaluateCityQC(address, country) {
   }
 
   // United States City Evaluation (Strict QC Rule):
-  // Note: (Town, Township, Borough, Municipality) should be considered as City.
+  // Note: (Town, Township, Borough, Municipality, Village) should be considered as City.
   // Standard US address format: [Street Address], [City/Town], [State] [ZIP]
   if (isUnitedStatesLocation(cleanAddr, country)) {
     // 1. Capital Rule: Washington D.C. in address -> City: Available
     if (/\b(?:washington\s*d\.?c\.?|district\s*of\s*columbia)\b/i.test(cleanAddr)) {
       return "Available";
     }
-    // 2. Explicit City, Town, Township, Borough, Municipality designation
+    // 2. Explicit City, Town, Township, Borough, Municipality, Village designation
     const strippedUS = stripNonAdministrativeCityTerms(cleanAddr);
     if (hasExplicitCityWord(strippedUS) || /\b(?:town|township|borough|municipality|village)\b/i.test(strippedUS)) {
       return "Available";
@@ -1032,10 +1032,11 @@ function evaluateCityQC(address, country) {
     if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
       return "Available";
     }
+    // 4. Suburb-only addresses: If the address only has a suburb/neighborhood and no recognized city/town, MUST evaluate as Not Available!
     if (addressLooksLikeSuburbOnly(cleanAddr)) {
       return "Not Available";
     }
-    // 4. Structural detection: Locality preceding State/ZIP
+    // 5. Structural detection: Locality preceding State/ZIP
     const structCity = detectCityFromStructure(cleanAddr, country);
     if (structCity && !isNotCitySegment(structCity)) {
       return "Available";
@@ -1182,8 +1183,8 @@ function evaluateCityQC(address, country) {
     return "Available";
   }
 
-  // Structural address detection (for USA, Canada, and countries where city precedes state/province)
-  if (isUnitedStatesLocation(cleanAddr, country) || /\b(?:canada|china|germany|deutschland|france)\b/i.test(country || cleanAddr)) {
+  // Structural address detection (for Canada, and countries where city precedes state/province)
+  if (/\b(?:canada|china|germany|deutschland|france)\b/i.test(country || cleanAddr)) {
     const structCity = detectCityFromStructure(cleanAddr, country);
     if (structCity && !isNotCitySegment(structCity)) {
       return "Available";

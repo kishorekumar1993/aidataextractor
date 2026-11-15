@@ -1,5 +1,4 @@
 // Multi-provider AI extraction (Gemini & Groq), key validation, and heuristic fallback extraction.
-
 function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
   const compactSlice = (text, maxLen) => String(text || "").replace(/\s+/g, " ").trim().slice(0, maxLen);
   const formattedAddressEvidence = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
@@ -28,7 +27,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   "notWorkingReason": "string (mandatory explanation if not Working, else empty string \"\")",
   "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
   "companyProfile": "Available" | "Not Available" | "",
-  "companyName": "string",
+  "companyName": "string (expand ONLY abbreviations present on site; standalone 'Co.' -> 'Company', NEVER add 'Limited' unless 'Ltd.'/'Limited' is on site)",
   "countryName": "string",
   "companyAddress": "string",
   "state": "Available" | "Not Available" | "",
@@ -84,8 +83,11 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
 4. COMPANY NAME (CRITICAL QC RULE):
 - Extract the official legal registered company name in COMPLETE FULL FORM.
-- EXPAND ALL CORPORATE & INDUSTRY ABBREVIATIONS:
-  * Co. -> Company, Ltd. -> Limited, Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company.
+- EXPAND ONLY THE EXACT CORPORATE & INDUSTRY ABBREVIATIONS PRESENT ON THE WEBSITE (NEVER invent or append extra corporate suffixes not written on the site!):
+  * Standalone Co. -> Company (CRITICAL: If the website ends with "Co." and does NOT contain "Ltd." or "Limited", output "Company" ONLY — NEVER append ", Limited"!).
+  * Standalone Ltd. -> Limited.
+  * Co., Ltd. / Co.,Ltd / Co. Ltd / Co Ltd -> Company, Limited (only when BOTH Co. and Ltd. are present on the site).
+  * Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company.
   * Pty Ltd -> Proprietary Limited, Pte Ltd / Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad.
   * PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata.
   * Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises.
@@ -139,9 +141,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * NEVER put commas inside a street name ("Pump Lane" not "Pump, Lane"), inside an industrial park name ("Argent Trade Park" not "Argent, Trade Park"), or between street number and street name ("604 Progress Drive" not "604, Progress Drive").
   * Address MUST NOT end with a comma or period.
 
-7. STATE & CITY QC RULES (ALL COUNTRIES WORLDWIDE - EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
-
-### STATE — MANDATORY QC RULE:
+7. STATE — MANDATORY QC RULE (ALL COUNTRIES WORLDWIDE - EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
 - State is a dropdown field with only two permitted options:
   - "Available"
   - "Not Available"
@@ -156,11 +156,12 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   - If a country's capital city is mentioned as the company's location in the company address (e.g. Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
   - This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
 - Do not guess or infer a State from the City, postal code, country, or other information.
-- Do not treat street names, building names, industrial estates, or business park names as State names (e.g. "County Road" or "State Highway" is a street name, NOT a State).
+- Do not assume the last word in companyAddress is a State just because of its position! Verify that the word is actually an officially recognized State, County, Province, or Prefecture (e.g. "28 Rue Zuber, Rixheim" or "27W705 Hickory Lane, Northwoods" has no State written -> mark "Not Available").
+- Do not treat street names, building names, industrial estates, or business park names as State names (e.g. "County Road", "State Highway", "Victoria Street", or "Yorkshire Way" is a street name, NOT a State).
 - Evaluate this field strictly using the company address extracted from the official company website.
 - Final output: Return only "Available" or "Not Available".
 
-### 8. CITY — MANDATORY QC RULE:
+8. CITY — MANDATORY QC RULE (ALL COUNTRIES WORLDWIDE - EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
 - City is a dropdown field with only two permitted options:
   - "Available"
   - "Not Available"
@@ -175,17 +176,18 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   - If a country's capital city is mentioned as the company's location in the company address, BOTH "city": "Available" AND "state": "Available"!
   - This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
 - Do not guess or infer a City from the State, postal code, country, or other information.
-- Do not automatically treat suburbs, neighborhoods, industrial estates, or business parks as Cities unless they qualify as an officially recognized City, Town, District, or Municipality (e.g. Campbellfield, Rowville, Oakleigh South, Sandton, Penrose, Trafford Park are suburbs -> mark "Not Available").
+- DO NOT assume a locality is a City just because it appears right before a State/Province (e.g. "[Locality], Illinois")! Verify whether the locality is an officially recognized City, Town, Township, District, or Municipality.
+- Do not automatically treat unincorporated subdivisions, neighborhoods, suburbs, industrial estates, or business parks as Cities unless they qualify as an officially recognized City, Town, District, or Municipality (e.g. Northwoods, Campbellfield, Rowville, Oakleigh South, Sandton, Penrose, Trafford Park are unincorporated neighborhoods/suburbs -> mark "Not Available").
 - Do not treat street names, building names, or company names as City names (e.g. "District Road", "Town Street", "City Road" are street names -> mark "Not Available").
 - Evaluate this field strictly using the company address extracted from the official company website.
 - Final output: Return only "Available" or "Not Available".
 
-8. EMAIL ID & SECONDARY EMAIL ID:
+9. EMAIL ID & SECONDARY EMAIL ID:
 - Primary Email: Official general contact or sales inbox (e.g. sales@, info@, contact@, enquiry@).
 - Secondary Email: Distinct secondary corporate email (e.g. support@, jobs@, service@).
 - Must NOT be identical. Reject privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix). Empty string "" if none found.
 
-9. PHONE NUMBER (CRITICAL HIGH PRIORITY RULE - MANDATORY INTERNATIONAL COUNTRY CODE REMOVAL):
+10. PHONE NUMBER (CRITICAL HIGH PRIORITY RULE - MANDATORY INTERNATIONAL COUNTRY CODE REMOVAL):
 - ABSOLUTELY NEVER INCLUDE THE COUNTRY CALLING CODE IN phoneNumber! RETURN ONLY DOMESTIC SUBSCRIBER DIGITS!
 - YOU MUST STRIP THE INTERNATIONAL COUNTRY CALLING CODE FOR ALL COUNTRIES WORLDWIDE:
   * Malaysia (+60): "+60 4-3329299" -> strip +60 -> "43329299" (CRITICAL: NEVER return "6043329299"!)
@@ -204,7 +206,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). If only toll-free is available, return empty string "".
 - Valid numbers must be domestic national digits between 7 and 12 digits.
 
-10. PRODUCT, IMAGE & DESCRIPTION COUNTS:
+11. PRODUCT, IMAGE & DESCRIPTION COUNTS:
 - Values: "0" | "1" | "2" | "3" (3 or more).
 - STRICT MANDATE: Count physical product images on the website ("productImages"). Whatever value "productImages" has, set "numberOfProducts" and "numberOfProductDescriptions" to that EXACT SAME value!
 

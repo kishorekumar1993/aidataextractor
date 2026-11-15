@@ -39,7 +39,7 @@ const NON_CITY_SUBURBS = [
   // Canada Suburbs & Boroughs (MUST NOT be considered as City)
   "scarborough", "etobicoke", "north york", "east york", "york",
   // United States
-  "brooklyn", "queens", "manhattan", "bronx", "staten island", "hollywood", "beverly hills",
+  "brooklyn", "queens", "manhattan", "bronx", "staten island", "hollywood", "beverly hills", "northwoods",
   // Australia Suburbs & Localities (MUST NOT be considered as City)
   "minto", "campbellfield", "dandenong", "dandenong south", "braeside", "bayswater", "bayswater north",
   "clayton", "clayton south", "tullamarine", "thomastown", "somerton", "laverton", "laverton north",
