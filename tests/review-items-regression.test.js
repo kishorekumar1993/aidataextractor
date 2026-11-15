@@ -1380,6 +1380,57 @@ async function runAll() {
     assert.strictEqual(mockCompanyInput.value, '', 'Other fields must be cleared on Prohibited site');
   });
 
+  runTest('Item 88: Taiwan / Asian floor sub-unit normalization (6th Floor-1, 6F-1, 6F.-1, 6th Floor, unit 1 -> 6th Floor-1)', () => {
+    const { ctx } = createTestContext();
+    // 1. Gemini output with "6th Floor, unit 1" must normalize to "6th Floor-1"
+    const geminiWrong1 = '6th Floor, unit 1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City';
+    const norm1 = ctx.sanitizeRule6CompanyAddress(geminiWrong1, '', 'Taiwan');
+    assert.strictEqual(norm1, '6th Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City',
+      'Should normalize "6th Floor, unit 1" to "6th Floor-1"');
+
+    // 2. Gemini output with capitalized "6th Floor, Unit 1"
+    const geminiWrong2 = '6th Floor, Unit 1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City';
+    const norm2 = ctx.sanitizeRule6CompanyAddress(geminiWrong2, '', 'Taiwan');
+    assert.strictEqual(norm2, '6th Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City',
+      'Should normalize "6th Floor, Unit 1" to "6th Floor-1"');
+
+    // 3. Raw crawl with "6F-1" shorthand
+    const rawCrawl1 = '6F-1, No. 27, Ln. 61, Sec. 1, Guangfu Rd., Sanchong Dist., New Taipei City';
+    const norm3 = ctx.sanitizeRule6CompanyAddress(rawCrawl1, '', 'Taiwan');
+    assert.strictEqual(norm3, '6th Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City',
+      'Should normalize "6F-1" to "6th Floor-1"');
+
+    // 4. Raw crawl with "6F.-1"
+    const rawCrawl2 = '6F.-1, No. 27, Ln. 61, Sec. 1, Guangfu Rd., Sanchong Dist., New Taipei City';
+    const norm4 = ctx.sanitizeRule6CompanyAddress(rawCrawl2, '', 'Taiwan');
+    assert.strictEqual(norm4, '6th Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City',
+      'Should normalize "6F.-1" to "6th Floor-1"');
+
+    // 5. Raw crawl with "6F - 1"
+    const rawCrawl3 = '6F - 1, No. 27, Ln. 61, Sec. 1, Guangfu Rd., Sanchong Dist., New Taipei City';
+    const norm5 = ctx.sanitizeRule6CompanyAddress(rawCrawl3, '', 'Taiwan');
+    assert.strictEqual(norm5, '6th Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City',
+      'Should normalize "6F - 1" to "6th Floor-1"');
+
+    // 6. Gemini output with "Floor 6, unit 1"
+    const geminiWrong3 = 'Floor 6, unit 1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City';
+    const norm6 = ctx.sanitizeRule6CompanyAddress(geminiWrong3, '', 'Taiwan');
+    assert.strictEqual(norm6, '6th Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City',
+      'Should normalize "Floor 6, unit 1" to "6th Floor-1"');
+
+    // 7. Gemini output with "6th Floor Unit 1"
+    const geminiWrong4 = '6th Floor Unit 1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City';
+    const norm7 = ctx.sanitizeRule6CompanyAddress(geminiWrong4, '', 'Taiwan');
+    assert.strictEqual(norm7, '6th Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City',
+      'Should normalize "6th Floor Unit 1" to "6th Floor-1"');
+
+    // 8. Other floor numbers e.g. 10F-2
+    const otherFloor = '10F-2, No. 15, Ln. 8, Sec. 2, Zhongshan N. Rd., Zhongshan Dist., Taipei City';
+    const norm8 = ctx.sanitizeRule6CompanyAddress(otherFloor, '', 'Taiwan');
+    assert.strictEqual(norm8, '10th Floor-2, Number 15, Lane 8, Section 2, Zhongshan North Road, Zhongshan District, Taipei City',
+      'Should normalize "10F-2" to "10th Floor-2"');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

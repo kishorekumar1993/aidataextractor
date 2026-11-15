@@ -225,6 +225,11 @@ function romanizeChineseAddress(addr) {
     [/巷/g, " Lane, "],
     [/弄/g, " Alley, "],
     [/(\d+)\s*[号號]/g, "Number $1, "],
+    // Floor sub-divisions in Chinese (e.g. 6樓之1, 6楼之1, 6F之1, 6-1樓)
+    [/(\d+)\s*[层樓楼]\s*之\s*(\d+)/g, "Floor $1-$2, "],
+    [/(\d+)\s*[Ff]\s*之\s*(\d+)/g, "Floor $1-$2, "],
+    [/(\d+)\s*[-之]\s*(\d+)\s*[层樓楼]/g, "Floor $1-$2, "],
+    [/(\d+)\s*[层樓楼]\s*(\d+)\s*[室房号號]/g, "Floor $1-$2, "],
     [/([A-Za-z0-9]+)\s*[幢栋棟]/g, "Building $1, "],
     [/([A-Za-z0-9]+)\s*[层樓楼]/g, "Floor $1, "],
     [/([A-Za-z0-9]+)\s*[室房]/g, "Room $1, "],
@@ -528,7 +533,24 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     return `${n}${ord} Floor`;
   };
 
-  // Floor & Level abbreviations (e.g. "5/F.", "5/F", "5F.", "5F", "Fl. 5", "Flr 5", "Floor 5", "5th Fl" -> "5th Floor")
+  // Floor & Level abbreviations and sub-divisions:
+  // 1. Hyphenated floor sub-divisions / unit reconciliation:
+  // e.g. "6th Floor, unit 1", "6th Floor, Unit 1", "Floor 6, unit 1", "6th Floor Unit 1", "6th Floor, room 1" -> "6th Floor-1"
+  a = a.replace(/(^|[,\s])(?:(\d{1,3})(?:st|nd|rd|th)?\s+Floor|Floor\s+(\d{1,3}))[,\s]+(?:unit|suite|ste\.?|rm\.?|room|#)\s*[-#]?\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, n2, sub) => {
+    const fNum = n1 || n2;
+    return `${p1}${toOrdinalFloor(fNum)}-${sub.toUpperCase()}`;
+  });
+
+  // 2. Hyphenated floor sub-divisions shorthand (e.g. "6F-1", "6F.-1", "6F - 1", "6/F-1", "6F之1" -> "6th Floor-1")
+  a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?\s*[-–之]\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, num, sub) => `${p1}${toOrdinalFloor(num)}-${sub.toUpperCase()}`);
+
+  // 3. Hyphenated Floor words (e.g. "6th Floor - 1", "6th Floor -1", "Floor 6-1", "Floor 6 - 1" -> "6th Floor-1")
+  a = a.replace(/(^|[,\s])(?:(\d{1,3})(?:st|nd|rd|th)?\s+Floor|Floor\s+(\d{1,3}))\s*[-–]\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, n2, sub) => {
+    const fNum = n1 || n2;
+    return `${p1}${toOrdinalFloor(fNum)}-${sub.toUpperCase()}`;
+  });
+
+  // 4. Standard standalone Floor & Level abbreviations (e.g. "5/F.", "5/F", "5F.", "5F", "Fl. 5", "Flr 5", "Floor 5", "5th Fl" -> "5th Floor")
   a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
   a = a.replace(/(^|[,\s])(?:Flr?|Floor)\.?\s*(\d{1,3})\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
   a = a.replace(/(^|[,\s])(\d{1,3})(?:st|nd|rd|th)?\s*(?:Flr?|Floor)\.?\b/gi, (m, p1, num) => `${p1}${toOrdinalFloor(num)}`);
@@ -1522,8 +1544,8 @@ function ensureCommaBeforeState(addr) {
   a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
 
   // 2c. Ensure clean comma separation across Taiwanese, East Asian, and multi-component premises:
-  // Floor -> Premise Number
-  a = a.replace(/\b(\d+(?:st|nd|rd|th)?\s+Floor|Floor\s+\d+)\s*(?!,)\s+(?=(?:Number|No\.?|#)?\s*\d)/gi, "$1, ");
+  // Floor -> Premise Number (e.g. "6th Floor-1 Number 27" -> "6th Floor-1, Number 27")
+  a = a.replace(/\b(\d+(?:st|nd|rd|th)?\s+Floor(?:-[A-Za-z0-9]+)?|Floor\s+\d+(?:-[A-Za-z0-9]+)?)\s*(?!,)\s+(?=(?:Number|No\.?|#)?\s*\d)/gi, "$1, ");
   // Lane -> Alley / Section / Road
   a = a.replace(/\b(Lane|Ln\.?)\s+(\d+[A-Za-z]?)\s*(?!,)\s+(?=(?:Alley|Aly\.?|Section|Sec\.?|[A-Z][a-z0-9]+(?:\s+[A-Z][a-z0-9]+)*\s+(?:Road|Street|Avenue))\b)/gi, "$1 $2, ");
   // Alley -> Section / Road
