@@ -18,11 +18,11 @@ const ctx = vm.createContext({
   clearTimeout,
   fetch: async () => { throw new Error('Network fetch not mocked in test'); },
   chrome: {
-    runtime: { onMessage: { addListener: () => {} } },
+    runtime: { onMessage: { addListener: () => { } } },
     storage: {
       sync: {
         get: async () => ({}),
-        set: async () => {}
+        set: async () => { }
       },
       local: {
         get: async (keys) => {
@@ -44,7 +44,7 @@ const ctx = vm.createContext({
       }
     }
   },
-  console: { log: () => {}, warn: () => {}, error: () => {} }
+  console: { log: () => { }, warn: () => { }, error: () => { } }
 });
 ctx.importScripts = (...files) => {
   for (const file of files) {
@@ -1212,11 +1212,11 @@ runTest('Modular MV3 split loads all content scripts cleanly with valid AIExt bi
   assert.ok(files.length >= 9, `Expected modular content_scripts list, got ${files.length}`);
 
   const noopEl = {
-    style: { setProperty: () => {} },
-    classList: { add: () => {}, remove: () => {} },
-    addEventListener: () => {},
-    setAttribute: () => {},
-    appendChild: () => {},
+    style: { setProperty: () => { } },
+    classList: { add: () => { }, remove: () => { } },
+    addEventListener: () => { },
+    setAttribute: () => { },
+    appendChild: () => { },
     querySelectorAll: () => [],
     querySelector: () => null,
     closest: () => null,
@@ -1224,9 +1224,9 @@ runTest('Modular MV3 split loads all content scripts cleanly with valid AIExt bi
     textContent: '',
     value: ''
   };
-  const mockWindow = { location: { href: 'https://example.com/dataextraction' }, addEventListener: () => {} };
+  const mockWindow = { location: { href: 'https://example.com/dataextraction' }, addEventListener: () => { } };
   const cCtx = vm.createContext({
-    console: { log: () => {}, warn: () => {}, error: () => {} },
+    console: { log: () => { }, warn: () => { }, error: () => { } },
     window: mockWindow,
     document: {
       readyState: 'complete',
@@ -1237,23 +1237,23 @@ runTest('Modular MV3 split loads all content scripts cleanly with valid AIExt bi
       getElementById: () => null,
       querySelector: () => null,
       querySelectorAll: () => [],
-      addEventListener: () => {}
+      addEventListener: () => { }
     },
     chrome: {
-      runtime: { id: 'test-ext', onMessage: { addListener: () => {} }, sendMessage: (_, cb) => cb && cb({ success: true }) },
+      runtime: { id: 'test-ext', onMessage: { addListener: () => { } }, sendMessage: (_, cb) => cb && cb({ success: true }) },
       storage: {
-        sync: { get: (_, cb) => cb && cb({}), set: () => {} },
-        local: { get: (_, cb) => cb && cb({}), set: () => {}, remove: () => {} },
-        onChanged: { addListener: () => {} }
+        sync: { get: (_, cb) => cb && cb({}), set: () => { } },
+        local: { get: (_, cb) => cb && cb({}), set: () => { }, remove: () => { } },
+        onChanged: { addListener: () => { } }
       }
     },
     setTimeout: () => 1,
-    clearTimeout: () => {},
+    clearTimeout: () => { },
     setInterval: () => 1,
-    clearInterval: () => {},
-    Event: function () {},
+    clearInterval: () => { },
+    Event: function () { },
     URL,
-    MutationObserver: function () { return { observe: () => {} }; }
+    MutationObserver: function () { return { observe: () => { } }; }
   });
   cCtx.globalThis = cCtx;
   mockWindow.chrome = cCtx.chrome;
@@ -1312,20 +1312,20 @@ runTest('Rule 4 company name formatting preserves U.S. dots, symbols, commas, an
 // 30. Full 135-country valid list & accented QC address detection (incl. Greenland, Österreich, Türkiye)
 runTest('All 135 valid countries normalize & detect from address including accented QC entries', () => {
   const valid135 = [
-    'Afghanistan','Albania','Algeria','Andorra','Angola','Argentina','Armenia','Australia','Austria','Azerbaijan',
-    'Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium','Belize','Bhutan','Bolivia','Botswana',
-    'Brazil','Brunei Darussalam','Bulgaria','Cambodia','Canada','Cayman Islands','China','Colombia','Costa Rica','Croatia',
-    'Cyprus','Czech Republic','Denmark','Dominican Republic','Egypt','Estonia','Ethiopia','Fiji','Finland','France',
-    'Germany','Ghana','Greece','Greenland','Guatemala','Guyana','Hong Kong','Hungary','Iceland','India',
-    'Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan','Jordan','Kazakhstan',
-    'Kenya','Kuwait','Latvia','Lebanon','Liechtenstein','Lithuania','Luxembourg','Madagascar','Malaysia','Maldives',
-    'Malta','Mauritius','Mexico','Moldova','Mongolia','Morocco','Mozambique','Myanmar','Namibia','Nepal',
-    'Netherlands','New Zealand','Nicaragua','Nigeria','North Korea','North Macedonia','Norway','Oman','Pakistan','Panama',
-    'Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar','Romania','Russia','Rwanda',
-    'Saint Lucia','Samoa','Saudi Arabia','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia','South Africa',
-    'South Korea','Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tanzania',
-    'Thailand','Trinidad and Tobago','Tunisia','Türkiye','Uganda','Ukraine','United Arab Emirates','United Kingdom','United States',
-    'Uruguay','Uzbekistan','Vanuatu','Vietnam','Zambia','Zimbabwe'
+    'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Argentina', 'Armenia', 'Australia', 'Austria', 'Azerbaijan',
+    'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium', 'Belize', 'Bhutan', 'Bolivia', 'Botswana',
+    'Brazil', 'Brunei Darussalam', 'Bulgaria', 'Cambodia', 'Canada', 'Cayman Islands', 'China', 'Colombia', 'Costa Rica', 'Croatia',
+    'Cyprus', 'Czech Republic', 'Denmark', 'Dominican Republic', 'Egypt', 'Estonia', 'Ethiopia', 'Fiji', 'Finland', 'France',
+    'Germany', 'Ghana', 'Greece', 'Greenland', 'Guatemala', 'Guyana', 'Hong Kong', 'Hungary', 'Iceland', 'India',
+    'Indonesia', 'Iran', 'Iraq', 'Ireland', 'Israel', 'Italy', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan',
+    'Kenya', 'Kuwait', 'Latvia', 'Lebanon', 'Liechtenstein', 'Lithuania', 'Luxembourg', 'Madagascar', 'Malaysia', 'Maldives',
+    'Malta', 'Mauritius', 'Mexico', 'Moldova', 'Mongolia', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nepal',
+    'Netherlands', 'New Zealand', 'Nicaragua', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman', 'Pakistan', 'Panama',
+    'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland', 'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda',
+    'Saint Lucia', 'Samoa', 'Saudi Arabia', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'South Africa',
+    'South Korea', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland', 'Syria', 'Taiwan', 'Tanzania',
+    'Thailand', 'Trinidad and Tobago', 'Tunisia', 'Türkiye', 'Uganda', 'Ukraine', 'United Arab Emirates', 'United Kingdom', 'United States',
+    'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vietnam', 'Zambia', 'Zimbabwe'
   ];
 
   for (const c of valid135) {
@@ -2155,11 +2155,24 @@ async function runAsyncTests() {
     const updatedStats = await ctx.getNonWorkingRecordsAndStats();
     assert.ok(updatedStats.stats.lastSyncTime !== "Never", "Last sync time must be updated from Never");
 
-    // Clear records test
+    // Record a working site to test complete data clearing
+    await ctx.recordWorkingWebsite({
+      URL: "https://validworkingfactory.com",
+      "Business Type": "Manufacturer",
+      "Company Name": "Valid Factory Inc",
+      "Country Name": "United States"
+    });
+    const beforeClearStats = await ctx.getNonWorkingRecordsAndStats();
+    assert.strictEqual(beforeClearStats.workingRecords.length, 1);
+    assert.strictEqual(beforeClearStats.stats.totalWorking, 1);
+
+    // Clear records test (must completely clear both non-working AND working records)
     await ctx.clearNonWorkingRecords();
     const cleared = await ctx.getNonWorkingRecordsAndStats();
     assert.strictEqual(cleared.records.length, 0);
+    assert.strictEqual(cleared.workingRecords.length, 0, "Working records must be completely cleared");
     assert.strictEqual(cleared.stats.totalHistorical, 0);
+    assert.strictEqual(cleared.stats.totalWorking, 0, "Total working metric must be 0 after clear");
   });
 
   // 42. Non-Working Website Reason Sanitization & AI Failure Recheck / Own Crawl Fallback
@@ -2553,8 +2566,8 @@ async function runAsyncTests() {
       document: mockDoc,
       globalThis: {},
       setTimeout: () => 1,
-      clearTimeout: () => {},
-      console: { log: () => {}, warn: () => {} }
+      clearTimeout: () => { },
+      console: { log: () => { }, warn: () => { } }
     });
     overlayContext.globalThis = overlayContext;
 
@@ -3318,9 +3331,9 @@ async function runAsyncTests() {
       id: 'website-name',
       name: 'website_name',
       value: queueSites[0],
-      dispatchEvent: () => {},
+      dispatchEvent: () => { },
       closest: () => null,
-      classList: { add: () => {}, remove: () => {} },
+      classList: { add: () => { }, remove: () => { } },
       style: {}
     };
 
@@ -3335,9 +3348,9 @@ async function runAsyncTests() {
       ],
       selectedIndex: 0,
       value: '',
-      dispatchEvent: () => {},
+      dispatchEvent: () => { },
       closest: () => null,
-      classList: { add: () => {}, remove: () => {} },
+      classList: { add: () => { }, remove: () => { } },
       style: {}
     };
 
@@ -3354,9 +3367,9 @@ async function runAsyncTests() {
           mockWebsiteInput.value = queueSites[queueIdx];
         }
       },
-      closest: () => ({ requestSubmit: () => {} }),
-      classList: { add: () => {}, remove: () => {} },
-      scrollIntoView: () => {}
+      closest: () => ({ requestSubmit: () => { } }),
+      classList: { add: () => { }, remove: () => { } },
+      scrollIntoView: () => { }
     };
 
     const mockFromQueueBtn = {
@@ -3377,7 +3390,7 @@ async function runAsyncTests() {
       tagName: 'BUTTON',
       textContent: '⚡ Auto 10 Not Working',
       style: {},
-      addEventListener: () => {}
+      addEventListener: () => { }
     };
 
     const mockBatchAllBtn = {
@@ -3385,7 +3398,7 @@ async function runAsyncTests() {
       tagName: 'BUTTON',
       textContent: '⚡ Submit ALL Not Working',
       style: {},
-      addEventListener: () => {}
+      addEventListener: () => { }
     };
 
     let modalConfirmClicks = 0;
@@ -3393,8 +3406,8 @@ async function runAsyncTests() {
       id: 'notWorkingConfirmModal',
       classList: {
         contains: (cls) => cls === 'active' || cls === 'modal-overlay',
-        add: () => {},
-        remove: () => {}
+        add: () => { },
+        remove: () => { }
       },
       offsetParent: {}
     };
@@ -3411,14 +3424,14 @@ async function runAsyncTests() {
     };
 
     const bCtx = vm.createContext({
-      console: { log: () => {}, warn: () => {}, error: () => {} },
-      window: { location: { href: 'https://example.com/dataextraction' }, addEventListener: () => {} },
+      console: { log: () => { }, warn: () => { }, error: () => { } },
+      window: { location: { href: 'https://example.com/dataextraction' }, addEventListener: () => { } },
       document: {
         readyState: 'complete',
-        body: { appendChild: () => {}, querySelectorAll: () => [] },
-        head: { appendChild: () => {} },
+        body: { appendChild: () => { }, querySelectorAll: () => [] },
+        head: { appendChild: () => { } },
         title: 'Test Portal',
-        createElement: () => ({ style: {}, classList: { add: () => {}, remove: () => {} }, addEventListener: () => {}, setAttribute: () => {}, appendChild: () => {} }),
+        createElement: () => ({ style: {}, classList: { add: () => { }, remove: () => { } }, addEventListener: () => { }, setAttribute: () => { }, appendChild: () => { } }),
         getElementById: (id) => {
           if (id === 'website-name' || id === 'inputWebsiteName') return mockWebsiteInput;
           if (id === 'website-status' || id === 'selectWebsiteStatus') return mockStatusSelect;
@@ -3442,16 +3455,16 @@ async function runAsyncTests() {
           if (sel && sel.includes('input')) return [mockWebsiteInput];
           return [mockWebsiteInput, mockStatusSelect, mockSubmitBtn, mockFromQueueBtn, mockModalConfirmOkBtn];
         },
-        addEventListener: () => {}
+        addEventListener: () => { }
       },
       chrome: {
         runtime: {
           id: 'test-ext',
-          onMessage: { addListener: () => {} },
+          onMessage: { addListener: () => { } },
           sendMessage: (_, cb) => cb && cb({ success: true })
         },
         storage: {
-          sync: { get: (_, cb) => cb && cb({ autoQueueEnabled: false, autoSubmitNotWorkingEnabled: false }), set: () => {} },
+          sync: { get: (_, cb) => cb && cb({ autoQueueEnabled: false, autoSubmitNotWorkingEnabled: false }), set: () => { } },
           local: {
             get: (keys, cb) => {
               const res = {};
@@ -3465,16 +3478,16 @@ async function runAsyncTests() {
               if (keys.includes('batchNotWorking')) storedBatch = null;
             }
           },
-          onChanged: { addListener: () => {} }
+          onChanged: { addListener: () => { } }
         }
       },
       setTimeout: (fn) => { fn(); return 1; },
-      clearTimeout: () => {},
+      clearTimeout: () => { },
       setInterval: () => 1,
-      clearInterval: () => {},
-      Event: function () {},
+      clearInterval: () => { },
+      Event: function () { },
       URL,
-      MutationObserver: function () { return { observe: () => {} }; }
+      MutationObserver: function () { return { observe: () => { } }; }
     });
     bCtx.globalThis = bCtx;
 
@@ -3558,8 +3571,8 @@ async function runAsyncTests() {
       value: '',
       selectedIndex: 0,
       options: [{ value: 'Working', text: 'Working' }, { value: 'Not Working', text: 'Not Working' }],
-      dispatchEvent: () => {},
-      classList: { add: () => {}, remove: () => {} },
+      dispatchEvent: () => { },
+      classList: { add: () => { }, remove: () => { } },
       style: {}
     };
 
@@ -3567,26 +3580,26 @@ async function runAsyncTests() {
       tagName: 'INPUT',
       id: 'companyName',
       value: 'Some Previous Company',
-      classList: { add: () => {}, remove: () => {} },
+      classList: { add: () => { }, remove: () => { } },
       style: {},
-      dispatchEvent: () => {}
+      dispatchEvent: () => { }
     };
 
     const mockQueueToggle = {
       id: 'ai-widget-auto-queue-toggle',
       checked: false,
-      addEventListener: () => {}
+      addEventListener: () => { }
     };
 
     const mockAutoSubmitToggle = {
       id: 'ai-auto-submit-notworking-toggle',
       checked: false,
-      addEventListener: () => {}
+      addEventListener: () => { }
     };
 
     const mockStopAutoSubmitBtn = {
       id: 'ai-stop-auto-submit-btn',
-      addEventListener: () => {}
+      addEventListener: () => { }
     };
 
     const bCtx = vm.createContext({
@@ -3594,15 +3607,15 @@ async function runAsyncTests() {
       document: {
         location: { href: 'http://testportal.com' },
         title: 'Test Portal',
-        body: { innerText: '', querySelectorAll: () => [], appendChild: () => {}, removeChild: () => {} },
+        body: { innerText: '', querySelectorAll: () => [], appendChild: () => { }, removeChild: () => { } },
         documentElement: { querySelectorAll: () => [] },
         forms: [],
         createElement: (tag) => ({
           tagName: (tag || 'div').toUpperCase(),
           style: {},
-          classList: { add: () => {}, remove: () => {} },
-          appendChild: () => {},
-          addEventListener: () => {}
+          classList: { add: () => { }, remove: () => { } },
+          appendChild: () => { },
+          addEventListener: () => { }
         }),
         getElementById: (id) => {
           if (id === 'btnSubmitForm') return mockSubmitBtn;
@@ -3622,22 +3635,22 @@ async function runAsyncTests() {
           return null;
         },
         querySelectorAll: () => [],
-        addEventListener: () => {}
+        addEventListener: () => { }
       },
       chrome: {
         storage: {
-          sync: { get: (_, cb) => cb && cb({ autoQueueEnabled: false }), set: () => {} },
-          local: { get: (_, cb) => cb && cb({}), set: () => {}, remove: () => {} },
-          onChanged: { addListener: () => {} }
+          sync: { get: (_, cb) => cb && cb({ autoQueueEnabled: false }), set: () => { } },
+          local: { get: (_, cb) => cb && cb({}), set: () => { }, remove: () => { } },
+          onChanged: { addListener: () => { } }
         }
       },
       setTimeout: (fn) => { fn(); return 1; },
-      clearTimeout: () => {},
+      clearTimeout: () => { },
       setInterval: () => 1,
-      clearInterval: () => {},
-      Event: function () {},
+      clearInterval: () => { },
+      Event: function () { },
       URL,
-      MutationObserver: function () { return { observe: () => {} }; }
+      MutationObserver: function () { return { observe: () => { } }; }
     });
     bCtx.globalThis = bCtx;
 

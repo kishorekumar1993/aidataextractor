@@ -7,7 +7,7 @@
     extractionMode: "ai_first",
     showFloatingWidget: true,
     showInlineBtn: true,
-    autoQueueEnabled: true,
+    autoQueueEnabled: false,
     autoSubmitNotWorkingEnabled: false,
     pendingAutoSubmitTimer: null,
     currentNotWorkingData: null,
@@ -21,12 +21,14 @@
   });
 
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true, autoQueueEnabled: true, autoSubmitNotWorkingEnabled: false, extractionMode: "ai_first" }, (res) => {
+    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: true, autoQueueEnabled: false, crawlMode: "manual", autoSubmitNotWorkingEnabled: false, extractionMode: "ai_first" }, (res) => {
       if (res) {
         state.showFloatingWidget = res.showFloatingWidget !== false;
         state.showInlineBtn = res.showInlineBtn !== false;
         state.extractionMode = res.extractionMode || "ai_first";
-        if (res.autoQueueEnabled !== undefined) {
+        if (res.crawlMode !== undefined) {
+          state.autoQueueEnabled = res.crawlMode === "auto" || res.crawlMode === "continuous";
+        } else if (res.autoQueueEnabled !== undefined) {
           state.autoQueueEnabled = !!res.autoQueueEnabled;
         }
         if (typeof res.autoSubmitNotWorkingEnabled === "boolean") {
@@ -56,6 +58,14 @@
         }
         if (changes.showInlineBtn) {
           state.showInlineBtn = changes.showInlineBtn.newValue !== false;
+        }
+        if (changes.crawlMode !== undefined) {
+          state.autoQueueEnabled = changes.crawlMode.newValue === "auto" || changes.crawlMode.newValue === "continuous";
+          const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
+          if (widgetToggle) widgetToggle.checked = state.autoQueueEnabled;
+          if (!state.autoQueueEnabled && typeof AIExt.stopAutoQueuePipeline === "function") {
+            AIExt.stopAutoQueuePipeline("Auto-queue disabled");
+          }
         }
         if (changes.autoQueueEnabled !== undefined) {
           state.autoQueueEnabled = !!changes.autoQueueEnabled.newValue;

@@ -205,10 +205,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.action === "CLEAR_NON_WORKING_RECORDS") {
+  if (request.action === "CLEAR_NON_WORKING_RECORDS" || request.action === "CLEAR_ALL_RECORDS") {
     clearNonWorkingRecords()
       .then(res => { try { sendResponse(res); } catch (e) { } })
       .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
+    return true;
+  }
+
+  if (request.action === "STOP_ALL_CRAWLING") {
+    if (typeof chrome !== "undefined" && chrome.storage) {
+      if (chrome.storage.local) {
+        chrome.storage.local.remove(["autoQueuePipeline", "batchNotWorking"]).catch(() => {});
+        chrome.storage.local.set({ autoQueueEnabled: false, crawlMode: "manual" }).catch(() => {});
+      }
+      if (chrome.storage.sync) {
+        chrome.storage.sync.set({ autoQueueEnabled: false, crawlMode: "manual" }).catch(() => {});
+      }
+    }
+    try { sendResponse({ success: true, stopped: true }); } catch (e) { }
     return true;
   }
 

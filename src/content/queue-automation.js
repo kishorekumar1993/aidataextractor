@@ -523,6 +523,53 @@
   }
 
   /**
+   * Immediately halts all crawling and continuous pipelines, reverts to Manual Crawl mode,
+   * cancels timers, updates UI buttons and floating toast notifications.
+   */
+  function stopAllCrawling(reason = "") {
+    state.autoQueueEnabled = false;
+    state.isAutoQueuePipelineActive = false;
+    state.isCrawlingInProgress = false;
+    state.isBatchNotWorkingActive = false;
+    state.isWaitingForUserWorkingReview = false;
+
+    if (state.autoQueuePollTimer) {
+      clearInterval(state.autoQueuePollTimer);
+      state.autoQueuePollTimer = null;
+    }
+    if (state.pendingAutoSubmitTimer) {
+      clearTimeout(state.pendingAutoSubmitTimer);
+      state.pendingAutoSubmitTimer = null;
+    }
+
+    if (typeof chrome !== "undefined" && chrome.storage) {
+      if (chrome.storage.local) {
+        chrome.storage.local.remove(["autoQueuePipeline", "batchNotWorking"]).catch(() => {});
+      }
+      if (chrome.storage.sync) {
+        chrome.storage.sync.set({ autoQueueEnabled: false }).catch(() => {});
+      }
+    }
+
+    const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
+    if (widgetToggle) widgetToggle.checked = false;
+
+    const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+    if (pauseBtn) pauseBtn.style.display = "none";
+
+    if (typeof AIExt.resetCrawlButtons === "function") {
+      AIExt.resetCrawlButtons();
+    }
+    if (typeof AIExt.updateStatus === "function") {
+      AIExt.updateStatus("⏹️ Crawling stopped. Switched to Manual Crawl mode.", "idle");
+    }
+    if (typeof AIExt.showFloatingToast === "function") {
+      AIExt.showFloatingToast("⏹️ Crawling stopped. Manual Crawl active.", "info", 3000);
+    }
+    console.log("[AI Assistant] ⏹️ Stopped all crawling" + (reason ? `: ${reason}` : "."));
+  }
+
+  /**
    * Continuous Auto-Queue Engine:
    * Whenever '⚡ Auto-crawl till Working site' is active, continuously detects
    * when a new URL is loaded into the portal (via AJAX, page load, or queue advance)
@@ -957,6 +1004,7 @@
     processNextBatchNotWorkingItem,
     markAndSubmitCurrentAsNotWorking,
     stopAutoQueuePipeline,
+    stopAllCrawling,
     checkAndAutoTriggerQueueCrawl,
     scheduleNextQueueAutoCrawl,
     autoSubmitNotWorking,

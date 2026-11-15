@@ -195,6 +195,21 @@
         </div>
 
         <div class="form-group">
+          <label for="crawl-mode-select" style="font-weight: 700; color: #1e293b;">Crawl Execution Mode</label>
+          <select id="crawl-mode-select" style="font-size: 13px; font-weight: 600; padding: 7px 10px;">
+            <option value="manual" selected>✋ Manual Crawl (Always Manual - Only crawls on click)</option>
+            <option value="auto">⚡ Auto Crawl (Always Auto - Crawls every page / queue site)</option>
+          </select>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px; line-height: 1.4;">
+            • <strong>Manual:</strong> Always manual. Webpages will never crawl automatically until you click 'AI Crawl &amp; Fill'.<br>
+            • <strong>Auto:</strong> Always auto. Every webpage and queue item automatically crawls.
+          </div>
+          <button type="button" id="btn-popup-stop-crawl" class="btn btn-secondary btn-danger-outline" style="width: 100%; margin-top: 8px; display: none; font-weight: 700; color: #dc2626; border-color: #f87171; background: #fef2f2;">
+            🛑 Stop Active Crawling &amp; Switch to Manual
+          </button>
+        </div>
+
+        <div class="form-group">
           <label for="provider-select">AI Provider</label>
           <select id="provider-select">
             <option value="gemini" selected>Google Gemini</option>
@@ -254,11 +269,6 @@
       <!-- Display & Automation Options -->
       <div class="section-card">
         <div class="card-title">⚡ Assistant Display & Rules</div>
-        <label class="switch-row"
-          title="Automatically crawls and auto-submits Not Working / unreachable records, and stops at the Submit button when a Working site is found.">
-          <span class="switch-label">Auto-crawl queue (Stop on Working site)</span>
-          <input type="checkbox" id="toggle-auto-queue" checked>
-        </label>
         <label class="switch-row">
           <span class="switch-label">Show Floating Assistant Widget</span>
           <input type="checkbox" id="toggle-floating-widget" checked>

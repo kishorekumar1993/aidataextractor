@@ -72,6 +72,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnTestKey = document.getElementById("btn-test-key");
   const statusMsg = document.getElementById("api-test-status");
   const toggleAutoQueue = document.getElementById("toggle-auto-queue");
+  const crawlModeSelect = document.getElementById("crawl-mode-select");
+  const btnPopupStopCrawl = document.getElementById("btn-popup-stop-crawl");
   const toggleStrictFilter = document.getElementById("toggle-strict-filter");
   const toggleFloatingWidget = document.getElementById("toggle-floating-widget");
   const toggleInlineBtn = document.getElementById("toggle-inline-btn");
@@ -138,8 +140,15 @@ document.addEventListener("DOMContentLoaded", () => {
     populateModelsForProvider("gemini", savedModelsByProvider.gemini);
 
     toggleStrictFilter.checked = res.strictFilter !== undefined ? res.strictFilter : true;
+    const isAutoQueue = res.crawlMode === "auto" || res.crawlMode === "continuous" || (res.autoQueueEnabled !== undefined ? !!res.autoQueueEnabled : false);
     if (toggleAutoQueue) {
-      toggleAutoQueue.checked = res.autoQueueEnabled !== undefined ? res.autoQueueEnabled : true;
+      toggleAutoQueue.checked = isAutoQueue;
+    }
+    if (crawlModeSelect) {
+      crawlModeSelect.value = isAutoQueue ? "auto" : "manual";
+    }
+    if (btnPopupStopCrawl) {
+      btnPopupStopCrawl.style.display = isAutoQueue ? "block" : "none";
     }
     if (toggleFloatingWidget) {
       toggleFloatingWidget.checked = res.showFloatingWidget !== undefined ? res.showFloatingWidget : true;
@@ -167,7 +176,7 @@ document.addEventListener("DOMContentLoaded", () => {
     savedModelsByProvider.gemini = modelSelect.value;
 
     const strict = toggleStrictFilter.checked;
-    const autoQueue = toggleAutoQueue ? toggleAutoQueue.checked : true;
+    const isAuto = crawlModeSelect ? (crawlModeSelect.value === "auto" || crawlModeSelect.value === "continuous") : (toggleAutoQueue ? toggleAutoQueue.checked : false);
     const floating = toggleFloatingWidget ? toggleFloatingWidget.checked : true;
     const inline = toggleInlineBtn ? toggleInlineBtn.checked : true;
 
@@ -177,7 +186,8 @@ document.addEventListener("DOMContentLoaded", () => {
       apiKey: key,
       model: savedModelsByProvider.gemini,
       strictFilter: strict,
-      autoQueueEnabled: autoQueue,
+      autoQueueEnabled: isAuto,
+      crawlMode: isAuto ? "auto" : "manual",
       showFloatingWidget: floating,
       showInlineBtn: inline
     }, () => {
@@ -191,9 +201,54 @@ document.addEventListener("DOMContentLoaded", () => {
       saveSettingsToStorage({ extractionMode: extractionModeSelect.value });
     });
   }
+  if (crawlModeSelect) {
+    crawlModeSelect.addEventListener("change", () => {
+      const isContinuous = crawlModeSelect.value === "auto" || crawlModeSelect.value === "continuous";
+      if (toggleAutoQueue) toggleAutoQueue.checked = isContinuous;
+      if (btnPopupStopCrawl) btnPopupStopCrawl.style.display = isContinuous ? "block" : "none";
+      saveSettingsToStorage({ autoQueueEnabled: isContinuous, crawlMode: isContinuous ? "auto" : "manual" });
+      if (!isContinuous) {
+        chrome.runtime.sendMessage({ action: "STOP_ALL_CRAWLING" }, () => {});
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs && tabs[0] && tabs[0].id) {
+            chrome.tabs.sendMessage(tabs[0].id, { action: "STOP_ALL_CRAWLING" }, () => {});
+          }
+        });
+      }
+      showStatus(isContinuous ? "⚡ Auto Crawl activated: Always auto-crawls on load." : "✋ Manual Crawl activated: Always manual (only crawls on click).", "success");
+    });
+  }
+
   if (toggleAutoQueue) {
     toggleAutoQueue.addEventListener("change", () => {
-      saveSettingsToStorage({ autoQueueEnabled: toggleAutoQueue.checked });
+      const isContinuous = toggleAutoQueue.checked;
+      if (crawlModeSelect) crawlModeSelect.value = isContinuous ? "auto" : "manual";
+      if (btnPopupStopCrawl) btnPopupStopCrawl.style.display = isContinuous ? "block" : "none";
+      saveSettingsToStorage({ autoQueueEnabled: isContinuous, crawlMode: isContinuous ? "auto" : "manual" });
+      if (!isContinuous) {
+        chrome.runtime.sendMessage({ action: "STOP_ALL_CRAWLING" }, () => {});
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs && tabs[0] && tabs[0].id) {
+            chrome.tabs.sendMessage(tabs[0].id, { action: "STOP_ALL_CRAWLING" }, () => {});
+          }
+        });
+      }
+    });
+  }
+
+  if (btnPopupStopCrawl) {
+    btnPopupStopCrawl.addEventListener("click", () => {
+      if (toggleAutoQueue) toggleAutoQueue.checked = false;
+      if (crawlModeSelect) crawlModeSelect.value = "manual";
+      btnPopupStopCrawl.style.display = "none";
+      saveSettingsToStorage({ autoQueueEnabled: false, crawlMode: "manual" });
+      chrome.runtime.sendMessage({ action: "STOP_ALL_CRAWLING" }, () => {});
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs && tabs[0] && tabs[0].id) {
+          chrome.tabs.sendMessage(tabs[0].id, { action: "STOP_ALL_CRAWLING" }, () => {});
+        }
+      });
+      showStatus("🛑 Crawling stopped. Switched to Manual Crawl.", "idle");
     });
   }
   if (toggleFloatingWidget) {
@@ -507,12 +562,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const syncKey = typeof NON_WORKING_SYNC_TIME_KEY !== "undefined" ? NON_WORKING_SYNC_TIME_KEY : "nonWorkingLastExcelSyncTime";
 
         const data = await chrome.storage.local.get([recordsKey, workingKey, syncKey]);
-        if (Array.isArray(data[recordsKey])) {
-          currentRecords = data[recordsKey];
-        }
-        if (Array.isArray(data[workingKey])) {
-          currentWorkingRecords = data[workingKey];
-        }
+        currentRecords = Array.isArray(data[recordsKey]) ? data[recordsKey] : [];
+        currentWorkingRecords = Array.isArray(data[workingKey]) ? data[workingKey] : [];
         const lastSyncTime = data[syncKey] || null;
 
         if (typeof calculateErrorStats === "function") {
@@ -836,43 +887,61 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Clear Records (Confirmation Required)
+  // Clear Records (Confirmation Required - Clears both Working & Error records completely)
   if (btnClearRecords) {
     btnClearRecords.addEventListener("click", () => {
-      const total = currentRecords.length;
+      const errorCount = (currentRecords || []).length;
+      const workingCount = (currentWorkingRecords || []).length;
+      const total = errorCount + workingCount;
       if (total === 0) {
         showExcelSyncStatus("There are no records to clear.", "idle");
         return;
       }
 
-      const confirmed = window.confirm(`⚠️ Are you sure you want to clear all ${total} historical non-working website records?\n\nThis will remove them from local storage. Download your Excel file first if you wish to preserve a copy.`);
+      const confirmed = window.confirm(
+        `⚠️ Are you sure you want to completely clear all ${total} website records?\n\n` +
+        `• Working Sites: ${workingCount}\n` +
+        `• Not Working / Redirect / Not English: ${errorCount}\n\n` +
+        `This will completely clear all working and non-working records from local storage. Download your Excel file first if you wish to preserve a copy.`
+      );
       if (!confirmed) return;
 
       const clearLocally = () => {
         const recordsKey = typeof NON_WORKING_STORAGE_KEY !== "undefined" ? NON_WORKING_STORAGE_KEY : "nonWorkingRecords";
         const workingKey = typeof WORKING_STORAGE_KEY !== "undefined" ? WORKING_STORAGE_KEY : "workingRecords";
+        currentRecords = [];
+        currentWorkingRecords = [];
+        if (typeof calculateErrorStats === "function") {
+          lastFetchedStats = calculateErrorStats([], null, [], todayIsoDate);
+        } else if (lastFetchedStats) {
+          lastFetchedStats.totalWorking = 0;
+          lastFetchedStats.totalNotWorking = 0;
+          lastFetchedStats.totalRedirect = 0;
+          lastFetchedStats.totalNotEnglish = 0;
+          lastFetchedStats.totalHistorical = 0;
+          lastFetchedStats.workingToday = 0;
+          lastFetchedStats.notWorkingToday = 0;
+          lastFetchedStats.redirectToday = 0;
+          lastFetchedStats.notEnglishToday = 0;
+          lastFetchedStats.totalToday = 0;
+        }
+        updateMetricsDisplay();
+        if (recordsViewerPanel && recordsViewerPanel.style.display !== "none") {
+          renderRecordsTable();
+        }
         if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
           chrome.storage.local.set({ [recordsKey]: [], [workingKey]: [] }, () => {
-            currentRecords = [];
-            currentWorkingRecords = [];
-            refreshDashboardData();
-            showExcelSyncStatus("🗑️ All historical error records cleared.", "success");
+            chrome.storage.local.remove([recordsKey, workingKey]).catch(() => {});
+            showExcelSyncStatus("🗑️ Complete data cleared (Working & Error records).", "success");
           });
+        } else {
+          showExcelSyncStatus("🗑️ Complete data cleared (Working & Error records).", "success");
         }
       };
 
       try {
-        chrome.runtime.sendMessage({ action: "CLEAR_NON_WORKING_RECORDS" }, (res) => {
-          if (chrome.runtime.lastError) {
-            clearLocally();
-            return;
-          }
-          if (res && res.success) {
-            refreshDashboardData();
-            showExcelSyncStatus("🗑️ All historical error records cleared.", "success");
-          } else {
-            clearLocally();
-          }
+        chrome.runtime.sendMessage({ action: "CLEAR_NON_WORKING_RECORDS" }, () => {
+          clearLocally();
         });
       } catch (e) {
         clearLocally();

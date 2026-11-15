@@ -95,7 +95,7 @@
       }
     });
 
-    nonWorkingWriteQueue = writeTask.catch(() => {});
+    nonWorkingWriteQueue = writeTask.catch(() => { });
     return writeTask;
   }
 
@@ -150,7 +150,7 @@
       }
     });
 
-    workingWriteQueue = writeTask.catch(() => {});
+    workingWriteQueue = writeTask.catch(() => { });
     return writeTask;
   }
 
@@ -182,7 +182,7 @@
         return r;
       });
       if (hadInvalid && typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({ [NON_WORKING_STORAGE_KEY]: records }).catch(() => {});
+        chrome.storage.local.set({ [NON_WORKING_STORAGE_KEY]: records }).catch(() => { });
       }
       const stats = typeof calculateErrorStats === "function"
         ? calculateErrorStats(records, lastSyncTime, workingRecords, targetDate)
@@ -225,12 +225,16 @@
   }
 
   /**
-   * Clears records from storage (requires explicit confirmation).
+   * Clears all website records (both non-working and working) from storage (requires explicit confirmation).
    */
   async function clearNonWorkingRecords() {
     try {
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-        await chrome.storage.local.remove([NON_WORKING_STORAGE_KEY]);
+        await chrome.storage.local.set({
+          [NON_WORKING_STORAGE_KEY]: [],
+          [WORKING_STORAGE_KEY]: []
+        });
+        await chrome.storage.local.remove([NON_WORKING_STORAGE_KEY, WORKING_STORAGE_KEY]);
       }
       return { success: true };
     } catch (err) {

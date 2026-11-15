@@ -561,7 +561,7 @@
               const escapedKw = info.keyword.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
               try {
                 rawSnippet = rawSnippet.replace(new RegExp(`(\\b${escapedKw}\\b|${escapedKw})`, "gi"), '<mark style="background: #fef08a; color: #854d0e; padding: 1px 4px; border-radius: 3px; font-weight: 700;">$1</mark>');
-              } catch (e) {}
+              } catch (e) { }
             }
             snippetRow.innerHTML = `"...${rawSnippet}..."`;
           } else {
@@ -703,7 +703,7 @@
         </div>
 
         <div class="ai-secondary-actions" style="margin-top: 3px;">
-          <button class="ai-btn-secondary" id="ai-pause-pipeline-btn" style="display: none; color: #dc2626; border-color: #fca5a5; background-color: #fef2f2; font-weight: 600;" title="Pause Auto-Queue Pipeline">⏸️ Stop</button>
+          <button class="ai-btn-secondary" id="ai-pause-pipeline-btn" style="display: none; color: #b91c1c; border-color: #fca5a5; background-color: #fee2e2; font-weight: 700;" title="Stop Continuous Crawling & Switch to Manual Mode">🛑 Stop Crawl</button>
           <button class="ai-btn-secondary" id="ai-fill-cached-btn" title="Re-apply prefilled values">Fill Form</button>
           <button class="ai-btn-secondary" id="ai-clear-btn" title="Clear highlighted fields">Reset Form</button>
         </div>
@@ -790,13 +790,10 @@
           state.pendingAutoSubmitTimer = null;
         }
         state.autoSubmitNotWorkingEnabled = false;
-        state.autoQueueEnabled = false;
         const toggleEl = document.getElementById("ai-auto-submit-notworking-toggle");
         if (toggleEl) toggleEl.checked = false;
-        const autoQueueToggleEl = document.getElementById("ai-widget-auto-queue-toggle");
-        if (autoQueueToggleEl) autoQueueToggleEl.checked = false;
         if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-          chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: false, autoQueueEnabled: false });
+          chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: false });
         }
         AIExt.stopAutoQueuePipeline("User stopped auto-submit for study");
         AIExt.stopBatchNotWorking("User stopped auto-submit for study");
@@ -846,9 +843,13 @@
     const pausePipelineBtn = document.getElementById("ai-pause-pipeline-btn");
     if (pausePipelineBtn) {
       pausePipelineBtn.addEventListener("click", () => {
-        AIExt.stopAutoQueuePipeline("User paused auto-queue");
-        AIExt.stopBatchNotWorking("User paused batch");
-        updateStatus("⏸️ Process paused by user.", "idle");
+        if (typeof AIExt.stopAllCrawling === "function") {
+          AIExt.stopAllCrawling("User stopped continuous crawl in widget");
+        } else {
+          AIExt.stopAutoQueuePipeline("User paused auto-queue");
+          AIExt.stopBatchNotWorking("User paused batch");
+          updateStatus("⏹️ Process stopped by user.", "idle");
+        }
       });
     }
 
@@ -984,12 +985,19 @@
   }
 
   function injectInlineQuickButton() {
-    const existing = document.getElementById("ai-quick-btn");
+    const existing = document.getElementById("ai-inline-btn-container") || document.getElementById("ai-quick-btn");
     if (existing && document.body && document.body.contains(existing)) {
+      updateInlineControlsVisibility();
       return;
     }
     if (existing && (!document.body || !document.body.contains(existing))) {
       try { existing.remove(); } catch (e) { }
+    }
+
+    // Clean up any stray container if previously injected
+    const oldContainer = document.getElementById("ai-inline-btn-container");
+    if (oldContainer) {
+      try { oldContainer.remove(); } catch (e) {}
     }
 
     // 1. Look for btnClickHere or text "click here"

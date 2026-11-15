@@ -71,7 +71,7 @@
           };
 
           if (chrome.storage.sync) {
-            chrome.storage.sync.get({ autoQueueEnabled: true }, (syncRes) => {
+            chrome.storage.sync.get({ autoQueueEnabled: false }, (syncRes) => {
               state.autoQueueEnabled = syncRes ? !!syncRes.autoQueueEnabled : state.autoQueueEnabled;
               resumePipeline(state.autoQueueEnabled);
             });
@@ -93,6 +93,11 @@
           console.log("[AI Assistant] ⚡ Auto-crawl enabled on load. Auto-starting crawl...");
           if (typeof AIExt.checkAndAutoTriggerQueueCrawl === "function") {
             AIExt.checkAndAutoTriggerQueueCrawl();
+          }
+        } else {
+          console.log("[AI Assistant] ✋ Manual Crawl mode active on load. Waiting for user click.");
+          if (typeof AIExt.updateStatus === "function") {
+            AIExt.updateStatus("✋ Manual Crawl ready. Click 'AI Crawl & Fill' to crawl.", "idle");
           }
         }
       }
@@ -520,6 +525,13 @@
         AIExt.resetCrawlButtons();
         try { sendResponse({ success: true, started: true }); } catch (e) { }
         triggerCrawlAndFill();
+        return false;
+      }
+      if (message && message.action === "STOP_ALL_CRAWLING") {
+        if (typeof AIExt.stopAllCrawling === "function") {
+          AIExt.stopAllCrawling("Stopped via message from popup/background");
+        }
+        try { sendResponse({ success: true, stopped: true }); } catch (e) { }
         return false;
       }
       if (message && message.action === "START_BATCH_10_NOTWORKING") {
