@@ -335,8 +335,9 @@ Never sacrifice source accuracy to achieve full-form expansion.
   - Province
   - Prefecture
 - Therefore, if a County, Province, or Prefecture name is explicitly mentioned in the company address, select "Available".
-- CAPITAL CITY RULE — MANDATORY:
-  - If a country's capital city is mentioned as the company's location in the company address (e.g. Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
+- CAPITAL CITY & CITY-STATE RULE — MANDATORY:
+  - If a country's capital city is mentioned as the company's location in the company address (e.g. Singapore, Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
+  - Sovereign City-States (Singapore, Monaco, Vatican City, San Marino): In Singapore, the country itself functions as City, State, and Capital. For any address located in Singapore, BOTH "state": "Available" AND "city": "Available" MUST be selected!
   - This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
 - Do not guess or infer a State from the City, postal code, country, or other information.
 - Do not assume the last word in companyAddress is a State just because of its position! Verify that the word is actually an officially recognized State, County, Province, or Prefecture (e.g. "28 Rue Zuber, Rixheim" or "27W705 Hickory Lane, Northwoods" has no State written -> mark "Not Available").
@@ -432,14 +433,16 @@ RULE 5 — TOWNSHIP VALIDATION:
 - A township that is only a minor administrative subdivision, neighborhood, or unincorporated locality does not qualify.
 - Never assume Township and Town have the same administrative meaning.
 
-RULE 6 — CAPITAL CITY RULE (MANDATORY EXCEPTION):
-If the official national capital city is explicitly mentioned as the company's location in companyAddress:
+RULE 6 — CAPITAL CITY & CITY-STATE RULE (MANDATORY EXCEPTION):
+If the official national capital city is explicitly mentioned as the company's location in companyAddress, OR if the company location is Singapore or another sovereign City-State:
 
 BOTH FIELDS MUST BE:
 - "city": "Available"
 - "state": "Available"
 
 This rule applies even when the address does not separately mention a State, County, Province, or Prefecture.
+For Singapore addresses (e.g. "Block 531 Upper Cross Street, 1st Floor-12, Hong Lim Complex"):
+Singapore is a sovereign city-state; therefore BOTH City and State MUST be marked "Available".
 
 Additional conditions:
 - The national capital must be explicitly mentioned in companyAddress.

@@ -1083,11 +1083,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.city = "Not Available";
     }
 
-    // CAPITAL CITY RULE — MANDATORY:
-    // Apply as fallback ONLY if AI did not provide State or City
-    if ((!apiState || !apiCity) && result.companyAddress && result.companyAddress.length >= 3 && result.companyAddress.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country)) {
-      if (!apiCity) result.city = "Available";
-      if (!apiState) result.state = "Available";
+    // CAPITAL CITY & CITY-STATE RULE — MANDATORY:
+    // If country/location is Singapore or a City-State, or if capital city is mentioned:
+    // BOTH fields MUST be: City: "Available", State: "Available"
+    const isSg = (typeof isSingaporeLocation === "function" && isSingaporeLocation(result.companyAddress, country)) || (country && country.toLowerCase() === "singapore");
+    const hasCap = result.companyAddress && result.companyAddress.length >= 3 && result.companyAddress.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country);
+    if (isSg || hasCap) {
+      result.city = "Available";
+      result.state = "Available";
     }
 
     // 6. Email ID & Secondary Email ID: Take from API directly. DO NOT combine crawl emails.
@@ -1841,13 +1844,13 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
   }
 
-  // CAPITAL CITY RULE — MANDATORY:
-  // If a country's capital city is mentioned as the company's location in the company address,
+  // CAPITAL CITY & CITY-STATE RULE — MANDATORY:
+  // If a country's capital city is mentioned, OR if location/country is Singapore or a City-State:
   // BOTH fields must be selected as:
   // - City: "Available"
   // - State: "Available"
-  // This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
-  if (addr && addr.length >= 3 && addr.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(addr, country)) {
+  const isSgCrawl = (typeof isSingaporeLocation === "function" && isSingaporeLocation(addr, country)) || (country && country.toLowerCase() === "singapore");
+  if (isSgCrawl || (addr && addr.length >= 3 && addr.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(addr, country))) {
     result.city = "Available";
     result.state = "Available";
   }
