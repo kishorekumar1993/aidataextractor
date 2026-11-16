@@ -199,7 +199,121 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
     - No removed Post Office Box numbers.
     - No rearranged address components.
     - No accidental inclusion of postal codes, country names, or phone/fax numbers.
+RULE 13. MANDATORY FULL ADDRESS EXPANSION ENGINE (STRICT QC):
 
+- Every address must be expanded into its complete, recognizable form wherever the original website uses an abbreviation.
+- Do not leave commonly recognized abbreviations in the final companyAddress when their full forms can be reliably established.
+- Expansion must apply to ALL address components, not just street names.
+
+A. BUILDING AND PREMISE EXPANSION:
+- Bldg. / Bldg -> Building
+- Ste. / Ste -> Suite
+- Apt. / Apt -> Apartment
+- Fl. / Fl -> Floor
+- Rm. / Rm -> Room
+- Unit -> Unit
+- # -> Number (only when used as an address number prefix)
+- P.O. Box / PO Box -> Post Office Box
+- P.O. -> Post Office (only when context supports it)
+
+B. STREET TYPE EXPANSION:
+- St. -> Street
+- Rd. -> Road
+- Ave. -> Avenue
+- Blvd. -> Boulevard
+- Dr. -> Drive (only when context supports it)
+- Ln. -> Lane
+- Ct. -> Court
+- Cir. -> Circle
+- Pkwy. -> Parkway
+- Hwy. -> Highway
+- Pl. -> Place (only when context supports it)
+- Ter. -> Terrace
+- Trl. -> Trail
+- Way -> Way
+
+C. ADMINISTRATIVE DIVISION EXPANSION:
+- Ste. -> State (only when context supports it)
+- Co. -> County (only when context supports it)
+- Dist. -> District
+- Twp. -> Township
+- Muni. -> Municipality
+- Prov. -> Province
+- Reg. -> Region (only when context supports it)
+
+D. DIRECTIONAL EXPANSION:
+- N. -> North
+- S. -> South
+- E. -> East
+- W. -> West
+- NE -> Northeast
+- NW -> Northwest
+- SE -> Southeast
+- SW -> Southwest
+
+E. ORGANIZATIONAL AND INDUSTRIAL LOCATION EXPANSION:
+- Ind. Est. -> Industrial Estate
+- Ind. Area -> Industrial Area
+- Ind. Park -> Industrial Park
+- Bus. Park -> Business Park
+- Tech. Park -> Technology Park
+- Com. Centre -> Commercial Centre
+- Ind. Zone -> Industrial Zone
+
+F. EXPANSION VALIDATION:
+- Expand only when the abbreviation is unambiguous in its address context.
+- Never expand a street abbreviation when it forms part of an official proper name.
+- Never expand company names, building names, industrial park names, or registered proper names incorrectly.
+- Preserve ambiguous abbreviations and flag them for QC review.
+- Do not expand abbreviations that are already part of an official full name.
+- Never invent missing address components.
+
+G. FINAL OUTPUT REQUIREMENT:
+- Before generating companyAddress, perform a complete abbreviation scan.
+- Check every address segment from beginning to end.
+- Expand every reliably identifiable abbreviation.
+- Verify that no expandable abbreviation remains.
+- Preserve all original numbers, identifiers, symbols, and component order.
+RULE 15. TWO-PASS ADDRESS EXPANSION AND VALIDATION:
+
+PASS 1 – SOURCE EXTRACTION:
+- Identify the complete headquarters address from the official website.
+- Capture every address line.
+- Preserve original abbreviations, numbers, symbols, and sequence.
+- Identify the country and address language.
+
+PASS 2 – ADDRESS NORMALIZATION:
+- Expand all supported abbreviations.
+- Expand state, province, county, district, street, building, and premise abbreviations.
+- Preserve proper names and identifiers.
+- Remove postal codes, country names, and phone/fax numbers.
+- Apply comma separation rules.
+
+PASS 3 – FINAL QC:
+- Compare normalized address against the original source.
+- Check that no original component is missing.
+- Check that no unsupported word has been added.
+- Check that all expandable abbreviations have been expanded.
+- Check that street numbers and building identifiers remain unchanged.
+- Confirm the final address ends without a comma or period.
+
+If any expansion is ambiguous, preserve the original text and flag it for manual QC.
+
+CRITICAL FINAL INSTRUCTION:
+
+The companyAddress field must undergo a separate abbreviation-expansion
+validation process before JSON generation.
+
+Do not consider address extraction complete merely because the address
+has been copied correctly from the website.
+
+Correct extraction + complete abbreviation expansion +
+component preservation + final QC validation are all mandatory.
+
+If a recognized and unambiguous abbreviation remains in the final
+companyAddress, the address normalization is incomplete.
+
+Never sacrifice source accuracy to achieve full-form expansion.
 - CRITICAL HIGH PRIORITY FORMATTING RULES:
   * NEVER INVENT OR ADD THE WORD "Number" IN FRONT OF BARE STREET NUMBERS: If website says "40 Sarah Street", output "40 Sarah Street" (never "Number 40 Sarah Street"). ONLY expand to "Number" when "No.", "No", "Nos.", or "#" was literally written on the website (e.g. "No. 159" -> "Number 159").
   * ASIAN & TAIWAN FLOOR & SUB-UNIT NOTATION: Floor sub-divisions with hyphen (e.g. "6F-1", "6F.-1", "6F - 1", "6F之1", "6樓之1", "6/F-1") MUST ALWAYS be formatted with ordinal floor and hyphenated sub-unit: "6th Floor-1" (STRICTLY NEVER output "6th Floor, unit 1" or "Floor 6, unit 1").
