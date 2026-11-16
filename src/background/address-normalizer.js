@@ -271,7 +271,7 @@ function romanizeChineseAddress(addr) {
 function stripBlindlyAddedNumber(addr, rawEvidence = "", rawSource = "") {
   if (!addr || !/\bNumber\s+\d+/i.test(addr)) return addr;
   return addr.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    const rawHasNoRegex = new RegExp('(?:(?:\\b(?:no|nos|n|nu|nr|nº|n°|numero|num|number|lot\\s*no|plot\\s*no)[.:]?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+    const rawHasNoRegex = new RegExp('(?:(?:\\b(?:no|nos|n|nu|nr|nº|n°|numero|num|number|lot\\s*no|plot\\s*no)[.:]?|#)\\s*' + digits.replace('-', '[-/]') + '(?:\\b|(?=[A-Za-z]))|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
     // If rawSource explicitly had No./Number/#/號, preserve it
     if (rawSource && typeof rawSource === "string" && rawHasNoRegex.test(rawSource)) {
       return match;
@@ -298,7 +298,7 @@ function stripExtraWordsFromAddress(addr, rawSource = "") {
 
   // 1. "Number": If addr has "Number <digits>" but rawSource does NOT have "no", "number", "#", "號"
   a = a.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|n|nu|nr|nº|n°|numero|num|number|lot\\s*no|plot\\s*no)[.:]?|#)\\s*' + digits.replace('-', '[-/]') + '\\b|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+    const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|n|nu|nr|nº|n°|numero|num|number|lot\\s*no|plot\\s*no)[.:]?|#)\\s*' + digits.replace('-', '[-/]') + '(?:\\b|(?=[A-Za-z]))|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
     if (rawHasNo.test(rawSource)) {
       return match;
     }
@@ -516,6 +516,9 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])N\.\s*(?=\d+(?:[-\/]\d+)?\b(?!\s*(?:st|nd|rd|th)\b))/gi, '$1Number ');
   a = a.replace(/\blot\s+(?:no|nos)[.:]?\s*(?=\d)/gi, 'Lot Number ');
   a = a.replace(/\bplot\s+(?:no|nos)[.:]?\s*(?=\d)/gi, 'Plot Number ');
+
+  // Separate premise numbers that are run together with street names without a space (e.g. "62-6JHONGCHE ROAD" -> "62-6 Jhongche Road")
+  a = a.replace(/(\b\d+(?:[-/]\d+)?)([A-Za-z]+(?:\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Highway|Place|Court|Close|Square|Terrace|Park|Path|Walk|Plaza)\b))/gi, "$1 $2");
   a = a.replace(/(^|[,\s])Sec\.\s*(?=[A-Za-z0-9])/gi, '$1Section ');
   a = a.replace(/(^|[,\s])Sec\b\s*(?=[A-Za-z0-9])/gi, '$1Section ');
   a = a.replace(/\b(Hsinchu|Changhua|Miaoli|Yunlin|Chiayi|Pingtung|Taitung|Hualien|Yilan|Nantou|Kinmen|Penghu|Lienchiang|Matsu)\s+Country\b/gi, "$1 County");
@@ -2112,7 +2115,8 @@ function removePostalCodesCarefully(addr) {
   });
   a = a.replace(/(\b\d+\s+)\b(?:0[1-9]|[1-4]\d|5[0-2])\d{3}\b\s+(?=[\p{L}])/gu, "$1");
 
-  // 14. Postal code directly following City / District / Township / County / Hsien / Province / Region
+  // 14. Postal code directly following City / District / Township / County / Hsien / Province / Region or major Taiwan municipal cities
+  a = a.replace(/(\b(?:Taichung|Taipei|Tainan|Kaohsiung|Taoyuan|Keelung|Hsinchu|Chiayi|Changhua|Miaoli|Nantou|Yunlin|Pingtung|Yilan|Hualien|Taitung|Shengang|Beitun|Xitun|Nantun)\b[\s,]*)\b\d{3}\b(?=[\s,]|$)/gi, "$1");
   a = a.replace(/(\b(?:City|District|Township|County|Hsien|Province|Region|Town|Dist\.?)\b[\s,]*)\b\d{3,6}\b(?=[\s,]|$)/gi, "$1");
 
   // 15. Postal code at the very end of the address string (e.g. "... Campbellfield 3061", "... Mumbai - 400001", or "... Cincinnati, Ohio 45241")
@@ -2144,6 +2148,7 @@ function removePostalCodesCarefully(addr) {
  */
 function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", crawlData = null) {
   if (!addr || typeof addr !== "string") return "Not Available";
+  const rawInput = addr;
   let a = (typeof decodeHtmlEntities === "function" ? decodeHtmlEntities(addr) : addr).trim();
   if (!a || a.toLowerCase() === "not available" || a.length < 5) return "Not Available";
 
@@ -2317,7 +2322,8 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
 
   // Ensure "Number" is ONLY present if "No." / "No" / "#" / "Nº" / "號" was in the original raw address evidence
   if (crawlData && typeof stripBlindlyAddedNumber === "function") {
-    const allEv = `${(crawlData.contactPageText || "")} ${(crawlData.footerText || "")} ${((crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).join(" "))}`;
+    const candTexts = (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).filter(Boolean);
+    const allEv = `${(crawlData.contactPageText || "")} ${(crawlData.footerText || "")} ${(crawlData.profilePageText || "")} ${candTexts.join(" ")}`;
     a = stripBlindlyAddedNumber(a, allEv, "");
   }
 

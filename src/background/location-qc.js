@@ -954,12 +954,19 @@ function evaluateCityQC(address, country) {
     if (hasExplicitCityWord(cleanAddr) || /[\u5e02]/.test(cleanAddr)) {
       return "Available";
     }
-    // 3. Explicit Town, Township, District:
+    // 2b. Official Taiwanese Cities appearing as standalone municipal names (Taichung, Tainan, Kaohsiung, Taoyuan, Keelung, Hsinchu, Chiayi, New Taipei)
+    if (/\b(?:taichung|tainan|kaohsiung|taoyuan|keelung|hsinchu|chiayi|new\s*taipei)\b(?!\s+(?:road|street|avenue|lane|alley|boulevard|drive|way|place|court|highway|close|terrace))\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    // 3. Explicit Town, Township, District, or recognized Taiwanese administrative districts:
     const strippedTW = stripNonAdministrativeCityTerms(cleanAddr);
     if (/\b(?:township|town|district|municipality)\b/i.test(strippedTW) || /[\u93ae\u9547\u9109\u4e61\u5340\u533a]/.test(strippedTW)) {
       if (!addressLooksLikeSuburbOnly(cleanAddr)) {
         return "Available";
       }
+    }
+    if (/\b(?:shengang|beitun|xitun|nantun|dali|taiping|fengyuan|shalu|wuqi|qingshui|daya|tanzi|wuri|yongkang|banqiao|sanchong|zhonghe|yonghe|xinzhuang|xindian)\b/i.test(strippedTW)) {
+      return "Available";
     }
     // Suburb only or bare municipality/county name (e.g. "Keishan, Taoyuan", "Taoyuan") -> Not Available!
     return "Not Available";
