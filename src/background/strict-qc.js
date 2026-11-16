@@ -625,15 +625,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       console.warn(`[AI Assistant] AI First mode: No ${aiConfig.label} API key configured. Falling back to Own Crawl.`);
       extractedData = heuristicExtraction(crawlResult, restrictedCheck);
       extractedData._note = `Own Crawl (AI Fallback: No ${aiConfig.label} API key configured)`;
-      extractedData._extractionSource = "own_crawl_fallback";
-      extractedData._extractionMode = "ai_first";
-      extractedData._isFromAi = false;
-    } else if (elapsedBeforeAi > 25000) {
-      // Crawl took longer than 25s (approaching Chrome SW 28s limit) - fast-path to own crawl to avoid channel timeout
-      console.warn(`[AI Assistant] Crawl took ${elapsedBeforeAi}ms. Fast-pathing to Own Crawl fallback to prevent timeout.`);
-      extractedData = heuristicExtraction(crawlResult, restrictedCheck);
-      extractedData._note = "Own Crawl (AI Fallback: Crawl took >25s, fast-path to prevent timeout)";
-      extractedData._extractionSource = "own_crawl_fallback";
+      extractedData._extractionSource = "fallback";
       extractedData._extractionMode = "ai_first";
       extractedData._isFromAi = false;
     } else {
@@ -661,7 +653,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         console.warn(`[AI Assistant] ${aiConfig.label} API error, falling back to Own Crawl rule engine:`, aiErr.message);
         extractedData = heuristicExtraction(crawlResult, restrictedCheck);
         extractedData._note = `Own Crawl (AI Fallback: ${aiErr.message || "AI Error"})`;
-        extractedData._extractionSource = "own_crawl_fallback";
+        extractedData._extractionSource = "fallback";
         extractedData._extractionMode = "ai_first";
         extractedData._isFromAi = false;
       }

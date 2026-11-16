@@ -171,7 +171,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     city: {
       type: "STRING",
       enum: ["Available", "Not Available"],
-      description: "Available if an official City, Town, District, or Municipality is explicitly mentioned in companyAddress, or if a national Capital City is mentioned; otherwise Not Available. Note: (Town, District, Municipality) should be considered as City. If a country's capital is mentioned in the address, then both City and State are considered available. Do NOT treat suburbs or unincorporated neighborhoods (e.g. Northwoods, Campbellfield, Rowville, Oakleigh South, Mascot, Sandton, Penrose, Trafford Park) as City."
+      description: "Available if an official City, Town, District, or Municipality is explicitly mentioned in companyAddress, or if a national Capital City is mentioned; otherwise Not Available. Note: (Town, District, Municipality) should be considered as City. If a country's capital is mentioned in the address, then both City and State are considered available. Do NOT treat suburbs or unincorporated neighborhoods (e.g. Deception Bay, Campbellfield, Rowville, Oakleigh South, Mulgrave, Braeside, Mascot, Seven Hills, Northwoods, Sandton, Penrose, Trafford Park) as City. Suburb is NOT City: if an address only contains a suburb and state (e.g. '97–99 Kabi Circuit, Deception Bay, Queensland' or '40 Sarah Street, Campbellfield, Victoria'), City MUST be 'Not Available'."
     }, emailId: {
       type: "STRING",
       description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook)."
