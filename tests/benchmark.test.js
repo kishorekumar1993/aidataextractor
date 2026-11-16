@@ -3686,6 +3686,37 @@ async function runAsyncTests() {
     ext.fillFormFields(workingData);
     assert.strictEqual(ext.state.isWaitingForUserWorkingReview, false, 'Fill fields preserves state');
   });
+
+  // 52. Generate & Copy API Payload Feature
+  await runAsyncTest('Generate and copy API Payload (Gemini contents & responseSchema)', async () => {
+    const origFetch = ctx.fetch;
+    ctx.fetch = async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '<html><body><h1>Acme Corp</h1><p>Contact: 123 Main Street, Dallas, Texas, USA</p></body></html>'
+    });
+
+    try {
+      const res = await ctx.generateApiPayload('https://www.acmetest.com');
+      assert.strictEqual(res.success, true, 'generateApiPayload must return success');
+      assert.strictEqual(res.url, 'https://www.acmetest.com', 'Payload must record target URL');
+      assert.ok(typeof res.payloadString === 'string' && res.payloadString.length > 500, 'Payload must return formatted JSON string');
+
+      const parsed = JSON.parse(res.payloadString);
+      assert.ok(Array.isArray(parsed.contents), 'Gemini payload must contain contents array');
+      assert.ok(parsed.contents[0].parts[0].text.includes('EXTRACTION SOURCE PRIORITY'), 'Payload text must include prompt instructions');
+      assert.ok(parsed.generationConfig.responseSchema, 'Payload must include generationConfig responseSchema');
+      assert.strictEqual(parsed.generationConfig.responseMimeType, 'application/json', 'Payload must specify application/json responseMimeType');
+
+      // Test cache retrieval on empty URL
+      const cachedRes = await ctx.generateApiPayload('');
+      assert.strictEqual(cachedRes.success, true, 'Empty URL must fall back to cached payload');
+      assert.strictEqual(cachedRes.cached, true, 'Must indicate cached: true');
+      assert.strictEqual(cachedRes.url, 'https://www.acmetest.com', 'Cached URL must match previous payload');
+    } finally {
+      ctx.fetch = origFetch;
+    }
+  });
 }
 
 runAsyncTests().then(() => {

@@ -377,6 +377,84 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const btnPopupCopyPayload = document.getElementById("btn-popup-copy-payload");
+  if (btnPopupCopyPayload) {
+    btnPopupCopyPayload.addEventListener("click", () => {
+      const labelSpan = document.getElementById("btn-popup-copy-payload-text");
+      const origText = labelSpan ? labelSpan.textContent : "Generate & Copy API Payload";
+      if (labelSpan) labelSpan.textContent = "⏳ Generating...";
+      btnPopupCopyPayload.disabled = true;
+      showPopupCrawlStatus("⏳ Generating API payload...", "loading");
+
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const activeTab = tabs && tabs[0];
+        const tabId = activeTab ? activeTab.id : null;
+
+        const requestPayloadForUrl = (targetUrl) => {
+          chrome.runtime.sendMessage({
+            action: "GENERATE_API_PAYLOAD",
+            url: targetUrl || ""
+          }, async (res) => {
+            btnPopupCopyPayload.disabled = false;
+            if (chrome.runtime.lastError) {
+              const err = chrome.runtime.lastError.message;
+              showPopupCrawlStatus(`Error: ${err}`, "error");
+              if (labelSpan) labelSpan.textContent = "⚠️ Error";
+              setTimeout(() => { if (labelSpan) labelSpan.textContent = origText; }, 2500);
+              return;
+            }
+            if (res && res.success && res.payloadString) {
+              let copied = false;
+              try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  await navigator.clipboard.writeText(res.payloadString);
+                  copied = true;
+                }
+              } catch (clipErr) { }
+              if (!copied) {
+                try {
+                  const ta = document.createElement("textarea");
+                  ta.value = res.payloadString;
+                  ta.style.position = "fixed";
+                  ta.style.left = "-9999px";
+                  document.body.appendChild(ta);
+                  ta.focus();
+                  ta.select();
+                  copied = document.execCommand("copy");
+                  document.body.removeChild(ta);
+                } catch (e) { }
+              }
+              if (copied) {
+                const sizeKb = (res.charCount ? (res.charCount / 1024).toFixed(1) : (res.payloadString.length / 1024).toFixed(1));
+                showPopupCrawlStatus(`✅ API Payload copied to clipboard (${sizeKb} KB)! Ready to paste into Postman / Google AI Studio.`, "success");
+                if (labelSpan) labelSpan.textContent = `✅ Copied (${sizeKb} KB)!`;
+              } else {
+                showPopupCrawlStatus("⚠️ Unable to copy to clipboard", "error");
+                if (labelSpan) labelSpan.textContent = "⚠️ Copy Failed";
+              }
+            } else {
+              showPopupCrawlStatus(`Error: ${res?.error || "Could not generate payload"}`, "error");
+              if (labelSpan) labelSpan.textContent = "⚠️ Failed";
+            }
+            setTimeout(() => { if (labelSpan) labelSpan.textContent = origText; }, 2500);
+          });
+        };
+
+        if (tabId) {
+          chrome.tabs.sendMessage(tabId, { action: "GET_CURRENT_TARGET_URL" }, (urlRes) => {
+            let detectedUrl = (urlRes && urlRes.url) || "";
+            if (!detectedUrl && activeTab && activeTab.url && !activeTab.url.startsWith("chrome")) {
+              detectedUrl = activeTab.url;
+            }
+            requestPayloadForUrl(detectedUrl);
+          });
+        } else {
+          requestPayloadForUrl("");
+        }
+      });
+    });
+  }
+
   function showPopupCrawlStatus(msg, type) {
     if (!popupCrawlStatus) return;
     popupCrawlStatus.className = `status-msg ${type}`;

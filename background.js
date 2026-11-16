@@ -226,6 +226,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === "GENERATE_API_PAYLOAD") {
+    if (typeof generateApiPayload === "function") {
+      generateApiPayload(request.url, { forceFresh: !!request.forceFresh })
+        .then(res => { try { sendResponse(res); } catch (e) { } })
+        .catch(err => { try { sendResponse({ success: false, error: err.message }); } catch (e) { } });
+      return true;
+    } else {
+      sendResponse({ success: false, error: "generateApiPayload function not loaded" });
+      return false;
+    }
+  }
+
   if (request.action === "UPDATE_LAST_SYNC_TIME") {
     updateLastExcelSync(request.timestamp || Date.now())
       .then(res => { try { sendResponse(res); } catch (e) { } })

@@ -3,6 +3,31 @@
 (function (AIExt) {
   const state = (AIExt.state = AIExt.state || {});
 
+  async function copyTextToClipboard(text) {
+    if (!text) return false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) { }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      ta.style.top = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch (err) {
+      return false;
+    }
+  }
+
   function ensureAiCrawlButtonsVisible() {
     if (state.showFloatingWidget !== false) {
       createFloatingWidget();
@@ -714,6 +739,13 @@
           <button class="ai-btn-secondary" id="ai-clear-btn" title="Clear highlighted fields">Reset Form</button>
         </div>
 
+        <div class="ai-secondary-actions" style="margin-top: 4px;">
+          <button type="button" class="ai-btn-secondary" id="ai-copy-payload-btn" style="width: 100%; padding: 6px 8px; font-size: 11px; font-weight: 600; color: #1d4ed8; background: #eff6ff; border: 1px solid #93c5fd; border-radius: 4px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;" title="Generate and copy the exact JSON API payload (prompt + schema) for Google AI Studio / Postman">
+            <span>📋</span>
+            <span id="ai-copy-payload-label">Generate &amp; Copy API Payload</span>
+          </button>
+        </div>
+
         <!-- Dedicated Not Working Study Card with reason & rule -->
         <div id="ai-notworking-study-card" class="ai-notworking-card" style="display: none;">
           <div class="ai-notworking-header" style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px;">
@@ -985,6 +1017,55 @@
         e.stopPropagation();
         if (typeof AIExt.clearFilledFields === "function") {
           AIExt.clearFilledFields();
+        }
+      });
+    }
+
+    const copyPayloadBtn = document.getElementById("ai-copy-payload-btn");
+    if (copyPayloadBtn) {
+      copyPayloadBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const labelEl = document.getElementById("ai-copy-payload-label");
+        const origLabel = labelEl ? labelEl.textContent : "Generate & Copy API Payload";
+        const currentUrl = (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "") || state.lastProcessedUrl || "";
+
+        if (labelEl) labelEl.textContent = "⏳ Generating Payload...";
+        copyPayloadBtn.disabled = true;
+
+        try {
+          const res = await AIExt.sendRuntimeMessage({
+            action: "GENERATE_API_PAYLOAD",
+            url: currentUrl
+          });
+
+          if (res && res.success && res.payloadString) {
+            const ok = await copyTextToClipboard(res.payloadString);
+            if (ok) {
+              const sizeKb = (res.charCount ? (res.charCount / 1024).toFixed(1) : (res.payloadString.length / 1024).toFixed(1));
+              if (labelEl) labelEl.textContent = `✅ Copied (${sizeKb} KB)!`;
+              if (typeof AIExt.showFloatingToast === "function") {
+                AIExt.showFloatingToast(`✅ API Payload copied to clipboard (${sizeKb} KB)! Ready for Postman / AI Studio.`, "success", 3000);
+              }
+              if (typeof updateStatus === "function") {
+                updateStatus(`✅ Copied API payload for ${res.url || "current site"} (${sizeKb} KB)`, "success");
+              }
+            } else {
+              throw new Error("Clipboard write permission failed");
+            }
+          } else {
+            throw new Error(res?.error || "Failed to generate API payload");
+          }
+        } catch (err) {
+          if (labelEl) labelEl.textContent = "⚠️ Copy Failed";
+          if (typeof AIExt.showFloatingToast === "function") {
+            AIExt.showFloatingToast(`⚠️ Error: ${err.message}`, "warning", 3000);
+          }
+        } finally {
+          setTimeout(() => {
+            if (labelEl) labelEl.textContent = origLabel;
+            copyPayloadBtn.disabled = false;
+          }, 2500);
         }
       });
     }

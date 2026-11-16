@@ -646,6 +646,27 @@ async function analyzeWithAi(crawlData, aiConfig = {}, restrictedCheck = null, c
     });
     parsed._aiProvider = cfg.label;
     parsed._aiModel = activeModel;
+
+    // Cache latest API payload for 1-click clipboard copying
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({
+          lastApiPayload: {
+            url: crawlData.finalUrl || crawlData.originalUrl || "",
+            timestamp: Date.now(),
+            provider: "groq",
+            model: activeModel,
+            requestBody: {
+              model: activeModel,
+              messages: [{ role: "user", content: prompt }],
+              temperature: 0,
+              response_format: { type: "json_object" }
+            }
+          }
+        });
+      }
+    } catch (e) { }
+
     // Persist active verified Groq model if previously saved one was unavailable
     if (activeModel && activeModel !== normalized.model && typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
       try { chrome.storage.sync.set({ groqModel: activeModel }); } catch (e) { }
@@ -666,11 +687,190 @@ async function analyzeWithAi(crawlData, aiConfig = {}, restrictedCheck = null, c
   });
   parsed._aiProvider = "Gemini";
   parsed._aiModel = activeModel;
+
+  // Cache latest API payload for 1-click clipboard copying
+  try {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({
+        lastApiPayload: {
+          url: crawlData.finalUrl || crawlData.originalUrl || "",
+          timestamp: Date.now(),
+          provider: "gemini",
+          model: activeModel || reqModel,
+          requestBody: {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0,
+              maxOutputTokens: 2048,
+              responseMimeType: "application/json",
+              responseSchema: GEMINI_RESPONSE_SCHEMA
+            }
+          }
+        }
+      });
+    }
+  } catch (e) { }
+
   return finalizeParsedAiResult(parsed, crawlData);
 }
 
 async function analyzeWithGemini(crawlData, apiKey, modelName, restrictedCheck, crawlStartTime = 0) {
   return analyzeWithAi(crawlData, { provider: "gemini", apiKey, model: modelName }, restrictedCheck, crawlStartTime);
+}
+
+/**
+ * Generates the complete JSON API payload (prompt + schema + parameters)
+ * for the given website URL or retrieves the latest cached API payload.
+ * Formatted as ready-to-use JSON for Google AI Studio, Postman, or curl.
+ */
+async function generateApiPayload(rawUrl = "", options = {}) {
+  let targetUrl = (rawUrl && typeof rawUrl === "string") ? rawUrl.trim() : "";
+
+  // 1. If no URL provided, return latest cached API payload if available
+  if (!targetUrl) {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      try {
+        const stored = await chrome.storage.local.get(["lastApiPayload"]);
+        if (stored && stored.lastApiPayload && stored.lastApiPayload.requestBody) {
+          const p = stored.lastApiPayload;
+          const str = JSON.stringify(p.requestBody, null, 2);
+          return {
+            success: true,
+            cached: true,
+            url: p.url,
+            provider: p.provider,
+            model: p.model,
+            payload: p.requestBody,
+            payloadString: str,
+            charCount: str.length,
+            promptTokenEstimate: Math.round(str.length / 4)
+          };
+        }
+      } catch (e) { }
+    }
+    return {
+      success: false,
+      error: "No website URL provided. Please enter or detect a website URL first."
+    };
+  }
+
+  // 2. Check if cached payload matches the requested URL (instant copy without recrawl)
+  if (!options.forceFresh && typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    try {
+      const stored = await chrome.storage.local.get(["lastApiPayload"]);
+      if (stored && stored.lastApiPayload && stored.lastApiPayload.requestBody && stored.lastApiPayload.url === targetUrl) {
+        const p = stored.lastApiPayload;
+        const str = JSON.stringify(p.requestBody, null, 2);
+        return {
+          success: true,
+          cached: true,
+          url: p.url,
+          provider: p.provider,
+          model: p.model,
+          payload: p.requestBody,
+          payloadString: str,
+          charCount: str.length,
+          promptTokenEstimate: Math.round(str.length / 4)
+        };
+      }
+    } catch (e) { }
+  }
+
+  // 3. Load provider & model settings
+  let settings = {};
+  if (typeof chrome !== "undefined" && chrome.storage) {
+    try {
+      const sync = chrome.storage.sync ? await chrome.storage.sync.get(null) : {};
+      const local = chrome.storage.local ? await chrome.storage.local.get(null) : {};
+      settings = { ...(sync || {}), ...(local || {}) };
+    } catch (e) { }
+  }
+  const aiConfig = resolveAiProviderConfig(settings);
+  const apiKey = String(aiConfig.apiKey || "").trim();
+  const normalized = normalizeProviderAndModel(aiConfig.provider || "gemini", apiKey, aiConfig.model);
+
+  // 4. Crawl website to get authentic evidence for the prompt
+  let crawlResult;
+  try {
+    crawlResult = await crawlWebsite(targetUrl, {
+      maxPages: settings.maxPages || settings.crawlPageLimit || 5,
+      maxCrawlTimeMs: 8000
+    });
+  } catch (crawlErr) {
+    // If crawl fails, build fallback minimal crawl structure
+    crawlResult = {
+      originalUrl: targetUrl,
+      finalUrl: targetUrl,
+      title: cleanDomainStem(targetUrl),
+      mainHtml: `<html><body><h1>${cleanDomainStem(targetUrl)}</h1></body></html>`,
+      combinedText: targetUrl,
+      addressCandidates: [],
+      emails: [],
+      phones: [],
+      productItems: [],
+      detectedProductCount: 0,
+      detectedImageCount: 0,
+      detectedDescCount: 0
+    };
+  }
+
+  // 5. Construct Prompt & API Request Body
+  const isGroq = normalized.provider === "groq";
+  const prompt = buildExtractionPrompt(crawlResult, isGroq);
+  const activeModel = normalized.model || (isGroq ? "llama-3.1-8b-instant" : DEFAULT_MODEL);
+
+  const requestBody = isGroq
+    ? {
+        model: activeModel,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0,
+        response_format: { type: "json_object" }
+      }
+    : {
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: 2048,
+          responseMimeType: "application/json",
+          responseSchema: GEMINI_RESPONSE_SCHEMA
+        }
+      };
+
+  const payloadRecord = {
+    url: targetUrl,
+    timestamp: Date.now(),
+    provider: normalized.provider,
+    model: activeModel,
+    requestBody
+  };
+
+  // Cache in storage for instant re-access
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    try {
+      await chrome.storage.local.set({ lastApiPayload: payloadRecord });
+    } catch (e) { }
+  }
+
+  const payloadString = JSON.stringify(requestBody, null, 2);
+  return {
+    success: true,
+    cached: false,
+    url: targetUrl,
+    provider: normalized.provider,
+    model: activeModel,
+    payload: requestBody,
+    payloadString: payloadString,
+    charCount: payloadString.length,
+    promptTokenEstimate: Math.round(payloadString.length / 4)
+  };
 }
 
 function extractRootDomain(urlOrHost) {

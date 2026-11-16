@@ -531,6 +531,11 @@
         triggerCrawlAndFill();
         return false;
       }
+      if (message && message.action === "GET_CURRENT_TARGET_URL") {
+        const u = (typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "") || state.lastProcessedUrl || "";
+        try { sendResponse({ success: true, url: u }); } catch (e) { }
+        return false;
+      }
       if (message && message.action === "STOP_ALL_CRAWLING") {
         if (typeof AIExt.stopAllCrawling === "function") {
           AIExt.stopAllCrawling("Stopped via message from popup/background");
