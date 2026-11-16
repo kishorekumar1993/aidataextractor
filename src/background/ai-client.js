@@ -212,7 +212,8 @@ A. BUILDING AND PREMISE EXPANSION:
 - Fl. / Fl -> Floor
 - Rm. / Rm -> Room
 - Unit -> Unit
-- # -> Number (only when used as an address number prefix)
+- Blk. / Blk -> Block
+- # -> Preserve '#' for unit, apartment, or suite numbers (e.g. #01-12, #04-05, #12-34, #101). NEVER convert '#01-12' to 'Floor' or '1st Floor-12'. Only expand '#' to 'Number' when used directly in front of a street or house number without letters or hyphens (e.g. '# 159' -> 'Number 159').
 - P.O. Box / PO Box -> Post Office Box
 - P.O. -> Post Office (only when context supports it)
 
@@ -315,14 +316,15 @@ companyAddress, the address normalization is incomplete.
 
 Never sacrifice source accuracy to achieve full-form expansion.
 - CRITICAL HIGH PRIORITY FORMATTING RULES:
-  * NEVER INVENT OR ADD THE WORD "Number" IN FRONT OF BARE STREET NUMBERS: If website says "40 Sarah Street", output "40 Sarah Street" (never "Number 40 Sarah Street"). ONLY expand to "Number" when "No.", "No", "Nos.", or "#" was literally written on the website (e.g. "No. 159" -> "Number 159").
-  * ASIAN & TAIWAN FLOOR & SUB-UNIT NOTATION: Floor sub-divisions with hyphen (e.g. "6F-1", "6F.-1", "6F - 1", "6F之1", "6樓之1", "6/F-1") MUST ALWAYS be formatted with ordinal floor and hyphenated sub-unit: "6th Floor-1" (STRICTLY NEVER output "6th Floor, unit 1" or "Floor 6, unit 1").
-  * COMMA SEPARATION: Put commas between distinct structural components while strictly preserving their original order from the website. ALWAYS put a comma before State/Province (e.g. "Oakleigh South, Victoria", "Cincinnati, Ohio"). Address MUST NOT end with a comma or period.
-- COMMA SEPARATION:
-  * Put commas between distinct structural components while strictly preserving their original order from the website (e.g. "106 Northpoint Parkway, Suite 400, Acworth, Georgia" or "Suite 260, 2021 Guadalupe Street, Austin, Texas").
-  * ALWAYS put a comma before State/Province (e.g. "Oakleigh South, Victoria", "Cincinnati, Ohio", "Kettering, Northamptonshire", "Acworth, Georgia").
-  * NEVER put commas inside a street name ("Pump Lane" not "Pump, Lane"), inside an industrial park name ("Argent Trade Park" not "Argent, Trade Park"), or between street number and street name ("604 Progress Drive" not "604, Progress Drive").
-  * Address MUST NOT end with a comma or period.
+  * PRESERVE UNIT / APARTMENT / SUITE NUMBERS WITH HASH (#): Retain the '#' for unit, apartment, or suite numbers (e.g. '#01-12', '#04-05', '#12-34', '#5', '#101'). STRICTLY DO NOT convert '#01-12' to 'Floor', '1st Floor-12', or 'Number 01-12'. The '#' with floor-unit numbers represents the unit identifier and MUST be preserved verbatim.
+  * ASIAN FLOOR & SUB-UNIT NOTATION: Floor sub-divisions with 'F' or floor words (e.g. "6F-1", "6F.-1", "6F - 1", "6F之1", "6樓之1", "6/F-1") MUST ALWAYS be formatted with ordinal floor and hyphenated sub-unit: "6th Floor-1" (STRICTLY NEVER output "6th Floor, unit 1" or "Floor 6, unit 1"). However, unit numbers beginning with hash (e.g. '#01-12') MUST retain the hash and digits ('#01-12').
+  * PREMISE AND STREET COMMA SEPARATION: When a Block or Premise number precedes a street name (e.g. 'Block 12, Orchard Road'), separate the premise identifier from the thoroughfare name with a comma. Ensure distinct structural elements (Premise/Block, Street Name, Unit Number, Building/Complex Name, Locality/City, State) are cleanly comma-separated in their authentic sequence (e.g. 'Block 12, Orchard Road, #03-15, Central Complex').
+  * NEVER INVENT OR ADD THE WORD "Number" IN FRONT OF BARE STREET NUMBERS: If website says "40 Sarah Street", output "40 Sarah Street" (never "Number 40 Sarah Street"). ONLY expand to "Number" when "No.", "No", or "Nos." was literally written on the website (e.g. "No. 159" -> "Number 159").
+  * COMMA SEPARATION:
+    - Put commas between distinct structural components while strictly preserving their original order from the website.
+    - ALWAYS put a comma before State/Province (e.g. "Prince George, British Columbia", "Cincinnati, Ohio", "Acworth, Georgia").
+    - NEVER put commas inside a street name ("Pump Lane" not "Pump, Lane"), inside an industrial park name ("Argent Trade Park" not "Argent, Trade Park"), or between street number and street name ("604 Progress Drive" not "604, Progress Drive").
+    - Address MUST NOT end with a comma or period.
 
 7. STATE — MANDATORY QC RULE (ALL COUNTRIES WORLDWIDE - EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
 - State is a dropdown field with only two permitted options:
@@ -340,7 +342,7 @@ Never sacrifice source accuracy to achieve full-form expansion.
   - Sovereign City-States (Singapore, Monaco, Vatican City, San Marino): In Singapore, the country itself functions as City, State, and Capital. For any address located in Singapore, BOTH "state": "Available" AND "city": "Available" MUST be selected!
   - This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
 - Do not guess or infer a State from the City, postal code, country, or other information.
-- Do not assume the last word in companyAddress is a State just because of its position! Verify that the word is actually an officially recognized State, County, Province, or Prefecture (e.g. "28 Rue Zuber, Rixheim" or "27W705 Hickory Lane, Northwoods" has no State written -> mark "Not Available").
+- Do not assume the last word in companyAddress is a State just because of its position! Verify that the word is actually an officially recognized State, County, Province, or Prefecture (e.g. an address with only a street or city and no State written -> mark "Not Available").
 - Do not treat street names, building names, industrial estates, or business park names as State names (e.g. "County Road", "State Highway", "Victoria Street", or "Yorkshire Way" is a street name, NOT a State).
 - Evaluate this field strictly using the company address extracted from the official company website.
 - Final output: Return only "Available" or "Not Available".
@@ -409,29 +411,14 @@ DO NOT automatically classify the following as City:
 - Metropolitan Area
 - Rural Settlement
 
-CRITICAL AUSTRALIA, UK, NZ & SOUTH AFRICA SUBURB MANDATE:
-- In Australia, New Zealand, the United Kingdom, and South Africa, company addresses are typically written as: [Street Number] [Street Name], [Suburb], [State].
-- Suburbs are NOT Cities!
-- Examples of suburbs where City = "Not Available":
-  * "97–99 Kabi Circuit, Deception Bay, Queensland" -> "Deception Bay" is an Australian suburb (the local government City of Moreton Bay is NOT in the address) -> "city": "Not Available", "state": "Available".
-  * "40 Sarah Street, Campbellfield, Victoria" -> "Campbellfield" is an Australian suburb -> "city": "Not Available", "state": "Available".
-  * "Rowville, Victoria", "Oakleigh South, Victoria", "Mulgrave, Victoria", "Braeside, Victoria" -> Suburbs -> "city": "Not Available", "state": "Available".
-  * "Mascot, New South Wales", "Seven Hills, New South Wales" -> Suburbs -> "city": "Not Available", "state": "Available".
-  * "Penrose, Auckland" (New Zealand), "Sandton, Gauteng" (South Africa), "Trafford Park, Greater Manchester" (UK) -> Suburbs/Industrial areas -> "city": "Not Available", "state": "Available".
-- If the companyAddress contains ONLY a suburb followed by a State (e.g. "97–99 Kabi Circuit, Deception Bay, Queensland" or "40 Sarah Street, Campbellfield, Victoria"), you MUST return "city": "Not Available"!
-- ONLY mark City = "Available" in Australia if an officially recognized incorporated City is explicitly named in the address (e.g. Brisbane, Sydney, Melbourne, Perth, Adelaide, Gold Coast, Newcastle, Geelong, Cairns, Townsville, Toowoomba, Darwin, Hobart, Canberra) or if the word "City" is explicitly written (e.g. "City of Moreton Bay").
-
-UNITED STATES SUBDIVISIONS & UNINCORPORATED LOCALITIES:
-- In the United States, unincorporated residential subdivisions and communities that are not incorporated as a City, Town, or Village are NOT Cities:
-  * "27W705 Hickory Lane, Northwoods, Illinois" -> "Northwoods" is an unincorporated neighborhood/subdivision -> "city": "Not Available", "state": "Available".
-- Suburbs and unincorporated neighborhoods only qualify if their independent official administrative classification as an incorporated City, Town, District, or Municipality is explicitly verified. Otherwise, return "Not Available".
+RULE 4 — LOCALITY, TOWN, AND CITY VALIDATION:
+- An officially recognized City, Town, District, Municipality, or designated company locality explicitly present in companyAddress qualifies as "city": "Available".
+- Towns, Districts, and Municipalities are accepted as City.
+- Pure street names, building names, shopping centers, industrial parks, and business complexes do NOT qualify as City.
 
 RULE 5 — TOWNSHIP VALIDATION:
-- Do not automatically classify every Township as City.
-- A Township qualifies only if its official legal or administrative classification also meets one of the accepted categories:
-  City, Town, District, or Municipality.
-- A township that is only a minor administrative subdivision, neighborhood, or unincorporated locality does not qualify.
-- Never assume Township and Town have the same administrative meaning.
+- An explicitly mentioned and officially recognized Town, Township, District, or Municipality qualifies as City: "Available".
+- Do not automatically treat minor informal neighborhood nicknames as City unless recognized as an official town, district, municipality, or designated locality.
 
 RULE 6 — CAPITAL CITY & CITY-STATE RULE (MANDATORY EXCEPTION):
 If the official national capital city is explicitly mentioned as the company's location in companyAddress, OR if the company location is Singapore or another sovereign City-State:
@@ -441,8 +428,8 @@ BOTH FIELDS MUST BE:
 - "state": "Available"
 
 This rule applies even when the address does not separately mention a State, County, Province, or Prefecture.
-For Singapore addresses (e.g. "Block 531 Upper Cross Street, 1st Floor-12, Hong Lim Complex"):
-Singapore is a sovereign city-state; therefore BOTH City and State MUST be marked "Available".
+For Singapore addresses:
+Singapore is a sovereign City-State; therefore BOTH City and State MUST ALWAYS be marked "Available".
 
 Additional conditions:
 - The national capital must be explicitly mentioned in companyAddress.
@@ -455,19 +442,14 @@ RULE 7 — MULTIPLE GEOGRAPHICAL COMPONENTS:
 - Do not evaluate only the final locality appearing before the State or Province.
 - Check all explicitly mentioned geographical names, including:
   City, Town, District, Municipality, County, Suburb, Locality, and other administrative divisions.
-- If at least ONE geographical component qualifies as an officially recognized City, Town, District, or Municipality, return "Available".
+- If at least ONE geographical component qualifies as an officially recognized City, Town, District, Municipality, or designated locality, return "Available".
 - If none of the geographical components qualifies, return "Not Available".
 - Never combine different locations or infer a missing geographical component.
 
 RULE 8 — LOCALITY POSITION DOES NOT DETERMINE CITY STATUS:
-- Never assume that a location is a City merely because it appears immediately before a State or Province (e.g. "[Locality], Queensland" or "[Locality], Illinois")!
-- Never assume that the first or last geographical name is the City.
-- Never treat every location between the street and State as a City.
-- For example:
-  * "Deception Bay, Queensland": "Deception Bay" appears immediately before "Queensland". It is an Australian suburb -> "city": "Not Available", "state": "Available".
-  * "Campbellfield, Victoria": "Campbellfield" appears immediately before "Victoria". It is an Australian suburb -> "city": "Not Available", "state": "Available".
-  * "Northwoods, Illinois": "Northwoods" appears immediately before "Illinois". It is an unincorporated neighborhood -> "city": "Not Available", "state": "Available".
-- The presence of a locality name before a State does not establish that it is a City. If that locality is an ordinary suburb or unincorporated neighborhood, return "city": "Not Available".
+- Never assume that a word is a City merely because it appears immediately before a State or Province.
+- Street names, road types, building names, and industrial parks appearing before a State or Province do not qualify as a City.
+- An authentic City, Town, District, Municipality, or designated administrative locality must be explicitly present to select "city": "Available".
 
 RULE 9 — STREET, BUILDING AND COMPANY NAME EXCLUSION:
 The following must NEVER be treated as City names merely because of their wording:
@@ -563,7 +545,7 @@ Before generating the final JSON:
 - Confirm that the classification is based strictly on companyAddress.
 - Confirm that the geographical name is explicitly present.
 - Confirm its official administrative classification.
-- Confirm that an Australian suburb (e.g. Deception Bay, Campbellfield, Rowville, Mascot, Mulgrave) or US neighborhood (e.g. Northwoods) has NOT been incorrectly treated as a City -> mark "Not Available".
+- Confirm that street names, building names, shopping centers, and industrial parks have not been mistaken for Cities.
 - Confirm that an officially qualifying suburb or locality has not been incorrectly rejected.
 - Confirm that street names and building names have not been mistaken for Cities.
 - Confirm that no City has been inferred from postal codes or States.
