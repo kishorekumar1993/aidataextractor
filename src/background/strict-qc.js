@@ -1084,16 +1084,36 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     } else {
       // Rule 7: State / County / Province / Prefecture check
       const stateDetected = typeof hasStateInAddress === "function" ? hasStateInAddress(result.companyAddress, country) : false;
-      result.state = stateDetected ? "Available" : "Not Available";
+      const isTaiwan = typeof isTaiwanLocation === "function" && isTaiwanLocation(result.companyAddress, country);
+
+      if (stateDetected) {
+        result.state = "Available";
+      } else if (isTaiwan) {
+        // Special Taiwan Rule: Taichung, New Taipei, Tainan, Kaohsiung, Taoyuan, Keelung & districts without County -> strictly Not Available
+        result.state = "Not Available";
+      } else if (apiState === "Available") {
+        const lowerAddr = result.companyAddress.toLowerCase();
+        if (/\b(?:county\s+road|state\s+highway|state\s+route|co\.\s*rd)\b/i.test(lowerAddr) && !stateDetected) {
+          result.state = "Not Available";
+        } else {
+          result.state = "Available";
+        }
+      } else {
+        result.state = "Not Available";
+      }
 
       // Rule 8: City / Town / District / Municipality check
       const cityDetected = typeof evaluateCityQC === "function" ? evaluateCityQC(result.companyAddress, country) : "";
+      const isSuburbOnly = typeof addressLooksLikeSuburbOnly === "function" && addressLooksLikeSuburbOnly(result.companyAddress);
+
       if (cityDetected === "Available") {
         result.city = "Available";
-      } else if (cityDetected === "Not Available") {
+      } else if (isSuburbOnly || (cityDetected === "Not Available" && !apiCity)) {
         result.city = "Not Available";
+      } else if (apiCity === "Available") {
+        result.city = isSuburbOnly ? "Not Available" : "Available";
       } else {
-        result.city = apiCity || "Not Available";
+        result.city = cityDetected === "Available" ? "Available" : (apiCity || "Not Available");
       }
     }
 

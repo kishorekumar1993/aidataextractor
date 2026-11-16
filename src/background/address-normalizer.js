@@ -2447,6 +2447,16 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
   // High priority user mandate: In AI mode, TAKE AI DATA ONLY.
   // Never replace AI's address with crawl fragments (Case 1, 2, 3 are disabled for AI data).
   if (isFromAi) {
+    // If AI omitted "Number" before street/premise digits, but rawClean specifically had "Number" before the identical digits
+    // (e.g. source website had "No. 409-6, Beitun Road" or "No. 62-6, Jhongche Road", and AI output was "409-6 Beitun Road"),
+    // restore "Number " to enforce mandatory Rule 6 No. -> Number expansion!
+    const aiDigitsMatch = addr.match(/^(\d+[A-Za-z]?(?:[-/]\d+)?)\b/);
+    if (aiDigitsMatch && /^Number\s+/i.test(rawClean)) {
+      const rawDigitsMatch = rawClean.match(/^Number\s+(\d+[A-Za-z]?(?:[-/]\d+)?)\b/i);
+      if (rawDigitsMatch && rawDigitsMatch[1].toLowerCase() === aiDigitsMatch[1].toLowerCase()) {
+        return `Number ${addr}`;
+      }
+    }
     return addr;
   }
 

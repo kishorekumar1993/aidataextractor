@@ -467,7 +467,22 @@ function hasStateInAddress(addr, country) {
   // Germany Bundesländer and City-States (Berlin, Hamburg, Bremen)
   if (isGermanLocation(lower, country)) {
     if (/\b(?:berlin|hamburg|bremen)\b/i.test(lower)) return true;
-    if (/\b(?:baden[\s-]w[uü]rttemberg|bayern|bavaria|brandenburg|hessen|hesse|mecklenburg(?:[\s-]vorpommern)?|niedersachsen|lower\s*saxony|nordrhein[\s-]westfalen|north\s*rhine|rheinland[\s-]pfalz|rhineland|saarland|sachsen|saxony|sachsen[\s-]anhalt|schleswig[\s-]holstein|th[uü]ringen|thuringia)\b/i.test(lower)) {
+    if (/\b(?:baden[\s-]w(?:u|ü|ue)rttemberg|bayern|bavaria|brandenburg|hessen|hesse|mecklenburg(?:[\s-]vorpommern)?|niedersachsen|lower\s*saxony|nordrhein[\s-]westfalen|north\s*rhine(?:[\s-]westphalia)?|rheinland[\s-]pfalz|rhineland(?:[\s-]palatinate)?|saarland|sachsen|saxony|sachsen[\s-]anhalt|schleswig[\s-]holstein|th(?:u|ü|ue)ringen|thuringia)\b/i.test(lower)) {
+      return true;
+    }
+  }
+
+  // Italy Regions and Provinces
+  if (isItalianLocation(lower, country)) {
+    if (/\b(?:lombardia|lombardy|lazio|campania|sicilia|sicily|veneto|piemonte|piedmont|emilia[\s-]romagna|toscana|tuscany|puglia|apulia|calabria|sardegna|sardinia|liguria|marche|abruzzo|friuli(?:[\s-]venezia[\s-]giulia)?|trentino(?:[\s-]alto[\s-]adige)?|s[uü]dtirol|umbria|basilicata|molise|valle\s*d['’]aosta)\b/i.test(lower)) {
+      return true;
+    }
+  }
+
+  // Poland Voivodeships (Województwa)
+  if (/\b(?:poland|polska|pl)\b/i.test((country || "").toLowerCase()) || /\b(?:poland|polska)\b/i.test(lower)) {
+    if (/\b(?:warsaw|warszawa)\b/i.test(lower)) return true;
+    if (/\b(?:wojew[oó]dztwo|dolno[sś]l[aą]skie|dolnoslaskie|kujawsko[\s-]pomorskie|lubelskie|lubuskie|[lł][oó]dzkie|lodzkie|ma[lł]opolskie|malopolskie|mazowieckie|opolskie|podkarpackie|podlaskie|pomorskie|[sś]l[aą]skie|slaskie|[sś]wi[eę]tokrzyskie|swietokrzyskie|warmi[nń]sko[\s-]mazurskie|warminsko-mazurskie|wielkopolskie|zachodniopomorskie)\b/i.test(lower)) {
       return true;
     }
   }
@@ -715,6 +730,17 @@ function isTurkishLocation(address, country) {
   if (/\b(?:t[uü]rki?ye|turkey|turkiey)\b/i.test(a)) return true;
   if (/\b(?:istanbul|ankara|izmir|bursa|antalya|adana|konya|gaziantep|kocaeli|mersin|diyarbakir|kayseri|eskisehir|sanliurfa|samsun|denizli|sakarya|mugla|trabzon|silivri|gebze|corlu|cerkezkoy|kartal|pendik|tuzla|umraniye|kadikoy|besiktas|sisli|fatih|beylikduzu|esenyurt|basaksehir|avcilar|buyukcekmece|manisa|aydin|tekirdag|canakkale|balikesir|edirne|yalova|bolu|duzce)\b/i.test(a)) return true;
   if (/\b(?:mah\.?|mh\.?|mahallesi|mahalle|cad\.?|cd\.?|caddesi|cadde|sok\.?|sk\.?|sokak|bulv?\.?|blv\.?|bulvari|osb|san\.?\s*sit\.?)\b/i.test(a)) return true;
+  return false;
+}
+
+function isItalianLocation(address, country) {
+  const c = (country || "").toLowerCase();
+  if (/\b(?:italy|italia|it)\b/i.test(c)) return true;
+  const a = (address || "").toLowerCase();
+  if (/\b(?:italy|italia)\b/i.test(a)) return true;
+  if (/\b(?:milano|roma|napoli|torino|palermo|genova|bologna|firenze|bari|catania|venezia|verona|messina|padova|trieste|brescia|taranto|prato|parma|modena|reggio\s*emilia|perugia|ravenna|livorno|cagliari|foggia|rimini|salerno|ferrara|sassari|monza|bergamo|pescara|trento|vicenza|bolzano|novara|piacenza|ancona|arezzo|udine|cesena|lecce|pesaro|alessandria|la\s*spezia|pisa|catanzaro|lucca|como|treviso|varese|asti|caserta|ragusa|cremona|pavia)\b/i.test(a)) return true;
+  if (/\b(?:via|corso|viale|piazza|p\.zza|strada|localit[aà]|frazione|z\.?i\.?|zona\s+industriale)\b/i.test(a)) return true;
+  if (/\b\d{5}\s+[a-z]+/i.test(a) && /\b(?:lombardia|lazio|campania|sicilia|veneto|piemonte|emilia-romagna|toscana|puglia|calabria|sardegna|liguria|marche|abruzzo|friuli|trentino|umbria|basilicata|molise)\b/i.test(a)) return true;
   return false;
 }
 
@@ -1021,6 +1047,10 @@ function evaluateCityQC(address, country) {
     if (hasExplicitCityWord(strippedMY) || /\b(?:bandar|daerah|mukim|pekan|majlis\s*perbandaran|town|township|district|municipality)\b/i.test(strippedMY)) {
       return "Available";
     }
+    const structCityMY = detectCityFromStructure(cleanAddr, country);
+    if (structCityMY && !isNotCitySegment(structCityMY) && !hasNamedStateOrProvince(structCityMY, "Malaysia")) {
+      return "Available";
+    }
     // Industrial park alone without a town/city -> Not Available
     return "Not Available";
   }
@@ -1112,6 +1142,30 @@ function evaluateCityQC(address, country) {
   // Spanish City evaluation: Recognized Spanish cities & municipal centres evaluate as Available
   if (isSpanishLocation(cleanAddr, country)) {
     if (hasSpanishCityOrTown(cleanAddr) || hasRecognizedPlaceName(cleanAddr, SPANISH_CITIES_AND_TOWNS)) {
+      return "Available";
+    }
+  }
+
+  // Italy City Evaluation:
+  if (isItalianLocation(cleanAddr, country)) {
+    if (/\b(?:roma|rome)\b/i.test(cleanAddr) && !isPlaceUsedAsStreetName(cleanAddr, "roma") && !isPlaceUsedAsStreetName(cleanAddr, "rome")) {
+      return "Available";
+    }
+    if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+      return "Available";
+    }
+    if (hasExplicitCityWord(cleanAddr) || /\b(?:comune|municipio|citt[aà]|distretto|localit[aà]|frazione)\b/i.test(cleanAddr)) {
+      return "Available";
+    }
+    const capMatch = cleanAddr.match(/\b\d{5}\s+([a-z\s-]+)/i);
+    if (capMatch && capMatch[1]) {
+      const cand = capMatch[1].split(/[,;\n]/)[0].trim();
+      if (cand.length >= 2 && !isNotCitySegment(cand) && !hasNamedStateOrProvince(cand, "Italy")) {
+        return "Available";
+      }
+    }
+    const structCityIT = detectCityFromStructure(cleanAddr, country);
+    if (structCityIT && !isNotCitySegment(structCityIT) && !hasNamedStateOrProvince(structCityIT, "Italy")) {
       return "Available";
     }
   }
@@ -1221,12 +1275,10 @@ function evaluateCityQC(address, country) {
     return "Available";
   }
 
-  // Structural address detection (for Canada, and countries where city precedes state/province)
-  if (/\b(?:canada|china|germany|deutschland|france)\b/i.test(country || cleanAddr)) {
-    const structCity = detectCityFromStructure(cleanAddr, country);
-    if (structCity && !isNotCitySegment(structCity)) {
-      return "Available";
-    }
+  // Structural address detection for international countries (city preceding state or postal code or at end of address)
+  const structCity = detectCityFromStructure(cleanAddr, country);
+  if (structCity && !isNotCitySegment(structCity) && !addressLooksLikeSuburbOnly(structCity)) {
+    return "Available";
   }
 
   return "Not Available";

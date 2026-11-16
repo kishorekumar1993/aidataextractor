@@ -1951,6 +1951,91 @@ async function runAll() {
     assert.ok(result2.companyAddress.toLowerCase().includes('27w705 hickory lane, northwoods, illinois'), 'Address must preserve Northwoods, Illinois');
   });
 
+  runTest('Item 98: Rule 7 (State) and Rule 8 (City) across AI and Local Crawl modes (Chen Sound, Wey Yii, Milano, Ditzingen, Senai, Warszawa)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Chen Sound Taiwan (Local crawl) - Shengang District, Taichung City: City Available, State Not Available
+    const chenSoundLocal = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: 'Number 62-6, Jhongche Road, Shengang District, Taichung City',
+      countryName: 'Taiwan'
+    }, {}, {});
+    assert.strictEqual(chenSoundLocal.state, 'Not Available', 'Chen Sound Taiwan: Taichung City & Shengang District has no county -> State: Not Available');
+    assert.strictEqual(chenSoundLocal.city, 'Available', 'Chen Sound Taiwan: Shengang District & Taichung City -> City: Available');
+
+    // 2. Wey Yii Taiwan (AI mode) - 409-6 Beitun Road, Beitun District, Taichung:
+    // AI hallucinated State: Available -> strictly corrected to State: Not Available; City: Available; No. restored to Number
+    const rawWeyYii = 'No. 409-6, Beitun Rd., Beitun Dist., Taichung, Taiwan';
+    const weyYiiAi = ctx.applyStrictInstructions({
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: '409-6 Beitun Road, Beitun District, Taichung',
+      countryName: 'Taiwan',
+      state: 'Available',
+      city: 'Available'
+    }, { addressCandidates: [{ raw: rawWeyYii, source: 'contact' }] }, {});
+    assert.strictEqual(weyYiiAi.state, 'Not Available', 'Wey Yii Taiwan: Taichung has no county/province and is not capital -> State: Not Available');
+    assert.strictEqual(weyYiiAi.city, 'Available', 'Wey Yii Taiwan: Beitun District & Taichung -> City: Available');
+    assert.ok(weyYiiAi.companyAddress.startsWith('Number 409-6'), 'Raw "No. 409-6" on website restores "Number 409-6"');
+
+    // 3. Milano Italy (Local crawl & AI mode) - Via Roma 10, 20121 Milano: City Available
+    const milanoLocal = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: 'Via Roma 10, 20121 Milano',
+      countryName: 'Italy'
+    }, {}, {});
+    assert.strictEqual(milanoLocal.city, 'Available', 'Milano in Italy must evaluate as City Available');
+
+    const milanoAi = ctx.applyStrictInstructions({
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: 'Via Roma 10, 20121 Milano',
+      countryName: 'Italy',
+      state: 'Available',
+      city: 'Available'
+    }, {}, {});
+    assert.strictEqual(milanoAi.city, 'Available', 'AI City Available for Milano must be preserved');
+
+    // 4. Ditzingen Germany (Local crawl) - Siemensstrasse 10, 71254 Ditzingen, Baden-Wuerttemberg: Both Available
+    const ditzingenLocal = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: 'Siemensstrasse 10, 71254 Ditzingen, Baden-Wuerttemberg',
+      countryName: 'Germany'
+    }, {}, {});
+    assert.strictEqual(ditzingenLocal.state, 'Available', 'Baden-Wuerttemberg must evaluate as State Available');
+    assert.strictEqual(ditzingenLocal.city, 'Available', 'Ditzingen must evaluate as City Available');
+
+    // 5. Senai Malaysia (Local crawl) - Senai, Johor: Both Available
+    const senaiLocal = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: 'Senai, Johor',
+      countryName: 'Malaysia'
+    }, {}, {});
+    assert.strictEqual(senaiLocal.state, 'Available', 'Johor must evaluate as State Available');
+    assert.strictEqual(senaiLocal.city, 'Available', 'Senai town must evaluate as City Available');
+
+    // 6. Warszawa Poland (Capital Rule) - ul. Marszalkowska 10, Warszawa: Both Available
+    const warszawaLocal = ctx.applyStrictInstructions({
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyAddress: 'ul. Marszalkowska 10, Warszawa',
+      countryName: 'Poland'
+    }, {}, {});
+    assert.strictEqual(warszawaLocal.state, 'Available', 'Capital Warszawa makes State Available');
+    assert.strictEqual(warszawaLocal.city, 'Available', 'Capital Warszawa makes City Available');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
