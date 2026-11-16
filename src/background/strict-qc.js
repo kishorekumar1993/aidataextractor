@@ -1064,36 +1064,36 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.companyAddress = cleanAddr || "Not Available";
     }
 
-    // 5. State & City: In AI mode, strictly take AI values directly from API response!
-    // Never override AI's "Available" or "Not Available" with local heuristics.
+    // 5. State & City Quality Control (Rules 7 & 8):
+    // Rule 7 (State): If the state name is given in the address, select Available; if not, select Not Available.
+    // Note: (County, Province, Prefecture) should be considered as State.
+    // Rule 8 (City): If the city name is given in the address, select Available; if not, select Not Available.
+    // Note: (Town, District, Municipality) should be considered as City.
+    // Capital Rule: (If a country’s capital is mentioned in the address, then both City and State are considered available.)
     const apiState = normalizeAvailability(result.state);
     const apiCity = normalizeAvailability(result.city);
 
-    // Set State: prioritize AI value, only evaluate from address if AI left it empty
-    if (apiState) {
-      result.state = apiState;
-    } else if (result.companyAddress && result.companyAddress.toLowerCase() !== "not available") {
-      const stateDetected = hasStateInAddress(result.companyAddress, country);
-      result.state = stateDetected ? "Available" : "Not Available";
-    } else {
+    if (!result.companyAddress || result.companyAddress.toLowerCase() === "not available" || result.companyAddress.trim().length < 3) {
       result.state = "Not Available";
-    }
-
-    // Set City: prioritize AI value, only evaluate from address if AI left it empty
-    if (apiCity) {
-      result.city = apiCity;
-    } else if (result.companyAddress && result.companyAddress.toLowerCase() !== "not available") {
-      const cityDetected = evaluateCityQC(result.companyAddress, country);
-      result.city = (cityDetected === "Available") ? "Available" : "Not Available";
-    } else {
       result.city = "Not Available";
-    }
-
-    // CAPITAL CITY & CITY-STATE RULE — MANDATORY:
-    // (If a country's capital is mentioned in the address, then both City and State are considered available.)
-    if (result.companyAddress && result.companyAddress.length >= 3 && result.companyAddress.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country)) {
-      result.city = "Available";
+    } else if (typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country)) {
+      // Capital city mentioned in the address -> BOTH City and State are Available!
       result.state = "Available";
+      result.city = "Available";
+    } else {
+      // Rule 7: State / County / Province / Prefecture check
+      const stateDetected = typeof hasStateInAddress === "function" ? hasStateInAddress(result.companyAddress, country) : false;
+      result.state = stateDetected ? "Available" : "Not Available";
+
+      // Rule 8: City / Town / District / Municipality check
+      const cityDetected = typeof evaluateCityQC === "function" ? evaluateCityQC(result.companyAddress, country) : "";
+      if (cityDetected === "Available") {
+        result.city = "Available";
+      } else if (cityDetected === "Not Available") {
+        result.city = "Not Available";
+      } else {
+        result.city = apiCity || "Not Available";
+      }
     }
 
     // 6. Email ID & Secondary Email ID: Take from API directly. DO NOT combine crawl emails.

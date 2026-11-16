@@ -167,24 +167,35 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Comma Separation: Separate distinct components with commas in their original order. ALWAYS put a comma before State/Province (e.g. "Prince George, British Columbia", "Cincinnati, Ohio"). Never put commas inside a street name or industrial park name. Address must not end with a comma or period.
 - Return "Not Available" if a Working website has no verifiable physical headquarters address. Return "" if not Working.
 
-9. CITY & STATE INDEPENDENT VALIDATION:
-- Both City and State are dropdown fields with only two permitted values: "Available" | "Not Available".
+9. STATE & CITY STRICT QUALITY CONTROL VALIDATION:
+- Both State and City are dropdown options with ONLY two permitted values: "Available" | "Not Available".
 - Evaluate State and City independently using ONLY words explicitly present in the final companyAddress. Never infer from country name, postal codes, or external databases.
-- STATE RULES:
-  * State = "Available" when an explicitly identified State, County, Province, Prefecture is present in companyAddress (County, Province, Prefecture -> State).
-  * US States (e.g. Ohio, California, Texas, Illinois), Canadian Provinces (Ontario, Quebec, British Columbia), Australian States (Victoria, New South Wales, Queensland), UK Counties (West Midlands, Derbyshire, Yorkshire, Surrey), Indian States (Maharashtra, Tamil Nadu, Gujarat) -> State = "Available".
-  * Taiwan Exception: Standalone Taiwanese municipal cities (Taichung, Tainan, Kaohsiung, Taoyuan) have State = "Not Available" unless a separate County ("County" or "Hsien", e.g. Changhua County) or Province is explicitly present in companyAddress.
-  * State = "Not Available" if no State, County, Province, Prefecture is present in companyAddress.
-- CITY RULES:
-  * City = "Available" when companyAddress explicitly contains at least one officially recognized geographical location that qualifies as a City, Town, District, Municipality (Town, District, Municipality -> City).
-  * Major Municipal Cities: Standalone cities (e.g. Taichung, Tainan, Kaohsiung, Taoyuan, Keelung, Hsinchu, Chiayi, New Taipei, Birmingham, Manchester, Leeds, Glasgow, Sydney, Melbourne, Brisbane, Chicago, Houston, Phoenix, Toronto, Vancouver, Frankfurt, Munich, Milan) qualify as City = "Available", even if the literal word "City" is omitted on the website.
-  * Administrative Districts: Official municipal/county districts (e.g. Shengang District / Shengang, Beitun, Xitun, Nantun, Yongkang, Minhang, Pudong) qualify under District -> City = "Available".
-  * Exclusions: Suburbs, neighborhoods, villages, hamlets, postal areas, and industrial/business parks do not automatically qualify unless officially recognized under an accepted classification. Pure street names, road names, and building names never qualify.
-  * City = "Not Available" if no recognized City, Town, District, or Municipality is present.
-- NATIONAL CAPITAL & CITY-STATE RULE (CONSOLIDATED MANDATORY EXCEPTION):
-  * If a country's national capital city is mentioned as the company's location in companyAddress (e.g. Singapore, Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
-  * Sovereign City-States (Singapore, Monaco, Vatican City, San Marino): In Singapore, the country itself functions as City, State, and Capital. For any address located in Singapore, BOTH "state": "Available" AND "city": "Available" MUST be selected.
-  * This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
+
+RULE 7. STATE:
+* This is a drop-down option. If the state name is given in the address, select Available; if not, select Not Available.
+* MANDATORY NOTE: (County, Province, Prefecture) should be considered as State. (County, Province, Prefecture -> State).
+  - State: US States (e.g. California, Texas, New York, New Jersey, Ohio), Australian States (Victoria, Queensland, New South Wales), Indian States (Maharashtra, Tamil Nadu, Karnataka), Brazilian States (São Paulo), etc. -> Available.
+  - Province: Canadian Provinces (Ontario, Quebec, British Columbia), Chinese Provinces (Guangdong, Zhejiang, Jiangsu), Indonesian Provinces (Jawa Barat, Jawa Tengah, Jawa Timur), South African Provinces (Gauteng, KwaZulu-Natal), etc. -> Available.
+  - County: UK Counties (West Midlands, Derbyshire, Essex, Yorkshire, Kent, Surrey, Lancashire, Cheshire), Irish Counties (County Dublin, County Cork), Taiwan Counties (Changhua County, Miaoli County, Yunlin County, Nantou County), US Counties (Cook County, Orange County) -> Available.
+  - Prefecture: Japanese Prefectures (Tokyo Prefecture, Osaka Prefecture, Aichi Prefecture) -> Available.
+* IF NO State, County, Province, or Prefecture is present in companyAddress -> MUST SELECT "Not Available"!
+  - Standalone cities and districts are NOT States! (e.g. in "409-6 Beitun Road, Beitun District, Taichung" or "Number 62-6, Jhongche Road, Shengang, Taichung" -> Taichung is City, Beitun/Shengang is District -> State is strictly "Not Available"!). Never mark State as Available unless an actual State, County, Province, or Prefecture is written.
+
+RULE 8. CITY:
+* This is a drop-down option. If the city name is given in the address, select Available; if not, select Not Available.
+* MANDATORY NOTE: (Town, District, Municipality) should be considered as City. (Town, District, Municipality -> City).
+  - City: Major cities & municipal cities (e.g. Dallas, Chicago, Houston, Taichung, Tainan, Kaohsiung, Birmingham, Manchester, Leeds, Munich, Lyon, etc.) -> Available.
+  - Town: Recognized towns (e.g. Sutton Coldfield, Heanor, Watford, Cambridge, Slough) -> Available.
+  - District: Recognized municipal/administrative districts (e.g. Beitun District / Beitun, Shengang District / Shengang, Xitun, Nantun, Yongkang, Minhang District, Pudong) -> Available.
+  - Municipality: Recognized municipalities -> Available.
+* IF NO City, Town, District, or Municipality is present in companyAddress -> MUST SELECT "Not Available"!
+  - Suburbs alone (e.g. Campbellfield, Oakleigh South, Penrose), industrial parks, business parks, villages, localities, postal codes, and pure street names DO NOT qualify as City -> MUST SELECT "Not Available".
+
+CAPITAL CITY RULE (MANDATORY EXCEPTION FOR BOTH STATE & CITY):
+* (If a country's capital is mentioned in the address, then both City and State are considered available.)
+* If a country's national capital city is mentioned as the company's location in companyAddress (e.g. Singapore, Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
+* Sovereign City-States (Singapore, Monaco, Vatican City, San Marino): In Singapore, the country itself functions as City, State, and Capital. For any address located in Singapore, BOTH "state": "Available" AND "city": "Available" MUST be selected.
+* This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
 
 10. CONTACT DETAILS (EMAIL & PHONE NUMBER):
 - "emailId": Select primary official corporate email (e.g. sales@, info@, contact@, enquiry@).

@@ -165,12 +165,12 @@ const GEMINI_RESPONSE_SCHEMA = {
     state: {
       type: "STRING",
       enum: ["Available", "Not Available"],
-      description: "Available if an official State, County, Province, Territory, or Prefecture is explicitly mentioned in companyAddress, or if a national Capital City is mentioned, or for City-States (e.g. Singapore, Monaco, Vatican City); otherwise Not Available. Note: (County, Province, Prefecture) should be considered as State. If a country's capital is mentioned in the address, then both City and State are considered available. For Singapore addresses, both City and State are considered Available. Do NOT guess or infer from city/ZIP/country, and do NOT treat street names or building names as State."
+      description: "This is a drop-down option. If the state name is given in the address, select Available; if not, select Not Available. Note: (County, Province, Prefecture) should be considered as State. (If a country's capital is mentioned in the address, then both City and State are considered available). Standalone cities or districts without a state/county/province are Not Available."
     },
     city: {
       type: "STRING",
       enum: ["Available", "Not Available"],
-      description: "Available if an official City, Town, District, Municipality, or designated locality is explicitly mentioned in companyAddress, or if a national Capital City is mentioned, or for City-States (e.g. Singapore, Monaco, Vatican City); otherwise Not Available. Note: (Town, District, Municipality) should be considered as City. If a country's capital is mentioned in the address, then both City and State are considered available. For Singapore addresses, both City and State are considered Available."
+      description: "This is a drop-down option. If the city name is given in the address, select Available; if not, select Not Available. Note: (Town, District, Municipality) should be considered as City. (If a country's capital is mentioned in the address, then both City and State are considered available). Suburbs alone without city/town are Not Available."
     }, emailId: {
       type: "STRING",
       description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook)."
