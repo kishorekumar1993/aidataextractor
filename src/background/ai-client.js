@@ -197,11 +197,16 @@ BUSINESS ELIGIBILITY RULES:
   * Named & Memorial Highways / Boulevards / Routes: GAR Highway / G.A.R. Hwy -> Grand Army Of The Republic Highway, MLK Jr Blvd -> Martin Luther King Junior Boulevard, JFK Blvd/Expy -> John F Kennedy Boulevard/Expressway, FDR Dr -> Franklin D Roosevelt Drive, PCH -> Pacific Coast Highway, Co. Rd. -> County Road, State Rte. -> State Route, FM 1960 -> Farm To Market Road 1960, RM -> Ranch To Market Road (Texas), MG Road -> Mahatma Gandhi Road, GT Road -> Grand Trunk Road.
   * States / Provinces / Counties / Cantons Globally: Expand ALL US states (MA -> Massachusetts, TX -> Texas, CA -> California, IL -> Illinois, etc.), Canadian provinces (ON -> Ontario, QC -> Quebec, BC -> British Columbia), Australian states (VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland), UK/Irish counties (Northants -> Northamptonshire, Yorks -> Yorkshire, Co. Durham -> County Durham), Indian states & zones (MH -> Maharashtra, KA -> Karnataka, TN -> Tamil Nadu, GJ -> Gujarat, MIDC -> Maharashtra Industrial Development Corporation, GIDC -> Gujarat Industrial Development Corporation, Opp. -> Opposite, S.No. -> Survey Number), South African provinces (GP -> Gauteng, KZN -> KwaZulu-Natal), Malaysian/Indonesian states (Sgr -> Selangor, Jabar -> Jawa Barat, Jateng -> Jawa Tengah, Jatim -> Jawa Timur), Austrian/Swiss/German states (NÖ -> Niederösterreich, ZH -> Zürich, BW -> Baden-Württemberg), Brazilian/Mexican states (SP -> São Paulo, CDMX -> Ciudad de Mexico).
 
-- RULE 7. POSTAL CODE IDENTIFICATION:
-  * Remove postal codes, ZIP codes, and PIN codes wherever they appear in the address.
-  * Do not remove street numbers, building numbers, plot numbers, unit numbers, or Post Office Box numbers.
-  * Never classify a number as a postal code merely because it appears at the end of an address.
-  * Use the country's postal code format and address context to distinguish postal codes from other numbers.
+- RULE 7. POSTAL CODE IDENTIFICATION (NUMERIC & ALPHANUMERIC GLOBALLY):
+  * Remove all postal codes, ZIP codes, PIN codes, and postcodes wherever they appear in companyAddress.
+  * STRIP ALPHANUMERIC POSTCODES (CRITICAL MANDATE):
+    - United Kingdom Postcodes: UK postcodes combine letters and digits (e.g. "B75 7BU", "SW1A 1AA", "EC1A 1BB", "W1A 0AX", "M1 1AE", "CM9 4PX", "CV4 7HS"). YOU MUST ALWAYS STRIP UK POSTCODES from companyAddress!
+    - Canadian Postcodes: Alphanumeric format (e.g. "M5V 2T6", "K1A 0B1", "V6B 2W9") must be stripped.
+    - Dutch Postcodes: 4 digits + 2 letters (e.g. "1015 CW", "3011 WN") must be stripped.
+    - European Country-Prefixed Postcodes: e.g. "ES-28014", "D-80333", "FR-75002", "PL-00-838", "CZ-60200" must be stripped.
+    - Standard Numeric Postal / ZIP / PIN Codes: US 5-digit and ZIP+4 ("90210", "45241-1234"), Australia 4-digit ("3061"), India 6-digit PIN ("400001"), Singapore 6-digit ("050531"), Germany, France, Italy, Spain, China, etc. must be stripped.
+  * Do NOT remove street numbers, building numbers, plot numbers, unit numbers, or Post Office Box numbers (e.g. "Post Office Box 261619" and "12 Main Street" must be retained).
+  * Use the country's postal code format and address context to distinguish postal codes from street and building numbers.
 
 - RULE 8. NON-ENGLISH ADDRESS HANDLING:
   * Preserve the original language and authentic proper names of streets, buildings, industrial parks, and localities.
