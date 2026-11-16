@@ -1048,33 +1048,30 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.countryName = country;
 
-    // 4. Company Address: Take directly from API with safe Rule 6 cleanup.
-    // Mandatory user rule: In AI mode, TAKE AI DATA ONLY. Strictly preserve AI address; NEVER overwrite or corrupt with local crawl fragments!
+    // 4. Company Address: Take directly from AI.
+    // High priority user mandate: In AI mode, TAKE AI DATA ONLY. Strictly preserve AI address; NEVER overwrite or corrupt with local crawl fragments!
     let addr = decodeHtmlEntities(String(result.companyAddress || "").trim());
     const aiAddrMatch = resolveBestAddressCandidateAndSource(addr, crawlData);
     const selectedAiCandidate = aiAddrMatch.candidate || (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates[0]) || null;
     const bestRaw = selectedAiCandidate ? (typeof selectedAiCandidate === "object" ? selectedAiCandidate.raw : selectedAiCandidate) : "";
 
-    // Fall back to local raw crawl ONLY if AI returned empty or Not Available
-    if (!addr || addr.toLowerCase() === "not available" || addr.length < 5) {
-      if (bestRaw) {
-        addr = bestRaw;
-      } else {
-        addr = "Not Available";
+    // If AI explicitly returned "Not Available", strictly keep "Not Available" (NEVER replace with crawl candidate!)
+    if (addr.toLowerCase() === "not available") {
+      result.companyAddress = "Not Available";
+    } else if (!addr || addr.length < 3) {
+      // Fall back to local raw crawl ONLY if AI returned completely empty string ""
+      result.companyAddress = bestRaw ? (typeof sanitizeRule6CompanyAddress === "function" ? sanitizeRule6CompanyAddress(bestRaw, result.companyName, country, crawlData) : bestRaw) : "Not Available";
+    } else {
+      // Reconcile ONLY for sequence & symbol preservation (e.g. Item 95 sequence preservation, or '+' symbol)
+      // Strictly pass isFromAi = true so it NEVER replaces the AI address with crawl fragments
+      if (bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
+        addr = reconcileAddressWithRawEvidence(addr, bestRaw, result.companyName, country, crawlData, true);
       }
+      if (typeof sanitizeRule6CompanyAddress === "function") {
+        addr = sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData);
+      }
+      result.companyAddress = addr || "Not Available";
     }
-
-    // Reconcile with authentic website evidence to preserve original format, sequence, and symbols
-    if (addr && addr !== "Not Available" && bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
-      addr = reconcileAddressWithRawEvidence(addr, bestRaw, result.companyName, country, crawlData);
-    }
-
-    if (addr && addr !== "Not Available") {
-      addr = typeof sanitizeRule6CompanyAddress === "function"
-        ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData)
-        : toTitleCase(addr);
-    }
-    result.companyAddress = addr || "Not Available";
 
     // 5. State & City: In AI mode, strictly take AI values directly from API response!
     // Never override AI's "Available" or "Not Available" with local heuristics.
@@ -1102,14 +1099,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     // CAPITAL CITY RULE — MANDATORY:
-    // If a country's capital city is mentioned as the company's location in the company address,
-    // BOTH fields must be selected as:
-    // - City: "Available"
-    // - State: "Available"
-    // This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
-    if (result.companyAddress && result.companyAddress.length >= 3 && result.companyAddress.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country)) {
-      result.city = "Available";
-      result.state = "Available";
+    // Apply as fallback ONLY if AI did not provide State or City
+    if ((!apiState || !apiCity) && result.companyAddress && result.companyAddress.length >= 3 && result.companyAddress.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country)) {
+      if (!apiCity) result.city = "Available";
+      if (!apiState) result.state = "Available";
     }
 
     // 6. Email ID & Secondary Email ID: Take from API directly. DO NOT combine crawl emails.

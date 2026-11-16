@@ -1886,6 +1886,71 @@ async function runAll() {
     assert.strictEqual(qcUnavail.city, 'Not Available');
   });
 
+  runTest('Item 97: Pure AI Data Mode - Zero Cross-Source Contamination, Conversion or Override', () => {
+    const { ctx } = createTestContext();
+
+    // 1. AI result has companyAddress: 'Not Available' while crawl has raw candidates.
+    // Must strictly retain 'Not Available' from AI and NEVER replace with crawl candidate!
+    const aiWithNoAddress = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Cloud Solutions Inc',
+      countryName: 'United States Of America',
+      companyAddress: 'Not Available',
+      state: 'Not Available',
+      city: 'Not Available',
+      emailId: 'contact@cloudsolutions.com',
+      secondaryEmailId: '',
+      phoneNumber: '2125551234',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    const crawlWithCandidate = {
+      addressCandidates: [{ raw: '999 Old Branch Road, Dallas, Texas 75201', source: 'footer' }],
+      emails: ['billing@cloudsolutions.com', 'admin@marketing.com'],
+      phones: ['+1 800 123 4567'],
+      detectedProductCount: 0
+    };
+
+    const result1 = ctx.applyStrictInstructions(aiWithNoAddress, crawlWithCandidate, {});
+    assert.strictEqual(result1.companyAddress, 'Not Available', 'AI address Not Available must NOT be overwritten with crawl candidate');
+    assert.strictEqual(result1.state, 'Not Available', 'AI state Not Available must NOT be overwritten');
+    assert.strictEqual(result1.city, 'Not Available', 'AI city Not Available must NOT be overwritten');
+    assert.strictEqual(result1.emailId, 'contact@cloudsolutions.com', 'AI email must NOT be modified');
+    assert.strictEqual(result1.secondaryEmailId, '', 'Secondary email must NOT be backfilled from crawl');
+    assert.strictEqual(result1.phoneNumber, '2125551234', 'AI phone must NOT be overwritten');
+    assert.strictEqual(result1.numberOfProducts, '3', 'AI products count must NOT be overwritten');
+
+    // 2. Suburb / Unincorporated locality: AI returns City: Not Available.
+    // Local regex / capital rules must NEVER convert or override AI city to Available!
+    const aiSuburban = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Precision Lathes LLC',
+      countryName: 'United States Of America',
+      companyAddress: '27W705 Hickory Lane, Northwoods, Illinois',
+      state: 'Available',
+      city: 'Not Available',
+      emailId: 'sales@precisionlathes.com',
+      secondaryEmailId: '',
+      phoneNumber: '6305559876',
+      numberOfProducts: '2',
+      productImages: '2',
+      numberOfProductDescriptions: '2'
+    };
+
+    const result2 = ctx.applyStrictInstructions(aiSuburban, { addressCandidates: [] }, {});
+    assert.strictEqual(result2.city, 'Not Available', 'AI City: Not Available must be completely preserved without heuristic override');
+    assert.strictEqual(result2.state, 'Available', 'AI State: Available must be preserved');
+    assert.ok(result2.companyAddress.toLowerCase().includes('27w705 hickory lane, northwoods, illinois'), 'Address must preserve Northwoods, Illinois');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

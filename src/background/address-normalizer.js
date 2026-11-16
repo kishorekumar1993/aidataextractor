@@ -2408,14 +2408,14 @@ function restoreOriginalSymbolsInCompanyAddress(addr, crawlData) {
  * are missed, truncated, or dropped (e.g. trailing cities, districts, counties, states,
  * leading unit/premise/estate names, or intermediate villages/sections).
  */
-function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", country = "", crawlData = null) {
+function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", country = "", crawlData = null, isFromAi = false) {
   if (!rawCand) return addr;
   const rawText = typeof rawCand === "object" ? (rawCand.raw || "") : String(rawCand || "");
   if (!rawText || rawText.length < 5 || rawText.length > 350) return addr;
 
   const rawClean = sanitizeRule6CompanyAddress(rawText, companyName, country, crawlData);
   if (!rawClean || rawClean === "Not Available" || rawClean.length < 5) return addr;
-  if (!addr || addr === "Not Available") return rawClean;
+  if (!addr || addr === "Not Available") return isFromAi ? addr : rawClean;
 
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, " ").replace(/\s+/g, " ").trim();
   const normAi = norm(addr);
@@ -2438,6 +2438,12 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
   const sortedRaw = normRaw.split(" ").filter(Boolean).sort().join(" ");
   if (sortedAi === sortedRaw) {
     return rawClean;
+  }
+
+  // High priority user mandate: In AI mode, TAKE AI DATA ONLY.
+  // Never replace AI's address with crawl fragments (Case 1, 2, 3 are disabled for AI data).
+  if (isFromAi) {
+    return addr;
   }
 
   // Case 1: Raw candidate has trailing components missing from addr (e.g. City / County / State / District / Township)
