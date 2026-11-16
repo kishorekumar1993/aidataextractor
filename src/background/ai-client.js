@@ -25,7 +25,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 {
   "websiteStatus": "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site" | "Manual Review",
   "notWorkingReason": "string (mandatory explanation if not Working, else empty string \"\")",
-  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
+  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
   "companyProfile": "Available" | "Not Available" | "",
   "companyName": "string (expand ONLY abbreviations present on site; standalone 'Co.' -> 'Company', NEVER add 'Limited' unless 'Ltd.'/'Limited' is on site)",
   "countryName": "string",
@@ -42,16 +42,30 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
   return `You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
 
+AI EXTRACTION SOURCE PRIORITY:
+1. Use information extracted from the provided website content as the primary source.
+2. Use official website pages such as About Us, Contact Us, Company Profile, Products, and Footer.
+3. Use official company social media only for fields explicitly permitted to use social media (e.g. corporate emails, or country when omitted from website).
+4. Never fabricate, assume, or manually complete missing values.
+5. If information is unavailable, return the specified empty string "" or "Not Available" value.
+6. Preserve the original AI-extracted information without invention.
+7. Do not replace an extracted value with an inferred or guessed value without supporting evidence.
+
 1. WEBSITE STATUS QC RULES:
 - Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site" | "Manual Review".
-- Rules 11 & 16 (Online Store / Shopping Cart / Buy Now / Checkout):
-  * If company IS A MANUFACTURER (produces/fabricates products in own factory, OEM/ODM) -> Mark "Working" and "Manufacturer", extract all 14 fields. Online ordering/cart is PERMITTED for manufacturers!
-  * If company is NOT A MANUFACTURER (Retailer, Reseller, Trader, E-commerce Store, Distributor) -> Mark "Not Working" and leave all other 13 fields empty "".
-  * B2B quotation actions ("Request a Quote", "Add to Quote", "Inquire") or dealer locators are NOT online shopping carts -> Eligible!
-- Rule 12 (Non-English): No English translation option -> mark "Non English" (all other fields empty "").
-- Rule 14 (Flash): Designed in Flash format where text is uncopyable -> mark "Flash" (all other fields empty "").
-- Rule 13 (Redirect Site): Redirected to a completely DIFFERENT domain (companyA.com -> companyB.com) -> mark "Redirect Site", evaluate details from destination site. Same-domain redirects (http to https, www vs non-www, language path /en/) are NOT Redirect Sites -> mark "Working".
-- Manual Review: Anti-bot challenge (Cloudflare/Access Denied) or ambiguous access.
+- CLEAR DISTINCTIONS BETWEEN STATUSES:
+  * "Working": Operational physical goods company or eligible B2B service provider with accessible content, products, or services.
+  * "Not Working": Website is dead, server error (404, 500, 502, 503), domain unreachable, blocked by anti-bot gate, genuine prohibited category business, or an ordinary online retail store without manufacturing/supply evidence.
+  * "Domain Expired": Domain parking page, for sale notice, expired domain registrar placeholder, or domain renewal landing page.
+  * "Redirect Site": The target website redirects to a completely DIFFERENT external domain (e.g. domainA.com -> domainB.com). Evaluate all details from the destination domain. (Note: Same-domain redirects like http to https, www to non-www, or language directories like /en/ are NOT Redirect Sites; mark "Working").
+  * "Non English": The entire website is in a non-English language AND has NO English translation option or language switcher available. If the website provides an English version, language selector, or substantial English content, evaluate in English and mark "Working".
+  * "Under Construction": Site explicitly states "Under Construction", "Coming Soon", or maintenance mode placeholder.
+  * "Flash": Site is built entirely in Flash format with uncopyable, unindexable text.
+  * "Manual Review": Indeterminate anti-bot challenge (e.g. Cloudflare Turnstile, CAPTCHA) or ambiguous access restrictions.
+- Rules for Online Stores / Shopping Carts / Buy Now:
+  * If company IS A MANUFACTURER (produces, fabricates, or molds products in own factory, OEM/ODM) -> Mark "Working" and "Manufacturer", extract all 14 fields. Online ordering or cart is PERMITTED for genuine manufacturers!
+  * If company is NOT A MANUFACTURER (pure retailer, reseller, consumer e-commerce store with shopping cart) -> Mark "Not Working", "Online Shopping", and leave all other fields empty "".
+  * B2B quotation actions ("Request a Quote", "Add to Quote", "Inquire") or dealer locators are NOT consumer shopping carts -> Eligible!
 - Supplier with 0 Displayed Products: An operational physical supplier with no displayed product catalog is classified as "Supplier" with product count "0" and marked "Working" (submitted as Non-Paid). Do NOT mark 0 products as Not Working if company is an operational supplier!
 - If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason. If "Working", set "notWorkingReason" to "".
 - CRITICAL RULE NOTE 2 - PROHIBITED / RESTRICTED CATEGORIES (13 STRICTLY PROHIBITED CATEGORIES):
@@ -73,31 +87,57 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * CONTEXTUAL EXCLUSIONS (NOT RESTRICTED - FALSE POSITIVES): Distinguish genuine prohibited category operations from unrelated contextual mentions! An industrial machinery manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, knife gate valves, connectors for aerospace applications, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business.
   * When a genuine restricted category business/product is detected, you MUST set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
 
-2. BUSINESS TYPE:
-- Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
-- If company manufactures, fabricates, molds, or engineers products -> "Manufacturer".
+2. BUSINESS TYPE & ELIGIBILITY VALIDATION:
+- Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
+(STRICTLY use "Distributor" - never output duplicate or misspelled "Distributer").
 
-3. COMPANY PROFILE:
+ALLOWED BUSINESS CLASSIFICATIONS:
+- "Manufacturer": Company manufactures physical products in own facility/factory (OEM/ODM, machining, molding, fabrication, assembly).
+- "Industrial Services": Company provides industrial services (machining, custom fabrication, tooling, surface treatment, industrial maintenance).
+- "Exporter": Company exports physical goods to international markets.
+- "Trader": Company trades physical goods (buying and selling physical commodities or equipment).
+- "Distributor": Company distributes physical goods (authorized distributor, dealership network, channel partner).
+- "Supplier": Company supplies physical goods (B2B supply, stockist, materials supplier).
+- "Wholesaler": Company sells physical goods wholesale in bulk quantities.
+- "Service Provider": Company provides eligible B2B business services.
+
+BUSINESS ELIGIBILITY RULES:
+- Do not classify an ordinary online shopping website as a manufacturer or supplier without evidence of actual manufacturing or supply activities.
+- Classify prohibited business categories according to the provided eligibility policy ("Restricted Site").
+- Do not reject an eligible manufacturer merely because its website contains a product enquiry or online ordering feature.
+
+3. COMPANY PROFILE VALIDATION:
 - Options: "Available" | "Not Available".
-- Mark "Available" if site has dedicated About Us, Company Profile, history, mission, or factory overview. Otherwise "Not Available".
+- "Available": Site has a dedicated, genuine company overview, history, story, mission/vision, or factory/facility profile text describing the company's background, operations, or establishment.
+- "Not Available": Website only has brief slogans, one-line taglines, or bare product listings with no descriptive company background text.
 
-4. COMPANY NAME (CRITICAL QC RULE):
-- Extract the official legal registered company name in COMPLETE FULL FORM.
-- EXPAND ONLY THE EXACT CORPORATE & INDUSTRY ABBREVIATIONS PRESENT ON THE WEBSITE (NEVER invent or append extra corporate suffixes not written on the site!):
+4. COMPANY NAME STRICT VALIDATION:
+- Extract the complete company name displayed on the official website.
+- Prefer the registered legal name when explicitly available (Footer copyright, About Us, Contact Us, Legal Notices, JSON-LD).
+- Expand supported abbreviations according to the expansion rules:
   * Standalone Co. -> Company (CRITICAL: If the website ends with "Co." and does NOT contain "Ltd." or "Limited", output "Company" ONLY — NEVER append ", Limited"!).
   * Standalone Ltd. -> Limited.
   * Co., Ltd. / Co.,Ltd / Co. Ltd / Co Ltd -> Company, Limited (only when BOTH Co. and Ltd. are present on the site).
   * Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company.
-  * Pty Ltd -> Proprietary Limited, Pte Ltd / Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad.
-  * PT -> Perseroan Terbatas, CV -> Commanditaire Vennootschap, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, GmbH -> Gesellschaft mit beschränkter Haftung, B.V. -> Besloten Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata.
-  * Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises.
+  * Pty Ltd -> Proprietary Limited, Pte Ltd / Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad, Bhd -> Berhad.
+  * PT -> Perseroan Terbatas, Tbk -> Terbuka, CV -> Commanditaire Vennootschap, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, GmbH / Ges.m.b.H. -> Gesellschaft mit beschränkter Haftung, AG -> Aktiengesellschaft, KG -> Kommanditgesellschaft, B.V. -> Besloten Vennootschap, N.V. -> Naamloze Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, S.p.A. -> Società per Azioni, Sp. z o.o. -> Spółka z Ograniczoną Odpowiedzialnością, AB -> Aktiebolag, Oy -> Osakeyhtiö, A/S -> Aktieselskab, Ltda. -> Limitada.
+  * Industry Words: Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises, Solns. -> Solutions.
+- NEVER invent Limited, Incorporated, Corporation, or other suffixes when the website only provides a brand name or when the suffix is absent from the site.
+- Never use a product name, slogan, or tagline as the company name.
+- Preserve genuine brand acronyms in UPPERCASE (e.g. PEM, BMW, CNC, USA) and internal symbols ('&', '+', '/', '%', '#').
+- Do not combine two different company names.
 - Remove brackets ()/[] keeping inner text (e.g. "Company (Malaysia) Sdn Bhd" -> "Company Malaysia Sendirian Berhad"). If country name is inside company name, keep it as is.
-- NEVER expand special characters or symbols into words (do NOT convert "&" to "And", "+" to "Plus", "@" to "At", "/" to "Slash"/"Or", "%" to "Percent", "#" to "Number"; keep internal symbols as-is such as "CJ Tool & Mouldings Limited", "H&R Manufacturing", "Design+Build").
-- Format in Title Case where EVERY word starts with a capital letter (keep brand acronyms like PEM, BMW in UPPERCASE).
+- Format in Title Case where EVERY word starts with a capital letter.
 - Strictly REMOVE ANY special characters from the beginning or end of the company name (no leading or trailing ".", ",", "-", "!", "*", "&", "+", "/", "#", "@", "®", "™", "©", quotes, brackets, or symbols). Rule: Special character should not start and should not end.
-- Preserve comma before corporate suffix ONLY IF a comma is explicitly present before that suffix on the website (e.g. "Hsin Hsin Metals, Ltd." -> "Hsin Hsin Metals, Limited", "Mocap, LLC" -> "Mocap, Limited Liability Company"). If NO comma is present before the suffix on the website (e.g. "TAD Communications Ltd"), do NOT add a comma -> output "TAD Communications Limited". If comma available then only put comma else leave.
+- Preserve comma before corporate suffix ONLY IF a comma is explicitly present before that suffix on the website (e.g. "Hsin Hsin Metals, Limited"); if NO comma on site (e.g. "TAD Communications Limited"), do not insert a comma.
 
-5. COUNTRY NAME (CRITICAL QC RULE - SUPPORT ALL 135+ COUNTRIES GLOBALLY WITH FULL NAME EXPANSION):
+5. COUNTRY NAME STRICT VALIDATION (SOURCE EVIDENCE PRIORITY & GLOBAL EXPANSION):
+- SOURCE EVIDENCE PRIORITY:
+  1. Headquarters physical address explicitly on the website (Contact Us, Footer, About Us).
+  2. Official corporate legal registration / imprint / company profile.
+  3. Official company social media (LinkedIn, Facebook).
+  4. Top-level domain extension (.uk, .de, .ca, .au, .sg, .jp) or international telephone calling code.
+- PROHIBIT GUESSING: Never fabricate, assume, or guess a country without supporting evidence.
 - ALWAYS output the full expanded original English country name (NEVER return an abbreviation like USA/UK/UAE/KSA/PNG/NZ/HK, a city, state, continent, email, or local-language name).
 - MANDATORY QC FULL EXPANSION & STANDARDIZATION:
   * USA / U.S.A. / US / United States -> "United States Of America"
@@ -107,7 +147,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * Deutschland -> "Germany" | España -> "Spain" | Italia -> "Italy" | Nederland -> "Netherlands" | Österreich -> "Austria" | Schweiz -> "Switzerland" | Hrvatska -> "Croatia"
   * Türkiye / Turkiye / Turkey -> "Türkiye" | Republic of Korea / ROK -> "South Korea" | DPRK -> "North Korea" | Republic of China / ROC -> "Taiwan" | Peoples Republic of China / PRC -> "China" | Kingdom of Bahrain -> "Bahrain" | Sultanate of Oman -> "Oman"
 - Use standard full English names for ALL countries globally (Afghanistan, Albania, Algeria, Andorra, Angola, Argentina, Armenia, Australia, Austria, Azerbaijan, Bahamas, Bahrain, Bangladesh, Barbados, Belarus, Belgium, Belize, Bhutan, Bolivia, Botswana, Brazil, Brunei Darussalam, Bulgaria, Cambodia, Canada, Cayman Islands, China, Colombia, Costa Rica, Croatia, Cyprus, Czech Republic, Denmark, Dominican Republic, Egypt, Estonia, Ethiopia, Fiji, Finland, France, Germany, Ghana, Greece, Greenland, Guatemala, Guyana, Hong Kong, Hungary, Iceland, India, Indonesia, Iran, Iraq, Ireland, Israel, Italy, Jamaica, Japan, Jordan, Kazakhstan, Kenya, Kuwait, Latvia, Lebanon, Liechtenstein, Lithuania, Luxembourg, Madagascar, Malaysia, Maldives, Malta, Mauritius, Mexico, Moldova, Mongolia, Morocco, Mozambique, Myanmar, Namibia, Nepal, Netherlands, New Zealand, Nicaragua, Nigeria, North Korea, North Macedonia, Norway, Oman, Pakistan, Panama, Papua New Guinea, Paraguay, Peru, Philippines, Poland, Portugal, Qatar, Romania, Russia, Rwanda, Saint Lucia, Samoa, Saudi Arabia, Serbia, Seychelles, Sierra Leone, Singapore, Slovakia, Slovenia, South Africa, South Korea, Spain, Sri Lanka, Sudan, Suriname, Sweden, Switzerland, Syria, Taiwan, Tanzania, Thailand, Trinidad and Tobago, Tunisia, Türkiye, Uganda, Ukraine, United Arab Emirates, United Kingdom, United States Of America, Uruguay, Uzbekistan, Vanuatu, Vietnam, Zambia, Zimbabwe).
-- If omitted on website, infer country from social media or address city/state/postcode globally.
+- Empty string "" if websiteStatus is not Working.
 
 6. COMPANY ADDRESS (CRITICAL QC MANDATE — 12 MANDATORY RULES):
 - RULE 1. HEADQUARTERS PRIORITY AND ADDRESS SELECTION:
@@ -326,49 +366,42 @@ Never sacrifice source accuracy to achieve full-form expansion.
     - NEVER put commas inside a street name ("Pump Lane" not "Pump, Lane"), inside an industrial park name ("Argent Trade Park" not "Argent, Trade Park"), or between street number and street name ("604 Progress Drive" not "604, Progress Drive").
     - Address MUST NOT end with a comma or period.
 
-7. STATE — MANDATORY QC RULE (ALL COUNTRIES WORLDWIDE - EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
+7. STATE — INDEPENDENT VALIDATION (EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
 - State is a dropdown field with only two permitted options:
   - "Available"
   - "Not Available"
-- If the State name is explicitly mentioned in the company address, select "Available".
-- If the State name is not mentioned in the company address, select "Not Available".
-- IMPORTANT: The following administrative divisions (County, Province, Prefecture) must also be considered as State:
-  - County
-  - Province
-  - Prefecture
-- Therefore, if a County, Province, or Prefecture name is explicitly mentioned in the company address, select "Available".
+- Evaluate State independently from City, using words in companyAddress only.
+- State = "Available" when an explicitly identified State, County, Province, Territory, or Prefecture is present in companyAddress.
+- State = "Not Available" if no State, County, Province, Territory, or Prefecture is present in companyAddress.
+- Expand abbreviations only when country context confirms them (e.g. standard US, Canadian, or Australian state abbreviations matching the country).
 - CAPITAL CITY & CITY-STATE RULE — MANDATORY:
-  - If a country's capital city is mentioned as the company's location in the company address (e.g. Singapore, Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
+  - If a country's national capital city is mentioned as the company's location in companyAddress (e.g. Singapore, Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
   - Sovereign City-States (Singapore, Monaco, Vatican City, San Marino): In Singapore, the country itself functions as City, State, and Capital. For any address located in Singapore, BOTH "state": "Available" AND "city": "Available" MUST be selected!
   - This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
-- Do not guess or infer a State from the City, postal code, country, or other information.
+- Never infer State from postal codes, city alone, or nearby locations.
 - Do not assume the last word in companyAddress is a State just because of its position! Verify that the word is actually an officially recognized State, County, Province, or Prefecture (e.g. an address with only a street or city and no State written -> mark "Not Available").
 - Do not treat street names, building names, industrial estates, or business park names as State names (e.g. "County Road", "State Highway", "Victoria Street", or "Yorkshire Way" is a street name, NOT a State).
 - Evaluate this field strictly using the company address extracted from the official company website.
 - Final output: Return only "Available" or "Not Available".
 
 
-8. CITY — MANDATORY GLOBAL QC VALIDATION RULE
-(ALL COUNTRIES WORLDWIDE — STRICTLY BASED ON companyAddress)
+8. CITY — INDEPENDENT VALIDATION (EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
+- The City field is a dropdown with ONLY TWO permitted values:
+  - "Available"
+  - "Not Available"
 
 OBJECTIVE:
 Determine whether the companyAddress explicitly contains at least one officially recognized geographical location that qualifies as a City, Town, District, or Municipality.
 
-The City field is a dropdown with ONLY TWO permitted values:
-- "Available"
-- "Not Available"
-
-No other values are permitted.
-
-RULE 1 — STRICT ADDRESS-ONLY EVALUATION:
-- Evaluate City strictly using the geographical names explicitly present in the final companyAddress field.
+RULE 1 — STRICT ADDRESS-ONLY INDEPENDENT EVALUATION:
+- Evaluate City independently using the geographical names explicitly present in the final companyAddress field only.
 - Do not use the original website separately to introduce a City that is missing from companyAddress.
-- Do not infer or guess a City from State, Province, County, Country, postal code, telephone number, or other information.
+- Do not infer or guess a City from State, Province, County, Country, postal code, telephone number, or nearby locations.
 - Do not use the company's name, website domain, or registered country to infer City.
 - Every geographical location evaluated must be explicitly present in companyAddress.
 
 RULE 2 — ACCEPTED CITY CLASSIFICATIONS:
-A geographical location must be considered qualifying if it is officially recognized under the applicable country's administrative system as one of the following:
+A geographical location qualifies as "city": "Available" if it is officially recognized under the applicable country's administrative system as one of the following:
 
 1. City
 2. Town
@@ -567,32 +600,29 @@ Never return:
 - Alternative dropdown values
 
 9. EMAIL ID & SECONDARY EMAIL ID:
-- Primary Email: Official general contact or sales inbox (e.g. sales@, info@, contact@, enquiry@).
-- Secondary Email: Distinct secondary corporate email (e.g. support@, jobs@, service@).
-- Must NOT be identical. Reject privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix). Empty string "" if none found.
+- Select the primary official corporate email (e.g. sales@, info@, contact@, enquiry@).
+- Select a different secondary corporate email (e.g. support@, service@).
+- Never duplicate emailId in secondaryEmailId (if duplicate or unavailable, return "").
+- Do not invent email addresses.
+- Exclude privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix).
+- Empty string "" if none found.
 
-10. PHONE NUMBER (CRITICAL HIGH PRIORITY RULE - MANDATORY INTERNATIONAL COUNTRY CODE REMOVAL):
-- ABSOLUTELY NEVER INCLUDE THE COUNTRY CALLING CODE IN phoneNumber! RETURN ONLY DOMESTIC SUBSCRIBER DIGITS!
-- YOU MUST STRIP THE INTERNATIONAL COUNTRY CALLING CODE FOR ALL COUNTRIES WORLDWIDE:
-  * Malaysia (+60): "+60 4-3329299" -> strip +60 -> "43329299" (CRITICAL: NEVER return "6043329299"!)
-  * China (+86): "+86 21 6888 8888" -> strip +86 -> "2168888888" (CRITICAL: NEVER return "862168888888"!)
-  * Taiwan (+886): "+886 4 7322367" -> strip +886 -> "47322367" (CRITICAL: NEVER return "88647322367"!)
-  * India (+91): "+91 98401 23456" -> strip +91 -> "9840123456" (CRITICAL: NEVER return "919840123456"!)
-  * United States / Canada (+1): "+1 (212) 555-1234" -> strip +1 -> "2125551234" (CRITICAL: NEVER return "12125551234"!)
-  * United Kingdom (+44): "+44 1773 768822" -> strip +44 and trunk (0) -> "1773768822"
-  * Australia (+61): "+61 3 9562 0780" -> strip +61 and trunk (0) -> "395620780"
-  * Indonesia (+62): "+62 821 3690 3270" -> strip +62 -> "82136903270"
-  * France (+33): "+33 (0) 3 89 44 13 88" -> strip +33 and trunk (0) -> "389441388"
-  * Germany (+49): "+49 89 123456" -> strip +49 and trunk (0) -> "89123456"
-  * Hong Kong (+852), Japan (+81), South Korea (+82), Singapore (+65), Thailand (+66), Vietnam (+84), Philippines (+63), South Africa (+27), UAE (+971), Saudi Arabia (+966), Italy (+39), Spain (+34), Netherlands (+31), Switzerland (+41), Poland (+48), Türkiye (+90), Mexico (+52), Brazil (+55), New Zealand (+64), Pakistan (+92), Bangladesh (+880), etc.
-- ALWAYS STRIP TRUNK ZERO (e.g. 04-3329299 -> 43329299; 020 7946 0000 -> 2079460000).
-- Digits only (no spaces, hyphens, brackets, dots, or plus signs).
-- STRICTLY DO NOT TAKE TOLL-FREE NUMBERS (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). If only toll-free is available, return empty string "".
-- Valid numbers must be domestic national digits between 7 and 12 digits.
+10. PHONE NUMBER STRICT VALIDATION:
+- Return domestic subscriber digits only.
+- ABSOLUTELY NEVER INCLUDE THE COUNTRY CALLING CODE IN phoneNumber!
+- Remove the country calling code (+1, +44, +60, +61, +65, +86, +91, +886, etc.).
+- Remove the trunk prefix (leading 0) when applicable (e.g. 04-3329299 -> 43329299; 020 7946 0000 -> 2079460000).
+- Protect authentic domestic subscriber digits (e.g. in Singapore, 8-digit domestic numbers starting with 65 must retain all 8 digits: 65353907).
+- Exclude fax, toll-free (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800), and emergency numbers. If only toll-free is available, return empty string "".
+- Never invent or complete missing digits.
+- Digits only (no spaces, hyphens, brackets, dots, or plus signs). Valid numbers must be domestic national digits between 7 and 12 digits.
 
-11. PRODUCT, IMAGE & DESCRIPTION COUNTS:
-- Values: "0" | "1" | "2" | "3" (3 or more).
-- STRICT MANDATE: Count physical product images on the website ("productImages"). Whatever value "productImages" has, set "numberOfProducts" and "numberOfProductDescriptions" to that EXACT SAME value!
+11. PRODUCT IDENTIFICATION RULES (INDEPENDENT EVALUATION):
+- "numberOfProducts": Count distinct physical products offered (not repeated images of the same product). Scale: "0" | "1" | "2" | "3" (for 3 or more).
+- "productImages": Count genuine physical product photographs only. Do not count banners, logos, icons, advertisements, or decorative graphics as product images. Scale: "0" | "1" | "2" | "3" (for 3 or more).
+- "numberOfProductDescriptions": Count distinct product descriptions only when actual descriptive text is available. Scale: "0" | "1" | "2" | "3" (for 3 or more).
+- Apply the 0, 1, 2, and 3+ counting scale independently to each field.
+- Do not automatically copy the image count into other product fields. Evaluate each field on its own merit.
 
 WEBSITE DATA FOR THIS CRAWL:
 Target URL (Original): ${crawlData.originalUrl}
