@@ -321,7 +321,7 @@ function finalizeParsedAiResult(parsed, crawlData) {
 async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlStartTime = 0 }) {
   let lastError = null;
   for (const modelToTry of candidateModels) {
-    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 25000) {
+    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 21000) {
       console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting AI calls.`);
       break;
     }
@@ -330,7 +330,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
 
     // Recheck loop: if attempt 1 fails, recheck again before switching candidate models
     for (let attempt = 1; attempt <= 2; attempt++) {
-      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 25000) break;
+      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 21000) break;
       try {
         const abortCtrl = new AbortController();
         const timeoutPerModel = (modelToTry === candidateModels[0]) ? (attempt === 1 ? 8500 : 5000) : 4500;

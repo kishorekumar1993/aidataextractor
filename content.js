@@ -188,8 +188,19 @@
       }
     }, 2500);
 
-    // Safety timeout: ensure buttons are NEVER permanently disabled (30s)
-    const safetyTimer = setTimeout(AIExt.resetCrawlButtons, 30000);
+    // Safety timeout: ensure buttons are NEVER permanently disabled (28s)
+    const safetyTimer = setTimeout(() => {
+      if (state.isCrawlingInProgress) {
+        console.warn("[AI Assistant] Safety timer reached. Resetting crawling state.");
+        state.isCrawlingInProgress = false;
+        if (typeof AIExt.resetCrawlButtons === "function") {
+          AIExt.resetCrawlButtons();
+        }
+        if (typeof AIExt.updateStatus === "function") {
+          AIExt.updateStatus("⚠️ Crawl timed out. Ready to retry.", "warning");
+        }
+      }
+    }, 28000);
 
     try {
       const response = await AIExt.sendRuntimeMessage({
@@ -518,7 +529,16 @@
     } finally {
       state.isCrawlingInProgress = false;
       clearTimeout(safetyTimer);
-      AIExt.resetCrawlButtons();
+      if (progressTimer) {
+        clearTimeout(progressTimer);
+        progressTimer = null;
+      }
+      const quickBtn = document.getElementById("ai-quick-btn");
+      if (quickBtn && quickBtn.disabled && !quickBtn.classList.contains("ai-btn-success") && !quickBtn.classList.contains("ai-btn-not-working") && !quickBtn.classList.contains("ai-btn-restricted")) {
+        if (typeof AIExt.resetCrawlButtons === "function") {
+          AIExt.resetCrawlButtons();
+        }
+      }
     }
   }
 

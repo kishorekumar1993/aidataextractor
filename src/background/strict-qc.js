@@ -60,7 +60,7 @@ function determineValidErrorCategoryQC(reason) {
   return "No Business Products / 0 Products";
 }
 
-async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
+async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "", options = {}) {
   const crawlStartTime = Date.now();
   let targetUrl = (rawUrl && typeof rawUrl === "string") ? rawUrl.trim() : "";
   let crawlResult = null;
@@ -210,7 +210,8 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
   // Step 1: Deep crawl complete website across all pages, framesets, contact, products, footer, JSON-LD
   crawlResult = await crawlWebsite(targetUrl, {
     maxPages: settings.maxPages || settings.crawlPageLimit || undefined,
-    maxCrawlTimeMs: extractionMode === "own_crawl" ? 10000 : 7500
+    maxCrawlTimeMs: extractionMode === "own_crawl" ? 10000 : 7500,
+    abortSignal: options.abortSignal
   });
 
   // If website returned HTTP 401/403/429, anti-bot challenge, or blocked status:

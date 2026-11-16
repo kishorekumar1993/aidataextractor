@@ -345,7 +345,7 @@ async function crawlWebsite(targetUrl, options = {}) {
         } catch (e) { return false; }
       });
       if (matchedTab && matchedTab.id) {
-        const injected = await chrome.scripting.executeScript({
+        const injectPromise = chrome.scripting.executeScript({
           target: { tabId: matchedTab.id },
           func: () => ({
             html: document.documentElement ? document.documentElement.outerHTML : "",
@@ -353,6 +353,8 @@ async function crawlWebsite(targetUrl, options = {}) {
             title: document.title || ""
           })
         });
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("DOM grab timeout")), 1500));
+        const injected = await Promise.race([injectPromise, timeoutPromise]).catch(() => null);
         if (injected && injected[0] && injected[0].result && injected[0].result.html && injected[0].result.html.length > 500) {
           const tabData = injected[0].result;
           mainRes = {
@@ -532,7 +534,7 @@ async function crawlWebsite(targetUrl, options = {}) {
             } catch (e) { return false; }
           });
           if (matchedDestTab && matchedDestTab.id) {
-            const injected = await chrome.scripting.executeScript({
+            const injectPromise = chrome.scripting.executeScript({
               target: { tabId: matchedDestTab.id },
               func: () => ({
                 html: document.documentElement ? document.documentElement.outerHTML : "",
@@ -540,6 +542,8 @@ async function crawlWebsite(targetUrl, options = {}) {
                 title: document.title || ""
               })
             });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Dest DOM grab timeout")), 1500));
+            const injected = await Promise.race([injectPromise, timeoutPromise]).catch(() => null);
             if (injected && injected[0] && injected[0].result && injected[0].result.html && injected[0].result.html.length > 500 && !isAntiBotChallenge(injected[0].result.html, 200)) {
               mainRes = {
                 ok: true,
