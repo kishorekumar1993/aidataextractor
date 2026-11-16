@@ -344,26 +344,242 @@ Never sacrifice source accuracy to achieve full-form expansion.
 - Evaluate this field strictly using the company address extracted from the official company website.
 - Final output: Return only "Available" or "Not Available".
 
-8. CITY — MANDATORY QC RULE (ALL COUNTRIES WORLDWIDE - EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
-- City is a dropdown field with only two permitted options:
-  - "Available"
-  - "Not Available"
-- If the City name is explicitly mentioned in the company address, select "Available".
-- If the City name is not mentioned in the company address, select "Not Available".
-- IMPORTANT: The following administrative/locality divisions (Town, District, Municipality) must also be considered as City:
-  - Town
-  - District
-  - Municipality
-- Therefore, if a Town, District, or Municipality name is explicitly mentioned in the company address, select "Available".
-- CAPITAL CITY RULE — MANDATORY:
-  - If a country's capital city is mentioned as the company's location in the company address, BOTH "city": "Available" AND "state": "Available"!
-  - This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
-- Do not guess or infer a City from the State, postal code, country, or other information.
-- DO NOT assume a locality is a City just because it appears right before a State/Province (e.g. "[Locality], Illinois")! Verify whether the locality is an officially recognized City, Town, Township, District, or Municipality.
-- Do not automatically treat unincorporated subdivisions, neighborhoods, suburbs, industrial estates, or business parks as Cities unless they qualify as an officially recognized City, Town, District, or Municipality (e.g. Northwoods, Campbellfield, Rowville, Oakleigh South, Sandton, Penrose, Trafford Park are unincorporated neighborhoods/suburbs -> mark "Not Available").
-- Do not treat street names, building names, or company names as City names (e.g. "District Road", "Town Street", "City Road" are street names -> mark "Not Available").
-- Evaluate this field strictly using the company address extracted from the official company website.
-- Final output: Return only "Available" or "Not Available".
+
+8. CITY — MANDATORY GLOBAL QC VALIDATION RULE
+(ALL COUNTRIES WORLDWIDE — STRICTLY BASED ON companyAddress)
+
+OBJECTIVE:
+Determine whether the companyAddress explicitly contains at least one officially recognized geographical location that qualifies as a City, Town, District, or Municipality.
+
+The City field is a dropdown with ONLY TWO permitted values:
+- "Available"
+- "Not Available"
+
+No other values are permitted.
+
+RULE 1 — STRICT ADDRESS-ONLY EVALUATION:
+- Evaluate City strictly using the geographical names explicitly present in the final companyAddress field.
+- Do not use the original website separately to introduce a City that is missing from companyAddress.
+- Do not infer or guess a City from State, Province, County, Country, postal code, telephone number, or other information.
+- Do not use the company's name, website domain, or registered country to infer City.
+- Every geographical location evaluated must be explicitly present in companyAddress.
+
+RULE 2 — ACCEPTED CITY CLASSIFICATIONS:
+A geographical location must be considered qualifying if it is officially recognized under the applicable country's administrative system as one of the following:
+
+1. City
+2. Town
+3. District
+4. Municipality
+
+IMPORTANT:
+- These classifications apply worldwide.
+- Administrative terminology differs between countries.
+- Verify the actual official administrative classification rather than relying only on the geographical name.
+- A location does not automatically qualify simply because its name contains the words City, Town, District, or Municipality.
+- Likewise, a location can qualify even when its name does not contain these words.
+
+RULE 3 — TOWN, DISTRICT AND MUNICIPALITY INCLUSION:
+- An explicitly mentioned and officially recognized Town qualifies as City = "Available".
+- An explicitly mentioned and officially recognized District qualifies as City = "Available".
+- An explicitly mentioned and officially recognized Municipality qualifies as City = "Available".
+- This rule applies to all countries.
+- Do not automatically treat every geographical subdivision as a qualifying District.
+- Verify whether the administrative entity is officially classified as a District or Municipality in that country.
+
+RULE 4 — SUBURB, NEIGHBORHOOD AND LOCALITY EXCLUSION:
+DO NOT automatically classify the following as City:
+
+- Suburb
+- Neighborhood
+- Locality
+- Hamlet
+- Village
+- Residential Area
+- Industrial Estate
+- Industrial Park
+- Business Park
+- Commercial Zone
+- Industrial Zone
+- Housing Estate
+- Township Subdivision
+- Unincorporated Community
+- Postal Area
+- Metropolitan Area
+- Rural Settlement
+
+CRITICAL AUSTRALIA, UK, NZ & SOUTH AFRICA SUBURB MANDATE:
+- In Australia, New Zealand, the United Kingdom, and South Africa, company addresses are typically written as: [Street Number] [Street Name], [Suburb], [State].
+- Suburbs are NOT Cities!
+- Examples of suburbs where City = "Not Available":
+  * "97–99 Kabi Circuit, Deception Bay, Queensland" -> "Deception Bay" is an Australian suburb (the local government City of Moreton Bay is NOT in the address) -> "city": "Not Available", "state": "Available".
+  * "40 Sarah Street, Campbellfield, Victoria" -> "Campbellfield" is an Australian suburb -> "city": "Not Available", "state": "Available".
+  * "Rowville, Victoria", "Oakleigh South, Victoria", "Mulgrave, Victoria", "Braeside, Victoria" -> Suburbs -> "city": "Not Available", "state": "Available".
+  * "Mascot, New South Wales", "Seven Hills, New South Wales" -> Suburbs -> "city": "Not Available", "state": "Available".
+  * "Penrose, Auckland" (New Zealand), "Sandton, Gauteng" (South Africa), "Trafford Park, Greater Manchester" (UK) -> Suburbs/Industrial areas -> "city": "Not Available", "state": "Available".
+- If the companyAddress contains ONLY a suburb followed by a State (e.g. "97–99 Kabi Circuit, Deception Bay, Queensland" or "40 Sarah Street, Campbellfield, Victoria"), you MUST return "city": "Not Available"!
+- ONLY mark City = "Available" in Australia if an officially recognized incorporated City is explicitly named in the address (e.g. Brisbane, Sydney, Melbourne, Perth, Adelaide, Gold Coast, Newcastle, Geelong, Cairns, Townsville, Toowoomba, Darwin, Hobart, Canberra) or if the word "City" is explicitly written (e.g. "City of Moreton Bay").
+
+UNITED STATES SUBDIVISIONS & UNINCORPORATED LOCALITIES:
+- In the United States, unincorporated residential subdivisions and communities that are not incorporated as a City, Town, or Village are NOT Cities:
+  * "27W705 Hickory Lane, Northwoods, Illinois" -> "Northwoods" is an unincorporated neighborhood/subdivision -> "city": "Not Available", "state": "Available".
+- Suburbs and unincorporated neighborhoods only qualify if their independent official administrative classification as an incorporated City, Town, District, or Municipality is explicitly verified. Otherwise, return "Not Available".
+
+RULE 5 — TOWNSHIP VALIDATION:
+- Do not automatically classify every Township as City.
+- A Township qualifies only if its official legal or administrative classification also meets one of the accepted categories:
+  City, Town, District, or Municipality.
+- A township that is only a minor administrative subdivision, neighborhood, or unincorporated locality does not qualify.
+- Never assume Township and Town have the same administrative meaning.
+
+RULE 6 — CAPITAL CITY RULE (MANDATORY EXCEPTION):
+If the official national capital city is explicitly mentioned as the company's location in companyAddress:
+
+BOTH FIELDS MUST BE:
+- "city": "Available"
+- "state": "Available"
+
+This rule applies even when the address does not separately mention a State, County, Province, or Prefecture.
+
+Additional conditions:
+- The national capital must be explicitly mentioned in companyAddress.
+- Do not infer the capital from the country name.
+- Do not apply this exception to ordinary regional capitals, provincial capitals, county seats, or administrative centers unless separately qualified under the accepted City classifications.
+- The capital-city exception overrides the normal requirement for an explicitly stated State/Province in the State field.
+
+RULE 7 — MULTIPLE GEOGRAPHICAL COMPONENTS:
+- Examine EVERY geographical component in companyAddress.
+- Do not evaluate only the final locality appearing before the State or Province.
+- Check all explicitly mentioned geographical names, including:
+  City, Town, District, Municipality, County, Suburb, Locality, and other administrative divisions.
+- If at least ONE geographical component qualifies as an officially recognized City, Town, District, or Municipality, return "Available".
+- If none of the geographical components qualifies, return "Not Available".
+- Never combine different locations or infer a missing geographical component.
+
+RULE 8 — LOCALITY POSITION DOES NOT DETERMINE CITY STATUS:
+- Never assume that a location is a City merely because it appears immediately before a State or Province (e.g. "[Locality], Queensland" or "[Locality], Illinois")!
+- Never assume that the first or last geographical name is the City.
+- Never treat every location between the street and State as a City.
+- For example:
+  * "Deception Bay, Queensland": "Deception Bay" appears immediately before "Queensland". It is an Australian suburb -> "city": "Not Available", "state": "Available".
+  * "Campbellfield, Victoria": "Campbellfield" appears immediately before "Victoria". It is an Australian suburb -> "city": "Not Available", "state": "Available".
+  * "Northwoods, Illinois": "Northwoods" appears immediately before "Illinois". It is an unincorporated neighborhood -> "city": "Not Available", "state": "Available".
+- The presence of a locality name before a State does not establish that it is a City. If that locality is an ordinary suburb or unincorporated neighborhood, return "city": "Not Available".
+
+RULE 9 — STREET, BUILDING AND COMPANY NAME EXCLUSION:
+The following must NEVER be treated as City names merely because of their wording:
+
+- Street names
+- Road names
+- Building names
+- Shopping center names
+- Industrial park names
+- Company names
+- Project names
+- Property names
+- Business complex names
+
+Examples:
+- District Road = Street/Road component, NOT District.
+- Town Street = Street component, NOT Town.
+- City Road = Street component, NOT City.
+- Municipal Building = Building name, NOT Municipality.
+
+Only independently qualifying geographical entities can be considered.
+
+RULE 10 — COUNTRY-SPECIFIC ADMINISTRATIVE CLASSIFICATION:
+- Apply the official administrative structure of the country where the companyAddress is located.
+- Do not apply US administrative definitions to other countries.
+- Do not apply Indian administrative definitions to other countries.
+- Recognize that the same term may have different legal meanings in different countries.
+- A District may qualify in one country's administrative system but not necessarily in another context.
+- Verify whether the named geographical entity officially qualifies under the accepted classifications.
+- Do not mistake a County, Province, Region, State, Prefecture, or Territory for a City merely because it is an administrative division.
+- However, if a County or other administrative entity is officially designated as a District or Municipality, it may qualify under the accepted categories.
+
+RULE 11 — AMBIGUOUS GEOGRAPHICAL NAMES:
+- If a geographical name could refer to multiple locations or administrative entities, do not guess.
+- Verify the classification using reliable official administrative or government sources when external verification is permitted.
+- The verification must relate to the exact geographical name present in companyAddress.
+- External verification may establish administrative classification only.
+- Never use external sources to add missing address components.
+- If the classification cannot be reliably established, do not assume it qualifies.
+- Return "Not Available" unless another explicitly mentioned geographical component independently qualifies.
+
+RULE 12 — CAPITAL AND MULTIPLE CITY VALIDATION:
+- If the address contains multiple qualifying cities or municipalities, City = "Available".
+- If the address contains a qualifying City and a non-qualifying suburb, City = "Available".
+- If the address contains only non-qualifying localities, City = "Not Available".
+- If the national capital is explicitly identified as the company's location, apply the Capital City Rule.
+- Do not mark State = "Available" simply because a City, Town, District, or Municipality is available.
+
+RULE 13 — STRICT SEPARATION OF CITY AND STATE:
+- City and State are separate dropdown fields.
+- City = "Available" does not automatically mean State = "Available".
+- State must be evaluated using the separate State validation rules.
+- The ONLY exception is the explicitly mentioned national capital rule, which requires both City and State to be "Available".
+- Never infer a State, Province, County, or Prefecture from a City name unless the separate State rules explicitly permit it.
+
+RULE 14 — FINAL CITY DECISION LOGIC:
+
+STEP 1:
+Read the final companyAddress.
+
+STEP 2:
+Identify all geographical names explicitly mentioned in the address.
+
+STEP 3:
+Exclude street names, building names, company names, and non-geographical identifiers.
+
+STEP 4:
+Check whether any remaining geographical name is officially classified as:
+- City
+- Town
+- District
+- Municipality
+
+STEP 5:
+Check the National Capital Rule.
+
+STEP 6:
+Apply the final decision:
+
+IF:
+At least one explicitly mentioned geographical entity qualifies as an officially recognized City, Town, District, or Municipality:
+
+RETURN:
+"Available"
+
+ELSE:
+
+RETURN:
+"Not Available"
+
+RULE 15 — FINAL QC COMPLIANCE:
+Before generating the final JSON:
+- Confirm that the classification is based strictly on companyAddress.
+- Confirm that the geographical name is explicitly present.
+- Confirm its official administrative classification.
+- Confirm that an Australian suburb (e.g. Deception Bay, Campbellfield, Rowville, Mascot, Mulgrave) or US neighborhood (e.g. Northwoods) has NOT been incorrectly treated as a City -> mark "Not Available".
+- Confirm that an officially qualifying suburb or locality has not been incorrectly rejected.
+- Confirm that street names and building names have not been mistaken for Cities.
+- Confirm that no City has been inferred from postal codes or States.
+- Confirm that the National Capital Rule has been applied correctly.
+- Confirm that City and State have been evaluated separately.
+- Confirm that the output contains only one permitted dropdown value.
+
+FINAL OUTPUT RESTRICTION:
+Return ONLY:
+"Available"
+OR
+"Not Available"
+
+Never return:
+- City names
+- Explanations
+- Additional comments
+- Confidence scores
+- Alternative dropdown values
 
 9. EMAIL ID & SECONDARY EMAIL ID:
 - Primary Email: Official general contact or sales inbox (e.g. sales@, info@, contact@, enquiry@).
