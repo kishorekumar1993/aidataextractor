@@ -188,10 +188,10 @@
       }
     }, 2500);
 
-    // Safety timeout: ensure buttons are NEVER permanently disabled (28s)
+    // Safety timeout: ensure buttons are NEVER permanently disabled (32s)
     const safetyTimer = setTimeout(() => {
       if (state.isCrawlingInProgress) {
-        console.warn("[AI Assistant] Safety timer reached. Resetting crawling state.");
+        console.log("[AI Assistant] Safety timer reached. Resetting crawling state.");
         state.isCrawlingInProgress = false;
         if (typeof AIExt.resetCrawlButtons === "function") {
           AIExt.resetCrawlButtons();
@@ -200,7 +200,7 @@
           AIExt.updateStatus("⚠️ Crawl timed out. Ready to retry.", "warning");
         }
       }
-    }, 28000);
+    }, 32000);
 
     try {
       const response = await AIExt.sendRuntimeMessage({

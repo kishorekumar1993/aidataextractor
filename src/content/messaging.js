@@ -55,11 +55,11 @@
       await ensureServiceWorkerAwake();
 
       let settled = false;
-      const timeoutMs = (message && message.action === "CRAWL_AND_EXTRACT") ? 27000 : 9000;
+      const timeoutMs = (message && message.action === "CRAWL_AND_EXTRACT") ? 25000 : 9000;
       const safetyTimer = setTimeout(() => {
         if (!settled) {
           settled = true;
-          console.warn(`[Messaging] sendRuntimeMessage timed out after ${timeoutMs}ms for action:`, message && message.action);
+          console.log(`[Messaging] sendRuntimeMessage timed out after ${timeoutMs}ms for action:`, message && message.action);
           resolve({ success: false, error: `Background response timeout (${Math.round(timeoutMs / 1000)}s)`, isExtensionError: true });
         }
       }, timeoutMs);
