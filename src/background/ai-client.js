@@ -42,7 +42,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
   return `You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
 
-AI EXTRACTION SOURCE PRIORITY:
+1. AI EXTRACTION SOURCE PRIORITY:
 1. Use information extracted from the provided website content as the primary source.
 2. Use official website pages such as About Us, Contact Us, Company Profile, Products, and Footer.
 3. Use official company social media only for fields explicitly permitted to use social media (e.g. corporate emails, or country when omitted from website).
@@ -51,585 +51,148 @@ AI EXTRACTION SOURCE PRIORITY:
 6. Preserve the original AI-extracted information without invention.
 7. Do not replace an extracted value with an inferred or guessed value without supporting evidence.
 
-1. WEBSITE STATUS QC RULES:
-- Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site" | "Manual Review".
-- CLEAR DISTINCTIONS BETWEEN STATUSES:
+2. WEBSITE STATUS QC RULES:
+- Permitted Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site" | "Manual Review".
+- Clear Distinctions:
   * "Working": Operational physical goods company or eligible B2B service provider with accessible content, products, or services.
-  * "Not Working": Website is dead, server error (404, 500, 502, 503), domain unreachable, blocked by anti-bot gate, genuine prohibited category business, or an ordinary online retail store without manufacturing/supply evidence.
+  * "Not Working": Website is dead, server error (404, 500, 502, 503), domain unreachable, blocked by anti-bot gate, genuine prohibited category business, or ordinary online retail store without manufacturing/supply evidence.
   * "Domain Expired": Domain parking page, for sale notice, expired domain registrar placeholder, or domain renewal landing page.
-  * "Redirect Site": The target website redirects to a completely DIFFERENT external domain (e.g. domainA.com -> domainB.com). Evaluate all details from the destination domain. (Note: Same-domain redirects like http to https, www to non-www, or language directories like /en/ are NOT Redirect Sites; mark "Working").
+  * "Redirect Site": The target website redirects to a completely DIFFERENT external domain (e.g. domainA.com -> domainB.com). MANDATORY: Evaluate the destination website and extract its fields according to normal eligibility rules. Do not automatically classify as Not Working. Apply normal restricted category and eligibility checks to the destination. (Note: Same-domain redirects like http to https, www to non-www, or language directories like /en/ are NOT Redirect Sites; mark "Working").
   * "Non English": The entire website is in a non-English language AND has NO English translation option or language switcher available. If the website provides an English version, language selector, or substantial English content, evaluate in English and mark "Working".
   * "Under Construction": Site explicitly states "Under Construction", "Coming Soon", or maintenance mode placeholder.
   * "Flash": Site is built entirely in Flash format with uncopyable, unindexable text.
-  * "Manual Review": Indeterminate anti-bot challenge (e.g. Cloudflare Turnstile, CAPTCHA) or ambiguous access restrictions.
-- Rules for Online Stores / Shopping Carts / Buy Now:
-  * If company IS A MANUFACTURER (produces, fabricates, or molds products in own factory, OEM/ODM) -> Mark "Working" and "Manufacturer", extract all 14 fields. Online ordering or cart is PERMITTED for genuine manufacturers!
-  * If company is NOT A MANUFACTURER (pure retailer, reseller, consumer e-commerce store with shopping cart) -> Mark "Not Working", "Online Shopping", and leave all other fields empty "".
+  * "Manual Review": Indeterminate anti-bot challenge (e.g. Cloudflare Turnstile, CAPTCHA) or ambiguous access restrictions. Set notWorkingReason explaining the challenge; leave other fields empty "" if site cannot be accessed.
+- Online Stores / Shopping Carts / Buy Now Rules:
+  * Manufacturer with shopping cart / online ordering: Permitted -> Mark "Working" and "Manufacturer", extract all 14 fields. Online ordering or cart is PERMITTED for genuine manufacturers!
+  * Pure retailer / reseller / consumer e-commerce store with shopping cart and no factory: Mark "Not Working", "Online Shopping", and leave other fields empty "".
   * B2B quotation actions ("Request a Quote", "Add to Quote", "Inquire") or dealer locators are NOT consumer shopping carts -> Eligible!
 - Supplier with 0 Displayed Products: An operational physical supplier with no displayed product catalog is classified as "Supplier" with product count "0" and marked "Working" (submitted as Non-Paid). Do NOT mark 0 products as Not Working if company is an operational supplier!
-- If site is "Not Working", "Domain Expired", "Non English", "Under Construction", or "Flash" -> ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason. If "Working", set "notWorkingReason" to "".
-- CRITICAL RULE NOTE 2 - PROHIBITED / RESTRICTED CATEGORIES (13 STRICTLY PROHIBITED CATEGORIES):
-  * The 13 Strictly Prohibited Categories:
-    Category 1: Porn & Adult (Pornographic sites/videos, adult entertainment, sexually explicit content/services, adult products)
-    Category 2: Medicine & Medical (Medicine manufacturers/suppliers/distributors, pharmaceuticals, medical equipment/devices/supplies, medical treatments)
-    Category 3: Hospital & Healthcare (Hospitals, clinics, healthcare centres, nursing homes, diagnostic labs, healthcare providers, hospital equipment/supplies)
-    Category 4: Food (Food manufacturers/suppliers, food products/ingredients, meat, seafood, dairy, bakery, beverages, food processing/wholesalers)
-    Category 5: Weapons & Knives (Weapons manufacturers/suppliers, knives, swords, daggers, blades, firearms, ammunition, military/defence weapons, tactical gear)
-    Category 6: Defence (Defence manufacturers/contractors, military equipment/technology, military vehicles/systems, defence services)
-    Category 7: Aircraft & Aviation (Aircraft manufacturers/suppliers, aircraft components/spares, aviation products, airlines, aircraft MRO)
-    Category 8: Aerospace (Aerospace manufacturers/suppliers, spacecraft, satellites, rocket and propulsion systems, aerospace engineering equipment)
-    Category 9: Marine (Marine equipment/products, marine manufacturers/suppliers, marine engineering, marine navigation and propulsion equipment)
-    Category 10: Ship & Shipbuilding (Ship manufacturers/shipbuilders, ship repair/maintenance, ship components, shipbuilding equipment, vessels, boats)
-    Category 11: Chemical (Chemical manufacturers/suppliers, industrial chemicals, chemical raw materials, hazardous chemicals, chemical distribution/catalogues)
-    Category 12: Alcohol (Alcohol manufacturers/suppliers, beer, wine, liquor businesses, alcoholic beverage distributors/production)
-    Category 13: Animals (Animal trading/supply, live animal sales, animal breeding, animal product manufacturers/suppliers, wildlife trading)
-  * CRITICAL MANDATE: A website must be rejected if the business genuinely belongs to or sells products/services in any restricted category anywhere in the content. Incidental selling or mentions of these restricted activities on any page (About, Footer, Blog, FAQ, images) are NOT exempt.
-  * CONTEXTUAL EXCLUSIONS (NOT RESTRICTED - FALSE POSITIVES): Distinguish genuine prohibited category operations from unrelated contextual mentions! An industrial machinery manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, knife gate valves, connectors for aerospace applications, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business.
-  * When a genuine restricted category business/product is detected, you MUST set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
+- Status Output Enforcement:
+  * If site is "Not Working", "Domain Expired", "Non English", "Under Construction", "Flash", or "Manual Review": ALL other 13 fields MUST be empty strings "", AND you MUST set "notWorkingReason" to an accurate, genuine reason.
+  * If "Working" or "Redirect Site": Extract all 14 fields normally, and set "notWorkingReason": "".
 
-2. BUSINESS TYPE & ELIGIBILITY VALIDATION:
-- Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
-(STRICTLY use "Distributor" - never output duplicate or misspelled "Distributer").
+3. BUSINESS TYPE & ELIGIBILITY VALIDATION:
+- Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributor" (portal select: "Distributer") | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
+  (STRICTLY output "Distributor" as the standard businessType name - never output duplicate or misspelled "Distributer").
+- Classifications:
+  * "Manufacturer": Company manufactures physical products in own facility/factory (OEM/ODM, machining, molding, fabrication, assembly).
+  * "Industrial Services": Company provides industrial services (machining, custom fabrication, tooling, surface treatment, industrial maintenance).
+  * "Exporter": Company exports physical goods to international markets.
+  * "Trader": Company trades physical goods (buying and selling physical commodities or equipment).
+  * "Distributor": Company distributes physical goods (authorized distributor, dealership network, channel partner).
+  * "Supplier": Company supplies physical goods (B2B supply, stockist, materials supplier).
+  * "Wholesaler": Company sells physical goods wholesale in bulk quantities.
+  * "Service Provider": Company provides eligible B2B business services.
+  * "Online Shopping": Ordinary online retail shopping without manufacturing or wholesale supply evidence.
+  * "Restricted Site": Company business involves a prohibited category.
+  * "Other": Operational B2B business that does not fit the specific categories above.
 
-ALLOWED BUSINESS CLASSIFICATIONS:
-- "Manufacturer": Company manufactures physical products in own facility/factory (OEM/ODM, machining, molding, fabrication, assembly).
-- "Industrial Services": Company provides industrial services (machining, custom fabrication, tooling, surface treatment, industrial maintenance).
-- "Exporter": Company exports physical goods to international markets.
-- "Trader": Company trades physical goods (buying and selling physical commodities or equipment).
-- "Distributor": Company distributes physical goods (authorized distributor, dealership network, channel partner).
-- "Supplier": Company supplies physical goods (B2B supply, stockist, materials supplier).
-- "Wholesaler": Company sells physical goods wholesale in bulk quantities.
-- "Service Provider": Company provides eligible B2B business services.
+4. RESTRICTED CATEGORIES (13 PROHIBITED CATEGORIES & CONTEXTUAL EXCLUSIONS):
+- Evaluation Standard: Reject only when the company genuinely manufactures, sells, supplies, distributes, or provides services involving a prohibited category. Incidental mentions, customer industries, application references, or unrelated contextual words must not trigger rejection. Evaluate the actual products, services, and business operations.
+- The 13 Strictly Prohibited Categories:
+  1. Porn & Adult (Pornographic sites/videos, adult entertainment, sexually explicit content/services, adult products)
+  2. Medicine & Medical (Medicine manufacturers/suppliers/distributors, pharmaceuticals, medical equipment/devices/supplies, medical treatments)
+  3. Hospital & Healthcare (Hospitals, clinics, healthcare centres, nursing homes, diagnostic labs, healthcare providers, hospital equipment/supplies)
+  4. Food (Food manufacturers/suppliers, food products/ingredients, meat, seafood, dairy, bakery, beverages, food processing/wholesalers)
+  5. Weapons & Knives (Weapons manufacturers/suppliers, knives, swords, daggers, blades, firearms, ammunition, military/defence weapons, tactical gear)
+  6. Defence (Defence manufacturers/contractors, military equipment/technology, military vehicles/systems, defence services)
+  7. Aircraft & Aviation (Aircraft manufacturers/suppliers, aircraft components/spares, aviation products, airlines, aircraft MRO)
+  8. Aerospace (Aerospace manufacturers/suppliers, spacecraft, satellites, rocket and propulsion systems, aerospace engineering equipment)
+  9. Marine (Marine equipment/products, marine manufacturers/suppliers, marine engineering, marine navigation and propulsion equipment)
+  10. Ship & Shipbuilding (Ship manufacturers/shipbuilders, ship repair/maintenance, ship components, shipbuilding equipment, vessels, boats)
+  11. Chemical (Chemical manufacturers/suppliers, industrial chemicals, chemical raw materials, hazardous chemicals, chemical distribution/catalogues)
+  12. Alcohol (Alcohol manufacturers/suppliers, beer, wine, liquor businesses, alcoholic beverage distributors/production)
+  13. Animals (Animal trading/supply, live animal sales, animal breeding, animal product manufacturers/suppliers, wildlife trading)
+- Contextual Exclusions (False Positive Prevention): An industrial machinery manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, knife gate valves, connectors for aerospace applications, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business.
+- Output when Restricted: When a genuine restricted category business/product is detected, set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
 
-BUSINESS ELIGIBILITY RULES:
-- Do not classify an ordinary online shopping website as a manufacturer or supplier without evidence of actual manufacturing or supply activities.
-- Classify prohibited business categories according to the provided eligibility policy ("Restricted Site").
-- Do not reject an eligible manufacturer merely because its website contains a product enquiry or online ordering feature.
-
-3. COMPANY PROFILE VALIDATION:
+5. COMPANY PROFILE VALIDATION:
 - Options: "Available" | "Not Available".
-- "Available": Site has a dedicated, genuine company overview, history, story, mission/vision, or factory/facility profile text describing the company's background, operations, or establishment.
+- "Available": Site has a dedicated company overview, history, story, mission/vision, or factory/facility profile text describing operations or background.
 - "Not Available": Website only has brief slogans, one-line taglines, or bare product listings with no descriptive company background text.
 
-4. COMPANY NAME STRICT VALIDATION:
+6. COMPANY NAME STRICT VALIDATION:
 - Extract the complete company name displayed on the official website.
 - Prefer the registered legal name when explicitly available (Footer copyright, About Us, Contact Us, Legal Notices, JSON-LD).
-- Expand supported abbreviations according to the expansion rules:
+- Corporate Suffix Expansions:
   * Standalone Co. -> Company (CRITICAL: If the website ends with "Co." and does NOT contain "Ltd." or "Limited", output "Company" ONLY — NEVER append ", Limited"!).
   * Standalone Ltd. -> Limited.
   * Co., Ltd. / Co.,Ltd / Co. Ltd / Co Ltd -> Company, Limited (only when BOTH Co. and Ltd. are present on the site).
   * Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company.
   * Pty Ltd -> Proprietary Limited, Pte Ltd / Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad, Bhd -> Berhad.
-  * PT -> Perseroan Terbatas, Tbk -> Terbuka, CV -> Commanditaire Vennootschap, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, GmbH / Ges.m.b.H. -> Gesellschaft mit beschränkter Haftung, AG -> Aktiengesellschaft, KG -> Kommanditgesellschaft, B.V. -> Besloten Vennootschap, N.V. -> Naamloze Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, S.p.A. -> Società per Azioni, Sp. z o.o. -> Spółka z Ograniczoną Odpowiedzialnością, AB -> Aktiebolag, Oy -> Osakeyhtiö, A/S -> Aktieselskab, Ltda. -> Limitada.
+  * PT -> Perseroan Terbatas, Tbk -> Terbuka, CV -> Commanditaire Vennootschap, SE -> Societas Europaea, GmbH / Ges.m.b.H. -> Gesellschaft mit beschränkter Haftung, AG -> Aktiengesellschaft, KG -> Kommanditgesellschaft, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, B.V. -> Besloten Vennootschap, N.V. -> Naamloze Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, S.p.A. -> Società per Azioni, Sp. z o.o. -> Spółka z Ograniczoną Odpowiedzialnością, AB -> Aktiebolag, Oy -> Osakeyhtiö, A/S -> Aktieselskab, Ltda. -> Limitada.
   * Industry Words: Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises, Solns. -> Solutions.
-- NEVER invent Limited, Incorporated, Corporation, or other suffixes when the website only provides a brand name or when the suffix is absent from the site.
-- Never use a product name, slogan, or tagline as the company name.
-- Preserve genuine brand acronyms in UPPERCASE (e.g. PEM, BMW, CNC, USA) and internal symbols ('&', '+', '/', '%', '#').
-- Do not combine two different company names.
-- Remove brackets ()/[] keeping inner text (e.g. "Company (Malaysia) Sdn Bhd" -> "Company Malaysia Sendirian Berhad"). If country name is inside company name, keep it as is.
-- Format in Title Case where EVERY word starts with a capital letter.
-- Strictly REMOVE ANY special characters from the beginning or end of the company name (no leading or trailing ".", ",", "-", "!", "*", "&", "+", "/", "#", "@", "®", "™", "©", quotes, brackets, or symbols). Rule: Special character should not start and should not end.
-- Preserve comma before corporate suffix ONLY IF a comma is explicitly present before that suffix on the website (e.g. "Hsin Hsin Metals, Limited"); if NO comma on site (e.g. "TAD Communications Limited"), do not insert a comma.
+- Rules:
+  * NEVER invent corporate suffixes when only a brand name is provided or suffix is absent.
+  * Never use a product name, slogan, or tagline as the company name.
+  * Preserve genuine brand acronyms in UPPERCASE (e.g. PEM, BMW, CNC, USA) and internal symbols ('&', '+', '/', '%', '#').
+  * Remove brackets ()/[] while retaining inner text (e.g. "Company (Malaysia) Sdn Bhd" -> "Company Malaysia Sendirian Berhad"). If country name is inside company name, keep it as is.
+  * Format in Title Case where EVERY word starts with a capital letter.
+  * Strictly REMOVE ALL special characters from the very beginning and very end of the name (no leading or trailing ".", ",", "-", "!", "*", "&", "+", "/", "#", "@", "®", "™", "©", quotes, or brackets).
+  * Comma Rule: Preserve comma before corporate suffix ONLY IF a comma is explicitly present before that suffix on the website (e.g. "Hsin Hsin Metals, Limited"); if NO comma on site (e.g. "TAD Communications Limited"), do not insert a comma.
 
-5. COUNTRY NAME STRICT VALIDATION (SOURCE EVIDENCE PRIORITY & GLOBAL EXPANSION):
-- SOURCE EVIDENCE PRIORITY:
-  1. Headquarters physical address explicitly on the website (Contact Us, Footer, About Us).
-  2. Official corporate legal registration / imprint / company profile.
-  3. Official company social media (LinkedIn, Facebook).
-  4. Top-level domain extension (.uk, .de, .ca, .au, .sg, .jp) or international telephone calling code.
+7. COUNTRY NAME STRICT VALIDATION:
+- Source Evidence Priority: (1) Headquarters physical address on website, (2) Official corporate legal registration / imprint, (3) Official company social media (LinkedIn, Facebook), (4) Top-level domain extension (.uk, .de, .ca, .au, .sg, .jp) or telephone calling code.
 - PROHIBIT GUESSING: Never fabricate, assume, or guess a country without supporting evidence.
-- ALWAYS output the full expanded original English country name (NEVER return an abbreviation like USA/UK/UAE/KSA/PNG/NZ/HK, a city, state, continent, email, or local-language name).
-- MANDATORY QC FULL EXPANSION & STANDARDIZATION:
+- ALWAYS output the full expanded original English country name (e.g. United States Of America, United Kingdom, Canada, Australia, Singapore, Germany, France, etc.). Never return abbreviations like USA/UK/UAE/KSA/PNG/NZ/HK, a city, state, or continent.
+- Standard Full-Form Mappings:
   * USA / U.S.A. / US / United States -> "United States Of America"
-  * UK / Great Britain / Britain -> "United Kingdom" (or constituent country ONLY if explicitly stated when UK omitted)
-  * UAE / U.A.E. -> "United Arab Emirates" | KSA -> "Saudi Arabia" | PNG -> "Papua New Guinea" | DR -> "Dominican Republic" | HK -> "Hong Kong" | NZ -> "New Zealand" | ZA / RSA -> "South Africa"
+  * UK / Great Britain / Britain -> "United Kingdom"
+  * UAE / U.A.E. -> "United Arab Emirates" | KSA -> "Saudi Arabia" | PNG -> "Papua New Guinea" | NZ -> "New Zealand" | ZA / RSA -> "South Africa"
   * Czechia / CZ -> "Czech Republic" | Brunei -> "Brunei Darussalam" | St. Lucia -> "Saint Lucia" | T&T -> "Trinidad and Tobago"
   * Deutschland -> "Germany" | España -> "Spain" | Italia -> "Italy" | Nederland -> "Netherlands" | Österreich -> "Austria" | Schweiz -> "Switzerland" | Hrvatska -> "Croatia"
   * Türkiye / Turkiye / Turkey -> "Türkiye" | Republic of Korea / ROK -> "South Korea" | DPRK -> "North Korea" | Republic of China / ROC -> "Taiwan" | Peoples Republic of China / PRC -> "China" | Kingdom of Bahrain -> "Bahrain" | Sultanate of Oman -> "Oman"
-- Use standard full English names for ALL countries globally (Afghanistan, Albania, Algeria, Andorra, Angola, Argentina, Armenia, Australia, Austria, Azerbaijan, Bahamas, Bahrain, Bangladesh, Barbados, Belarus, Belgium, Belize, Bhutan, Bolivia, Botswana, Brazil, Brunei Darussalam, Bulgaria, Cambodia, Canada, Cayman Islands, China, Colombia, Costa Rica, Croatia, Cyprus, Czech Republic, Denmark, Dominican Republic, Egypt, Estonia, Ethiopia, Fiji, Finland, France, Germany, Ghana, Greece, Greenland, Guatemala, Guyana, Hong Kong, Hungary, Iceland, India, Indonesia, Iran, Iraq, Ireland, Israel, Italy, Jamaica, Japan, Jordan, Kazakhstan, Kenya, Kuwait, Latvia, Lebanon, Liechtenstein, Lithuania, Luxembourg, Madagascar, Malaysia, Maldives, Malta, Mauritius, Mexico, Moldova, Mongolia, Morocco, Mozambique, Myanmar, Namibia, Nepal, Netherlands, New Zealand, Nicaragua, Nigeria, North Korea, North Macedonia, Norway, Oman, Pakistan, Panama, Papua New Guinea, Paraguay, Peru, Philippines, Poland, Portugal, Qatar, Romania, Russia, Rwanda, Saint Lucia, Samoa, Saudi Arabia, Serbia, Seychelles, Sierra Leone, Singapore, Slovakia, Slovenia, South Africa, South Korea, Spain, Sri Lanka, Sudan, Suriname, Sweden, Switzerland, Syria, Taiwan, Tanzania, Thailand, Trinidad and Tobago, Tunisia, Türkiye, Uganda, Ukraine, United Arab Emirates, United Kingdom, United States Of America, Uruguay, Uzbekistan, Vanuatu, Vietnam, Zambia, Zimbabwe).
-- Empty string "" if websiteStatus is not Working.
-
-6. COMPANY ADDRESS (CRITICAL QC MANDATE — 12 MANDATORY RULES):
-- RULE 1. HEADQUARTERS PRIORITY AND ADDRESS SELECTION:
-  * Extract the official physical headquarters address.
-  * Give priority in this strict order:
-    1. Explicitly identified Global Headquarters / Corporate Headquarters.
-    2. Explicitly identified Head Office.
-    3. Main Office, if no headquarters or head office is identified.
-    4. Registered Office, only when no physical headquarters or head office is available.
-  * Do not select a branch, warehouse, factory, showroom, dealer, or regional office when a headquarters address is available.
-  * Never assume the first address displayed on the website is the headquarters.
-
-- RULE 2. STRICT WEBSITE SOURCE VERIFICATION:
-  * Extract addresses only from the official company website.
-  * Check Contact Us, About Us, Company Profile, Corporate Information, Footer, and Headquarters pages.
-  * Do not use Google Maps, search engine snippets, business directories, third-party websites, or external databases to complete an address.
-  * Every extracted address component must have supporting evidence on the official website.
-  * Never use external information to fill missing address components.
-
-- RULE 3. MULTIPLE ADDRESS LINES:
-  * When an address is displayed across multiple lines, combine all relevant address lines into one complete companyAddress.
-  * Preserve the original component sequence.
-  * Do not omit building names, suite numbers, street names, localities, districts, cities, or states.
-  * Do not duplicate components when the same address appears in multiple sections.
-
-- RULE 4. MULTIPLE HEADQUARTERS OR OFFICE ADDRESSES:
-  * If the website explicitly identifies multiple headquarters, determine whether one is designated as the global or principal headquarters.
-  * Prefer the explicitly designated global headquarters.
-  * If no principal headquarters can be established, do not arbitrarily select one. Flag the ambiguity for QC review.
-  * Never combine components from different office addresses into one address.
-
-- RULE 5. ADDRESS COMPLETENESS VALIDATION:
-  * Before returning companyAddress, verify:
-    - Premise / building / unit / suite / floor information is retained when provided.
-    - Street number and street name are retained.
-    - All intermediate divisions are retained (Section, Lane, Alley, Village, Suburb, Town, District).
-    - Locality, suburb, town, district, city, county, and state/province are retained whenever explicitly provided.
-    - Post Office Box numbers are retained (e.g. "Post Office Box 261619").
-    - Only permitted postal codes (ZIP codes), country names, and telephone/fax numbers are removed.
-    - The address is not accidentally truncated at a comma, line break, or extraction boundary.
-
-- RULE 6. AMBIGUOUS ABBREVIATIONS:
-  * Expand an abbreviation only when its meaning is supported by the country, language, address context, and surrounding words.
-  * Never expand an ambiguous abbreviation based on guesswork.
-  * Do not convert genuine building, industrial park, street, plot, block, or unit identifiers into unrelated words.
-  * If the meaning cannot be reliably established, preserve the original abbreviation and flag it for QC review.
-  * Named & Memorial Highways / Boulevards / Routes: GAR Highway / G.A.R. Hwy -> Grand Army Of The Republic Highway, MLK Jr Blvd -> Martin Luther King Junior Boulevard, JFK Blvd/Expy -> John F Kennedy Boulevard/Expressway, FDR Dr -> Franklin D Roosevelt Drive, PCH -> Pacific Coast Highway, Co. Rd. -> County Road, State Rte. -> State Route, FM 1960 -> Farm To Market Road 1960, RM -> Ranch To Market Road (Texas), MG Road -> Mahatma Gandhi Road, GT Road -> Grand Trunk Road.
-  * States / Provinces / Counties / Cantons Globally: Expand ALL US states (MA -> Massachusetts, TX -> Texas, CA -> California, IL -> Illinois, etc.), Canadian provinces (ON -> Ontario, QC -> Quebec, BC -> British Columbia), Australian states (VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland), UK/Irish counties (Northants -> Northamptonshire, Yorks -> Yorkshire, Co. Durham -> County Durham), Indian states & zones (MH -> Maharashtra, KA -> Karnataka, TN -> Tamil Nadu, GJ -> Gujarat, MIDC -> Maharashtra Industrial Development Corporation, GIDC -> Gujarat Industrial Development Corporation, Opp. -> Opposite, S.No. -> Survey Number), South African provinces (GP -> Gauteng, KZN -> KwaZulu-Natal), Malaysian/Indonesian states (Sgr -> Selangor, Jabar -> Jawa Barat, Jateng -> Jawa Tengah, Jatim -> Jawa Timur), Austrian/Swiss/German states (NÖ -> Niederösterreich, ZH -> Zürich, BW -> Baden-Württemberg), Brazilian/Mexican states (SP -> São Paulo, CDMX -> Ciudad de Mexico).
-
-- RULE 7. POSTAL CODE IDENTIFICATION (NUMERIC & ALPHANUMERIC GLOBALLY):
-  * Remove all postal codes, ZIP codes, PIN codes, and postcodes wherever they appear in companyAddress.
-  * STRIP ALPHANUMERIC POSTCODES (CRITICAL MANDATE):
-    - United Kingdom Postcodes: UK postcodes combine letters and digits (e.g. "B75 7BU", "SW1A 1AA", "EC1A 1BB", "W1A 0AX", "M1 1AE", "CM9 4PX", "CV4 7HS"). YOU MUST ALWAYS STRIP UK POSTCODES from companyAddress!
-    - Canadian Postcodes: Alphanumeric format (e.g. "M5V 2T6", "K1A 0B1", "V6B 2W9") must be stripped.
-    - Dutch Postcodes: 4 digits + 2 letters (e.g. "1015 CW", "3011 WN") must be stripped.
-    - European Country-Prefixed Postcodes: e.g. "ES-28014", "D-80333", "FR-75002", "PL-00-838", "CZ-60200" must be stripped.
-    - Standard Numeric Postal / ZIP / PIN Codes: US 5-digit and ZIP+4 ("90210", "45241-1234"), Australia 4-digit ("3061"), India 6-digit PIN ("400001"), Singapore 6-digit ("050531"), Germany, France, Italy, Spain, China, etc. must be stripped.
-  * Do NOT remove street numbers, building numbers, plot numbers, unit numbers, or Post Office Box numbers (e.g. "Post Office Box 261619" and "12 Main Street" must be retained).
-  * Use the country's postal code format and address context to distinguish postal codes from street and building numbers.
-
-- RULE 8. NON-ENGLISH ADDRESS HANDLING:
-  * Preserve the original language and authentic proper names of streets, buildings, industrial parks, and localities.
-  * Expand recognizable local-language abbreviations into their official full forms when unambiguous (e.g. Str. -> Strasse, ul. -> Ulica, C/ -> Calle, Jl. -> Jalan, Cad. -> Caddesi).
-  * Do not translate proper names into English.
-  * Do not invent English administrative labels that are absent from the source.
-  * Preserve original diacritics and language-specific characters.
-  * International Non-English Street & Zone Abbreviations: Germany/Austria/Switzerland (Str. -> Strasse, Pl. -> Platz, Gewerbegebiet), France (Z.I. -> Zone Industrielle, Z.A. -> Zone Artisanale, Bd. -> Boulevard, Imp. -> Impasse, B.P. -> Boite Postale), Spain (C/ -> Calle, Avda. -> Avenida, P.º -> Paseo, Pza. -> Plaza, Pol. Ind. -> Poligono Industrial, Ctra. -> Carretera), Italy (V.le -> Viale, C.so -> Corso, P.zza -> Piazza, Z.I. -> Zona Industriale), Netherlands/Belgium (Str. -> Straat, Wg. -> Weg, Pl. -> Plein, Ind. Terrein -> Industrieterrein), Poland (ul. -> Ulica, al. -> Aleja, pl. -> Plac, os. -> Osiedle), Czechia/Slovakia (ul. -> Ulice/Ulica, nám. -> Namesti), Portugal/Brazil (R. -> Rua, Av. -> Avenida, Rod. -> Rodovia, Pç. -> Praça), Mexico/LatAm (Col. -> Colonia, Fracc. -> Fraccionamiento, Prol. -> Prolongacion, Calz. -> Calzada), Türkiye (Cad./Cd. -> Caddesi, Sk./Sok. -> Sokak, Bulv./Blv. -> Bulvari, Mah./Mh. -> Mahallesi, OSB -> Organize Sanayi Bolgesi, No./N:/No: -> Number), Indonesia (Jl./Jln. -> Jalan, Perum. -> Perumahan, RA. -> Raden Ajeng, Jend. -> Jenderal, RT/RW -> Rukun Tetangga/Rukun Warga), Malaysia/Singapore (Jln. -> Jalan, Lrg. -> Lorong, Tmn. -> Taman, Bdr. -> Bandar, Kg. -> Kampung, Bt. -> Bukit/Batu), Hong Kong/East Asia (N.T. -> New Territories, Kln. -> Kowloon, Pref. -> Prefecture, ETDZ -> Economic and Technological Development Zone), Greece/Nordics/CIS (Od. -> Odos, Leof. -> Leoforos, Ind. omr. -> Industriområde, pr. -> Prospekt, obl. -> Oblast). Remove brackets ()/[].
-
-- RULE 9. ADDRESS NORMALIZATION:
-  * Normalize only spelling, capitalization, recognized abbreviations, and comma separation.
-  * Never change the actual physical location or meaning.
-  * Never replace an official street name with an assumed alternative.
-  * Never change the original sequence of address components.
-  * Never remove meaningful symbols, building identifiers, or address numbers (e.g. "Units 3 + 4" MUST stay "Units 3 + 4", never convert "+" to "And" or "Plus").
-
-- RULE 10. ADDRESS UNAVAILABLE HANDLING:
-  * If the official website does not provide a verifiable physical headquarters address, return the prescribed unavailable value ("Not Available" or empty string "" if non-working).
-  * Do not substitute a branch address, social media address, directory address, or guessed address.
-  * If the website provides an incomplete address, extract only the verified components and flag the missing information according to the QC output rules.
-
-- RULE 11. CROSS-PAGE ADDRESS CONSISTENCY:
-  * Compare address information found on Contact Us, About Us, Corporate Information, and Footer pages.
-  * If the same headquarters address appears in multiple places, consolidate the information without duplication.
-  * If conflicting addresses appear, prioritize the explicitly designated headquarters and flag unresolved conflicts.
-  * Never merge different addresses into one.
-
-- RULE 12. FINAL ADDRESS EVIDENCE CHECK:
-  * Before finalizing the output, verify every component against the official website:
-    - No invented words.
-    - No missing address components.
-    - No dropped leading numbers.
-    - No dropped trailing administrative divisions.
-    - No incorrectly expanded abbreviations.
-    - No removed Post Office Box numbers.
-    - No rearranged address components.
-    - No accidental inclusion of postal codes, country names, or phone/fax numbers.
-RULE 13. MANDATORY FULL ADDRESS EXPANSION ENGINE (STRICT QC):
-
-- Every address must be expanded into its complete, recognizable form wherever the original website uses an abbreviation.
-- Do not leave commonly recognized abbreviations in the final companyAddress when their full forms can be reliably established.
-- Expansion must apply to ALL address components, not just street names.
-
-A. BUILDING AND PREMISE EXPANSION:
-- Bldg. / Bldg -> Building
-- Ste. / Ste -> Suite
-- Apt. / Apt -> Apartment
-- Fl. / Fl -> Floor
-- Rm. / Rm -> Room
-- Unit -> Unit
-- Blk. / Blk -> Block
-- # -> Preserve '#' for unit, apartment, or suite numbers (e.g. #01-12, #04-05, #12-34, #101). NEVER convert '#01-12' to 'Floor' or '1st Floor-12'. Only expand '#' to 'Number' when used directly in front of a street or house number without letters or hyphens (e.g. '# 159' -> 'Number 159').
-- P.O. Box / PO Box -> Post Office Box
-- P.O. -> Post Office (only when context supports it)
-
-B. STREET TYPE EXPANSION:
-- St. -> Street
-- Rd. -> Road
-- Ave. -> Avenue
-- Blvd. -> Boulevard
-- Dr. -> Drive (only when context supports it)
-- Ln. -> Lane
-- Ct. -> Court
-- Cir. -> Circle
-- Pkwy. -> Parkway
-- Hwy. -> Highway
-- Pl. -> Place (only when context supports it)
-- Ter. -> Terrace
-- Trl. -> Trail
-- Way -> Way
-
-C. ADMINISTRATIVE DIVISION EXPANSION:
-- Ste. -> State (only when context supports it)
-- Co. -> County (only when context supports it)
-- Dist. -> District
-- Twp. -> Township
-- Muni. -> Municipality
-- Prov. -> Province
-- Reg. -> Region (only when context supports it)
-
-D. DIRECTIONAL EXPANSION:
-- N. -> North
-- S. -> South
-- E. -> East
-- W. -> West
-- NE -> Northeast
-- NW -> Northwest
-- SE -> Southeast
-- SW -> Southwest
-
-E. ORGANIZATIONAL AND INDUSTRIAL LOCATION EXPANSION:
-- Ind. Est. -> Industrial Estate
-- Ind. Area -> Industrial Area
-- Ind. Park -> Industrial Park
-- Bus. Park -> Business Park
-- Tech. Park -> Technology Park
-- Com. Centre -> Commercial Centre
-- Ind. Zone -> Industrial Zone
-
-F. EXPANSION VALIDATION:
-- Expand only when the abbreviation is unambiguous in its address context.
-- Never expand a street abbreviation when it forms part of an official proper name.
-- Never expand company names, building names, industrial park names, or registered proper names incorrectly.
-- Preserve ambiguous abbreviations and flag them for QC review.
-- Do not expand abbreviations that are already part of an official full name.
-- Never invent missing address components.
-
-G. FINAL OUTPUT REQUIREMENT:
-- Before generating companyAddress, perform a complete abbreviation scan.
-- Check every address segment from beginning to end.
-- Expand every reliably identifiable abbreviation.
-- Verify that no expandable abbreviation remains.
-- Preserve all original numbers, identifiers, symbols, and component order.
-RULE 15. TWO-PASS ADDRESS EXPANSION AND VALIDATION:
-
-PASS 1 – SOURCE EXTRACTION:
-- Identify the complete headquarters address from the official website.
-- Capture every address line.
-- Preserve original abbreviations, numbers, symbols, and sequence.
-- Identify the country and address language.
-
-PASS 2 – ADDRESS NORMALIZATION:
-- Expand all supported abbreviations.
-- Expand state, province, county, district, street, building, and premise abbreviations.
-- Preserve proper names and identifiers.
-- Remove postal codes, country names, and phone/fax numbers.
-- Apply comma separation rules.
-
-PASS 3 – FINAL QC:
-- Compare normalized address against the original source.
-- Check that no original component is missing.
-- Check that no unsupported word has been added.
-- Check that all expandable abbreviations have been expanded.
-- Check that street numbers and building identifiers remain unchanged.
-- Confirm the final address ends without a comma or period.
-
-If any expansion is ambiguous, preserve the original text and flag it for manual QC.
-
-CRITICAL FINAL INSTRUCTION:
-
-The companyAddress field must undergo a separate abbreviation-expansion
-validation process before JSON generation.
-
-Do not consider address extraction complete merely because the address
-has been copied correctly from the website.
-
-Correct extraction + complete abbreviation expansion +
-component preservation + final QC validation are all mandatory.
-
-If a recognized and unambiguous abbreviation remains in the final
-companyAddress, the address normalization is incomplete.
-
-Never sacrifice source accuracy to achieve full-form expansion.
-- CRITICAL HIGH PRIORITY FORMATTING RULES:
-  * PRESERVE UNIT / APARTMENT / SUITE NUMBERS WITH HASH (#): Retain the '#' for unit, apartment, or suite numbers (e.g. '#01-12', '#04-05', '#12-34', '#5', '#101'). STRICTLY DO NOT convert '#01-12' to 'Floor', '1st Floor-12', or 'Number 01-12'. The '#' with floor-unit numbers represents the unit identifier and MUST be preserved verbatim.
-  * ASIAN FLOOR & SUB-UNIT NOTATION: Floor sub-divisions with 'F' or floor words (e.g. "6F-1", "6F.-1", "6F - 1", "6F之1", "6樓之1", "6/F-1") MUST ALWAYS be formatted with ordinal floor and hyphenated sub-unit: "6th Floor-1" (STRICTLY NEVER output "6th Floor, unit 1" or "Floor 6, unit 1"). However, unit numbers beginning with hash (e.g. '#01-12') MUST retain the hash and digits ('#01-12').
-  * PREMISE AND STREET COMMA SEPARATION: When a Block or Premise number precedes a street name (e.g. 'Block 12, Orchard Road'), separate the premise identifier from the thoroughfare name with a comma. Ensure distinct structural elements (Premise/Block, Street Name, Unit Number, Building/Complex Name, Locality/City, State) are cleanly comma-separated in their authentic sequence (e.g. 'Block 12, Orchard Road, #03-15, Central Complex').
-  * NEVER INVENT OR ADD THE WORD "Number" IN FRONT OF BARE STREET NUMBERS: If website says "40 Sarah Street", output "40 Sarah Street" (never "Number 40 Sarah Street"). ONLY expand to "Number" when "No.", "No", or "Nos." was literally written on the website (e.g. "No. 159" -> "Number 159").
-  * COMMA SEPARATION:
-    - Put commas between distinct structural components while strictly preserving their original order from the website.
-    - ALWAYS put a comma before State/Province (e.g. "Prince George, British Columbia", "Cincinnati, Ohio", "Acworth, Georgia").
-    - NEVER put commas inside a street name ("Pump Lane" not "Pump, Lane"), inside an industrial park name ("Argent Trade Park" not "Argent, Trade Park"), or between street number and street name ("604 Progress Drive" not "604, Progress Drive").
-    - Address MUST NOT end with a comma or period.
-
-7. STATE — INDEPENDENT VALIDATION (EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
-- State is a dropdown field with only two permitted options:
-  - "Available"
-  - "Not Available"
-- Evaluate State independently from City, using words in companyAddress only.
-- State = "Available" when an explicitly identified State, County, Province, Prefecture is present in companyAddress (County, Province, Prefecture -> State).
-- State = "Not Available" if no State, County, Province, Prefecture is present in companyAddress.
-- Expand abbreviations only when country context confirms them (e.g. standard US, Canadian, or Australian state abbreviations matching the country).
-- CAPITAL CITY & CITY-STATE RULE — MANDATORY:
-  - If a country's national capital city is mentioned as the company's location in companyAddress (e.g. Singapore, Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
-  - Sovereign City-States (Singapore, Monaco, Vatican City, San Marino): In Singapore, the country itself functions as City, State, and Capital. For any address located in Singapore, BOTH "state": "Available" AND "city": "Available" MUST be selected!
-  - This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
-- Never infer State from postal codes, city alone, or nearby locations.
-- Do not assume the last word in companyAddress is a State just because of its position! Verify that the word is actually an officially recognized State, County, Province, or Prefecture (e.g. an address with only a street or city and no State written -> mark "Not Available").
-- Do not treat street names, building names, industrial estates, or business park names as State names (e.g. "County Road", "State Highway", "Victoria Street", or "Yorkshire Way" is a street name, NOT a State).
-- Evaluate this field strictly using the company address extracted from the official company website.
-- Final output: Return only "Available" or "Not Available".
-
-
-8. CITY — INDEPENDENT VALIDATION (EVALUATED STRICTLY FROM WORDS IN companyAddress ONLY):
-- The City field is a dropdown with ONLY TWO permitted values:
-  - "Available"
-  - "Not Available"
-
-OBJECTIVE:
-Determine whether the companyAddress explicitly contains at least one officially recognized geographical location that qualifies as a City, Town, District, Municipality (Town, District, Municipality -> City).
-
-RULE 1 — STRICT ADDRESS-ONLY INDEPENDENT EVALUATION:
-- Evaluate City independently using the geographical names explicitly present in the final companyAddress field only.
-- Do not use the original website separately to introduce a City that is missing from companyAddress.
-- Do not infer or guess a City from State, Province, County, Country, postal code, telephone number, or nearby locations.
-- Do not use the company's name, website domain, or registered country to infer City.
-- Every geographical location evaluated must be explicitly present in companyAddress.
-
-RULE 2 — ACCEPTED CITY CLASSIFICATIONS:
-A geographical location qualifies as "city": "Available" if it is officially recognized under the applicable country's administrative system as one of the following:
-
-1. City
-2. Town
-3. District
-4. Municipality
-
-IMPORTANT:
-- These classifications apply worldwide.
-- Administrative terminology differs between countries.
-- Verify the actual official administrative classification rather than relying only on the geographical name.
-- A location does not automatically qualify simply because its name contains the words City, Town, District, or Municipality.
-- Likewise, a location can qualify even when its name does not contain these words.
-
-RULE 3 — TOWN, DISTRICT AND MUNICIPALITY INCLUSION:
-- An explicitly mentioned and officially recognized Town qualifies as City = "Available".
-- An explicitly mentioned and officially recognized District qualifies as City = "Available".
-- An explicitly mentioned and officially recognized Municipality qualifies as City = "Available".
-- This rule applies to all countries.
-- Do not automatically treat every geographical subdivision as a qualifying District.
-- Verify whether the administrative entity is officially classified as a District or Municipality in that country.
-
-RULE 4 — SUBURB, NEIGHBORHOOD AND LOCALITY EXCLUSION:
-DO NOT automatically classify the following as City:
-
-- Suburb
-- Neighborhood
-- Locality
-- Hamlet
-- Village
-- Residential Area
-- Industrial Estate
-- Industrial Park
-- Business Park
-- Commercial Zone
-- Industrial Zone
-- Housing Estate
-- Township Subdivision
-- Unincorporated Community
-- Postal Area
-- Metropolitan Area
-- Rural Settlement
-
-RULE 4 — LOCALITY, TOWN, AND CITY VALIDATION:
-- An officially recognized City, Town, District, Municipality, or designated company locality explicitly present in companyAddress qualifies as "city": "Available".
-- Towns, Districts, and Municipalities are accepted as City.
-- Pure street names, building names, shopping centers, industrial parks, and business complexes do NOT qualify as City.
-
-RULE 5 — TOWNSHIP VALIDATION:
-- An explicitly mentioned and officially recognized Town, Township, District, or Municipality qualifies as City: "Available".
-- Do not automatically treat minor informal neighborhood nicknames as City unless recognized as an official town, district, municipality, or designated locality.
-
-RULE 6 — CAPITAL CITY & CITY-STATE RULE (MANDATORY EXCEPTION):
-If the official national capital city is explicitly mentioned as the company's location in companyAddress, OR if the company location is Singapore or another sovereign City-State:
-
-BOTH FIELDS MUST BE:
-- "city": "Available"
-- "state": "Available"
-
-This rule applies even when the address does not separately mention a State, County, Province, or Prefecture.
-For Singapore addresses:
-Singapore is a sovereign City-State; therefore BOTH City and State MUST ALWAYS be marked "Available".
-
-Additional conditions:
-- The national capital must be explicitly mentioned in companyAddress.
-- Do not infer the capital from the country name.
-- Do not apply this exception to ordinary regional capitals, provincial capitals, county seats, or administrative centers unless separately qualified under the accepted City classifications.
-- The capital-city exception overrides the normal requirement for an explicitly stated State/Province in the State field.
-
-RULE 7 — MULTIPLE GEOGRAPHICAL COMPONENTS:
-- Examine EVERY geographical component in companyAddress.
-- Do not evaluate only the final locality appearing before the State or Province.
-- Check all explicitly mentioned geographical names, including:
-  City, Town, District, Municipality, County, Suburb, Locality, and other administrative divisions.
-- If at least ONE geographical component qualifies as an officially recognized City, Town, District, Municipality, or designated locality, return "Available".
-- If none of the geographical components qualifies, return "Not Available".
-- Never combine different locations or infer a missing geographical component.
-
-RULE 8 — LOCALITY POSITION DOES NOT DETERMINE CITY STATUS:
-- Never assume that a word is a City merely because it appears immediately before a State or Province.
-- Street names, road types, building names, and industrial parks appearing before a State or Province do not qualify as a City.
-- An authentic City, Town, District, Municipality, or designated administrative locality must be explicitly present to select "city": "Available".
-
-RULE 9 — STREET, BUILDING AND COMPANY NAME EXCLUSION:
-The following must NEVER be treated as City names merely because of their wording:
-
-- Street names
-- Road names
-- Building names
-- Shopping center names
-- Industrial park names
-- Company names
-- Project names
-- Property names
-- Business complex names
-
-Examples:
-- District Road = Street/Road component, NOT District.
-- Town Street = Street component, NOT Town.
-- City Road = Street component, NOT City.
-- Municipal Building = Building name, NOT Municipality.
-
-Only independently qualifying geographical entities can be considered.
-
-RULE 10 — COUNTRY-SPECIFIC ADMINISTRATIVE CLASSIFICATION:
-- Apply the official administrative structure of the country where the companyAddress is located.
-- Do not apply US administrative definitions to other countries.
-- Do not apply Indian administrative definitions to other countries.
-- Recognize that the same term may have different legal meanings in different countries.
-- A District may qualify in one country's administrative system but not necessarily in another context.
-- Verify whether the named geographical entity officially qualifies under the accepted classifications.
-- Do not mistake a County, Province, Region, State, Prefecture, or Territory for a City merely because it is an administrative division.
-- However, if a County or other administrative entity is officially designated as a District or Municipality, it may qualify under the accepted categories.
-
-RULE 11 — AMBIGUOUS GEOGRAPHICAL NAMES:
-- If a geographical name could refer to multiple locations or administrative entities, do not guess.
-- Verify the classification using reliable official administrative or government sources when external verification is permitted.
-- The verification must relate to the exact geographical name present in companyAddress.
-- External verification may establish administrative classification only.
-- Never use external sources to add missing address components.
-- If the classification cannot be reliably established, do not assume it qualifies.
-- Return "Not Available" unless another explicitly mentioned geographical component independently qualifies.
-
-RULE 12 — CAPITAL AND MULTIPLE CITY VALIDATION:
-- If the address contains multiple qualifying cities or municipalities, City = "Available".
-- If the address contains a qualifying City and a non-qualifying suburb, City = "Available".
-- If the address contains only non-qualifying localities, City = "Not Available".
-- If the national capital is explicitly identified as the company's location, apply the Capital City Rule.
-- Do not mark State = "Available" simply because a City, Town, District, or Municipality is available.
-
-RULE 13 — STRICT SEPARATION OF CITY AND STATE:
-- City and State are separate dropdown fields.
-- City = "Available" does not automatically mean State = "Available".
-- State must be evaluated using the separate State validation rules.
-- The ONLY exception is the explicitly mentioned national capital rule, which requires both City and State to be "Available".
-- Never infer a State, Province, County, or Prefecture from a City name unless the separate State rules explicitly permit it.
-
-RULE 14 — FINAL CITY DECISION LOGIC:
-
-STEP 1:
-Read the final companyAddress.
-
-STEP 2:
-Identify all geographical names explicitly mentioned in the address.
-
-STEP 3:
-Exclude street names, building names, company names, and non-geographical identifiers.
-
-STEP 4:
-Check whether any remaining geographical name is officially classified as:
-- City
-- Town
-- District
-- Municipality
-
-STEP 5:
-Check the National Capital Rule.
-
-STEP 6:
-Apply the final decision:
-
-IF:
-At least one explicitly mentioned geographical entity qualifies as an officially recognized City, Town, District, or Municipality:
-
-RETURN:
-"Available"
-
-ELSE:
-
-RETURN:
-"Not Available"
-
-RULE 15 — FINAL QC COMPLIANCE:
-Before generating the final JSON:
-- Confirm that the classification is based strictly on companyAddress.
-- Confirm that the geographical name is explicitly present.
-- Confirm its official administrative classification.
-- Confirm that street names, building names, shopping centers, and industrial parks have not been mistaken for Cities.
-- Confirm that an officially qualifying suburb or locality has not been incorrectly rejected.
-- Confirm that street names and building names have not been mistaken for Cities.
-- Confirm that no City has been inferred from postal codes or States.
-- Confirm that the National Capital Rule has been applied correctly.
-- Confirm that City and State have been evaluated separately.
-- Confirm that the output contains only one permitted dropdown value.
-
-FINAL OUTPUT RESTRICTION:
-Return ONLY:
-"Available"
-OR
-"Not Available"
-
-Never return:
-- City names
-- Explanations
-- Additional comments
-- Confidence scores
-- Alternative dropdown values
-
-9. EMAIL ID & SECONDARY EMAIL ID:
-- Select the primary official corporate email (e.g. sales@, info@, contact@, enquiry@).
-- Select a different secondary corporate email (e.g. support@, service@).
-- Never duplicate emailId in secondaryEmailId (if duplicate or unavailable, return "").
-- Do not invent email addresses.
+- Return "" if websiteStatus is not Working.
+
+8. COMPANY ADDRESS (HEADQUARTERS EXTRACTION, FULL-FORM EXPANSIONS & QC):
+- Headquarters Priority: Global Headquarters / Corporate Headquarters > Head Office > Main Office > Registered Office (only if no physical HQ/Head/Main office exists). Never select a branch, warehouse, factory, showroom, or dealer when headquarters is available.
+- Complete Multi-Line Extraction & Sequence: Combine all lines into one comma-separated address in the exact sequence shown on the website. Retain premise, building, unit, suite, floor, street number, street name, locality, town, district, city, county, and state/province.
+- Postal Code Removal: Strip ALL numeric and alphanumeric postal codes, ZIP codes, and PIN codes (UK postcodes like B75 7BU, SW1A 1AA; Canadian like M5V 2T6; European; US 5-digit and ZIP+4). Retain Post Office Box numbers (e.g. "Post Office Box 1264").
+- Noise Removal: Strip company names, office labels (e.g. "Physical Address:"), country names, telephone/fax numbers, email addresses, URLs, and map links from the address field.
+- Mandatory Full-Form Abbreviation Expansions:
+  * Building & Premise: Bldg. -> Building, Ste. -> Suite, Apt. -> Apartment, Fl. -> Floor, Rm. -> Room, Blk. -> Block, P.O. Box / PO Box -> Post Office Box.
+  * Street Types: St. -> Street (except Saint before names like St. James), Rd. -> Road, Ave. -> Avenue, Blvd. -> Boulevard, Dr. -> Drive, Ln. -> Lane, Ct. -> Court, Cir. -> Circle, Pkwy. -> Parkway, Hwy. -> Highway, Expy. -> Expressway, Fwy. -> Freeway, Pl. -> Place, Ter. -> Terrace, Trl. -> Trail, Way -> Way, Co. Rd. -> County Road, State Rte. -> State Route.
+  * Named & Memorial Highways: GAR Highway / G.A.R. Hwy -> Grand Army Of The Republic Highway, MLK Jr Blvd -> Martin Luther King Junior Boulevard, JFK Blvd/Expy -> John F Kennedy Boulevard/Expressway, FDR Dr -> Franklin D Roosevelt Drive, PCH -> Pacific Coast Highway, FM 1960 -> Farm To Market Road 1960, RM -> Ranch To Market Road, MG Road -> Mahatma Gandhi Road, GT Road -> Grand Trunk Road.
+  * Directionals: N. -> North, S. -> South, E. -> East, W. -> West, NE/NW/SE/SW -> Northeast/Northwest/Southeast/Southwest.
+  * Zones & Estates: Ind. Est. -> Industrial Estate, Ind. Area -> Industrial Area, Ind. Park -> Industrial Park, Bus. Park -> Business Park, Tech. Park -> Technology Park, Com. Centre -> Commercial Centre, Ind. Zone -> Industrial Zone.
+  * Administrative Divisions: Dist. -> District, Twp. -> Township, Muni. -> Municipality, Prov. -> Province, Co. -> County (administrative only).
+  * States / Provinces / Counties Globally: Expand ALL US states (MA -> Massachusetts, TX -> Texas, CA -> California, IL -> Illinois, etc.), Canadian provinces (ON -> Ontario, QC -> Quebec, BC -> British Columbia), Australian states (VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland), UK/Irish counties (Northants -> Northamptonshire, Yorks -> Yorkshire, Co. Durham -> County Durham), Indian states & zones (MH -> Maharashtra, KA -> Karnataka, TN -> Tamil Nadu, GJ -> Gujarat, MIDC -> Maharashtra Industrial Development Corporation, GIDC -> Gujarat Industrial Development Corporation, Opp. -> Opposite, S.No. -> Survey Number), South African provinces (GP -> Gauteng, KZN -> KwaZulu-Natal), Malaysian/Indonesian states (Sgr -> Selangor, Jabar -> Jawa Barat, Jateng -> Jawa Tengah, Jatim -> Jawa Timur), Austrian/Swiss/German states (NÖ -> Niederösterreich, ZH -> Zürich, BW -> Baden-Württemberg), Brazilian/Mexican states (SP -> São Paulo, CDMX -> Ciudad de Mexico).
+  * International Non-English Terms: France (Z.I. -> Zone Industrielle, Z.A. -> Zone Artisanale, Bd. -> Boulevard, Imp. -> Impasse, B.P. -> Boite Postale), Germany/Austria/Switzerland (Str. -> Strasse, Pl. -> Platz), Spain (C/ -> Calle, Avda. -> Avenida, Pol. Ind. -> Poligono Industrial, Ctra. -> Carretera), Italy (V.le -> Viale, C.so -> Corso, P.zza -> Piazza, Z.I. -> Zona Industriale), Netherlands/Belgium (Str. -> Straat, Wg. -> Weg, Pl. -> Plein, Ind. Terrein -> Industrieterrein), Poland (ul. -> Ulica, al. -> Aleja, pl. -> Plac, os. -> Osiedle), Portugal/Brazil (R. -> Rua, Av. -> Avenida, Rod. -> Rodovia), Mexico/LatAm (Col. -> Colonia, Fracc. -> Fraccionamiento, Calz. -> Calzada), Türkiye (Cad./Cd. -> Caddesi, Sk./Sok. -> Sokak, Bulv./Blv. -> Bulvari, Mah./Mh. -> Mahallesi, OSB -> Organize Sanayi Bolgesi, No./N:/No: -> Number), Indonesia (Jl./Jln. -> Jalan, Perum. -> Perumahan, RT/RW -> Rukun Tetangga/Rukun Warga, Kec. -> Kecamatan, Kab. -> Kabupaten, Kel. -> Kelurahan, Ds. -> Desa, Dk. -> Dukuh), Malaysia/Singapore (Jln. -> Jalan, Lrg. -> Lorong, Tmn. -> Taman, Bdr. -> Bandar, Kg. -> Kampung), Hong Kong/East Asia (N.T. -> New Territories, Kln. -> Kowloon, Pref. -> Prefecture).
+- Unit & Hash Preservation (#): Retain '#' for unit, apartment, or suite numbers verbatim (e.g. '#01-12', '#04-05', '#12-34', '#101'). NEVER convert '#01-12' to 'Floor' or '1st Floor-12'. Only expand '#' to 'Number' when used directly in front of a street or house number without letters or hyphens (e.g. '# 159' -> 'Number 159').
+- Asian Floor Notation: Format floor sub-divisions (e.g. 6F-1, 6F.-1, 6F之1) as "6th Floor-1".
+- Number Prefix Rule: NEVER invent or add "Number" in front of bare street numbers (e.g. "40 Sarah Street" not "Number 40 Sarah Street"). ONLY expand to "Number" when "No.", "No", or "Nos." was literally written on the website.
+- Preserve Verbatim: Symbols ('+', '&', '#', '/'), diacritics, and authentic non-English proper names.
+- Comma Separation: Separate distinct components with commas in their original order. ALWAYS put a comma before State/Province (e.g. "Prince George, British Columbia", "Cincinnati, Ohio"). Never put commas inside a street name or industrial park name. Address must not end with a comma or period.
+- Return "Not Available" if a Working website has no verifiable physical headquarters address. Return "" if not Working.
+
+9. CITY & STATE INDEPENDENT VALIDATION:
+- Both City and State are dropdown fields with only two permitted values: "Available" | "Not Available".
+- Evaluate State and City independently using ONLY words explicitly present in the final companyAddress. Never infer from country name, postal codes, or external databases.
+- STATE RULES:
+  * State = "Available" when an explicitly identified State, County, Province, Prefecture is present in companyAddress (County, Province, Prefecture -> State).
+  * State = "Not Available" if no State, County, Province, Prefecture is present in companyAddress.
+- CITY RULES:
+  * City = "Available" when companyAddress explicitly contains at least one officially recognized geographical location that qualifies as a City, Town, District, Municipality (Town, District, Municipality -> City).
+  * Exclusions: Suburbs, neighborhoods, villages, hamlets, postal areas, and industrial/business parks do not automatically qualify unless officially recognized under an accepted classification. Pure street names, road names, and building names never qualify.
+  * City = "Not Available" if no recognized City, Town, District, or Municipality is present.
+- NATIONAL CAPITAL & CITY-STATE RULE (CONSOLIDATED MANDATORY EXCEPTION):
+  * If a country's national capital city is mentioned as the company's location in companyAddress (e.g. Singapore, Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
+  * Sovereign City-States (Singapore, Monaco, Vatican City, San Marino): In Singapore, the country itself functions as City, State, and Capital. For any address located in Singapore, BOTH "state": "Available" AND "city": "Available" MUST be selected.
+  * This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
+
+10. CONTACT DETAILS (EMAIL & PHONE NUMBER):
+- "emailId": Select primary official corporate email (e.g. sales@, info@, contact@, enquiry@).
+- "secondaryEmailId": Select a distinct secondary corporate email (e.g. support@, service@). Never duplicate emailId in secondaryEmailId (return "" if duplicate or unavailable).
 - Exclude privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix).
-- Empty string "" if none found.
+- "phoneNumber": Domestic subscriber digits ONLY. Country calling codes (+1, +44, +60, +61, +65, +86, +91, +886, etc.) and leading trunk zeros (0) MUST ALWAYS BE STRIPPED. Protect domestic subscriber digits (Singapore 8-digit numbers like 65353907). Exclude fax and toll-free (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). Digits only (7 to 12 digits). Return "" if none found.
 
-10. PHONE NUMBER STRICT VALIDATION:
-- Return domestic subscriber digits only.
-- ABSOLUTELY NEVER INCLUDE THE COUNTRY CALLING CODE IN phoneNumber!
-- Remove the country calling code (+1, +44, +60, +61, +65, +86, +91, +886, etc.).
-- Remove the trunk prefix (leading 0) when applicable (e.g. 04-3329299 -> 43329299; 020 7946 0000 -> 2079460000).
-- Protect authentic domestic subscriber digits (e.g. in Singapore, 8-digit domestic numbers starting with 65 must retain all 8 digits: 65353907).
-- Exclude fax, toll-free (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800), and emergency numbers. If only toll-free is available, return empty string "".
-- Never invent or complete missing digits.
-- Digits only (no spaces, hyphens, brackets, dots, or plus signs). Valid numbers must be domestic national digits between 7 and 12 digits.
-
-11. PRODUCT IDENTIFICATION RULES (INDEPENDENT EVALUATION):
+11. PRODUCT IDENTIFICATION RULES (THREE INDEPENDENT COUNTS):
 - "numberOfProducts": Count distinct physical products offered (not repeated images of the same product). Scale: "0" | "1" | "2" | "3" (for 3 or more).
-- "productImages": Count genuine physical product photographs only. Do not count banners, logos, icons, advertisements, or decorative graphics as product images. Scale: "0" | "1" | "2" | "3" (for 3 or more).
-- "numberOfProductDescriptions": Count distinct product descriptions only when actual descriptive text is available. Scale: "0" | "1" | "2" | "3" (for 3 or more).
-- Apply the 0, 1, 2, and 3+ counting scale independently to each field.
-- Do not automatically copy the image count into other product fields. Evaluate each field on its own merit.
+- "productImages": Count genuine physical product photographs only (excluding banners, logos, icons, advertisements, and decorative graphics). Scale: "0" | "1" | "2" | "3".
+- "numberOfProductDescriptions": Count distinct product descriptions only when actual descriptive text is available. Scale: "0" | "1" | "2" | "3".
+- Evaluate all three fields independently. Do not automatically copy image count into product count or description count.
 
-WEBSITE DATA FOR THIS CRAWL:
+=== DYNAMIC WEBSITE DATA FOR THIS EXTRACTION REQUEST ===
 Target URL (Original): ${crawlData.originalUrl}
 Final URL (Destination): ${crawlData.finalUrl || crawlData.originalUrl}
 Redirect Detection: ${isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl) ? "REDIRECT DETECTED (Original domain redirected to a different destination domain -> MANDATORY: set websiteStatus to 'Redirect Site'). Evaluate all other 13 fields from the destination domain (" + (crawlData.finalUrl || crawlData.originalUrl) + ")." : "Same domain (Not a redirect)"}
@@ -768,7 +331,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
               contents: [{ parts: [{ text: prompt }] }],
               generationConfig: {
                 temperature: 0,
-                maxOutputTokens: 1024,
+                maxOutputTokens: 2048,
                 responseMimeType: "application/json",
                 responseSchema: GEMINI_RESPONSE_SCHEMA
               }
@@ -804,7 +367,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
                   contents: [{ parts: [{ text: prompt + "\nReturn strictly a valid JSON object matching the requested schema." }] }],
                   generationConfig: {
                     temperature: 0,
-                    maxOutputTokens: 1024,
+                    maxOutputTokens: 2048,
                     responseMimeType: "application/json"
                   }
                 })
