@@ -25,7 +25,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 {
   "websiteStatus": "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site" | "Manual Review",
   "notWorkingReason": "string (mandatory explanation if not Working, else empty string \"\")",
-  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
+  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
   "companyProfile": "Available" | "Not Available" | "",
   "companyName": "string (expand ONLY abbreviations present on site; standalone 'Co.' -> 'Company', NEVER add 'Limited' unless 'Ltd.'/'Limited' is on site)",
   "countryName": "string",
@@ -376,8 +376,8 @@ Never sacrifice source accuracy to achieve full-form expansion.
   - "Available"
   - "Not Available"
 - Evaluate State independently from City, using words in companyAddress only.
-- State = "Available" when an explicitly identified State, County, Province, Territory, or Prefecture is present in companyAddress.
-- State = "Not Available" if no State, County, Province, Territory, or Prefecture is present in companyAddress.
+- State = "Available" when an explicitly identified State, County, Province, Prefecture is present in companyAddress (County, Province, Prefecture -> State).
+- State = "Not Available" if no State, County, Province, Prefecture is present in companyAddress.
 - Expand abbreviations only when country context confirms them (e.g. standard US, Canadian, or Australian state abbreviations matching the country).
 - CAPITAL CITY & CITY-STATE RULE — MANDATORY:
   - If a country's national capital city is mentioned as the company's location in companyAddress (e.g. Singapore, Paris, Berlin, Tokyo, London, Jakarta, Riyadh, Doha, Muscat, Prague, Cairo, Nairobi, Buenos Aires, Canberra, Ottawa, Washington D.C., Wellington, Taipei City, Kuala Lumpur, Seoul, Bangkok, Beijing, New Delhi, Madrid, Rome, Warsaw, Zagreb, Bucharest), BOTH "state": "Available" AND "city": "Available"!
@@ -396,7 +396,7 @@ Never sacrifice source accuracy to achieve full-form expansion.
   - "Not Available"
 
 OBJECTIVE:
-Determine whether the companyAddress explicitly contains at least one officially recognized geographical location that qualifies as a City, Town, District, or Municipality.
+Determine whether the companyAddress explicitly contains at least one officially recognized geographical location that qualifies as a City, Town, District, Municipality (Town, District, Municipality -> City).
 
 RULE 1 — STRICT ADDRESS-ONLY INDEPENDENT EVALUATION:
 - Evaluate City independently using the geographical names explicitly present in the final companyAddress field only.

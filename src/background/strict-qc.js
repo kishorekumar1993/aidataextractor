@@ -625,7 +625,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
       console.warn(`[AI Assistant] AI First mode: No ${aiConfig.label} API key configured. Falling back to Own Crawl.`);
       extractedData = heuristicExtraction(crawlResult, restrictedCheck);
       extractedData._note = `Own Crawl (AI Fallback: No ${aiConfig.label} API key configured)`;
-      extractedData._extractionSource = "fallback";
+      extractedData._extractionSource = "own_crawl_fallback";
       extractedData._extractionMode = "ai_first";
       extractedData._isFromAi = false;
     } else {
@@ -653,7 +653,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         console.warn(`[AI Assistant] ${aiConfig.label} API error, falling back to Own Crawl rule engine:`, aiErr.message);
         extractedData = heuristicExtraction(crawlResult, restrictedCheck);
         extractedData._note = `Own Crawl (AI Fallback: ${aiErr.message || "AI Error"})`;
-        extractedData._extractionSource = "fallback";
+        extractedData._extractionSource = "own_crawl_fallback";
         extractedData._extractionMode = "ai_first";
         extractedData._isFromAi = false;
       }
@@ -1054,8 +1054,14 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Fall back to local raw crawl ONLY if AI returned completely empty string ""
       result.companyAddress = bestRaw ? (typeof sanitizeRule6CompanyAddress === "function" ? sanitizeRule6CompanyAddress(bestRaw, result.companyName, country, crawlData) : bestRaw) : "Not Available";
     } else {
-      // In AI mode, strictly preserve AI's companyAddress exactly as received from AI API!
-      result.companyAddress = addr || "Not Available";
+      // In AI mode, strictly sanitize AI address with Rule 6 (strip company name, country, trailing postal code, expand standard abbreviations)
+      let cleanAddr = (typeof sanitizeRule6CompanyAddress === "function")
+        ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData)
+        : (addr || "Not Available");
+      if (bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
+        cleanAddr = reconcileAddressWithRawEvidence(cleanAddr, bestRaw, result.companyName, country, crawlData, true);
+      }
+      result.companyAddress = cleanAddr || "Not Available";
     }
 
     // 5. State & City: In AI mode, strictly take AI values directly from API response!
