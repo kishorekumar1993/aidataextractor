@@ -114,7 +114,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
             errorSourceLink: errSourceLink,
             errorContext: errContext || cleanReason,
             errorUrl: errSourceLink
-          }).catch(() => {});
+          }).catch(() => { });
         }
       } catch (e) {
         console.warn("[Background] Error recording non-working website:", e.message);
@@ -581,8 +581,8 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
         const validReason = (extractedData.notWorkingReason && isValidNonWorkingReasonQC(extractedData.notWorkingReason))
           ? extractedData.notWorkingReason
           : (extractedData.reason && isValidNonWorkingReasonQC(extractedData.reason))
-          ? extractedData.reason
-          : "Website has 0 products and no verifiable catalog or physical address (Rule 1).";
+            ? extractedData.reason
+            : "Website has 0 products and no verifiable catalog or physical address (Rule 1).";
         extractedData.notWorkingReason = validReason;
         extractedData.errorSnippet = validReason;
         extractedData.errorKeyword = determineValidErrorKeywordQC(extractedData, validReason);
@@ -650,8 +650,8 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "") {
           const validReason = (extractedData.notWorkingReason && isValidNonWorkingReasonQC(extractedData.notWorkingReason))
             ? extractedData.notWorkingReason
             : (extractedData.reason && isValidNonWorkingReasonQC(extractedData.reason))
-            ? extractedData.reason
-            : "Website has 0 products and no verifiable catalog or physical address (Rule 1).";
+              ? extractedData.reason
+              : "Website has 0 products and no verifiable catalog or physical address (Rule 1).";
           extractedData.notWorkingReason = validReason;
           extractedData.errorSnippet = validReason;
           extractedData.errorKeyword = determineValidErrorKeywordQC(extractedData, validReason);
@@ -1041,7 +1041,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       country = toTitleCase(detectCountryFromAddress(result.companyAddress));
     }
     if (/^(?:uk|united\s*kingdom|great\s*britain)$/i.test(String(result.countryName || "").trim()) &&
-        !/\b(?:united\s*kingdom|great\s*britain|uk)\b/i.test(String(result.countryName || ""))) {
+      !/\b(?:united\s*kingdom|great\s*britain|uk)\b/i.test(String(result.countryName || ""))) {
       country = resolveUkCountryName(country, result.companyAddress || "", crawlData);
     } else if (!country) {
       country = resolveUkCountryName(country, result.companyAddress || "", crawlData);
