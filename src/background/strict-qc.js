@@ -1054,14 +1054,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // Fall back to local raw crawl ONLY if AI returned completely empty string ""
       result.companyAddress = bestRaw ? (typeof sanitizeRule6CompanyAddress === "function" ? sanitizeRule6CompanyAddress(bestRaw, result.companyName, country, crawlData) : bestRaw) : "Not Available";
     } else {
-      // Reconcile ONLY for sequence & symbol preservation (e.g. Item 95 sequence preservation, or '+' symbol)
-      // Strictly pass isFromAi = true so it NEVER replaces the AI address with crawl fragments
-      if (bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
-        addr = reconcileAddressWithRawEvidence(addr, bestRaw, result.companyName, country, crawlData, true);
-      }
-      if (typeof sanitizeRule6CompanyAddress === "function") {
-        addr = sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData);
-      }
+      // In AI mode, strictly preserve AI's companyAddress exactly as received from AI API!
       result.companyAddress = addr || "Not Available";
     }
 
