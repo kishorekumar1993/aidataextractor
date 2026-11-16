@@ -1084,11 +1084,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     // CAPITAL CITY & CITY-STATE RULE — MANDATORY:
-    // If country/location is Singapore or a City-State, or if capital city is mentioned:
-    // BOTH fields MUST be: City: "Available", State: "Available"
-    const isSg = (typeof isSingaporeLocation === "function" && isSingaporeLocation(result.companyAddress, country)) || (country && country.toLowerCase() === "singapore");
-    const hasCap = result.companyAddress && result.companyAddress.length >= 3 && result.companyAddress.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country);
-    if (isSg || hasCap) {
+    // (If a country's capital is mentioned in the address, then both City and State are considered available.)
+    if (result.companyAddress && result.companyAddress.length >= 3 && result.companyAddress.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(result.companyAddress, country)) {
       result.city = "Available";
       result.state = "Available";
     }
@@ -1845,12 +1842,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   }
 
   // CAPITAL CITY & CITY-STATE RULE — MANDATORY:
-  // If a country's capital city is mentioned, OR if location/country is Singapore or a City-State:
-  // BOTH fields must be selected as:
-  // - City: "Available"
-  // - State: "Available"
-  const isSgCrawl = (typeof isSingaporeLocation === "function" && isSingaporeLocation(addr, country)) || (country && country.toLowerCase() === "singapore");
-  if (isSgCrawl || (addr && addr.length >= 3 && addr.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(addr, country))) {
+  // (If a country's capital is mentioned in the address, then both City and State are considered available.)
+  if (addr && addr.length >= 3 && addr.toLowerCase() !== "not available" && typeof hasCapitalInAddress === "function" && hasCapitalInAddress(addr, country)) {
     result.city = "Available";
     result.state = "Available";
   }

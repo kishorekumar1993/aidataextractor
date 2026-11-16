@@ -161,10 +161,8 @@ function cleanPhoneNumber(rawPhone, country) {
 
   // 1. Match by detected country strictly: ALWAYS strip this specific country's calling code
   if (matchedCountryCc) {
-    // Singapore special rule: Domestic numbers have 8 digits and frequently start with 65 (e.g. 6535 3907).
-    // NEVER strip 65 from an 8-digit Singapore number unless explicit international prefix (+ or 00) was present and length > 8.
-    const isSingapore8Digit = (cLower.includes("singapore") || cLower === "sg") && digits.length === 8;
-    if (!isSingapore8Digit && digits.startsWith(matchedCountryCc.code) && (hasPlus || has00 || (digits.length - matchedCountryCc.code.length) >= 6)) {
+    const requiredMinLen = matchedCountryCc.minLen || (matchedCountryCc.code.length + 8);
+    if (digits.startsWith(matchedCountryCc.code) && (hasPlus || has00 || digits.length >= requiredMinLen)) {
       digits = digits.slice(matchedCountryCc.code.length);
       codeRemoved = true;
     }
