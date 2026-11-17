@@ -2183,6 +2183,101 @@ async function runAll() {
     assert.ok(finalStrictQc.notWorkingReason.includes('Aircraft & Aviation') || finalStrictQc.notWorkingReason.includes('Aerospace') || finalStrictQc.notWorkingReason.includes('Prohibited Category'));
   });
 
+  // =========================================================================
+  // Item 102: Business Type "Other", "Service Provider", "Online Shopping", and
+  // "Restricted Site" Classified as Not Working (All Fields Cleared)
+  // =========================================================================
+  runTest('Item 102: Business Type "Other", "Service Provider", "Online Shopping" Classified as Not Working', () => {
+    const { ctx } = createTestContext();
+
+    // 1. AI returned Business Type: "Other" with Working status
+    const aiOtherData = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Other',
+      companyProfile: 'Available',
+      companyName: 'Apex Business Consulting Ltd',
+      countryName: 'United Kingdom',
+      companyAddress: '10 High Street, London',
+      state: 'Not Available',
+      city: 'Available',
+      emailId: 'contact@apexbiz.co.uk',
+      phoneNumber: '442079460912',
+      numberOfProducts: '5',
+      productImages: '5',
+      numberOfProductDescriptions: '5'
+    };
+
+    const qcOther = ctx.applyStrictInstructions(aiOtherData, {
+      finalUrl: 'https://www.apexbiz.co.uk',
+      originalUrl: 'https://www.apexbiz.co.uk'
+    }, { isRestricted: false });
+
+    assert.strictEqual(qcOther.websiteStatus, 'Not Working', 'Business Type "Other" must be Not Working');
+    assert.strictEqual(qcOther.isDisallowedBusinessType, true, 'isDisallowedBusinessType must be true');
+    assert.strictEqual(qcOther.companyName, '', 'Company name must be wiped');
+    assert.strictEqual(qcOther.companyAddress, '', 'Company address must be wiped');
+    assert.strictEqual(qcOther.emailId, '', 'Email must be wiped');
+    assert.strictEqual(qcOther.phoneNumber, '', 'Phone must be wiped');
+    assert.strictEqual(qcOther.numberOfProducts, '', 'Products must be wiped');
+    assert.ok(qcOther.notWorkingReason.includes('Other') || qcOther.notWorkingReason.includes('outside allowed scope'));
+
+    // 2. AI returned Business Type: "Service Provider" with Working status
+    const aiServiceData = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Service Provider',
+      companyProfile: 'Available',
+      companyName: 'Digital Cloud Solutions Inc',
+      countryName: 'United States',
+      companyAddress: '500 Tech Blvd, Austin, Texas',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'info@digitalcloud.com',
+      phoneNumber: '15125550199',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    const qcService = ctx.applyStrictInstructions(aiServiceData, {
+      finalUrl: 'https://www.digitalcloud.com',
+      originalUrl: 'https://www.digitalcloud.com'
+    }, { isRestricted: false });
+
+    assert.strictEqual(qcService.websiteStatus, 'Not Working', 'Business Type "Service Provider" must be Not Working');
+    assert.strictEqual(qcService.companyName, '', 'Company name must be wiped');
+    assert.strictEqual(qcService.companyAddress, '', 'Company address must be wiped');
+    assert.strictEqual(qcService.emailId, '', 'Email must be wiped');
+
+    // 3. AI returned Business Type: "Online Shopping" with Working status
+    const aiOnlineShopData = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Online Shopping',
+      companyProfile: 'Available',
+      companyName: 'Trendy Fashion Boutique',
+      countryName: 'Australia',
+      companyAddress: '12 Collins Street, Melbourne, Victoria',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'orders@trendyboutique.com.au',
+      phoneNumber: '61390001122',
+      numberOfProducts: '20',
+      productImages: '20',
+      numberOfProductDescriptions: '20'
+    };
+
+    const qcOnlineShop = ctx.applyStrictInstructions(aiOnlineShopData, {
+      finalUrl: 'https://www.trendyboutique.com.au',
+      originalUrl: 'https://www.trendyboutique.com.au'
+    }, { isRestricted: false });
+
+    assert.strictEqual(qcOnlineShop.websiteStatus, 'Not Working', 'Business Type "Online Shopping" must be Not Working');
+    assert.strictEqual(qcOnlineShop.companyName, '', 'Company name must be wiped');
+    assert.strictEqual(qcOnlineShop.companyAddress, '', 'Company address must be wiped');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

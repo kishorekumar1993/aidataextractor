@@ -1048,6 +1048,55 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     const rawBt = String(result.businessType || "").trim();
     result.businessType = btAliasMap[rawBt.toLowerCase()] || rawBt;
 
+    // Disallowed Business Type Scope Check for AI results:
+    // Only Manufacturer to Wholesaler are permitted as Working. If "Other", "Service Provider", "Online Shopping", or "Restricted Site" -> Mark Not Working!
+    const allowedAiWorkingTypes = new Set([
+      "manufacturer",
+      "industrial services",
+      "exporter",
+      "trader",
+      "distributer",
+      "distributor",
+      "supplier",
+      "wholesaler"
+    ]);
+
+    const btNormalized = String(result.businessType || "").trim().toLowerCase();
+    const disallowedExplicitTypes = new Set([
+      "other",
+      "service provider",
+      "online shopping",
+      "restricted site"
+    ]);
+    const isDisallowedAiType = disallowedExplicitTypes.has(btNormalized) || (btNormalized && !allowedAiWorkingTypes.has(btNormalized));
+
+    if (isDisallowedAiType && result.websiteStatus !== "Redirect Site") {
+      const disType = result.businessType || "Other";
+      result.websiteStatus = "Not Working";
+      result.isDisallowedBusinessType = true;
+      result.disallowedReason = `Business Type "${disType}" outside allowed scope (Manufacturer to Wholesaler only)`;
+      result.notWorkingReason = result.disallowedReason;
+      result.errorCategory = "Disallowed Business Type";
+      result.errorKeyword = disType;
+      result.errorSourceUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+      result.errorSnippet = `Business Type "${disType}" is outside allowed working scope.`;
+      result.businessType = "";
+      result.companyProfile = "";
+      result.companyName = "";
+      result.countryName = "";
+      result.companyAddress = "";
+      result.state = "";
+      result.city = "";
+      result.emailId = "";
+      result.secondaryEmailId = "";
+      result.phoneNumber = "";
+      result.numberOfProducts = "";
+      result.productImages = "";
+      result.numberOfProductDescriptions = "";
+      populateEvidenceAndSourceLinks(result, crawlData, null, "");
+      return result;
+    }
+
     const apiProfile = normalizeAvailability(result.companyProfile);
     if (apiProfile) {
       result.companyProfile = apiProfile;

@@ -302,28 +302,32 @@
         return;
       }
 
-      // STRICT QC: If prohibited or restricted site, show proper error message, clear all fields, and select Not Working
-      if (data && (data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site")) {
-        const reason = data.restrictedReason || "Prohibited Category Detected";
+      // STRICT QC: If prohibited site, restricted site, or disallowed business type (e.g. Other, Service Provider, Online Shopping), mark Not Working
+      const btLower = String(data?.businessType || "").toLowerCase();
+      const isDisallowedType = !!(data?.isDisallowedBusinessType || btLower === "other" || btLower === "service provider" || btLower === "online shopping" || btLower === "restricted site");
+      if (data && (data.isProhibitedSite || data.isRestricted || isDisallowedType)) {
+        const reason = data.restrictedReason || data.disallowedReason || data.notWorkingReason || (isDisallowedType ? `Business Type "${data.businessType || 'Other'}" outside allowed scope` : "Prohibited Category Detected");
         if (typeof AIExt.setQuickBtnState === "function") {
-          AIExt.setQuickBtnState("restricted", "⛔ Restricted Site!");
+          AIExt.setQuickBtnState("restricted", isDisallowedType ? "⛔ Disallowed Type" : "⛔ Restricted Site!");
         }
         if (typeof AIExt.showFloatingToast === "function") {
-          AIExt.showFloatingToast(`⛔ Restricted Category (${reason}) -> Marked Not Working`, "restricted", 4000);
+          AIExt.showFloatingToast(`⛔ Disallowed Type / Restricted (${reason}) -> Marked Not Working`, "restricted", 4000);
         }
         AIExt.fillFormFields(data);
         AIExt.renderPreview(data);
-        AIExt.showRestrictedBanner(reason);
+        if (typeof AIExt.showRestrictedBanner === "function") {
+          AIExt.showRestrictedBanner(reason);
+        }
         if (state.autoQueueEnabled || state.autoSubmitNotWorkingEnabled) {
           const delay = state.autoQueueEnabled ? 500 : 1500;
-          AIExt.updateStatus(`⛔ PROHIBITED CATEGORY DETECTED: ${reason}. Status set to Not Working (auto-submitting in ${delay === 500 ? "0.5s" : "1.5s"}...).`, "error");
+          AIExt.updateStatus(`⛔ DISALLOWED TYPE / RESTRICTED: ${reason}. Status set to Not Working (auto-submitting in ${delay === 500 ? "0.5s" : "1.5s"}...).`, "error");
           if (state.pendingAutoSubmitTimer) clearTimeout(state.pendingAutoSubmitTimer);
           state.pendingAutoSubmitTimer = setTimeout(() => {
             state.pendingAutoSubmitTimer = null;
             AIExt.autoSubmitNotWorking(targetUrl);
           }, delay);
         } else {
-          AIExt.updateStatus(`⛔ PROHIBITED CATEGORY / WORD DETECTED: ${reason}. Website Status set to Not Working (all fields cleared).`, "error");
+          AIExt.updateStatus(`⛔ DISALLOWED TYPE / RESTRICTED: ${reason}. Website Status set to Not Working (all fields cleared).`, "error");
         }
         return;
       }

@@ -74,7 +74,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 3. BUSINESS TYPE & ELIGIBILITY VALIDATION:
 - Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributor" (portal select: "Distributer") | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
   (STRICTLY output "Distributor" as the standard businessType name - never output duplicate or misspelled "Distributer").
-- Classifications:
+- Permitted Working Classifications (Only these qualify for "Working" websiteStatus):
   * "Manufacturer": Company manufactures physical products in own facility/factory (OEM/ODM, machining, molding, fabrication, assembly).
   * "Industrial Services": Company provides industrial services (machining, custom fabrication, tooling, surface treatment, industrial maintenance).
   * "Exporter": Company exports physical goods to international markets.
@@ -82,10 +82,12 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * "Distributor": Company distributes physical goods (authorized distributor, dealership network, channel partner).
   * "Supplier": Company supplies physical goods (B2B supply, stockist, materials supplier).
   * "Wholesaler": Company sells physical goods wholesale in bulk quantities.
-  * "Service Provider": Company provides eligible B2B business services.
+- Disallowed / Ineligible Business Types (MUST BE MARKED AS "Not Working"):
+  * "Other": Any business that does not fit into the 7 physical goods/industrial classifications above.
+  * "Service Provider": General commercial services, IT, consulting, agencies, or non-industrial services.
   * "Online Shopping": Ordinary online retail shopping without manufacturing or wholesale supply evidence.
   * "Restricted Site": Company business involves a prohibited category.
-  * "Other": Operational B2B business that does not fit the specific categories above.
+- MANDATORY RULE FOR "Other", "Service Provider", "Online Shopping", & "Restricted Site": When the business type is classified as "Other", "Service Provider", "Online Shopping", or "Restricted Site", you MUST set "websiteStatus": "Not Working", "notWorkingReason": "Business Type [Type] outside allowed scope (Manufacturer to Wholesaler only)", AND leave all other 12 fields empty "".
 
 4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES & CONTEXTUAL EXCLUSIONS):
 - Evaluation Standard: Reject only when the company genuinely manufactures, sells, supplies, distributes, or provides services involving a prohibited category. Incidental mentions, customer industries, application references, or unrelated contextual words must not trigger rejection. Evaluate the actual products, services, and business operations.
