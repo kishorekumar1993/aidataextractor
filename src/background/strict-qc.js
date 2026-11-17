@@ -942,6 +942,56 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.URL = (crawlData && (crawlData.originalUrl || crawlData.finalUrl || crawlData.errorUrl || crawlData.targetUrl)) || result.URL || result.url || "";
   result.url = result.URL;
 
+  // 0. Prohibited Category / Word Check (Highest Priority Rule Note 2 & Official Strict Restriction Policy)
+  // Any restricted category word, meaningful phrase, or relevant image found anywhere triggers rejection.
+  // Incidental mentions and low-priority pages are NOT exempt. AI extraction CANNOT override this result.
+  const isProhibited = !!(restrictedCheck && restrictedCheck.isRestricted) ||
+    !!data.isRestricted ||
+    !!data.isProhibitedSite ||
+    String(data.businessType || "").toLowerCase() === "restricted site";
+
+  if (isProhibited) {
+    const errorUrl = (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || result.restrictedSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
+    result.websiteStatus = "Not Working";
+    result.businessType = "";
+    result.companyProfile = "";
+    result.companyName = "";
+    result.countryName = "";
+    result.companyAddress = "";
+    result.state = "";
+    result.city = "";
+    result.emailId = "";
+    result.secondaryEmailId = "";
+    result.phoneNumber = "";
+    result.numberOfProducts = "";
+    result.productImages = "";
+    result.numberOfProductDescriptions = "";
+    result.isRestricted = true;
+    result.isProhibitedSite = true;
+    result.restrictedReason = (restrictedCheck && restrictedCheck.reason) || result.restrictedReason || data.notWorkingReason || data.reason || "Prohibited Category Detected";
+    result.restrictedKeyword = (restrictedCheck && (restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword)) || result.restrictedKeyword || "";
+    result.restrictedCategory = (restrictedCheck && (restrictedCheck.category || restrictedCheck.restricted_category)) || result.restrictedCategory || "";
+    result.restrictedSourceUrl = errorUrl;
+    result.restrictedSnippet = (restrictedCheck && (restrictedCheck.snippet || restrictedCheck.matched_context)) || result.restrictedSnippet || "";
+    result.errorKeyword = result.restrictedKeyword;
+    result.errorSourceUrl = errorUrl;
+    result.errorSnippet = result.restrictedSnippet;
+    result.restricted_category = result.restrictedCategory;
+    result.matched_keyword = result.restrictedKeyword;
+    result.matched_page = errorUrl;
+    result.matched_context = result.restrictedSnippet;
+    result.business_activity = (restrictedCheck && restrictedCheck.business_activity) || "Genuine restricted business operations";
+    result.classification = "GENUINE_RESTRICTED";
+    result.is_restricted = true;
+    result.confidence = (restrictedCheck && restrictedCheck.confidence) || 0.98;
+    result.reason = result.restrictedReason;
+    result.notWorkingReason = result.restrictedReason;
+    result.errorCategory = "Prohibited Category";
+    result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
+    result._originalUrl = crawlData.originalUrl || "";
+    return result;
+  }
+
   // 1. Authoritative API Ground Truth: When AI API succeeded, take ALL 14 fields from the API response.
   // Only fall back to local/manual crawl helpers for individual fields that the API left empty/invalid.
   if (data._isFromAi) {
@@ -1161,53 +1211,6 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     populateEvidenceAndSourceLinks(result, crawlData, selectedAiCandidate, bestRaw);
-    return result;
-  }
-
-  // 2. Prohibited Category / Word Check (Highest Priority Rule Note 2 & Official Strict Restriction Policy)
-  // Any restricted category word, meaningful phrase, or relevant image found anywhere triggers rejection.
-  // Incidental mentions and low-priority pages are NOT exempt. AI extraction cannot override this result.
-  const isProhibited = !!(restrictedCheck && restrictedCheck.isRestricted);
-
-  if (isProhibited) {
-    const errorUrl = (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || result.restrictedSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
-    result.websiteStatus = "Not Working";
-    result.businessType = "";
-    result.companyProfile = "";
-    result.companyName = "";
-    result.countryName = "";
-    result.companyAddress = "";
-    result.state = "";
-    result.city = "";
-    result.emailId = "";
-    result.secondaryEmailId = "";
-    result.phoneNumber = "";
-    result.numberOfProducts = "";
-    result.productImages = "";
-    result.numberOfProductDescriptions = "";
-    result.isRestricted = true;
-    result.isProhibitedSite = true;
-    result.restrictedReason = (restrictedCheck && restrictedCheck.reason) || result.restrictedReason || "Prohibited Category Detected";
-    result.restrictedKeyword = (restrictedCheck && (restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword)) || result.restrictedKeyword || "";
-    result.restrictedCategory = (restrictedCheck && (restrictedCheck.category || restrictedCheck.restricted_category)) || result.restrictedCategory || "";
-    result.restrictedSourceUrl = errorUrl;
-    result.restrictedSnippet = (restrictedCheck && (restrictedCheck.snippet || restrictedCheck.matched_context)) || result.restrictedSnippet || "";
-    result.errorKeyword = result.restrictedKeyword;
-    result.errorSourceUrl = errorUrl;
-    result.errorSnippet = result.restrictedSnippet;
-    result.restricted_category = result.restrictedCategory;
-    result.matched_keyword = result.restrictedKeyword;
-    result.matched_page = errorUrl;
-    result.matched_context = result.restrictedSnippet;
-    result.business_activity = (restrictedCheck && restrictedCheck.business_activity) || "Genuine restricted business operations";
-    result.classification = "GENUINE_RESTRICTED";
-    result.is_restricted = true;
-    result.confidence = (restrictedCheck && restrictedCheck.confidence) || 0.98;
-    result.reason = result.restrictedReason;
-    result.notWorkingReason = result.restrictedReason;
-    result.errorCategory = "Prohibited Category";
-    result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-    result._originalUrl = crawlData.originalUrl || "";
     return result;
   }
 

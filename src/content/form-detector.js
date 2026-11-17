@@ -711,7 +711,7 @@
     const btVal = String(data.businessType || "").trim().toLowerCase();
     const isDisallowedType = !!(btVal && !allowedWorkingTypes.has(btVal));
 
-    const isProhibitedOrRestricted = !data._isFromAi && !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || isDisallowedType || data.isDisallowedBusinessType);
+    const isProhibitedOrRestricted = !!(data.isProhibitedSite || data.isRestricted || String(data.businessType || "").toLowerCase() === "restricted site" || (!data._isFromAi && (isDisallowedType || data.isDisallowedBusinessType)));
 
     // Rule 1 QC Safeguard: A site with 0 products and no address or contact info CANNOT be Working!
     const isZeroProdUnverifiable = !data._isFromAi && (String(data.numberOfProducts || "").trim() === "0" || data.numberOfProducts === 0) &&

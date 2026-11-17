@@ -96,15 +96,15 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   4. Food (Food manufacturers/suppliers, food products/ingredients, meat, seafood, dairy, bakery, beverages, food processing/wholesalers)
   5. Weapons & Knives (Weapons manufacturers/suppliers, knives, swords, daggers, blades, firearms, ammunition, military/defence weapons, tactical gear)
   6. Defence (Defence manufacturers/contractors, military equipment/technology, military vehicles/systems, defence services, ITAR registration/compliance (International Traffic in Arms Regulations))
-  7. Aircraft & Aviation (Aircraft manufacturers/suppliers, aircraft components/spares, aviation products, airlines, aircraft MRO)
-  8. Aerospace (Aerospace manufacturers/suppliers, aerospace CNC/machines/tooling, key aerospace industry suppliers, spacecraft, satellites, rocket and propulsion systems, aerospace engineering equipment)
+  7. Aircraft & Aviation (Aircraft manufacturers/suppliers, aircraft components/spares, airplane parts, aviation products, airlines, aircraft MRO)
+  8. Aerospace (Aerospace manufacturers/suppliers, aerospace CNC/machines/tooling/presses, aerospace components/parts, key aerospace industry suppliers, spacecraft, satellites, rocket and propulsion systems, aerospace engineering equipment)
   9. Marine (Marine equipment/products, marine manufacturers/suppliers, marine engineering, marine navigation and propulsion equipment)
   10. Ship & Shipbuilding (Ship manufacturers/shipbuilders, ship repair/maintenance, ship components, shipbuilding equipment, vessels, boats)
   11. Chemical (Chemical manufacturers/suppliers, industrial chemicals, chemical raw materials, hazardous chemicals, chemical distribution/catalogues)
   12. Alcohol (Alcohol manufacturers/suppliers, beer, wine, liquor businesses, alcoholic beverage distributors/production)
   13. Animals (Animal trading/supply, live animal sales, animal breeding, animal product manufacturers/suppliers, wildlife trading)
   14. School, College & Education (Schools, colleges, universities, academies, polytechnics, educational institutes, coaching centres, tutoring/tuition classes, and academic institutions are strictly out of scope. Mark "Not Working" with all other 13 fields empty).
-- Contextual Exclusions (False Positive Prevention): An industrial machinery or physical goods manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, school furniture/uniforms/buses, knife gate valves, connectors for aerospace applications, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business.
+- Contextual Exclusions (False Positive Prevention): An industrial machinery or physical goods manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, school furniture/uniforms/buses, knife gate valves, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business. However, any company that manufactures, supplies, or catalogs specialized parts, machinery, tooling, or presses for aircraft/airplanes, aerospace, military/defense, or medical devices is a PROHIBITED category business and must be rejected as Not Working.
 - Output when Restricted: When a genuine restricted category business/product is detected, set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
 
 5. COMPANY PROFILE VALIDATION:

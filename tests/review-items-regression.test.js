@@ -2134,6 +2134,55 @@ async function runAll() {
     assert.strictEqual(furnCheck.isRestricted, false, 'School furniture manufacturer must NOT be restricted');
   });
 
+  // =========================================================================
+  // Item 101: Aerospace & Airplane Machinery Rejection (action-wetori.com) &
+  // AI Mode Cannot Override Restricted Rejection
+  // =========================================================================
+  runTest('Item 101: Aerospace & Airplane Machinery Rejection (action-wetori.com) & AI Mode Cannot Override Restricted Rejection', () => {
+    const { ctx } = createTestContext();
+
+    // 1. action-wetori.com content detection (Airplane Parts & Aerospace)
+    const actionSnippet = 'APPLICATIONS Industrial Field Car Parts VIEW MORE Aerospace VIEW MORE Airplane Parts VIEW MORE Bathroom Equipment VIEW MORE';
+    const actionCheck = ctx.detectRestrictedKeywordsSingle(actionSnippet, '', 'https://www.action-wetori.com');
+    assert.strictEqual(actionCheck.isRestricted, true, 'action-wetori must be detected as restricted');
+    assert.ok(actionCheck.category === 'Aviation & Airlines' || actionCheck.category === 'Aerospace');
+
+    // 2. Critical: Even if AI returns Working with _isFromAi: true, applyStrictInstructions MUST override to Not Working
+    const mockAiReturnedWorking = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Action Machinery Industries Co., Ltd.',
+      countryName: 'Taiwan',
+      companyAddress: 'No. 30, Renhuagong 18th Road, Dali District, Taichung City 412, Taiwan',
+      state: 'Not Available',
+      city: 'Available',
+      emailId: 'sales@action-wetori.com.tw',
+      secondaryEmailId: '',
+      phoneNumber: '886424925937',
+      numberOfProducts: '6',
+      productImages: '6',
+      numberOfProductDescriptions: '6'
+    };
+
+    const finalStrictQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
+      finalUrl: 'https://www.action-wetori.com',
+      originalUrl: 'https://www.action-wetori.com'
+    }, actionCheck);
+
+    assert.strictEqual(finalStrictQc.websiteStatus, 'Not Working', 'Restricted site MUST be Not Working even if AI returned Working');
+    assert.strictEqual(finalStrictQc.businessType, '', 'Business type must be wiped');
+    assert.strictEqual(finalStrictQc.companyName, '', 'Company name must be wiped');
+    assert.strictEqual(finalStrictQc.companyAddress, '', 'Address must be wiped');
+    assert.strictEqual(finalStrictQc.emailId, '', 'Email must be wiped');
+    assert.strictEqual(finalStrictQc.phoneNumber, '', 'Phone must be wiped');
+    assert.strictEqual(finalStrictQc.numberOfProducts, '', 'Products must be wiped');
+    assert.strictEqual(finalStrictQc.isRestricted, true, 'isRestricted must be true');
+    assert.strictEqual(finalStrictQc.isProhibitedSite, true, 'isProhibitedSite must be true');
+    assert.ok(finalStrictQc.notWorkingReason.includes('Aircraft & Aviation') || finalStrictQc.notWorkingReason.includes('Aerospace') || finalStrictQc.notWorkingReason.includes('Prohibited Category'));
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

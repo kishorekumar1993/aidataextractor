@@ -379,14 +379,14 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Aircraft & Aviation",
     category: "Aviation & Airlines",
     label: "Aviation & Airlines",
-    regex: /\b(?:aircrafts?|airplanes?|aeroplanes?|aviation|airlines?|commercial\s*aviation|aviation\s*(?:equipment|products?|services?|charter)|passenger\s*flights?|airline\s*(?:tickets?|flights?|carrier|company)|aircraft\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|components?|spare\s*parts?|equipment|products?|maintenance|repair|overhaul|mro)|avionics|helicopters?\s*(?:charter|services?|manufactur(?:er|ing))|flight\s*booking|aircraft\s*leasing)\b/i
+    regex: /\b(?:aircrafts?|airplanes?|aeroplanes?|aviation|airlines?|commercial\s*aviation|aviation\s*(?:equipment|products?|services?|charter)|passenger\s*flights?|airline\s*(?:tickets?|flights?|carrier|company)|aircraft\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|components?|spare\s*parts?|equipment|products?|maintenance|repair|overhaul|mro)|airplane\s*(?:parts?|components?|spare\s*parts?)|avionics|helicopters?\s*(?:charter|services?|manufactur(?:er|ing))|flight\s*booking|aircraft\s*leasing)\b/i
   },
   {
     id: 8,
     officialCategory: "Aerospace",
     category: "Aerospace",
     label: "Aerospace",
-    regex: /\b(?:aerospace\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|contractor|components?|materials?|engineering|products?|equipment|industry|industries|machines?|machining|cnc|tooling)|spacecraft|satellite\s*manufactur(?:er|ing)|rocket\s*(?:and\s+)?propulsion(?:\s*systems?)?|launch\s*vehicles?|space\s*exploration\s*technology)\b/i
+    regex: /\b(?:aerospace\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|contractor|components?|materials?|engineering|products?|equipment|industry|industries|machines?|machining|cnc|tooling|press(?:es)?|forming|forging|parts?)|spacecraft|satellite\s*manufactur(?:er|ing)|rocket\s*(?:and\s+)?propulsion(?:\s*systems?)?|launch\s*vehicles?|space\s*exploration\s*technology)\b/i
   },
   {
     id: 9,
