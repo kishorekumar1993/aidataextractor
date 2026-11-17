@@ -1218,7 +1218,7 @@ function discoverProductAndCatalogLinks(html, baseUrl) {
   const linkRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match;
 
-  const restrictedHints = /\b(?:itar|medical|medicine|hospital|clinic|pharma|pharmaceutical|knife|knives|weapon|weapons|gun|guns|defence|defense|military|aircraft|aviation|aerospace|marine|ships?|boats?|yachts?|chemical|chemicals|alcohol|beer|wine|brewery|distillery|animals?|pets?|dogs?|cats?|veterinary|food|bakery|meat|poultry|seafood|porn|adult|casino|gambling|vape|vaping|tobacco|cannabis|cbd|thc)\b/i;
+  const restrictedHints = /\b(?:itar|medical|medicine|hospital|clinic|pharma|pharmaceutical|knife|knives|weapon|weapons|gun|guns|defence|defense|military|aircraft|aviation|aerospace|marine|ships?|boats?|yachts?|chemical|chemicals|alcohol|beer|wine|brewery|distillery|animals?|pets?|dogs?|cats?|veterinary|food|bakery|meat|poultry|seafood|porn|adult|casino|gambling|vape|vaping|tobacco|cannabis|cbd|thc|school|schools|college|colleges|university|universities|academy|academies|education|admissions?|students?|faculty)\b/i;
 
   while ((match = linkRegex.exec(html)) !== null) {
     const raw = match[1].trim();

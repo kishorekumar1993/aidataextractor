@@ -87,9 +87,9 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * "Restricted Site": Company business involves a prohibited category.
   * "Other": Operational B2B business that does not fit the specific categories above.
 
-4. RESTRICTED CATEGORIES (13 PROHIBITED CATEGORIES & CONTEXTUAL EXCLUSIONS):
+4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES & CONTEXTUAL EXCLUSIONS):
 - Evaluation Standard: Reject only when the company genuinely manufactures, sells, supplies, distributes, or provides services involving a prohibited category. Incidental mentions, customer industries, application references, or unrelated contextual words must not trigger rejection. Evaluate the actual products, services, and business operations.
-- The 13 Strictly Prohibited Categories:
+- The 14 Strictly Prohibited Categories:
   1. Porn & Adult (Pornographic sites/videos, adult entertainment, sexually explicit content/services, adult products)
   2. Medicine & Medical (Medicine manufacturers/suppliers/distributors, pharmaceuticals, medical equipment/devices/supplies, medical device manufacturing, medical treatments)
   3. Hospital & Healthcare (Hospitals, clinics, healthcare centres, nursing homes, diagnostic labs, healthcare providers, hospital equipment/supplies)
@@ -103,7 +103,8 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   11. Chemical (Chemical manufacturers/suppliers, industrial chemicals, chemical raw materials, hazardous chemicals, chemical distribution/catalogues)
   12. Alcohol (Alcohol manufacturers/suppliers, beer, wine, liquor businesses, alcoholic beverage distributors/production)
   13. Animals (Animal trading/supply, live animal sales, animal breeding, animal product manufacturers/suppliers, wildlife trading)
-- Contextual Exclusions (False Positive Prevention): An industrial machinery manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, knife gate valves, connectors for aerospace applications, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business.
+  14. School, College & Education (Schools, colleges, universities, academies, polytechnics, educational institutes, coaching centres, tutoring/tuition classes, and academic institutions are strictly out of scope. Mark "Not Working" with all other 13 fields empty).
+- Contextual Exclusions (False Positive Prevention): An industrial machinery or physical goods manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, school furniture/uniforms/buses, knife gate valves, connectors for aerospace applications, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business.
 - Output when Restricted: When a genuine restricted category business/product is detected, set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
 
 5. COMPANY PROFILE VALIDATION:

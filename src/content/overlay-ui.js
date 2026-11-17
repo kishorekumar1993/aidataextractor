@@ -381,7 +381,7 @@
         badgeBg: "#fee2e2",
         badgeColor: "#991b1b",
         reason: `Prohibited Category Detected: "${cat}"${kw && kw.toLowerCase() !== cat.toLowerCase() ? ` (matched "${kw}")` : ""} found on website`,
-        rule: "Rule Note 2: Weapons, Defence, Military, Medicine, Medical, Hospital, Food, Porn, Aerospace, Marine, Chemicals, Animals sites are strictly prohibited. Website Status is set to Not Working with all fields empty.",
+        rule: "Rule Note 2 & Scope: Weapons, Defence, Military, Medicine, Medical, Hospital, Food, Porn, Aerospace, Marine, Chemicals, Animals, and School/College/Education sites are strictly prohibited. Website Status is set to Not Working with all fields empty.",
         keyword: kw || cat,
         link: formatClickableUrl(rawLink, siteBaseUrl),
         snippet: data.restrictedSnippet || data.errorSnippet || `Prohibited category "${cat}" detected on the website.`

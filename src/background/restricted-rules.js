@@ -76,6 +76,10 @@ const RESTRICTED_PATTERNS = [
   {
     pattern: /\b(?:counterfeit\s*goods|replica\s*watches?|fake\s*id|fake\s*passports?|dark\s*web\s*market|payday\s*loans?|loan\s*shark)\b/i,
     label: "Counterfeits & Prohibited Financial Services"
+  },
+  {
+    pattern: /\b(?:high\s*school|elementary\s*school|primary\s*school|secondary\s*school|middle\s*school|prep\s*school|preparatory\s*school|kindergarten|preschool|nursery\s*school|daycare\s*center|charter\s*school|public\s*school|private\s*school|boarding\s*school|grammar\s*school|international\s*school|montessori\s*school|k-12\s*school|school\s*district|community\s*college|junior\s*college|state\s*college|technical\s*college|polytechnic\s*college|sixth\s*form\s*college|degree\s*college|polytechnic(?:\s*institute|\s*university)|educational\s*institution|academic\s*institution|higher\s*education\s*institution|school\s*of\s+(?:medicine|law|business|engineering|arts|nursing|pharmacy|dentistry|education|management|science)|coaching\s*institute|tutoring\s*center|tuition\s*centre|driving\s*school|flight\s*school|language\s*school|culinary\s*school|art\s*school|music\s*school|ballet\s*school|dance\s*school|acting\s*school|(?:school|college|university|academy|vidyalaya|polytechnic)\b[\s\S]{0,80}?\b(?:admissions?\s*(?:open|process|criteria|requirements?|office|portal|for)|enrol(?:l)?ments?|academic\s*curriculum|tuition\s*fees?|academic\s*programs?|undergraduate\s*(?:admissions?|programs?|degrees?)|postgraduate\s*(?:admissions?|programs?|degrees?)|degree\s*programs?|degrees?\s*offered|campus\s*life|student\s*portal|student\s*login|courses?\s*offered))\b/i,
+    label: "School, College & Education"
   }
 ];
 
@@ -117,7 +121,8 @@ const CANDIDATE_CATEGORY_KEYWORDS = [
   { label: "Ship & Shipbuilding", regex: /\b(?:ship|ships|shipyard|shipbuilding|boat|boats|vessel|vessels|yacht|yachts)\b/i },
   { label: "Chemical", regex: /\b(?:chemicals?|petrochemicals?|solvents?|hazardous\s*chemicals?)\b/i },
   { label: "Alcohol", regex: /\b(?:alcohol|brewery|breweries|distillery|distilleries|wine|beer|whiskey|whisky|liquor|spirits)\b/i },
-  { label: "Animals", regex: /\b(?:animals?|pets?|puppy|puppies|dogs?|cats?|livestock|cattle)\b/i }
+  { label: "Animals", regex: /\b(?:animals?|pets?|puppy|puppies|dogs?|cats?|livestock|cattle)\b/i },
+  { label: "School, College & Education", regex: /\b(?:school|schools|college|colleges|university|universities|academy|academies|education|polytechnic)\b/i }
 ];
 
 function sanitizeContextText(text) {
@@ -298,6 +303,10 @@ function sanitizeContextText(text) {
     .replace(/\b(?:food|beverage|packaging|dairy|bakery|meat|confectionery|cosmetic|cosmetics|chemical|nutraceutical)[,\s]+(?:and\s+)?(?:pharmaceutical|medical)\b/gi, " ")
     .replace(/\b(?:serving|serves|served|for|to)\s+(?:the\s+)?(?:pharmaceutical|medical)\s+(?:industry|industries|sector|sectors|applications?|market|markets)\b/gi, " ");
 
+  // 13b. Manufactured school/education supplies and uniforms false positives
+  cleanText = cleanText
+    .replace(/\b(?:school|college|university)\s+(?:buses?|bus|uniforms?|bags?|backpacks?|stationery|supplies|furniture|desks?|chairs?|books?|textbooks?|software|management\s*system|portal\s*software)\b/gi, " ");
+
   // 14. Industrial chemical equipment and tanks false positives
   cleanText = cleanText
     .replace(/\b(?:chemical\s*(?:storage|process(?:ing)?|handling|injection|dosing|transfer)\s*(?:tanks?|vessels?|reactors?|equipment|machinery|machines?|pumps?|skids?|piping|systems?|solutions?))\b/gi, " ")
@@ -413,6 +422,13 @@ const STRICT_OFFICIAL_CATEGORIES = [
     category: "Animals & Pets",
     label: "Animals & Pets",
     regex: /\b(?:animal\s*(?:trading|suppl(?:y|ies|ier|iers)|breeding|commercial|products?\s*manufactur(?:er|ing)|products?\s*suppl(?:ier|ies)|catalog(?:ue)?)|live\s*animal\s*sales?|wildlife\s*trading|pupp(?:y|ies)\s*(?:for\s*sale|mill|breeder|breeding)|dogs?\s*(?:breeder|breeding|for\s*sale)|cats?\s*(?:breeder|breeding|for\s*sale)(?!\s*[-_.]?\s*(?:no\b|num|#|code|part|id|class|rating|group|ref|item|type|section|3\b|5\b|5e\b|6\b|6a\b|7\b|7a\b|8\b|cables?|cabling))|kittens\s*for\s*sale|animal\s*shelter|livestock\s*(?:farming|producer|breeding|trade|market|sales?)|cattle\s*farming|poultry\s*farming|pig\s*farming|commercial\s*slaughterhouse|pet\s*(?:shop|store|boutique|supplies|accessories|food|breeding))\b/i
+  },
+  {
+    id: 14,
+    officialCategory: "School, College & Education",
+    category: "School, College & Education",
+    label: "School, College & Education",
+    regex: /\b(?:high\s*school|elementary\s*school|primary\s*school|secondary\s*school|middle\s*school|prep\s*school|preparatory\s*school|kindergarten|preschool|nursery\s*school|daycare\s*center|charter\s*school|public\s*school|private\s*school|boarding\s*school|grammar\s*school|international\s*school|montessori\s*school|k-12\s*school|school\s*district|community\s*college|junior\s*college|state\s*college|technical\s*college|polytechnic\s*college|sixth\s*form\s*college|degree\s*college|polytechnic(?:\s*institute|\s*university)|educational\s*institution|academic\s*institution|higher\s*education\s*institution|school\s*of\s+(?:medicine|law|business|engineering|arts|nursing|pharmacy|dentistry|education|management|science)|coaching\s*institute|tutoring\s*center|tuition\s*centre|driving\s*school|flight\s*school|language\s*school|culinary\s*school|art\s*school|music\s*school|ballet\s*school|dance\s*school|acting\s*school|(?:school|college|university|academy|vidyalaya|polytechnic)\b[\s\S]{0,80}?\b(?:admissions?\s*(?:open|process|criteria|requirements?|office|portal|for)|enrol(?:l)?ments?|academic\s*curriculum|tuition\s*fees?|academic\s*programs?|undergraduate\s*(?:admissions?|programs?|degrees?)|postgraduate\s*(?:admissions?|programs?|degrees?)|degree\s*programs?|degrees?\s*offered|campus\s*life|student\s*portal|student\s*login|courses?\s*offered))\b/i
   }
 ];
 
@@ -799,6 +815,27 @@ function detectDisallowedWebsitePlatformOrDomain(url, html = "", text = "") {
       return {
         isDisallowed: true,
         reason: `Subdomain Website Not Hosted at Root Level (${hostname}) - Rule 10`
+      };
+    }
+  }
+
+  // Educational institution domains (.edu, .edu.xx, .ac.xx, .k12.xx, .sch.xx)
+  const isEduDomain = /\.(?:edu|ac|k12|sch)(?:\.[a-z]{2})?$/i.test(hostname);
+  if (isEduDomain) {
+    return {
+      isDisallowed: true,
+      reason: `School, College & Education Institution Domain (${hostname}) - Prohibited Category`
+    };
+  }
+
+  // School, college, university name in hostname with confirmed educational content
+  if (/(?:(?:^|[.-])(?:school|college|university|academy|polytechnic|vidyalaya|gurukul)[s]?(?:[.-]|$))/i.test(cleanHost)) {
+    const plainCheck = (text || stripHtml(html)).slice(0, 3000).toLowerCase();
+    const titleCheck = (html.match(/<title[^>]*>([^<]+)<\/title>/i) || ["", ""])[1].toLowerCase();
+    if (/\b(?:school|college|university|academy|campus|student|faculty|admission|academic|curriculum|degree|education|courses)\b/i.test(titleCheck + " " + plainCheck)) {
+      return {
+        isDisallowed: true,
+        reason: `School, College & Education Institution (${hostname}) - Prohibited Category`
       };
     }
   }

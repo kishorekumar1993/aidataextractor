@@ -2080,6 +2080,60 @@ async function runAll() {
     assert.ok(restrictedEvaluation.notWorkingReason.includes('Defence & Military') || restrictedEvaluation.notWorkingReason.includes('Prohibited Category'));
   });
 
+  // =========================================================================
+  // Item 100: School, College, University & Education Websites Classified as
+  // Not Working (Prohibited Category / Out of Scope)
+  // =========================================================================
+  runTest('Item 100: School, College, University & Education Websites Classified as Not Working', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Domain-level check: .edu and .ac.* domains
+    const harvardDomain = ctx.detectDisallowedWebsitePlatformOrDomain('https://www.harvard.edu');
+    assert.strictEqual(harvardDomain.isDisallowed, true, '.edu domain must be disallowed');
+    assert.ok(harvardDomain.reason.includes('School, College & Education'));
+
+    const oxfordDomain = ctx.detectDisallowedWebsitePlatformOrDomain('https://www.ox.ac.uk');
+    assert.strictEqual(oxfordDomain.isDisallowed, true, '.ac.uk domain must be disallowed');
+    assert.ok(oxfordDomain.reason.includes('School, College & Education'));
+
+    // 2. High School (.com domain)
+    const schoolText = "Welcome to St. Mary's High School. Admissions open for academic year 2026. Academic curriculum, student life, and faculty details.";
+    const schoolHtml = "<html><head><title>St. Mary's High School</title></head><body><h1>St. Mary's High School</h1><p>Admissions open for academic year 2026.</p></body></html>";
+    const schoolCheck = ctx.detectRestrictedKeywordsSingle(schoolText, schoolHtml, 'https://www.stmaryshighschool.com');
+    assert.strictEqual(schoolCheck.isRestricted, true, 'High school must be restricted');
+    assert.strictEqual(schoolCheck.category, 'School, College & Education');
+
+    // 3. Community College (.org domain)
+    const collegeText = "Brighton Community College offers higher education degree courses, vocational diplomas, and adult education classes.";
+    const collegeCheck = ctx.detectRestrictedKeywordsSingle(collegeText, '', 'https://www.brightoncollege.org');
+    assert.strictEqual(collegeCheck.isRestricted, true, 'Community college must be restricted');
+    assert.strictEqual(collegeCheck.category, 'School, College & Education');
+
+    // 4. Full QC evaluation marks School as Not Working and clears all 13 fields
+    const schoolQc = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      companyName: "St. Mary's High School",
+      companyAddress: '100 School Lane, Springfield, Ohio',
+      phoneNumber: '5551234567'
+    }, {}, schoolCheck);
+
+    assert.strictEqual(schoolQc.websiteStatus, 'Not Working', 'School status must be Not Working');
+    assert.strictEqual(schoolQc.companyName, '', 'Company name must be cleared');
+    assert.strictEqual(schoolQc.companyAddress, '', 'Company address must be cleared');
+    assert.strictEqual(schoolQc.phoneNumber, '', 'Phone must be cleared');
+    assert.strictEqual(schoolQc.isRestricted, true, 'isRestricted must be true');
+    assert.ok(schoolQc.notWorkingReason.includes('School, College & Education') || schoolQc.notWorkingReason.includes('Prohibited Category'));
+
+    // 5. False positive protection: School Uniform and School Furniture Manufacturers are NOT restricted
+    const uniformText = "Elite Garment Factory: We manufacture custom school uniforms, sports jerseys, and corporate workwear.";
+    const uniformCheck = ctx.detectRestrictedKeywordsSingle(uniformText, '', 'https://www.elitegarments.com');
+    assert.strictEqual(uniformCheck.isRestricted, false, 'Uniform manufacturer must NOT be restricted');
+
+    const furnText = "ClassCraft Furniture: Industrial manufacturer of durable desks and ergonomic chairs for schools and universities.";
+    const furnCheck = ctx.detectRestrictedKeywordsSingle(furnText, '', 'https://www.classcraftfurniture.com');
+    assert.strictEqual(furnCheck.isRestricted, false, 'School furniture manufacturer must NOT be restricted');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

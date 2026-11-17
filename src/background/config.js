@@ -102,7 +102,7 @@ function resolveAiProviderConfig(settings = {}) {
 // Authoritative Strict Restriction Policy for Prohibited / Restricted Categories:
 // A website must be rejected if any restricted category word, meaningful category phrase,
 // or relevant image is found anywhere in the available website content.
-// The 10 strictly prohibited categories are:
+// The strictly prohibited categories are:
 // 1. Porn and adult content
 // 2. Medicine, medical, medical device manufacturing, and hospitals
 // 3. Food and food products
@@ -113,6 +113,7 @@ function resolveAiProviderConfig(settings = {}) {
 // 8. Chemicals and chemical products
 // 9. Alcohol and alcoholic beverages
 // 10. Animals and animal-related products
+// 11. School, college, university, and educational institutions (Out of Scope / Prohibited)
 // Incidental mentions, testimonials, blogs, news, FAQs, footers, headers, privacy/terms,
 // and images are NOT exempt. Genuine occurrences trigger rejection across all crawled content.
 
