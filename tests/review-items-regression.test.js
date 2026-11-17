@@ -46,6 +46,9 @@ function createTestContext(customFetch) {
     URL,
     AbortController,
     TextDecoder,
+    Buffer,
+    atob: typeof atob === 'function' ? atob : (s) => Buffer.from(s, 'base64').toString('binary'),
+    btoa: typeof btoa === 'function' ? btoa : (s) => Buffer.from(s, 'binary').toString('base64'),
     setTimeout,
     clearTimeout,
     setInterval,
@@ -2335,6 +2338,65 @@ async function runAll() {
     const normUnit = ctx.sanitizeRule6CompanyAddress(unitAddr, '', 'United Kingdom');
     assert.strictEqual(normUnit, 'Unit 1, Plot 5, 20, Industrial Area, Heanor, Derbyshire',
       'Should preserve Unit 1 and Plot 5 verbatim without grammar alterations');
+  });
+
+  runTest('Item 105: Email & Secondary Email exhaustive website page check, obfuscation decoding & recovery', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Obfuscation decoding: data-user + data-domain, Base64, and [at] [dot] normalization
+    const htmlWithObfuscated = `
+      <div>
+        <span data-user="sales" data-domain="acmemachinery.com"></span>
+        <a href="javascript:location.href=atob('bWFpbHRvOnN1cHBvcnRAYWNtZW1hY2hpbmVyeS5jb20=')">Support</a>
+        <p>Inquiries: info [at] acmemachinery [dot] com</p>
+      </div>
+    `;
+    const extracted = ctx.extractEmailsFromHtml(htmlWithObfuscated, 'https://www.acmemachinery.com');
+    assert.ok(extracted.includes('sales@acmemachinery.com'), 'Should decode data-user + data-domain email');
+    assert.ok(extracted.includes('support@acmemachinery.com'), 'Should decode Base64 encoded mailto link');
+    assert.ok(extracted.includes('info@acmemachinery.com'), 'Should decode [at] [dot] obfuscated email');
+
+    // 2. Multilingual contact links discovery (e.g. Chinese 聯絡我們 and Japanese お問い合わせ)
+    const navHtml = `
+      <nav>
+        <a href="/contact-tw.html">聯絡我們</a>
+        <a href="/inquiry-jp.html">お問い合わせ</a>
+      </nav>
+    `;
+    const contactLinks = ctx.discoverContactLinks(navHtml, 'https://www.acmemachinery.com');
+    assert.ok(contactLinks.some(l => l.includes('contact-tw.html')), 'Should discover Taiwanese 聯絡我們 contact page');
+    assert.ok(contactLinks.some(l => l.includes('inquiry-jp.html')), 'Should discover Japanese お問い合わせ inquiry page');
+
+    // 3. Secondary Email backfill: If AI only returned primary email, secondary email is backfilled from crawl
+    const aiDataSingleEmail = {
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Acme Machinery Limited',
+      companyAddress: '100 Main Street, Dallas, Texas',
+      countryName: 'United States Of America',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'sales@acmemachinery.com',
+      secondaryEmailId: '',
+      phoneNumber: '2145550199',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+    const crawlDataTwoEmails = {
+      finalUrl: 'https://www.acmemachinery.com',
+      originalUrl: 'https://www.acmemachinery.com',
+      emails: ['sales@acmemachinery.com', 'support@acmemachinery.com', 'info@acmemachinery.com']
+    };
+
+    const finalized = ctx.finalizeParsedAiResult(aiDataSingleEmail, crawlDataTwoEmails);
+    assert.strictEqual(finalized.emailId, 'sales@acmemachinery.com', 'Primary email preserved');
+    assert.strictEqual(finalized.secondaryEmailId, 'support@acmemachinery.com', 'Secondary email must be backfilled from crawl data when AI left it empty');
+
+    // 4. Strict QC preserves both primary and secondary emails
+    const qcResult = ctx.applyStrictInstructions(finalized, crawlDataTwoEmails, { isRestricted: false });
+    assert.strictEqual(qcResult.emailId, 'sales@acmemachinery.com');
+    assert.strictEqual(qcResult.secondaryEmailId, 'support@acmemachinery.com');
   });
 
   console.log('\n========================================================');

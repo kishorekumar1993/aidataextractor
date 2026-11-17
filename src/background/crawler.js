@@ -647,7 +647,7 @@ async function crawlWebsite(targetUrl, options = {}) {
       // STRICT PRIORITY ORDER:
       // Phase 1: Crawl dedicated Contact Us page(s) FIRST and wait for results before checking other pages.
       // Phase 2: Crawl About / Profile / Product / Restricted / Remaining pages AFTER Contact Us.
-      const isDedicatedContactUrl = (u) => /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint)/i.test(u || "");
+      const isDedicatedContactUrl = (u) => /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint|iletisim|iletişim|bize-ulasin|bize-ulaşın|email|mail|inquiry|enquiry)/i.test(u || "") || /(?:聯絡我們|聯絡|联系我们|联系|聯繫我們|聯繫|お問い合わせ|お問合せ|問合せ|会社案内|連絡先|연락처|문의)/i.test(u || "");
       const contactPriorityLinks = [];
       const otherTopLinks = [];
       const seenPaths = new Set();
@@ -922,27 +922,24 @@ async function crawlWebsite(targetUrl, options = {}) {
           .filter(l => l && !fetchedUrls.has(l) && !isIrrelevantUrl(l))
           .sort((a, b) => {
             const score = (u) => {
-              if (/(?:contact|kontakt|contacto|contatti|impressum)/i.test(u)) return 15;
-              if (/(?:privacy|policy|legal|terms|support|warranty|service|inquir|quote)/i.test(u)) return 10;
+              if (/(?:contact|kontakt|contacto|contatti|impressum)/i.test(u)) return 20;
+              if (/(?:email|mail|inquiry|enquiry|feedback)/i.test(u)) return 18;
+              if (/(?:about|profile|support|customer[-_]?service|service|warranty)/i.test(u)) return 14;
+              if (/(?:privacy|policy|legal|terms)/i.test(u)) return 8;
               return 1;
             };
             return score(b) - score(a);
           })
-          .slice(0, 4);
+          .slice(0, 6);
 
-        for (const cUrl of remainingCandidates) {
-          if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
-          fetchedUrls.add(cUrl);
-          const settled = await safeFetchHtml(cUrl, {
-            timeoutMs: 4000,
-            headers: {
-              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-              "Accept-Language": "en-US,en;q=0.9",
-              "Referer": finalUrl
+        if (remainingCandidates.length > 0) {
+          for (const u of remainingCandidates) fetchedUrls.add(u);
+          const batchResults = await fetchSubpageBatch(remainingCandidates, 3500, 4, true);
+          for (let i = 0; i < batchResults.length; i++) {
+            const settled = batchResults[i];
+            if (settled && settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
+              recordSubpageContent(settled.value.url || remainingCandidates[i], settled.value.html, { includeAddresses: true, includeProfileText: false });
             }
-          });
-          if (settled && settled.ok && settled.html) {
-            recordSubpageContent(settled.url || cUrl, settled.html, { includeAddresses: true, includeProfileText: false });
           }
         }
       }
@@ -961,10 +958,10 @@ async function crawlWebsite(targetUrl, options = {}) {
     const allCrawlText = mainHtml + "\n" + contactHtml;
     companySocials = extractOfficialSocialLinks(allCrawlText);
 
-    // High-speed smart social check: ONLY if NO email was discovered on the website at all,
-    // check company's official Facebook/LinkedIn pages sequentially with tight 1.5s timeout.
+    // High-speed smart social check: if fewer than 2 emails discovered on website,
+    // check company's official Facebook/LinkedIn pages sequentially with tight 1.5s timeout for primary or secondary email.
     const socialCandidates = [companySocials.facebook, companySocials.linkedin].filter(Boolean);
-    if (allDiscoveredEmails.size === 0 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
+    if (allDiscoveredEmails.size < 2 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
       for (const socialUrl of socialCandidates) {
         if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
         const normSocial = normalizeCrawlUrl(socialUrl);
@@ -1167,7 +1164,7 @@ function discoverContactLinks(html, baseUrl) {
     if (!raw || /^(javascript:|mailto:|tel:|#)/i.test(raw) || isIrrelevantUrl(rawLower)) continue;
 
     let score = 0;
-    if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us|kontakt|contacto|contactenos|contáctenos|contatti|contattaci|contactez-nous|nous-contacter|contato|fale-conosco|hubungi|hubungi-kami|kontak|kontak-kami|impressum|imprint)\b/i.test(rawLower)) score += 100;
+    if (/\b(contact|contact-us|contactus|contact_us|get-in-touch|reach-us|reach-out|kontakt|contacto|contactenos|contáctenos|contatti|contattaci|contactez-nous|nous-contacter|contato|fale-conosco|hubungi|hubungi-kami|kontak|kontak-kami|impressum|imprint|iletisim|iletişim|bize-ulasin|bize-ulaşın|email-us|mail-us|write-us|inquiry|enquiry)\b/i.test(rawLower) || /(?:聯絡我們|聯絡|联系我们|联系|聯繫我們|聯繫|お問い合わせ|お問合せ|問合せ|会社案内|連絡先|연락처|문의)/i.test(rawLower)) score += 100;
     if (/\b(industries|industry|markets|market|applications|sectors|sector|industries-served|markets-served)\b/i.test(rawLower)) score += 50;
     if (/\b(about|about-us|aboutus|about_us|who-we-are|our-company|company-profile|profile|quienes-somos|sobre-nosotros|nosotros|empresa|nuestra-empresa|chi-siamo|azienda|uber-uns|ueber-uns|unternehmen|wir-ueber-uns|a-propos|qui-sommes-nous|sobre-nos|quem-somos|tentang-kami|profil-perusahaan)\b/i.test(rawLower)) score += 25;
     if (/\b(terms|terms-conditions|terms-and-conditions|terms-of-service|conditions|privacy|privacy-policy|legal|disclaimer|mentions-legales|aviso-legal|note-legali|datenschutz|politica-de-privacidad|confidentialite|warranty|warranties|guarantee|returns)\b/i.test(rawLower)) score += 7;
@@ -1181,7 +1178,7 @@ function discoverContactLinks(html, baseUrl) {
     if (/\b(careers|career|jobs|job|employment|work-with-us|join-our-team)\b/i.test(rawLower)) score += 3;
     if (/\b(careers|career|jobs|employment|work\s*with\s*us|join\s*our\s*team)\b/i.test(innerText)) score += 3;
     if (/\b(feedback|complaints|directory)\b/i.test(rawLower)) score += 5;
-    if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us|kontakt|contacto|contáctenos|contatti|contattaci|contactez[-\s]*nous|nous\s*contacter|contato|fale\s*conosco|hubungi\s*kami|kontak\s*kami|kontak)\b/i.test(innerText)) score += 120;
+    if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us|reach\s*out|kontakt|contacto|contáctenos|contatti|contattaci|contactez[-\s]*nous|nous\s*contacter|contato|fale\s*conosco|hubungi\s*kami|kontak\s*kami|kontak|iletisim|iletişim|email\s*us|e-mail|mail\s*us|send\s*(?:us\s*)?email|write\s*to\s*us|inquiry|enquiry)\b/i.test(innerText) || /(?:聯絡我們|聯絡|联系我们|联系|聯繫我們|聯繫|お問い合わせ|お問合せ|問合せ|会社案内|連絡先|연락처|문의|문의하기|고객센터)/i.test(innerText)) score += 120;
     if (/\b(industries|our\s*industries|industries\s*served|markets|markets\s*served|applications|sectors)\b/i.test(innerText)) score += 50;
     if (/\b(about|about\s*us|who\s*we\s*are|company\s*profile|our\s*profile|quienes\s*somos|quiénes\s*somos|sobre\s*nosotros|nuestra\s*empresa|chi\s*siamo|la\s*azienda|über\s*uns|ueber\s*uns|das\s*unternehmen|à\s*propos|qui\s*sommes[-\s]*nous|quem\s*somos|sobre\s*nós|tentang\s*kami)\b/i.test(innerText)) score += 20;
     if (/\b(shop|store|online\s*store|cart|basket|buy\s*online)\b/i.test(innerText)) score += 9;
@@ -1515,6 +1512,89 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     } catch (e) { }
   }
 
+  // 3b. Decode Base64 encoded emails (e.g. atob("bWFpbHRvOnNhbGVzQGNvbXBhbnkuY29t") or data-b64="...")
+  const decodeBase64Safe = (b64) => {
+    if (!b64) return "";
+    if (typeof atob === "function") {
+      try { return atob(b64); } catch (e) { }
+    }
+    if (typeof Buffer !== "undefined") {
+      try { return Buffer.from(b64, 'base64').toString('binary'); } catch (e) { }
+    }
+    try {
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+      let output = "";
+      let clean = String(b64).replace(/[^A-Za-z0-9+/=]/g, "");
+      let idx = 0;
+      while (idx < clean.length) {
+        const enc1 = chars.indexOf(clean.charAt(idx++));
+        const enc2 = chars.indexOf(clean.charAt(idx++));
+        const enc3 = chars.indexOf(clean.charAt(idx++));
+        const enc4 = chars.indexOf(clean.charAt(idx++));
+        const chr1 = (enc1 << 2) | (enc2 >> 4);
+        const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+        const chr3 = ((enc3 & 3) << 6) | enc4;
+        output += String.fromCharCode(chr1);
+        if (enc3 !== 64 && enc3 !== -1) output += String.fromCharCode(chr2);
+        if (enc4 !== 64 && enc4 !== -1) output += String.fromCharCode(chr3);
+      }
+      return output;
+    } catch (e) {
+      return "";
+    }
+  };
+
+  const b64Matches = [...html.matchAll(/(?:atob|base64_decode)\s*\(\s*["']([A-Za-z0-9+/=]{8,})["']\s*\)|data-(?:b64|base64|enc)=["']([A-Za-z0-9+/=]{8,})["']/gi)];
+  for (const bm of b64Matches) {
+    try {
+      const b64Str = bm[1] || bm[2];
+      if (b64Str) {
+        const dec = decodeBase64Safe(b64Str).toLowerCase().trim();
+        const emMatches = dec.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+        for (const em of emMatches) {
+          if (isValidCorporateEmail(em) && !isUnwantedEmail(em)) candidateEmails.add(em);
+        }
+      }
+    } catch (e) { }
+  }
+
+  // 3c. Decode dataset / split attribute emails (e.g. data-user="sales" data-domain="company.com")
+  const userDomainMatches = [...html.matchAll(/(?:data-user|data-name|data-prefix)=["']([^"']+)["'][^>]*?(?:data-domain|data-host|data-suffix)=["']([^"']+)["']/gi)];
+  for (const ud of userDomainMatches) {
+    const u = (ud[1] || "").trim();
+    const d = (ud[2] || "").trim().replace(/^@/, "");
+    if (u && d && !d.includes("@") && d.includes(".")) {
+      const reconstructed = `${u}@${d}`.toLowerCase();
+      if (isValidCorporateEmail(reconstructed) && !isUnwantedEmail(reconstructed)) {
+        candidateEmails.add(reconstructed);
+      }
+    }
+  }
+  const domainUserMatches = [...html.matchAll(/(?:data-domain|data-host|data-suffix)=["']([^"']+)["'][^>]*?(?:data-user|data-name|data-prefix)=["']([^"']+)["']/gi)];
+  for (const du of domainUserMatches) {
+    const d = (du[1] || "").trim().replace(/^@/, "");
+    const u = (du[2] || "").trim();
+    if (u && d && !d.includes("@") && d.includes(".")) {
+      const reconstructed = `${u}@${d}`.toLowerCase();
+      if (isValidCorporateEmail(reconstructed) && !isUnwantedEmail(reconstructed)) {
+        candidateEmails.add(reconstructed);
+      }
+    }
+  }
+
+  // 3d. Decode reverse text (CSS rtl / unicode-bidi:bidi-override emails, e.g. moc.ynapmoc@selas)
+  const rtlMatches = [...html.matchAll(/(?:direction\s*:\s*rtl|unicode-bidi\s*:\s*bidi-override|class=["'][^"']*(?:rtl|reverse)[^"']*["'])[^>]*>([\s\S]*?)<\//gi)];
+  for (const rm of rtlMatches) {
+    const inner = (rm[1] || "").replace(/<[^>]+>/g, "").trim();
+    if (inner && inner.includes("@")) {
+      const reversed = inner.split("").reverse().join("");
+      const emMatches = reversed.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+      for (const em of emMatches) {
+        if (isValidCorporateEmail(em) && !isUnwantedEmail(em)) candidateEmails.add(em);
+      }
+    }
+  }
+
   // 4. Decode all mailto: links (including multiple comma/semicolon separated emails and ?cc= / ?bcc= parameters)
   const mailtoBlocks = [...html.matchAll(/(?:href=["']|data-[a-z0-9_-]*=["'])\s*mailto:([^"'>\s]+)/gi)];
   for (const mb of mailtoBlocks) {
@@ -1553,18 +1633,25 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     }
   }
 
-  // 7. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] (DO NOT MATCH RAW PROSE "at")
+  // 7. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] / AT / DOT
   // Strip <script> and <style> tags to avoid capturing error tracking, analytics tokens, and bundle code
   const emailSearchText = htmlWithoutPlaceholders
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
     .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec))
     .replace(/&#x([0-9a-f]+);/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&amp;/g, "&")
     .replace(/&commat;/gi, "@")
     .replace(/%40/gi, "@")
-    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\.)\s*([a-zA-Z]{2,})/gi, "$1@$2.$3");
+    // Bracketed and spaced at / dot normalization
+    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_|\bAT\b)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\bDOT\b|\.)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
+    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_|\bAT\b)\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2")
+    .replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\bDOT\b)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
+    .replace(/([a-zA-Z0-9._%+-]+)\s+@\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, "$1@$2")
+    .replace(/([a-zA-Z0-9._%+-]+)@\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, "$1@$2")
+    .replace(/([a-zA-Z0-9._%+-]+)\s+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, "$1@$2");
 
   const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi;
   const rawEmails = emailSearchText.match(emailRegex) || [];

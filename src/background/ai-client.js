@@ -272,13 +272,18 @@ function finalizeParsedAiResult(parsed, crawlData) {
     parsed.secondaryEmailId = "";
   }
 
-  // Fall back to crawl emails ONLY if AI returned completely empty email
+  // Recover valid primary and secondary corporate emails from crawl data if missing or invalid
   const crawlEmails = (crawlData && Array.isArray(crawlData.emails) ? crawlData.emails : []).map(e => String(e).trim().toLowerCase());
-  if ((!parsed.emailId || !parsed.emailId.trim()) && crawlEmails.length > 0) {
-    parsed.emailId = crawlEmails.find(e => isValidCorporateEmail(e)) || crawlEmails[0] || "";
-    if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim()) && crawlEmails.length > 1) {
-      const second = crawlEmails.find(e => isValidCorporateEmail(e) && e.toLowerCase() !== (parsed.emailId || "").toLowerCase());
-      parsed.secondaryEmailId = second || "";
+  if ((!parsed.emailId || !parsed.emailId.trim() || !isValidCorporateEmail(parsed.emailId) || isUnwantedEmail(parsed.emailId)) && crawlEmails.length > 0) {
+    parsed.emailId = crawlEmails.find(e => isValidCorporateEmail(e) && !isUnwantedEmail(e)) || crawlEmails[0] || "";
+  }
+  const primLower = (parsed.emailId || "").toLowerCase().trim();
+  if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim() || parsed.secondaryEmailId.toLowerCase().trim() === primLower || !isValidCorporateEmail(parsed.secondaryEmailId) || isUnwantedEmail(parsed.secondaryEmailId)) && crawlEmails.length > 1) {
+    const second = crawlEmails.find(e => isValidCorporateEmail(e) && !isUnwantedEmail(e) && e.toLowerCase().trim() !== primLower);
+    if (second) {
+      parsed.secondaryEmailId = second;
+    } else {
+      parsed.secondaryEmailId = "";
     }
   }
 
