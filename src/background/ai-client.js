@@ -42,14 +42,21 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
   return `You are an expert AI data entry quality control assistant. Extract exact company details for the website dynamically from the provided content according to these STRICT QC RULES:
 
+0. CORE PRINCIPLE: WHAT WEBSITE HAS, TAKE THE SAME — EXPANSION ONLY, NO GRAMMAR CHANGES, NO NEW INVENTIONS:
+- What the website has, take the exact same text. Do NOT change anything, do NOT rephrase, reword, or rewrite text.
+- ONLY DO standard abbreviation expansions (e.g. Co. -> Company, Ltd. -> Limited, St. -> Street, Rd. -> Road, Bldg. -> Building, Fl. -> Floor, Ste. -> Suite, No. -> Number, P.O. Box -> Post Office Box).
+- DO NOT DO GRAMMAR CHANGES: Never change grammar, syntax, word forms, or word order (e.g. never convert cardinal floor numbers to ordinals: use '1 Floor', '2 Floor', '6 Floor-1', NEVER '1st Floor' or '6th Floor'; if the website has '1st Floor', remove the ordinal grammar expansion -> '1 Floor'). Never alter tense, singular/plural forms, or insert unnecessary grammatical articles/connectors.
+- DO NOT INVENT ANYTHING NEW: Never add words or suffixes (e.g. never add 'Limited' or 'Number') if they are not explicitly present on the website.
+
 1. AI EXTRACTION SOURCE PRIORITY:
 1. Use information extracted from the provided website content as the primary source.
-2. Use official website pages such as About Us, Contact Us, Company Profile, Products, and Footer.
-3. Use official company social media only for fields explicitly permitted to use social media (e.g. corporate emails, or country when omitted from website).
-4. Never fabricate, assume, or manually complete missing values.
-5. If information is unavailable, return the specified empty string "" or "Not Available" value.
-6. Preserve the original AI-extracted information without invention.
-7. Do not replace an extracted value with an inferred or guessed value without supporting evidence.
+2. What the website has, take the same text: only expand abbreviations, do not make grammar changes or introduce new wording.
+3. Use official website pages such as About Us, Contact Us, Company Profile, Products, and Footer.
+4. Use official company social media only for fields explicitly permitted to use social media (e.g. corporate emails, or country when omitted from website).
+5. Never fabricate, assume, or manually complete missing values.
+6. If information is unavailable, return the specified empty string "" or "Not Available" value.
+7. Preserve the original AI-extracted information without invention.
+8. Do not replace an extracted value with an inferred or guessed value without supporting evidence.
 
 2. WEBSITE STATUS QC RULES:
 - Permitted Options: "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site" | "Manual Review".
@@ -148,6 +155,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Return "" if websiteStatus is not Working.
 
 8. COMPANY ADDRESS (HEADQUARTERS EXTRACTION, FULL-FORM EXPANSIONS & QC):
+- CORE PRINCIPLE: WHAT WEBSITE HAS, TAKE THE SAME — EXPANSION ONLY, NO GRAMMAR CHANGES: Take the exact address as found on the website. DO NOT rewrite, paraphrase, or change words. Only expand standard abbreviations (St. -> Street, Rd. -> Road, Fl. -> Floor, No. -> Number, Ste. -> Suite, Bldg. -> Building). Do NOT make grammar changes (e.g. no ordinal suffixes on floors; '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor'). Do NOT invent new words not on the site.
 - Headquarters Priority: Global Headquarters / Corporate Headquarters > Head Office > Main Office > Registered Office (only if no physical HQ/Head/Main office exists). Never select a branch, warehouse, factory, showroom, or dealer when headquarters is available.
 - Complete Multi-Line Extraction & Sequence: Combine all lines into one comma-separated address in the exact sequence shown on the website. Retain premise, building, unit, suite, floor, street number, street name, locality, town, district, city, county, and state/province.
 - Postal Code Removal: Strip ALL numeric and alphanumeric postal codes, ZIP codes, and PIN codes (UK postcodes like B75 7BU, SW1A 1AA; Canadian like M5V 2T6; European; US 5-digit and ZIP+4). Retain Post Office Box numbers (e.g. "Post Office Box 1264").

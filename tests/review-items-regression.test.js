@@ -2315,6 +2315,28 @@ async function runAll() {
     assert.strictEqual(norm7, '2 Floor, Building B, 20 Industrial Park, Berlin', 'Fl. 2 must normalize to 2 Floor');
   });
 
+  runTest('Item 104: Core extraction rule: What website has, take the same — Expansion only, no grammar changes or new inventions', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Take website text verbatim with abbreviation expansion only, no grammar conversions
+    const rawWebsiteAddr = '1 Floor, Bldg. 4, Ste. 200, 1500 Main St., Dallas, TX';
+    const norm1 = ctx.sanitizeRule6CompanyAddress(rawWebsiteAddr, '', 'United States Of America');
+    assert.strictEqual(norm1, '1 Floor, Building 4, Suite 200, 1500 Main Street, Dallas, Texas',
+      'Should take same text and perform expansion only (Bldg -> Building, Ste -> Suite, St -> Street, TX -> Texas) without grammar alteration');
+
+    // 2. Company Name: Take same name, expand abbreviations only, never invent suffixes or do grammar changes
+    const rawComp = 'Apex Precision Mfg. Co.';
+    const expComp = ctx.expandCompanyAbbreviations(rawComp, 'United States Of America');
+    assert.strictEqual(expComp, 'Apex Precision Manufacturing Company',
+      'Should expand Mfg -> Manufacturing and Co -> Company without inventing Limited or altering words');
+
+    // 3. No grammar changes to numbers or words (e.g. "Unit 1", "Plot 5")
+    const unitAddr = 'Unit 1, Plot 5, 20 Industrial Area, Heanor, Derbyshire';
+    const normUnit = ctx.sanitizeRule6CompanyAddress(unitAddr, '', 'United Kingdom');
+    assert.strictEqual(normUnit, 'Unit 1, Plot 5, 20, Industrial Area, Heanor, Derbyshire',
+      'Should preserve Unit 1 and Plot 5 verbatim without grammar alterations');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
