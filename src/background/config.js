@@ -104,11 +104,11 @@ function resolveAiProviderConfig(settings = {}) {
 // or relevant image is found anywhere in the available website content.
 // The 10 strictly prohibited categories are:
 // 1. Porn and adult content
-// 2. Medicine, medical, and hospitals
+// 2. Medicine, medical, medical device manufacturing, and hospitals
 // 3. Food and food products
 // 4. Weapons, knives, and firearms
-// 5. Defence and military
-// 6. Aircraft, aviation, and aerospace
+// 5. Defence, military, and ITAR registration (International Traffic in Arms Regulations)
+// 6. Aircraft, aviation, and aerospace (including aerospace machinery/tooling)
 // 7. Marine, ships, and boats
 // 8. Chemicals and chemical products
 // 9. Alcohol and alcoholic beverages

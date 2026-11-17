@@ -2036,6 +2036,50 @@ async function runAll() {
     assert.strictEqual(warszawaLocal.city, 'Available', 'Capital Warszawa makes City Available');
   });
 
+  // =========================================================================
+  // Item 99: ITAR registration (Defence), Medical Device Manufacturing, and
+  // Aerospace CNC Machinery classified as Prohibited Categories (grinding.com)
+  // =========================================================================
+  runTest('Item 99: ITAR registration (Defence), Medical Device Manufacturing, and Aerospace classified as Prohibited Categories (grinding.com)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. ITAR registration on About Us / Corporate Profile
+    const itarSnippet = 'UNITED GRINDING North America, Inc., also holds International Traffic in Arms Regulations (ITAR) Registration.';
+    const itarCheck = ctx.detectRestrictedKeywordsSingle(itarSnippet, '', 'https://www.grinding.com/en/about-us/');
+    assert.strictEqual(itarCheck.isRestricted, true, 'ITAR registration must be detected as restricted');
+    assert.strictEqual(itarCheck.category, 'Defence & Military', 'ITAR must be classified under Defence & Military');
+
+    // 2. Navigation / Key Industries mentioning Medical Device Manufacturing and Aerospace
+    const navSnippet = 'Industries Key Industries Automotive & Suppliers Energy Industry Medical Device Manufacturing Aerospace Tooling Machine Manufacturers';
+    const navCheck = ctx.detectRestrictedKeywordsSingle(navSnippet, '', 'https://www.grinding.com/en/');
+    assert.strictEqual(navCheck.isRestricted, true, 'Medical Device Manufacturing in nav must be restricted');
+
+    // 3. Dedicated Medical Device Manufacturing subpage
+    const medSnippet = 'Medical Device Machines & Grinders. Precision CNC grinding for medical device manufacturing, surgical instruments, and orthopedic implants.';
+    const medCheck = ctx.detectRestrictedKeywordsSingle(medSnippet, '', 'https://www.grinding.com/en/industries/key-industries/medical-device-manufacturing/');
+    assert.strictEqual(medCheck.isRestricted, true, 'Medical Device Machines must be restricted');
+    assert.strictEqual(medCheck.category, 'Medicine, Medical & Hospital');
+
+    // 4. Dedicated Aerospace CNC Machines subpage
+    const aeroSnippet = 'Aerospace CNC Machines & Grinders. High precision grinding machines engineered for turbine blades and aerospace manufacturing.';
+    const aeroCheck = ctx.detectRestrictedKeywordsSingle(aeroSnippet, '', 'https://www.grinding.com/en/industries/key-industries/aerospace/');
+    assert.strictEqual(aeroCheck.isRestricted, true, 'Aerospace CNC Machines must be restricted');
+    assert.strictEqual(aeroCheck.category, 'Aerospace');
+
+    // 5. Full strict QC evaluation marks site as Not Working and clears all fields
+    const restrictedEvaluation = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      companyName: 'United Grinding',
+      companyAddress: '2100 United Grinding Boulevard, Miamisburg, Ohio'
+    }, {}, itarCheck);
+
+    assert.strictEqual(restrictedEvaluation.websiteStatus, 'Not Working');
+    assert.strictEqual(restrictedEvaluation.companyName, '');
+    assert.strictEqual(restrictedEvaluation.companyAddress, '');
+    assert.strictEqual(restrictedEvaluation.isRestricted, true);
+    assert.ok(restrictedEvaluation.notWorkingReason.includes('Defence & Military') || restrictedEvaluation.notWorkingReason.includes('Prohibited Category'));
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

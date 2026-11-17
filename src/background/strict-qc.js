@@ -1204,6 +1204,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.is_restricted = true;
     result.confidence = (restrictedCheck && restrictedCheck.confidence) || 0.98;
     result.reason = result.restrictedReason;
+    result.notWorkingReason = result.restrictedReason;
+    result.errorCategory = "Prohibited Category";
     result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
     result._originalUrl = crawlData.originalUrl || "";
     return result;

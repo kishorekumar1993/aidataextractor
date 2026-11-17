@@ -91,13 +91,13 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Evaluation Standard: Reject only when the company genuinely manufactures, sells, supplies, distributes, or provides services involving a prohibited category. Incidental mentions, customer industries, application references, or unrelated contextual words must not trigger rejection. Evaluate the actual products, services, and business operations.
 - The 13 Strictly Prohibited Categories:
   1. Porn & Adult (Pornographic sites/videos, adult entertainment, sexually explicit content/services, adult products)
-  2. Medicine & Medical (Medicine manufacturers/suppliers/distributors, pharmaceuticals, medical equipment/devices/supplies, medical treatments)
+  2. Medicine & Medical (Medicine manufacturers/suppliers/distributors, pharmaceuticals, medical equipment/devices/supplies, medical device manufacturing, medical treatments)
   3. Hospital & Healthcare (Hospitals, clinics, healthcare centres, nursing homes, diagnostic labs, healthcare providers, hospital equipment/supplies)
   4. Food (Food manufacturers/suppliers, food products/ingredients, meat, seafood, dairy, bakery, beverages, food processing/wholesalers)
   5. Weapons & Knives (Weapons manufacturers/suppliers, knives, swords, daggers, blades, firearms, ammunition, military/defence weapons, tactical gear)
-  6. Defence (Defence manufacturers/contractors, military equipment/technology, military vehicles/systems, defence services)
+  6. Defence (Defence manufacturers/contractors, military equipment/technology, military vehicles/systems, defence services, ITAR registration/compliance (International Traffic in Arms Regulations))
   7. Aircraft & Aviation (Aircraft manufacturers/suppliers, aircraft components/spares, aviation products, airlines, aircraft MRO)
-  8. Aerospace (Aerospace manufacturers/suppliers, spacecraft, satellites, rocket and propulsion systems, aerospace engineering equipment)
+  8. Aerospace (Aerospace manufacturers/suppliers, aerospace CNC/machines/tooling, key aerospace industry suppliers, spacecraft, satellites, rocket and propulsion systems, aerospace engineering equipment)
   9. Marine (Marine equipment/products, marine manufacturers/suppliers, marine engineering, marine navigation and propulsion equipment)
   10. Ship & Shipbuilding (Ship manufacturers/shipbuilders, ship repair/maintenance, ship components, shipbuilding equipment, vessels, boats)
   11. Chemical (Chemical manufacturers/suppliers, industrial chemicals, chemical raw materials, hazardous chemicals, chemical distribution/catalogues)

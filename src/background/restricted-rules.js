@@ -10,7 +10,7 @@ const RESTRICTED_PATTERNS = [
     label: "Weapons, Armor & Knives"
   },
   {
-    pattern: /\b(?:military|armed\s*forces|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?|defence\s*contractors?|defense\s*contractors?|military\s*defence|military\s*defense|ministry\s*of\s*defence|department\s*of\s*defense|defence\s*forces?|defense\s*forces?|national\s*defence|national\s*defense|homeland\s*defence|homeland\s*defense|air\s*defence|air\s*defense|naval\s*defence|naval\s*defense|aerospace\s*(?:and|&)\s*defence|aerospace\s*(?:and|&)\s*defense|defence\s*equipment|defense\s*equipment|defence\s*systems?|defense\s*systems?|defence\s*industry|defense\s*industry|munitions?)\b/i,
+    pattern: /\b(?:military|armed\s*forces|tactical\s*armaments|artillery|combat\s*vehicles?|missile\s*systems?|defence\s*contractors?|defense\s*contractors?|military\s*defence|military\s*defense|ministry\s*of\s*defence|department\s*of\s*defense|defence\s*forces?|defense\s*forces?|national\s*defence|national\s*defense|homeland\s*defence|homeland\s*defense|air\s*defence|air\s*defense|naval\s*defence|naval\s*defense|aerospace\s*(?:and|&)\s*defence|aerospace\s*(?:and|&)\s*defense|defence\s*equipment|defense\s*equipment|defence\s*systems?|defense\s*systems?|defence\s*industry|defense\s*industry|munitions?|itar(?:\s*[-–]?\s*(?:registered|registration|compliant|compliance|certified|certification|controlled|regulations?))?|international\s*traffic\s*in\s*arms\s*regulations)\b/i,
     label: "Defence & Military"
   },
   {
@@ -18,7 +18,7 @@ const RESTRICTED_PATTERNS = [
     label: "Aviation & Airlines"
   },
   {
-    pattern: /\b(?:aerospace\s*(?:manufacturer|manufacturing|contractor|defense|systems\s*manufacturer|industry\s*oem|propulsion|spacecraft|satellite\s*manufacturer|launch\s*vehicle|rocket)|spacecraft|satellite\s*manufacturing|rocket\s*propulsion|space\s*exploration\s*technology)\b/i,
+    pattern: /\b(?:aerospace\s*(?:manufacturer|manufacturing|contractor|defense|systems\s*manufacturer|industry\s*oem|propulsion|spacecraft|satellite\s*manufacturer|launch\s*vehicle|rocket|industry|industries|machines?|machining|cnc|tooling)|spacecraft|satellite\s*manufacturing|rocket\s*propulsion|space\s*exploration\s*technology)\b/i,
     label: "Aerospace"
   },
   {
@@ -34,7 +34,7 @@ const RESTRICTED_PATTERNS = [
     label: "Chemicals & Petrochemicals"
   },
   {
-    pattern: /\b(?:hospital|hospitals|patient\s*care|dental\s*(?:clinic|practice)|outpatient\s*clinic|surgery\s*center|veterinary\s*hospital|psychiatric\s*hospital|health\s*clinic|urgent\s*care|diagnostic\s*center|medical\s*(?:practice|center|treatment|services?|diagnostic|consultation|therapy|care|doctor|physician|imaging\s*center|laboratory|surgical\s*center|clinic)|pharmaceutical\s*(?:company|manufacturer|manufacturing|drugs?|formulation|products?|distributor|supplier|wholesaler|trader|export(?:er)?)|prescription\s*drugs?|online\s*pharmacy|pharmacy|pharmacies|drugstore|drugstores|medicine\s*(?:manufacturer|production|formulation|sales|store|distributor))\b/i,
+    pattern: /\b(?:hospital|hospitals|patient\s*care|dental\s*(?:clinic|practice)|outpatient\s*clinic|surgery\s*center|veterinary\s*hospital|psychiatric\s*hospital|health\s*clinic|urgent\s*care|diagnostic\s*center|medical\s*(?:practice|center|treatment|services?|diagnostic|consultation|therapy|care|doctor|physician|imaging\s*center|laboratory|surgical\s*center|clinic|devices?|equipment|supplies|instruments?|implants?|technology|manufacturing)|pharmaceutical\s*(?:company|manufacturer|manufacturing|drugs?|formulation|products?|distributor|supplier|wholesaler|trader|export(?:er)?)|prescription\s*drugs?|online\s*pharmacy|pharmacy|pharmacies|drugstore|drugstores|medicine\s*(?:manufacturer|production|formulation|sales|store|distributor))\b/i,
     label: "Medicine, Medical & Hospital"
   },
   {
@@ -110,7 +110,7 @@ const CANDIDATE_CATEGORY_KEYWORDS = [
   { label: "Hospital & Healthcare", regex: /\b(?:hospitals?|clinics?|patient\s*care|healthcare|nursing\s*homes?)\b/i },
   { label: "Food", regex: /\b(?:food|bakery|catering|restaurant|eatery|beverages?|dairy|meat|poultry|seafood)\b/i },
   { label: "Weapons & Knives", regex: /\b(?:weapons?|firearms?|rifles?|guns?|knives|knife|ammunition|swords?|daggers?|blades?)\b/i },
-  { label: "Defence", regex: /\b(?:military|defence|defense|armed\s*forces|tactical\s*armaments?)\b/i },
+  { label: "Defence", regex: /\b(?:military|defence|defense|armed\s*forces|tactical\s*armaments?|itar|international\s*traffic\s*in\s*arms\s*regulations)\b/i },
   { label: "Aircraft & Aviation", regex: /\b(?:aircraft|airplane|airlines?|aviation|avionics|helicopters?)\b/i },
   { label: "Aerospace", regex: /\b(?:aerospace|spacecraft|satellite|rocket\s*propulsion)\b/i },
   { label: "Marine", regex: /\b(?:marine|maritime|naval)\b/i },
@@ -265,7 +265,7 @@ function sanitizeContextText(text) {
   cleanText = cleanText
     .replace(/\b(?:titanium\s+)?(?:bolts?|fasteners?|brackets?|components?|parts?|connectors?|cables?|machining|tooling)\s+(?:perform\s+flawlessly\s+on|for|in|on|used\s+in)\s+(?:our\s+)?(?:military\s+aircraft|commercial\s+aircraft|aircraft|aviation|aerospace)\b/gi, " ")
     .replace(/\b(?:for|in|serving|services?|supplying|supplies|solutions?|applications?|components?|parts?|tooling|cables?|machining|fabrication|engineering)\s+(?:for|in|to)?\s*(?:the\s+)?(?:aerospace|aircraft|aviation|defence|defense|medical|pharmaceutical)\b/gi, " ")
-    .replace(/\b(?:aerospace|aircraft|aviation|defence|defense)\s+(?:applications?|grade|industry|industries|sector|sectors|market|markets|standards?|specifications?|spec|specs|cables?|connectors?|fasteners?|gears?|components?|parts?|tooling|machining|hangars?|composites?)\b/gi, " ")
+    .replace(/\b(?:aerospace|aircraft|aviation|defence|defense)\s+(?:applications?|grade|standards?|specifications?|spec|specs|hangars?|composites?)\b/gi, " ")
     .replace(/\b(?:aircraft\s*cables?|aircraft-grade)\b/gi, " ")
     .replace(/\badvising\s+(?:corporate\s+)?clients\s+in\s+[^.\n;]+?(?=[.\n;]|$)/gi, " ");
 
@@ -294,7 +294,7 @@ function sanitizeContextText(text) {
 
   // 13. Pharmaceutical / medical equipment & served industries
   cleanText = cleanText
-    .replace(/\b(?:pharmaceutical|medical|healthcare)\s+(?:equipment|machinery|machines?|conveyors?|packaging|packaging\s*machinery|processing|processing\s*equipment|automation|tooling|cleanrooms?|clean\s*rooms?|tanks?|vessels?|pumps?|valves?|piping|tubing|devices?|instrumentation|instruments?|components?|parts?|systems?|grade|applications?|industry|industries|sector|sectors|market|markets|facilities|manufacturing|solutions?)\b/gi, " ")
+    .replace(/\b(?:cleanrooms?|clean\s*rooms?|tanks?|vessels?|pumps?|valves?|piping|tubing|hvac|ventilation|flooring|lighting)\s+(?:for|in)\s+(?:pharmaceutical|medical|healthcare)\s+(?:plants?|facilities|buildings?)\b/gi, " ")
     .replace(/\b(?:food|beverage|packaging|dairy|bakery|meat|confectionery|cosmetic|cosmetics|chemical|nutraceutical)[,\s]+(?:and\s+)?(?:pharmaceutical|medical)\b/gi, " ")
     .replace(/\b(?:serving|serves|served|for|to)\s+(?:the\s+)?(?:pharmaceutical|medical)\s+(?:industry|industries|sector|sectors|applications?|market|markets)\b/gi, " ");
 
@@ -335,7 +335,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Medicine & Medical",
     category: "Medicine, Medical & Hospital",
     label: "Medicine, Medical & Hospital",
-    regex: /\b(?:medicines?|pharmaceuticals?|pharmac(?:y|ies)|prescription\s*drugs?|medical\s*(?:equipment|devices?|supplies|treatment|products?|catalog(?:ue)?|instruments?|implants?|technology|diagnostic\s*tools?)|medicine\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|trader|distributor|production|formulation|sales|store))\b/i
+    regex: /\b(?:medicines?|pharmaceuticals?|pharmac(?:y|ies)|prescription\s*drugs?|medical\s*(?:equipment|devices?|supplies|treatment|products?|catalog(?:ue)?|instruments?|implants?|technology|diagnostic\s*tools?|manufacturing)|medicine\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|trader|distributor|production|formulation|sales|store))\b/i
   },
   {
     id: 3,
@@ -363,7 +363,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Defence",
     category: "Defence & Military",
     label: "Defence & Military",
-    regex: /\b(?:defen[cs]e\s*(?:contractors?|manufactur(?:er|ing)|suppl(?:ier|ies)|products?|equipment|systems?|technology|industry)|military\s*(?:equipment|technology|vehicles?|systems?|defence|defense|armaments?|artillery|contractors?)|armed\s*forces|tactical\s*armaments|combat\s*vehicles?|missile\s*systems?|ministry\s*of\s*defence|department\s*of\s*defense|defence\s*forces?|national\s*defen[cs]e|homeland\s*defen[cs]e|air\s*defen[cs]e|naval\s*defen[cs]e)\b/i
+    regex: /\b(?:defen[cs]e\s*(?:contractors?|manufactur(?:er|ing)|suppl(?:ier|ies)|products?|equipment|systems?|technology|industry)|military\s*(?:equipment|technology|vehicles?|systems?|defence|defense|armaments?|artillery|contractors?)|armed\s*forces|tactical\s*armaments|combat\s*vehicles?|missile\s*systems?|ministry\s*of\s*defence|department\s*of\s*defense|defence\s*forces?|national\s*defen[cs]e|homeland\s*defen[cs]e|air\s*defen[cs]e|naval\s*defen[cs]e|itar(?:\s*[-–]?\s*(?:registered|registration|compliant|compliance|certified|certification|controlled|regulations?))?|international\s*traffic\s*in\s*arms\s*regulations)\b/i
   },
   {
     id: 7,
@@ -377,7 +377,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Aerospace",
     category: "Aerospace",
     label: "Aerospace",
-    regex: /\b(?:aerospace\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|contractor|components?|materials?|engineering|products?|equipment)|spacecraft|satellite\s*manufactur(?:er|ing)|rocket\s*(?:and\s+)?propulsion(?:\s*systems?)?|launch\s*vehicles?|space\s*exploration\s*technology)\b/i
+    regex: /\b(?:aerospace\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|contractor|components?|materials?|engineering|products?|equipment|industry|industries|machines?|machining|cnc|tooling)|spacecraft|satellite\s*manufactur(?:er|ing)|rocket\s*(?:and\s+)?propulsion(?:\s*systems?)?|launch\s*vehicles?|space\s*exploration\s*technology)\b/i
   },
   {
     id: 9,
