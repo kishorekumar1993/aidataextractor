@@ -1390,6 +1390,9 @@ function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
   const strippedMain = (crawlData && crawlData.mainHtml && typeof stripHtml === "function") ? stripHtml(crawlData.mainHtml) : "";
   const strippedContact = (crawlData && crawlData.contactHtml && typeof stripHtml === "function") ? stripHtml(crawlData.contactHtml) : "";
   const strippedDedicated = (crawlData && crawlData.dedicatedContactHtml && typeof stripHtml === "function") ? stripHtml(crawlData.dedicatedContactHtml) : "";
+  const subpagesText = Array.isArray(crawlData && crawlData.crawledPages)
+    ? crawlData.crawledPages.map(p => (p && (p.text || p.html)) || "").join(" ")
+    : "";
 
   let corpus = [
     crawlData && crawlData.copyrightText,
@@ -1398,6 +1401,7 @@ function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
     strippedMain,
     strippedContact,
     strippedDedicated,
+    subpagesText,
     crawlData && crawlData.contactPageText,
     crawlData && crawlData.dedicatedContactText,
     crawlData && crawlData.bodyText,

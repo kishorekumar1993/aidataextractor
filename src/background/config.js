@@ -142,14 +142,15 @@ const GEMINI_RESPONSE_SCHEMA = {
         "Service Provider",
         "Online Shopping",
         "Restricted Site",
-        "Other"
+        "Other",
+        ""
       ],
-      description: "Business scope classification. Allowed working types: Manufacturer (manufactures physical goods in own facility/factory), Industrial Services (machining, fabrication, industrial maintenance), Exporter, Trader, Distributor (authorized physical distributor/network), Supplier (B2B goods supplier), Wholesaler (wholesale goods), Service Provider (eligible B2B services). Ordinary online retail shopping without manufacturing/supply evidence is Online Shopping."
+      description: "Business scope classification. Allowed working types: Manufacturer (manufactures physical goods in own facility/factory), Industrial Services (machining, fabrication, industrial maintenance), Exporter, Trader, Distributor (authorized physical distributor/network), Supplier (B2B goods supplier), Wholesaler (wholesale goods), Service Provider (eligible B2B services). Ordinary online retail shopping without manufacturing/supply evidence is Online Shopping. Output \"\" if websiteStatus is Not Working."
     },
     companyProfile: {
       type: "STRING",
-      enum: ["Available", "Not Available"],
-      description: "Available if dedicated company overview, history, story, mission, or factory profile text exists describing background or operations; Not Available if only brief slogans, taglines, or bare product listings."
+      enum: ["Available", "Not Available", ""],
+      description: "Available if dedicated company overview, history, story, mission, or factory profile text exists describing background or operations; Not Available if only brief slogans, taglines, or bare product listings. Output \"\" if websiteStatus is Not Working."
     },
     companyName: {
       type: "STRING",
@@ -161,43 +162,43 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     companyAddress: {
       type: "STRING",
-      description: "Take what the website has directly: abbreviation expansion only, do not do grammar changes or invent new words. Official physical headquarters address in Title Case without country name or postal codes. Output \"\" if websiteStatus is not Working, or \"Not Available\" if a Working site has no verifiable physical address. Retain all structural components (building, suite, unit, floor, street, locality, district, city, state) in original sequence. Expand standard abbreviations (St. -> Street, Rd. -> Road, Ave. -> Avenue, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Fl. -> Floor, P.O. Box -> Post Office Box). Whenever 'No.', 'No', 'NO.', 'Nos.', 'N:', 'No:', or '#' appears before a building/street number in the source address, ALWAYS expand it to 'Number ' (e.g. 'No. 62-6' -> 'Number 62-6', 'No. 409-6' -> 'Number 409-6'). NEVER drop or strip 'No.'. Never invent 'Number' before bare street numbers. Preserve '#' with unit numbers (e.g. #01-12). Format Asian floors as '6 Floor-1'. Never use ordinal grammar expansions on floor numbers (e.g. '1 Floor', '2 Floor', '6 Floor', not '1st Floor' or '6th Floor'). Separate components with commas and always place a comma before State/Province."
+      description: "Take what the website has directly: abbreviation expansion only, do not do grammar changes or invent new words. Official physical headquarters address in Title Case without country name or postal codes. Output \"\" if websiteStatus is not Working, or \"Not Available\" if a Working site has no verifiable physical address. Retain all structural components (building, suite, unit, floor, street, locality, district, city, state) in original sequence. Expand standard abbreviations (St. -> Street, Rd. -> Road, Ave. -> Avenue, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Fl. -> Floor, Dist. -> District, P.O. Box -> Post Office Box). Whenever 'No.', 'No', 'NO.', 'Nos.', 'N:', 'No:', or '#' appears before a building/street number in the source address (including concatenated forms without spaces e.g. 'No.1008' -> 'Number 1008', 'No. 62-6' -> 'Number 62-6', 'No. 409-6' -> 'Number 409-6'), ALWAYS expand it to 'Number '. NEVER drop or strip 'No.'. Never invent 'Number' before bare street numbers. Preserve '#' with unit numbers (e.g. #01-12). Format Asian floors as '6 Floor-1'. Never use ordinal grammar expansions on floor numbers (e.g. '1 Floor', '2 Floor', '6 Floor', not '1st Floor' or '6th Floor'). Separate components with commas and always place a comma before State/Province."
     },
     state: {
       type: "STRING",
-      enum: ["Available", "Not Available"],
-      description: "This is a drop-down option. If the state name is given in the address, select Available; if not, select Not Available. Note: (County, Province, Prefecture) should be considered as State. (If a country's capital is mentioned in the address, then both City and State are considered available). Standalone cities or districts without a state/county/province (e.g. 'Taichung', 'Beitun District', 'Shengang District') are Not Available."
+      enum: ["Available", "Not Available", ""],
+      description: "This is a drop-down option. If the state name is given in the address, select Available; if not, select Not Available. Note: (County, Province, Prefecture) should be considered as State. (If a country's capital is mentioned in the address, then both City and State are considered available). Standalone cities or districts without a state/county/province (e.g. 'Taichung', 'Beitun District', 'Shengang District') are Not Available. Output \"\" if websiteStatus is Not Working."
     },
     city: {
       type: "STRING",
-      enum: ["Available", "Not Available"],
-      description: "This is a drop-down option. If the city name is given in the address, select Available; if not, select Not Available. Note: (Town, District, Municipality) should be considered as City. (If a country's capital is mentioned in the address, then both City and State are considered available). Suburbs alone without city/town are Not Available."
+      enum: ["Available", "Not Available", ""],
+      description: "This is a drop-down option. If the city name is given in the address, select Available; if not, select Not Available. Note: (Town, District, Municipality) should be considered as City. (If a country's capital is mentioned in the address, then both City and State are considered available). Suburbs alone without city/town are Not Available. Output \"\" if websiteStatus is Not Working."
     }, emailId: {
       type: "STRING",
-      description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook)."
+      description: "Primary corporate contact email address found anywhere on website or company social media (LinkedIn, Facebook). Output \"\" if websiteStatus is Not Working."
     },
     secondaryEmailId: {
       type: "STRING",
-      description: "Secondary distinct corporate email from anywhere on website or company social media (LinkedIn, Facebook). STRICTLY MUST NOT be the same as emailId."
+      description: "Secondary distinct corporate email from anywhere on website or company social media (LinkedIn, Facebook). STRICTLY MUST NOT be the same as emailId. Output \"\" if websiteStatus is Not Working."
     },
     phoneNumber: {
       type: "STRING",
-      description: "Domestic subscriber digits ONLY. Country calling code (+1, +44, +60, +61, +62, +86, +91, +886, etc.) and leading trunk zero MUST ALWAYS BE REMOVED. E.g. '+6043329299' -> '43329299'; '+86 21 6888 8888' -> '2168888888'; '+91 98401 23456' -> '9840123456'; '+886 4 7322367' -> '47322367'; '+1 212 555 1234' -> '2125551234'. Digits only. Strictly do not take toll-free numbers."
+      description: "Domestic subscriber digits ONLY. Country calling code (+1, +44, +60, +61, +62, +86, +91, +886, etc.) and leading trunk zero MUST ALWAYS BE REMOVED. E.g. '+6043329299' -> '43329299'; '+86 21 6888 8888' -> '2168888888'; '+91 98401 23456' -> '9840123456'; '+886 4 7322367' -> '47322367'; '+1 212 555 1234' -> '2125551234'. Digits only. Strictly do not take toll-free numbers. Output \"\" if websiteStatus is Not Working."
     },
     numberOfProducts: {
       type: "STRING",
-      enum: ["0", "1", "2", "3"],
-      description: "Count of distinct physical products offered (not repeated images of the same product): '0', '1', '2', or '3' (for 3 or more). Evaluated independently."
+      enum: ["0", "1", "2", "3", ""],
+      description: "Count of distinct physical products offered (not repeated images of the same product): '0', '1', '2', or '3' (for 3 or more). Evaluated independently. Output \"\" if websiteStatus is Not Working."
     },
     productImages: {
       type: "STRING",
-      enum: ["0", "1", "2", "3"],
-      description: "Count of genuine physical product photographs (excluding banners, logos, icons, and decorative graphics): '0', '1', '2', or '3' (for 3 or more). Evaluated independently."
+      enum: ["0", "1", "2", "3", ""],
+      description: "Count of genuine physical product photographs (excluding banners, logos, icons, and decorative graphics): '0', '1', '2', or '3' (for 3 or more). Evaluated independently. Output \"\" if websiteStatus is Not Working."
     },
     numberOfProductDescriptions: {
       type: "STRING",
-      enum: ["0", "1", "2", "3"],
-      description: "Count of distinct physical products with actual descriptive text: '0', '1', '2', or '3' (for 3 or more). Evaluated independently."
+      enum: ["0", "1", "2", "3", ""],
+      description: "Count of distinct physical products with actual descriptive text: '0', '1', '2', or '3' (for 3 or more). Evaluated independently. Output \"\" if websiteStatus is Not Working."
     }
   },
   required: [

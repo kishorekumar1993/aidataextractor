@@ -265,6 +265,8 @@ function sanitizeContextText(text) {
 
   // 8. Aerospace & Aircraft application false positives
   cleanText = cleanText
+    .replace(/\b(?:applications?|industries?\s*served)\s*:[^.\n;]{0,160}?(?:aeronautical\s*parts?|aerospace|marine)[^.\n;]{0,160}?(?=[.\n;]|$)/gi, " ")
+    .replace(/\baeronautical\s+parts?\b/gi, " ")
     .replace(/\b(?:titanium\s+)?(?:bolts?|fasteners?|brackets?)\s+(?:perform\s+flawlessly\s+on)\s+(?:our\s+)?(?:military\s+aircraft)\b/gi, " ")
     .replace(/\badvising\s+(?:corporate\s+)?clients\s+in\s+[^.\n;]+?(?=[.\n;]|$)/gi, " ")
     .replace(/\b(?:precision\s+)?(?:gears?|gearboxes?)\s+(?:manufactured\s+for|for)\s+(?:aerospace\s+applications?|automotive[,\s]+agricultural[,\s]+and\s+aerospace\s+industries?)[^.\n;]*?(?=[.\n;]|$)/gi, " ")

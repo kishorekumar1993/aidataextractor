@@ -3844,7 +3844,8 @@ async function runAsyncTests() {
 
       const parsed = JSON.parse(res.payloadString);
       assert.ok(Array.isArray(parsed.contents), 'Gemini payload must contain contents array');
-      assert.ok(parsed.contents[0].parts[0].text.includes('EXTRACTION SOURCE PRIORITY'), 'Payload text must include prompt instructions');
+      const allPayloadText = (parsed.contents?.[0]?.parts?.[0]?.text || '') + ' ' + (parsed.systemInstruction?.parts?.[0]?.text || '');
+      assert.ok(allPayloadText.includes('EXTRACTION SOURCE PRIORITY'), 'Payload text must include prompt instructions');
       assert.ok(parsed.generationConfig.responseSchema, 'Payload must include generationConfig responseSchema');
       assert.strictEqual(parsed.generationConfig.responseMimeType, 'application/json', 'Payload must specify application/json responseMimeType');
 

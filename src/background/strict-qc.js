@@ -945,19 +945,37 @@ function expandInternationalCorporateSuffixesDynamic(name, crawlData, country = 
     .replace(/\bS\.?\s*R\.?\s*L\.?\s*$/i, "Società a Responsabilità Limitata")
     .replace(/\bS\.?\s*P\.?\s*A\.?\s*$/i, "Società per Azioni");
 
-  // Fix AI mistranslation: if AI output "Private Limited" for a Dutch entity or when site has BV / B.V.
-  const isDutchSite = (country && /netherland|dutch|holland/i.test(country)) ||
-    (crawlData && /(?:dutch|\.nl\b)/i.test(crawlData.finalUrl || crawlData.originalUrl || "")) ||
-    (crawlData && (crawlData.legalCompanyCandidates || []).some(c => /\bB\.?\s*V\.?\b/i.test(c)));
+  // Dynamic universal correction: if AI output "Private Limited" (or "Private, Limited") but the official registered entity on site or country has a different native corporate suffix:
+  const legalCands = (crawlData && crawlData.legalCompanyCandidates) || [];
+  const hasLegal = (pattern) => legalCands.some(c => pattern.test(c));
 
-  if (isDutchSite && /\b(?:Private Limited|Private, Limited)\b/i.test(res)) {
-    res = res.replace(/\b(?:Private Limited|Private, Limited)\b/gi, "Besloten Vennootschap");
-  }
+  if (/\b(?:Private\s+Limited|Private,\s*Limited)\b/i.test(res)) {
+    const isDutch = (country && /netherland|dutch|holland/i.test(country)) ||
+      (crawlData && /(?:dutch|\.nl\b)/i.test(crawlData.finalUrl || crawlData.originalUrl || "")) ||
+      hasLegal(/\b(?:b[\.\s]*v|bv|besloten\s+vennootschap)\b/i);
 
-  if (crawlData && crawlData.legalCompanyCandidates && /\b(?:Private Limited|Private, Limited)\b/i.test(res)) {
-    const hasBvCandidate = crawlData.legalCompanyCandidates.some(c => /\b(?:b[\.\s]*v|bv|besloten\s+vennootschap)\b/i.test(c));
-    if (hasBvCandidate) {
-      res = res.replace(/\b(?:Private Limited|Private, Limited)\b/gi, "Besloten Vennootschap");
+    if (isDutch || hasLegal(/\b(?:b[\.\s]*v|bv|besloten\s+vennootschap)\b/i)) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Besloten Vennootschap");
+    } else if (hasLegal(/\b(?:g[\.\s]*m[\.\s]*b[\.\s]*h|gmbh|ges[\.\s]*m[\.\s]*b[\.\s]*h|gesmbh)\b/i) || (country && /germany|deutschland|austria/i.test(country))) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Gesellschaft mit beschränkter Haftung");
+    } else if (hasLegal(/\b(?:s[\.\s]*a[\.\s]*r[\.\s]*l|sarl)\b/i) || (country && /france/i.test(country))) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Société à Responsabilité Limitée");
+    } else if (hasLegal(/\b(?:s[\.\s]*r[\.\s]*l|srl)\b/i) || (country && /italy/i.test(country))) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Società a Responsabilità Limitata");
+    } else if (hasLegal(/\b(?:s[\.\s]*l|sl)\b/i) || (country && /spain|españa/i.test(country))) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Sociedad Limitada");
+    } else if (hasLegal(/\b(?:s[\.\s]*p[\.\s]*a|spa)\b/i)) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Società per Azioni");
+    } else if (hasLegal(/\b(?:a[\.\s]*g|ag)\b/i)) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Aktiengesellschaft");
+    } else if (hasLegal(/\b(?:sp\.?\s*z\.?\s*o\.?\s*o|sp\s*z\s*o\s*o)\b/i)) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Spółka z ograniczoną odpowiedzialnością");
+    } else if (hasLegal(/\b(?:a[\.\s]*b|ab)\b/i)) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Aktiebolag");
+    } else if (hasLegal(/\b(?:o[\.\s]*y|oy)\b/i)) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Osakeyhtiö");
+    } else if (hasLegal(/\b(?:a[\.\s]*s|as)\b/i)) {
+      res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Aktieselskab");
     }
   }
 
@@ -1152,7 +1170,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
       }
     } else if (compName) {
-      if (crawlData && result._extractionMode !== "ai_only") {
+      if (crawlData) {
         const curIsSlogan = typeof isSeoSloganOrTagline === "function" && isSeoSloganOrTagline(compName);
         const dStem = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "");
         const dStemNorm = normalizeNameForComparison(dStem);
@@ -1167,10 +1185,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         const curHasWrongSuffix = /\b(?:private\s+limited|limited)\b/i.test(compName) &&
           cleanLegalCandidates.some(c => {
             const cNorm = normalizeNameForComparison(c);
-            return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm)) && /\b(?:b[\.\s]*v|bv|besloten\s+vennootschap|gmbh|ag|sa|sl|srl|spa)\b/i.test(c);
+            return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm)) && /\b(?:b[\.\s]*v|bv|besloten\s+vennootschap|gmbh|ag|sa|sl|srl|spa|sarl|sp\s*z\s*o\s*o|ab|oy|as)\b/i.test(c);
           });
 
-        if (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate) || curHasWrongSuffix) {
+        if (curHasWrongSuffix || (result._extractionMode !== "ai_only" && (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate)))) {
           compName = preferOfficialCompanyName(compName, crawlData);
           compName = restoreLegalSuffixIfOmitted(compName, crawlData);
         }

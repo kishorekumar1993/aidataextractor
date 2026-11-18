@@ -752,10 +752,20 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     }
   }
 
-  // Canada
+  // United States & Global non-US countries list
+  const nonUsCountries = [
+    "australia", "canada", "united kingdom", "india", "indonesia", "south africa", "malaysia",
+    "spain", "espana", "italy", "italia", "germany", "deutschland", "france", "taiwan",
+    "japan", "china", "singapore", "thailand", "vietnam", "philippines", "south korea",
+    "netherlands", "belgium", "switzerland", "austria", "poland", "portugal", "sweden",
+    "norway", "denmark", "finland", "ireland", "new zealand", "turkey", "türkiye", "czech republic",
+    "brazil", "mexico", "united arab emirates", "saudi arabia", "hong kong"
+  ];
+
+  // Canada - Only when country is Canada, Canadian postal code exists, or explicit Canada province names appear in non-foreign context
   const isCanadaAddress = cLower.includes("canada") ||
-    /\b(?:ont|que|qc|on|bc|b\.?c\.|alta|ab|sask|sk|man|mb|ns|nb|nl|pe|pei|quebec|ontario|alberta)\b/i.test(a) ||
-    /\b[A-Z]\d[A-Z]\s*\d[A-Z]\d\b/i.test(a);
+    (/\b[A-CEGHJ-NPRSTVXY]\d[A-CEGHJ-NPRSTV-Z]\s*\d[A-CEGHJ-NPRSTV-Z]\d\b/i.test(a) && !nonUsCountries.filter(c => c !== "canada").includes(cLower)) ||
+    ((!country || cLower === "canada") && !nonUsCountries.filter(c => c !== "canada").includes(cLower) && /\b(?:quebec|ontario|alberta|british\s*columbia|nova\s*scotia|new\s*brunswick|manitoba|saskatchewan|prince\s*edward\s*island|newfoundland)\b/i.test(a));
 
   if (isCanadaAddress) {
     a = a.replace(/,\s*\b(?:on|ont)\b\.?/gi, ", Ontario");
@@ -767,18 +777,12 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/,\s*\b(?:ns)\b\.?/gi, ", Nova Scotia");
     a = a.replace(/,\s*\b(?:nb)\b\.?/gi, ", New Brunswick");
     a = a.replace(/,\s*\b(?:nl)\b\.?/gi, ", Newfoundland And Labrador");
-    a = a.replace(/,\s*\b(?:pe|pei)\b\.?/gi, ", Prince Edward Island");
+    if (cLower.includes("canada") || /\b[A-CEGHJ-NPRSTVXY]\d[A-CEGHJ-NPRSTV-Z]\s*\d[A-CEGHJ-NPRSTV-Z]\d\b/i.test(a)) {
+      a = a.replace(/,\s*\b(?:pe|pei)\b\.?/gi, ", Prince Edward Island");
+    }
   }
 
   // United States - Only when country is United States or has US zip or explicit US context (NEVER override Indonesia / non-US countries)
-  const nonUsCountries = [
-    "australia", "canada", "united kingdom", "india", "indonesia", "south africa", "malaysia",
-    "spain", "espana", "italy", "italia", "germany", "deutschland", "france", "taiwan",
-    "japan", "china", "singapore", "thailand", "vietnam", "philippines", "south korea",
-    "netherlands", "belgium", "switzerland", "austria", "poland", "portugal", "sweden",
-    "norway", "denmark", "finland", "ireland", "new zealand", "turkey", "türkiye", "czech republic",
-    "brazil", "mexico", "united arab emirates", "saudi arabia", "hong kong"
-  ];
   const isUsAddress = !isCanadaAddress && !hasIndoHint && !nonUsCountries.includes(cLower) && (
     (typeof isUnitedStatesLocation === "function" && isUnitedStatesLocation(a, country)) ||
     cLower.includes("united states") || cLower.includes("usa") || cLower.includes("america") ||

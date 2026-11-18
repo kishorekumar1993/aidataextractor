@@ -120,6 +120,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
 4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES):
 - Mandatory Directive: Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals, or School, College & Education. Even if these images or words appear anywhere on the site (navigation menus, industry lists, product categories, headers, footers, image alt/titles), do not work on that site. Mark "websiteStatus": "Not Working", "businessType": "Restricted Site", and leave all other 12 fields empty "".
+- FALSE-POSITIVE EXEMPTION: General industrial machinery, bandsaw, cutting tool, fastener, valve, or component manufacturers that merely list workpiece cutting materials or served industries in an applications menu (e.g. "Applications: Car Parts | Metallic Materials | Aeronautical Parts", "Food packaging machinery", "Marine hardware") are PERMITTED ("Working") if their actual manufactured products are general industrial machines/tools (e.g. bandsaws, CNC machine tools) and NOT aircraft/spacecraft/weapons itself.
 - The 14 Strictly Prohibited Categories:
   1. Porn & Adult (Pornographic sites/videos, adult entertainment, sexually explicit content/services, adult products)
   2. Medicine & Medical (Medicine, pharmaceuticals, medical equipment/devices/supplies, medical device manufacturing, medical treatments, clinical healthcare)
@@ -155,7 +156,9 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * PT -> Perseroan Terbatas, Tbk -> Terbuka, CV -> Commanditaire Vennootschap, SE -> Societas Europaea, GmbH / Ges.m.b.H. -> Gesellschaft mit beschränkter Haftung, AG -> Aktiengesellschaft, KG -> Kommanditgesellschaft, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, B.V. / BV -> Besloten Vennootschap (MANDATORY: Expand B.V. / BV to "Besloten Vennootschap" — NEVER translate or expand B.V. / BV to "Private Limited"!), N.V. / NV -> Naamloze Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, S.p.A. -> Società per Azioni, Sp. z o.o. -> Spółka z Ograniczoną Odpowiedzialnością, AB -> Aktiebolag, Oy -> Osakeyhtiö, A/S -> Aktieselskab, Ltda. -> Limitada.
   * Industry Words: Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises, Solns. -> Solutions.
 - Rules:
-  * NEVER invent corporate suffixes when only a brand name is provided or suffix is absent.
+  * NEVER invent corporate suffixes when only a brand name is provided or suffix is absent on the website.
+  * NEVER translate non-English corporate entity suffixes into English! (e.g. NEVER translate B.V. / BV to "Private Limited", NEVER translate GmbH to "Limited Liability Company", NEVER translate SARL to "Limited", NEVER translate S.L. to "Limited Liability Company"). ALWAYS expand to the exact official corporate form: B.V. / BV -> "Besloten Vennootschap", GmbH -> "Gesellschaft mit beschränkter Haftung", SARL -> "Société à Responsabilité Limitée", S.L. -> "Sociedad Limitada", S.r.l. -> "Società a Responsabilità Limitata".
+  * "Private Limited" is ONLY valid when the website explicitly contains "Pte Ltd", "Pte. Ltd.", "Pvt Ltd", "Pvt. Ltd.", or "Private Limited" (typical for Singapore, India, UK, Malaysia). If none of these appear on the website, NEVER output "Private Limited"!
   * Never use a product name, slogan, or tagline as the company name.
   * Preserve genuine brand acronyms in UPPERCASE (e.g. PEM, BMW, CNC, USA) and internal symbols ('&', '+', '/', '%', '#').
   * Remove brackets ()/[] while retaining inner text (e.g. "Company (Malaysia) Sdn Bhd" -> "Company Malaysia Sendirian Berhad"). If country name is inside company name, keep it as is.
@@ -392,6 +395,34 @@ function finalizeParsedAiResult(parsed, crawlData) {
   return parsed;
 }
 
+function buildGeminiRequestBody(prompt) {
+  const splitMarker = "=== DYNAMIC WEBSITE DATA FOR THIS EXTRACTION REQUEST ===";
+  let systemInstruction = null;
+  let userText = prompt;
+  if (prompt && prompt.includes(splitMarker)) {
+    const splitIdx = prompt.indexOf(splitMarker);
+    const sysText = prompt.slice(0, splitIdx).trim();
+    userText = prompt.slice(splitIdx).trim();
+    if (sysText) {
+      systemInstruction = { parts: [{ text: sysText }] };
+    }
+  }
+
+  const reqBody = {
+    contents: [{ parts: [{ text: userText }] }],
+    generationConfig: {
+      temperature: 0,
+      maxOutputTokens: 2048,
+      responseMimeType: "application/json",
+      responseSchema: GEMINI_RESPONSE_SCHEMA
+    }
+  };
+  if (systemInstruction) {
+    reqBody.systemInstruction = systemInstruction;
+  }
+  return reqBody;
+}
+
 async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlStartTime = 0 }) {
   let lastError = null;
   for (const modelToTry of candidateModels) {
@@ -407,10 +438,15 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
       if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 21000) break;
       try {
         const abortCtrl = new AbortController();
-        const timeoutPerModel = (modelToTry === candidateModels[0]) ? (attempt === 1 ? 8500 : 5000) : 5000;
+        const remainingBudget = crawlStartTime > 0 ? Math.max(5000, 21000 - (Date.now() - crawlStartTime)) : 14000;
+        const timeoutPerModel = (modelToTry === candidateModels[0])
+          ? (attempt === 1 ? Math.min(13000, remainingBudget) : Math.min(6000, remainingBudget))
+          : Math.min(6000, remainingBudget);
         const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
         let response;
         try {
+          const reqBody = buildGeminiRequestBody(prompt);
+
           response = await fetch(url, {
             method: "POST",
             headers: {
@@ -418,15 +454,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
               "x-goog-api-key": apiKey
             },
             signal: abortCtrl.signal,
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                temperature: 0,
-                maxOutputTokens: 2048,
-                responseMimeType: "application/json",
-                responseSchema: GEMINI_RESPONSE_SCHEMA
-              }
-            })
+            body: JSON.stringify(reqBody)
           });
         } finally {
           clearTimeout(abortTimer);
@@ -782,15 +810,7 @@ async function analyzeWithAi(crawlData, aiConfig = {}, restrictedCheck = null, c
           timestamp: Date.now(),
           provider: "gemini",
           model: activeModel || reqModel,
-          requestBody: {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0,
-              maxOutputTokens: 2048,
-              responseMimeType: "application/json",
-              responseSchema: GEMINI_RESPONSE_SCHEMA
-            }
-          }
+          requestBody: buildGeminiRequestBody(prompt)
         }
       });
     }
@@ -911,23 +931,7 @@ async function generateApiPayload(rawUrl = "", options = {}) {
       temperature: 0,
       response_format: { type: "json_object" }
     }
-    : {
-      contents: [
-        {
-          parts: [
-            {
-              text: prompt
-            }
-          ]
-        }
-      ],
-      generationConfig: {
-        temperature: 0,
-        maxOutputTokens: 2048,
-        responseMimeType: "application/json",
-        responseSchema: GEMINI_RESPONSE_SCHEMA
-      }
-    };
+    : buildGeminiRequestBody(prompt);
 
   const payloadRecord = {
     url: targetUrl,
