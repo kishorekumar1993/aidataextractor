@@ -2690,6 +2690,144 @@ async function runAll() {
     assert.strictEqual(qcCorrectedBv.companyName, 'Dutch Regulators Besloten Vennootschap', 'Private Limited mistranslation of BV must be corrected to Besloten Vennootschap');
   });
 
+  // =========================================================================
+  // ITEM 110: Mandatory Comma Preservation & Hallucination Elimination
+  // Rule: "If comma available on website, put comma. If not available on website, do NOT put comma / leave without comma."
+  // =========================================================================
+  runTest('Item 110: Mandatory Comma Preservation & Hallucination Elimination across all global corporate suffixes', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Dutch Regulators BV on website WITHOUT comma -> Dutch Regulators Besloten Vennootschap (no comma)
+    const crawlDutchNoComma = {
+      originalUrl: 'http://www.dutchregulators.com',
+      finalUrl: 'https://www.dutchregulators.com/',
+      title: 'Dutch Regulators BV',
+      copyrightText: 'Copyright © 2024 Dutch Regulators BV. All rights reserved.',
+      legalCompanyCandidates: ['Dutch Regulators BV'],
+      mainHtml: '<html><body><h1>Dutch Regulators BV</h1></body></html>'
+    };
+    const aiDutchWithComma = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Dutch Regulators, Besloten Vennootschap', // AI mistakenly hallucinated a comma
+      countryName: 'Netherlands'
+    };
+    const qcDutchNoComma = ctx.applyStrictInstructions(aiDutchWithComma, crawlDutchNoComma, { isRestricted: false });
+    assert.strictEqual(
+      qcDutchNoComma.companyName,
+      'Dutch Regulators Besloten Vennootschap',
+      'Hallucinated comma before Besloten Vennootschap must be stripped when site has Dutch Regulators BV without comma'
+    );
+
+    // 2. Dutch Regulators, BV on website WITH comma -> Dutch Regulators, Besloten Vennootschap (comma preserved)
+    const crawlDutchWithComma = {
+      originalUrl: 'http://www.dutchregulators.com',
+      finalUrl: 'https://www.dutchregulators.com/',
+      title: 'Dutch Regulators, BV',
+      copyrightText: 'Copyright © 2024 Dutch Regulators, BV. All rights reserved.',
+      legalCompanyCandidates: ['Dutch Regulators, BV']
+    };
+    const aiDutchNoComma = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Dutch Regulators Besloten Vennootschap', // AI omitted comma that was on site
+      countryName: 'Netherlands'
+    };
+    const qcDutchWithComma = ctx.applyStrictInstructions(aiDutchNoComma, crawlDutchWithComma, { isRestricted: false });
+    assert.strictEqual(
+      qcDutchWithComma.companyName,
+      'Dutch Regulators, Besloten Vennootschap',
+      'Comma before Besloten Vennootschap must be restored when site has Dutch Regulators, BV with comma'
+    );
+
+    // 3. German GmbH without comma vs with comma
+    const crawlGmbhNoComma = {
+      legalCompanyCandidates: ['Robert Bosch GmbH'],
+      copyrightText: '© Robert Bosch GmbH 2024'
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Robert Bosch, Gesellschaft mit beschränkter Haftung', crawlGmbhNoComma),
+      'Robert Bosch Gesellschaft mit beschränkter Haftung',
+      'GmbH without comma must strip hallucinated comma'
+    );
+    const crawlGmbhWithComma = {
+      legalCompanyCandidates: ['Robert Bosch, GmbH']
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Robert Bosch Gesellschaft mit beschränkter Haftung', crawlGmbhWithComma),
+      'Robert Bosch, Gesellschaft mit beschränkter Haftung',
+      'GmbH with comma must preserve/restore comma'
+    );
+
+    // 4. European SE without comma vs with comma
+    const crawlSeNoComma = {
+      legalCompanyCandidates: ['Kaeser Kompressoren SE']
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Kaeser Kompressoren, Societas Europaea', crawlSeNoComma),
+      'Kaeser Kompressoren Societas Europaea'
+    );
+    const crawlSeWithComma = {
+      legalCompanyCandidates: ['Kaeser Kompressoren, SE']
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Kaeser Kompressoren Societas Europaea', crawlSeWithComma),
+      'Kaeser Kompressoren, Societas Europaea'
+    );
+
+    // 5. Co., Ltd. vs Co. Ltd. (Company, Limited vs Company Limited)
+    const crawlCoLtdComma = {
+      copyrightText: 'Kaulin Mfg. Co., Ltd.'
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Kaulin Manufacturing, Company, Limited', crawlCoLtdComma),
+      'Kaulin Manufacturing Company, Limited',
+      'Strips comma before Company when site has Kaulin Mfg. Co., Ltd. but keeps comma between Company and Limited'
+    );
+    const crawlCoLtdNoComma = {
+      copyrightText: 'Apex Tools Co. Ltd.'
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Apex Tools Company, Limited', crawlCoLtdNoComma),
+      'Apex Tools Company Limited',
+      'Co. Ltd without comma must output Company Limited'
+    );
+
+    // 6. Pte., Ltd. vs Pte. Ltd. (Private, Limited vs Private Limited)
+    const crawlPteLtdComma = {
+      legalCompanyCandidates: ['Apex Dynamics Pte., Ltd.']
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Apex Dynamics Private Limited', crawlPteLtdComma),
+      'Apex Dynamics Private, Limited'
+    );
+    const crawlPteLtdNoComma = {
+      legalCompanyCandidates: ['Apex Dynamics Pte. Ltd.']
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Apex Dynamics Private, Limited', crawlPteLtdNoComma),
+      'Apex Dynamics Private Limited'
+    );
+
+    // 7. Standalone Co. (Company)
+    const crawlCoNoComma = {
+      legalCompanyCandidates: ['Avon Gear Co.']
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Avon Gear, Company', crawlCoNoComma),
+      'Avon Gear Company'
+    );
+    const crawlCoWithComma = {
+      legalCompanyCandidates: ['Avon Gear, Co.']
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix('Avon Gear Company', crawlCoWithComma),
+      'Avon Gear, Company'
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

@@ -3265,6 +3265,146 @@ async function runAsyncTests() {
       "Incorporated must have comma when website has TP Orthodontics, Inc. with comma"
     );
 
+    // 6. Dutch Regulators BV (no comma on site) -> Dutch Regulators Besloten Vennootschap (no comma)
+    const dutchRegulatorsNoCommaCrawl = {
+      legalCompanyCandidates: ["Dutch Regulators BV"],
+      copyrightText: "Copyright © 2024 Dutch Regulators BV. All rights reserved.",
+      title: "Dutch Regulators BV - Precision Pressure Regulators"
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Dutch Regulators, Besloten Vennootschap", dutchRegulatorsNoCommaCrawl),
+      "Dutch Regulators Besloten Vennootschap",
+      "Hallucinated comma must be stripped when site has Dutch Regulators BV without comma"
+    );
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Dutch Regulators Besloten Vennootschap", dutchRegulatorsNoCommaCrawl),
+      "Dutch Regulators Besloten Vennootschap",
+      "No comma preserved when site has Dutch Regulators BV without comma"
+    );
+
+    // 7. Dutch Regulators, BV (with comma on site) -> Dutch Regulators, Besloten Vennootschap
+    const dutchRegulatorsWithCommaCrawl = {
+      legalCompanyCandidates: ["Dutch Regulators, BV"],
+      copyrightText: "Copyright © 2024 Dutch Regulators, BV."
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Dutch Regulators Besloten Vennootschap", dutchRegulatorsWithCommaCrawl),
+      "Dutch Regulators, Besloten Vennootschap",
+      "Comma must be restored when site has Dutch Regulators, BV with comma"
+    );
+
+    // 8. Robert Bosch GmbH (no comma) vs Robert Bosch, GmbH (with comma)
+    const boschNoCommaCrawl = {
+      legalCompanyCandidates: ["Robert Bosch GmbH"],
+      copyrightText: "© Robert Bosch GmbH 2024"
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Robert Bosch, Gesellschaft mit beschränkter Haftung", boschNoCommaCrawl),
+      "Robert Bosch Gesellschaft mit beschränkter Haftung",
+      "Hallucinated comma must be stripped when site has Robert Bosch GmbH without comma"
+    );
+    const boschWithCommaCrawl = {
+      legalCompanyCandidates: ["Robert Bosch, GmbH"]
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Robert Bosch Gesellschaft mit beschränkter Haftung", boschWithCommaCrawl),
+      "Robert Bosch, Gesellschaft mit beschränkter Haftung",
+      "Comma must be restored when site has Robert Bosch, GmbH with comma"
+    );
+
+    // 9. Kaeser Kompressoren SE (no comma) vs Kaeser Kompressoren, SE (with comma)
+    const kaeserNoCommaCrawl = {
+      legalCompanyCandidates: ["Kaeser Kompressoren SE"]
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Kaeser Kompressoren, Societas Europaea", kaeserNoCommaCrawl),
+      "Kaeser Kompressoren Societas Europaea",
+      "Hallucinated comma must be stripped when site has Kaeser Kompressoren SE without comma"
+    );
+    const kaeserWithCommaCrawl = {
+      legalCompanyCandidates: ["Kaeser Kompressoren, SE"]
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Kaeser Kompressoren Societas Europaea", kaeserWithCommaCrawl),
+      "Kaeser Kompressoren, Societas Europaea",
+      "Comma must be restored when site has Kaeser Kompressoren, SE with comma"
+    );
+
+    // 10. Siemens AG (no comma) vs Siemens, AG (with comma)
+    const siemensNoCommaCrawl = {
+      copyrightText: "Siemens AG 2024"
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Siemens, Aktiengesellschaft", siemensNoCommaCrawl),
+      "Siemens Aktiengesellschaft",
+      "Hallucinated comma must be stripped when site has Siemens AG without comma"
+    );
+    const siemensWithCommaCrawl = {
+      copyrightText: "Siemens, AG 2024"
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Siemens Aktiengesellschaft", siemensWithCommaCrawl),
+      "Siemens, Aktiengesellschaft",
+      "Comma must be restored when site has Siemens, AG with comma"
+    );
+
+    // 11. Avon Gear Co. (no comma) vs Avon Gear, Co. (with comma)
+    const avonNoCommaCrawl = {
+      copyrightText: "Avon Gear Co. All rights reserved."
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Avon Gear, Company", avonNoCommaCrawl),
+      "Avon Gear Company",
+      "Hallucinated comma must be stripped when site has Avon Gear Co. without comma"
+    );
+    const avonWithCommaCrawl = {
+      copyrightText: "Avon Gear, Co. All rights reserved."
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Avon Gear Company", avonWithCommaCrawl),
+      "Avon Gear, Company",
+      "Comma must be restored when site has Avon Gear, Co. with comma"
+    );
+
+    // 12. Kaulin Manufacturing, Company, Limited -> strips comma before Company when site has Kaulin Mfg. Co., Ltd.
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Kaulin Manufacturing, Company, Limited", kaulinCrawl),
+      "Kaulin Manufacturing Company, Limited",
+      "Extra comma before Company must be removed while comma between Company and Limited is preserved"
+    );
+
+    // 13. Private, Limited vs Private Limited (Pte., Ltd. vs Pte. Ltd.)
+    const pteLtdWithCommaCrawl = {
+      legalCompanyCandidates: ["Apex Dynamics Pte., Ltd."]
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Apex Dynamics Private Limited", pteLtdWithCommaCrawl),
+      "Apex Dynamics Private, Limited"
+    );
+    const pteLtdNoCommaCrawl = {
+      legalCompanyCandidates: ["Apex Dynamics Pte. Ltd."]
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Apex Dynamics Private, Limited", pteLtdNoCommaCrawl),
+      "Apex Dynamics Private Limited"
+    );
+
+    // 14. Proprietary, Limited vs Proprietary Limited (Pty., Ltd. vs Pty. Ltd.)
+    const ptyLtdWithCommaCrawl = {
+      legalCompanyCandidates: ["Southern Cross Mining Pty., Ltd."]
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Southern Cross Mining Proprietary Limited", ptyLtdWithCommaCrawl),
+      "Southern Cross Mining Proprietary, Limited"
+    );
+    const ptyLtdNoCommaCrawl = {
+      legalCompanyCandidates: ["Southern Cross Mining Pty. Ltd."]
+    };
+    assert.strictEqual(
+      ctx.restoreCommaBeforeCorporateSuffix("Southern Cross Mining Proprietary, Limited", ptyLtdNoCommaCrawl),
+      "Southern Cross Mining Proprietary Limited"
+    );
+
     // B. End-to-end QC pipeline test via applyStrictInstructions
     const tadMockExtracted = {
       websiteStatus: "Working",

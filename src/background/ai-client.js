@@ -19,12 +19,12 @@ function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
   // Dynamically collect crawled product/catalog subpage text so AI can verify product counts & descriptions
   const productPagesText = Array.isArray(crawlData.crawledPages)
     ? compactSlice(
-        crawlData.crawledPages
-          .filter(p => p && p.isProductPage && p.text)
-          .map(p => p.text)
-          .join("\n"),
-        2400
-      )
+      crawlData.crawledPages
+        .filter(p => p && p.isProductPage && p.text)
+        .map(p => p.text)
+        .join("\n"),
+      2400
+    )
     : "";
 
   const renderedText = compactSlice(crawlData.renderedText, 1800);
@@ -155,14 +155,18 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * PT -> Perseroan Terbatas, Tbk -> Terbuka, CV -> Commanditaire Vennootschap, SE -> Societas Europaea, GmbH / Ges.m.b.H. -> Gesellschaft mit beschränkter Haftung, AG -> Aktiengesellschaft, KG -> Kommanditgesellschaft, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, B.V. / BV -> Besloten Vennootschap (MANDATORY: Expand B.V. / BV to "Besloten Vennootschap" — NEVER translate or expand B.V. / BV to "Private Limited"!), N.V. / NV -> Naamloze Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, S.p.A. -> Società per Azioni, Sp. z o.o. -> Spółka z Ograniczoną Odpowiedzialnością, AB -> Aktiebolag, Oy -> Osakeyhtiö, A/S -> Aktieselskab, Ltda. -> Limitada.
   * Industry Words: Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises, Solns. -> Solutions.
 - Rules:
-  * CRITICAL FOR B.V. / BV (Dutch / Netherlands): B.V. or BV MUST ALWAYS be expanded to "Besloten Vennootschap". NEVER output "Private Limited" for Netherlands / Dutch entities!
   * NEVER invent corporate suffixes when only a brand name is provided or suffix is absent.
   * Never use a product name, slogan, or tagline as the company name.
   * Preserve genuine brand acronyms in UPPERCASE (e.g. PEM, BMW, CNC, USA) and internal symbols ('&', '+', '/', '%', '#').
   * Remove brackets ()/[] while retaining inner text (e.g. "Company (Malaysia) Sdn Bhd" -> "Company Malaysia Sendirian Berhad"). If country name is inside company name, keep it as is.
   * Format in Title Case where EVERY word starts with a capital letter.
   * Strictly REMOVE ALL special characters from the very beginning and very end of the name (no leading or trailing ".", ",", "-", "!", "*", "&", "+", "/", "#", "@", "®", "™", "©", quotes, or brackets).
-  * Comma Rule: Preserve comma before corporate suffix ONLY IF a comma is explicitly present before that suffix on the website (e.g. "Hsin Hsin Metals, Limited"); if NO comma on site (e.g. "TAD Communications Limited"), do not insert a comma.
+  * MANDATORY COMMA RULE: "If comma is available on website, put comma. If not available on website, do NOT put comma / leave without comma."
+    - If website has a comma before the corporate suffix (e.g. "Acme, Ltd.", "Dutch Regulators, B.V.", "Mocap, LLC", "TP Orthodontics, Inc.", "Avon Gear, Co.", "Kaeser Kompressoren, SE"), output WITH comma: "Acme, Limited", "Dutch Regulators, Besloten Vennootschap", "Mocap, Limited Liability Company", "TP Orthodontics, Incorporated", "Avon Gear, Company", "Kaeser Kompressoren, Societas Europaea".
+    - If website does NOT have a comma before the corporate suffix (e.g. "TAD Communications Ltd", "Dutch Regulators BV", "Mocap LLC", "Avon Gear Co.", "Robert Bosch GmbH", "Siemens AG"), output WITHOUT comma: "TAD Communications Limited", "Dutch Regulators Besloten Vennootschap", "Mocap Limited Liability Company", "Avon Gear Company", "Robert Bosch Gesellschaft mit beschränkter Haftung", "Siemens Aktiengesellschaft".
+    - For "Co., Ltd." vs "Co. Ltd.": If website has a comma between Co and Ltd ("Co., Ltd." or "Co.,Ltd"), output "Company, Limited". If website has NO comma between Co and Ltd ("Co. Ltd" or "Co Ltd"), output "Company Limited".
+    - For "Pte., Ltd." vs "Pte. Ltd.": If website has a comma ("Pte., Ltd."), output "Private, Limited". If NO comma ("Pte. Ltd."), output "Private Limited".
+    - For "Pty., Ltd." vs "Pty. Ltd.": If website has a comma ("Pty., Ltd."), output "Proprietary, Limited". If NO comma ("Pty. Ltd."), output "Proprietary Limited".
 
 7. COUNTRY NAME STRICT VALIDATION:
 - Source Evidence Priority: (1) Headquarters physical address on website, (2) Official corporate legal registration / imprint, (3) Official company social media (LinkedIn, Facebook), (4) Top-level domain extension (.uk, .de, .ca, .au, .sg, .jp) or telephone calling code.
@@ -179,6 +183,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
 8. COMPANY ADDRESS (HEADQUARTERS EXTRACTION, FULL-FORM EXPANSIONS & QC):
 - CORE PRINCIPLE: WHAT WEBSITE HAS, TAKE THE SAME — EXPANSION ONLY, NO GRAMMAR CHANGES: Take the exact address as found on the website. DO NOT rewrite, paraphrase, or change words. Only expand standard abbreviations (St. -> Street, Rd. -> Road, Fl. -> Floor, No. -> Number, Ste. -> Suite, Bldg. -> Building). Do NOT make grammar changes (e.g. no ordinal suffixes on floors; '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor'). Do NOT invent new words not on the site. If website has '7Floor' (no space), do not give space ('7Floor'); if website has '7 Floor' (with space), provide space ('7 Floor').
+- MANDATORY COMMA RULE IN ADDRESS: "If comma is present on the website, put comma. If comma is NOT present on the website, do NOT invent or put comma." Strictly mirror the on-site punctuation. Never insert an invented comma between bare street number and street name (e.g. "604 Progress Drive", NOT "604, Progress Drive"; "Luzernestraat 8", NOT "Luzernestraat, 8"). Commas are only used to separate distinct multi-line address parts into a single line or before State/Province (e.g. "Cincinnati, Ohio").
 - Headquarters Priority: Global Headquarters / Corporate Headquarters > Head Office > Main Office > Registered Office (only if no physical HQ/Head/Main office exists). Never select a branch, warehouse, factory, showroom, or dealer when headquarters is available.
 - Complete Multi-Line Extraction & Sequence: Combine all lines into one comma-separated address in the exact sequence shown on the website. Retain premise, building, unit, suite, floor, street number, street name, locality, town, district, city, county, and state/province.
 - Postal Code Removal: Strip ALL numeric and alphanumeric postal codes, ZIP codes, and PIN codes (UK postcodes like B75 7BU, SW1A 1AA; Canadian like M5V 2T6; European; US 5-digit and ZIP+4). Retain Post Office Box numbers (e.g. "Post Office Box 1264").
@@ -901,28 +906,28 @@ async function generateApiPayload(rawUrl = "", options = {}) {
 
   const requestBody = isGroq
     ? {
-        model: activeModel,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0,
-        response_format: { type: "json_object" }
-      }
+      model: activeModel,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0,
+      response_format: { type: "json_object" }
+    }
     : {
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0,
-          maxOutputTokens: 2048,
-          responseMimeType: "application/json",
-          responseSchema: GEMINI_RESPONSE_SCHEMA
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt
+            }
+          ]
         }
-      };
+      ],
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 2048,
+        responseMimeType: "application/json",
+        responseSchema: GEMINI_RESPONSE_SCHEMA
+      }
+    };
 
   const payloadRecord = {
     url: targetUrl,

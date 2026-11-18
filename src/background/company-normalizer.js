@@ -1202,30 +1202,139 @@ function getCorporateSuffixPattern(suffix) {
   if (s === "limited liability company") {
     return "(?:l[\\.\\s]*l[\\.\\s]*c|limited\\s+liability\\s+company)";
   }
+  if (s === "professional limited liability company") {
+    return "(?:p[\\.\\s]*l[\\.\\s]*l[\\.\\s]*c|pllc|professional\\s+limited\\s+liability\\s+company)";
+  }
+  if (s === "limited liability partnership") {
+    return "(?:l[\\.\\s]*l[\\.\\s]*p|limited\\s+liability\\s+partnership)";
+  }
+  if (s === "limited partnership") {
+    return "(?:l[\\.\\s]*p|limited\\s+partnership)";
+  }
   if (s === "corporation") {
     return "(?:c[\\.\\s]*o[\\.\\s]*r[\\.\\s]*p|corporation)";
   }
   if (s === "public limited company") {
     return "(?:p[\\.\\s]*l[\\.\\s]*c|public\\s+limited\\s+company)";
   }
-  if (s === "proprietary limited") {
-    return "(?:p[\\.\\s]*t[\\.\\s]*y[\\.\\s]*(?:l[\\.\\s]*t[\\.\\s]*d|limited)|proprietary\\s+limited)";
+  if (s === "state owned company limited") {
+    return "(?:soc[\\.\\s]*ltd|soc[\\.\\s]*limited|state\\s+owned\\s+company\\s+limited)";
   }
-  if (s === "private limited") {
-    return "(?:p[\\.\\s]*[tv][\\.\\s]*e?[\\.\\s]*(?:l[\\.\\s]*t[\\.\\s]*d|limited)|private\\s+limited)";
+  if (s === "proprietary limited" || s === "proprietary, limited") {
+    return "(?:p[\\.\\s]*t[\\.\\s]*y[\\.\\s]*,?[\\.\\s]*(?:l[\\.\\s]*t[\\.\\s]*d|limited)|proprietary[\\s,]+limited)";
   }
-  if (s === "limited liability partnership") {
-    return "(?:l[\\.\\s]*l[\\.\\s]*p|limited\\s+liability\\s+partnership)";
+  if (s === "private limited" || s === "private, limited") {
+    return "(?:p[\\.\\s]*[tv][\\.\\s]*e?[\\.\\s]*,?[\\.\\s]*(?:l[\\.\\s]*t[\\.\\s]*d|limited)|private[\\s,]+limited)";
   }
   if (s === "sendirian berhad") {
     return "(?:sdn[\\.\\s]*bhd|sendirian\\s+berhad)";
+  }
+  if (s === "berhad") {
+    return "(?:bhd|berhad)";
+  }
+  if (s === "company, limited" || s === "company limited") {
+    return "(?:c[\\.\\s]*o[\\.\\s]*,?[\\.\\s]*(?:l[\\.\\s]*t[\\.\\s]*d|limited)|company[\\s,]+limited)";
+  }
+  if (s === "company") {
+    return "(?:c[\\.\\s]*o|company)";
+  }
+  if (s === "besloten vennootschap") {
+    return "(?:b[\\.\\s]*v|besloten\\s+vennootschap)";
+  }
+  if (s === "besloten vennootschap met beperkte aansprakelijkheid") {
+    return "(?:b[\\.\\s]*v[\\.\\s]*b[\\.\\s]*a|bvba|besloten\\s+vennootschap\\s+met\\s+beperkte\\s+aansprakelijkheid)";
+  }
+  if (s === "naamloze vennootschap") {
+    return "(?:n[\\.\\s]*v|naamloze\\s+vennootschap)";
+  }
+  if (s === "gesellschaft mit beschränkter haftung" || s === "gesellschaft mit beschrankter haftung") {
+    return "(?:g[\\.\\s]*m[\\.\\s]*b[\\.\\s]*h|gmbh|ges[\\.\\s]*m[\\.\\s]*b[\\.\\s]*h|gesmbh|gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+haftung)";
+  }
+  if (/^gesellschaft mit beschr[äa]nkter haftung (?:und|and|&) compagnie(?: kommanditgesellschaft)?$/i.test(s)) {
+    return "(?:gmbh\\s*(?:&|\\+|und|and|u\\.?)\\s*co(?:\\.?\\s*kg)?|gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+haftung\\s+(?:und|and|&)\\s+compagnie(?:\\s+kommanditgesellschaft)?)";
+  }
+  if (s === "societas europaea") {
+    return "(?:s[\\.\\s]*e|se|societas\\s+europaea)";
+  }
+  if (s === "aktiengesellschaft") {
+    return "(?:a[\\.\\s]*g|ag|aktiengesellschaft)";
+  }
+  if (s === "kommanditgesellschaft") {
+    return "(?:k[\\.\\s]*g|kg|kommanditgesellschaft)";
+  }
+  if (s === "kommanditgesellschaft auf aktien") {
+    return "(?:k[\\.\\s]*g[\\.\\s]*a[\\.\\s]*a|kgaa|kommanditgesellschaft\\s+auf\\s+aktien)";
+  }
+  if (s === "unternehmergesellschaft" || s === "unternehmergesellschaft haftungsbeschränkt") {
+    return "(?:u[\\.\\s]*g|ug|unternehmergesellschaft(?:\\s*\\(?haftungsbeschr[äa]nkt\\)?)?)";
+  }
+  if (s === "società a responsabilità limitata" || s === "societa a responsabilita limitata") {
+    return "(?:s[\\.\\s]*r[\\.\\s]*l|srl|societ[àa]\\s+a\\s+responsabilit[àa]\\s+limitata)";
+  }
+  if (s === "società a responsabilità limitata semplificata" || s === "societa a responsabilita limitata semplificata") {
+    return "(?:s[\\.\\s]*r[\\.\\s]*l[\\.\\s]*s|srls|societ[àa]\\s+a\\s+responsabilit[àa]\\s+limitata\\s+semplificata)";
+  }
+  if (s === "società per azioni" || s === "societa per azioni") {
+    return "(?:s[\\.\\s]*p[\\.\\s]*a|spa|societ[àa]\\s+per\\s+azioni)";
+  }
+  if (s === "sociedad anónima" || s === "sociedad anonima") {
+    return "(?:s[\\.\\s]*a|sa|sociedad\\s+an[óo]nima)";
+  }
+  if (s === "sociedad limitada") {
+    return "(?:s[\\.\\s]*l|sl|sociedad\\s+limitada)";
+  }
+  if (s === "sociedad limitada unipersonal") {
+    return "(?:s[\\.\\s]*l[\\.\\s]*u|slu|sociedad\\s+limitada\\s+unipersonal)";
+  }
+  if (s === "sociedad anónima unipersonal" || s === "sociedad anonima unipersonal") {
+    return "(?:s[\\.\\s]*a[\\.\\s]*u|sau|sociedad\\s+an[óo]nima\\s+unipersonal)";
+  }
+  if (s === "sociedad anónima de capital variable" || s === "sociedad anonima de capital variable") {
+    return "(?:s[\\.\\s]*a[\\.\\s]*de[\\.\\s]*c[\\.\\s]*v|sa\\s+de\\s+cv|sociedad\\s+an[óo]nima\\s+de\\s+capital\\s+variable)";
+  }
+  if (s === "sociedad de responsabilidad limitada") {
+    return "(?:s[\\.\\s]*de[\\.\\s]*r[\\.\\s]*l|s\\s+de\\s+rl|sociedad\\s+de\\s+responsabilidad\\s+limitada)";
+  }
+  if (s === "sociedad de responsabilidad limitada de capital variable") {
+    return "(?:s[\\.\\s]*de[\\.\\s]*r[\\.\\s]*l[\\.\\s]*de[\\.\\s]*c[\\.\\s]*v|s\\s+de\\s+rl\\s+de\\s+cv|sociedad\\s+de\\s+responsabilidad\\s+limitada\\s+de\\s+capital\\s+variable)";
+  }
+  if (s === "société à responsabilité limitée" || s === "societe a responsabilite limitee") {
+    return "(?:s[\\.\\s]*a[\\.\\s]*r[\\.\\s]*l|sarl|soci[éte]\\s+[àa]\\s+responsabilit[éte]\\s+limit[éte]e)";
+  }
+  if (s === "société par actions simplifiée" || s === "societe par actions simplifiee") {
+    return "(?:s[\\.\\s]*a[\\.\\s]*s|sas|soci[éte]\\s+par\\s+actions\\s+simplifi[éte]e)";
+  }
+  if (s === "société anonyme" || s === "societe anonyme") {
+    return "(?:s[\\.\\s]*a|sa|soci[éte]\\s+anonyme)";
+  }
+  if (s === "spółka z ograniczoną odpowiedzialnością" || s === "spolka z ograniczona odpowiedzialnoscia") {
+    return "(?:sp[\\.\\s]*z[\\.\\s]*o[\\.\\s]*o|sp[oó][lł]ka\\s+z\\s+ograniczon[aą]\\s+odpowiedzialno[sś]ci[aą])";
+  }
+  if (s === "perseroan terbatas") {
+    return "(?:p[\\.\\s]*t|pt|perseroan\\s+terbatas)";
+  }
+  if (s === "commanditaire vennootschap") {
+    return "(?:c[\\.\\s]*v|cv|commanditaire\\s+vennootschap)";
+  }
+  if (s === "aktiebolag") {
+    return "(?:a[\\.\\s]*b|ab|aktiebolag)";
+  }
+  if (s === "aksjeselskap") {
+    return "(?:a[\\.\\s]*s|as|aksjeselskap)";
+  }
+  if (s === "osakeyhtiö" || s === "osakeyhtio") {
+    return "(?:o[\\.\\s]*y|oy|osakeyhti[oö])";
+  }
+  if (s === "anpartsselskab") {
+    return "(?:a[\\.\\s]*p[\\.\\s]*s|aps|anpartsselskab)";
   }
   return suffix.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
 }
 
 /**
  * Helper to build a flexible regex pattern for a company's base name,
- * allowing for optional dots/spaces in acronyms (e.g. TAD -> T.A.D.) and connectors (& / and).
+ * allowing for optional dots/spaces in acronyms (e.g. TAD -> T.A.D.), connectors (& / and),
+ * and standard industry word abbreviations with optional periods (e.g. Manufacturing -> Mfg.).
  */
 function buildFlexibleBasePattern(base) {
   const tokens = (base || "").split(/\s+/).filter(Boolean);
@@ -1236,10 +1345,32 @@ function buildFlexibleBasePattern(base) {
     }
     const tok = trimmed.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
     if (!tok) return "";
-    if (/^[A-Z]{2,5}$/.test(tok)) {
-      return tok.split("").map(c => c.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")).join("[\\.\\s]*");
+    const lower = tok.toLowerCase();
+    if (lower === "manufacturing" || lower === "makers") {
+      return "(?:mfg|manuf|mnfg|manufacturing|makers)\\.?";
     }
-    return tok.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+    if (lower === "industries" || lower === "industrial") {
+      return "(?:ind|inds|indust|indl|industries|industrial)\\.?";
+    }
+    if (lower === "international") {
+      return "(?:intl|int['’]?l|international)\\.?";
+    }
+    if (lower === "technology" || lower === "technologies") {
+      return "(?:tech|techs|technol|technology|technologies)\\.?";
+    }
+    if (lower === "engineering") {
+      return "(?:engg|engr|eng|engineering)\\.?";
+    }
+    if (lower === "corporation") {
+      return "(?:corp|corporation)\\.?";
+    }
+    if (lower === "company") {
+      return "(?:co|company)\\.?";
+    }
+    if (/^[A-Z]{2,5}$/.test(tok)) {
+      return tok.split("").map(c => c.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&")).join("[\\.\\s]*") + "\\.?";
+    }
+    return tok.replace(/[-\[\]{}()*+?.,\\^$|#\s]/g, "\\$&") + "\\.?";
   }).filter(Boolean).join("[\\s,]*");
 }
 
@@ -1250,20 +1381,31 @@ function buildFlexibleBasePattern(base) {
  * e.g. "Hsin Hsin Metals, Ltd." on website -> "Hsin Hsin Metals, Limited" (comma preserved)
  * e.g. "TP Orthodontics, Inc" -> "TP Orthodontics, Incorporated"
  * e.g. "Kaulin Manufacturing Company, Limited"
+ * e.g. "Dutch Regulators BV" -> "Dutch Regulators Besloten Vennootschap" (no comma)
+ * e.g. "Dutch Regulators, BV" -> "Dutch Regulators, Besloten Vennootschap" (comma preserved)
  */
 function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
   if (!compName || typeof compName !== "string") return compName;
 
-  const corpus = [
+  const strippedMain = (crawlData && crawlData.mainHtml && typeof stripHtml === "function") ? stripHtml(crawlData.mainHtml) : "";
+  const strippedContact = (crawlData && crawlData.contactHtml && typeof stripHtml === "function") ? stripHtml(crawlData.contactHtml) : "";
+  const strippedDedicated = (crawlData && crawlData.dedicatedContactHtml && typeof stripHtml === "function") ? stripHtml(crawlData.dedicatedContactHtml) : "";
+
+  let corpus = [
     crawlData && crawlData.copyrightText,
     crawlData && crawlData.title,
     crawlData && (crawlData.legalCompanyCandidates || []).join(" "),
-    crawlData && crawlData.mainHtml,
-    crawlData && crawlData.contactHtml,
+    strippedMain,
+    strippedContact,
+    strippedDedicated,
     crawlData && crawlData.contactPageText,
+    crawlData && crawlData.dedicatedContactText,
     crawlData && crawlData.bodyText,
-    crawlData && crawlData.combinedText
-  ].filter(Boolean).join(" ");
+    crawlData && crawlData.renderedText,
+    crawlData && crawlData.combinedText,
+    crawlData && crawlData.mainHtml,
+    crawlData && crawlData.contactHtml
+  ].filter(Boolean).join(" ").replace(/&nbsp;|\u00A0/g, " ");
 
   // 1. Rule: Co., Ltd. -> Company, Limited vs Co. Ltd. -> Company Limited
   // "is comma available then only u put comma else leave"
@@ -1272,18 +1414,75 @@ function restoreCommaBeforeCorporateSuffix(compName, crawlData) {
       const hasComma = /\b(?:co[\.\s]*,|company,)\s*(?:l[\.\s]*t[\.\s]*d|limited)\b/i.test(corpus);
       const hasNoComma = /\b(?:co[\.\s]+|company\s+)(?:l[\.\s]*t[\.\s]*d|limited)\b/i.test(corpus);
       if (hasComma) {
-        return compName.replace(/\bCompany\s+Limited\b/gi, "Company, Limited");
-      }
-      if (hasNoComma || !hasComma) {
-        return compName.replace(/\bCompany\s*,\s*Limited\b/gi, "Company Limited");
+        compName = compName.replace(/\bCompany\s+Limited\b/gi, "Company, Limited");
+      } else if (hasNoComma || !hasComma) {
+        compName = compName.replace(/\bCompany\s*,\s*Limited\b/gi, "Company Limited");
       }
     }
-    return compName;
+  }
+
+  // 1b. Rule: Private, Limited vs Private Limited & Proprietary, Limited vs Proprietary Limited
+  if (/\b(?:Private|Proprietary)\s*,\s*Limited\b/i.test(compName) || /\b(?:Private|Proprietary)\s+Limited\b/i.test(compName)) {
+    const isProp = /\bProprietary\b/i.test(compName);
+    const word = isProp ? "Proprietary" : "Private";
+    const abbr = isProp ? "pty" : "(?:pte|pvt)";
+    if (corpus) {
+      const hasComma = new RegExp(`\\b${abbr}[\\.\\s]*,\\s*(?:l[\\.\\s]*t[\\.\\s]*d|limited)\\b`, "i").test(corpus);
+      const hasNoComma = new RegExp(`\\b${abbr}[\\.\\s]+(?:l[\\.\\s]*t[\\.\\s]*d|limited)\\b`, "i").test(corpus);
+      if (hasComma) {
+        compName = compName.replace(new RegExp(`\\b${word}\\s+Limited\\b`, "gi"), `${word}, Limited`);
+      } else if (hasNoComma) {
+        compName = compName.replace(new RegExp(`\\b${word}\\s*,\\s*Limited\\b`, "gi"), `${word} Limited`);
+      }
+    }
   }
 
   // 2. Rule: General Corporate Legal Entity Suffixes
   // Match base name and corporate suffix:
-  const m = compName.match(/^(.*?)(?:,\s*|\s+)(Incorporated|Limited\s*Liability\s*Company|Limited\s*Liability\s*Partnership|Public\s*Limited\s*Company|Proprietary\s*Limited|Private\s*Limited|Corporation|Sendirian\s*Berhad|Limited)\b(.*)$/i);
+  const allCorporateSuffixesPattern = [
+    "Company,\\s*Limited",
+    "Company\\s+Limited",
+    "Private,\\s*Limited",
+    "Private\\s+Limited",
+    "Proprietary,\\s*Limited",
+    "Proprietary\\s+Limited",
+    "Public\\s+Limited\\s+Company",
+    "State\\s+Owned\\s+Company\\s+Limited",
+    "Limited\\s+Liability\\s+Company",
+    "Professional\\s+Limited\\s+Liability\\s+Company",
+    "Limited\\s+Liability\\s+Partnership",
+    "Limited\\s+Partnership",
+    "Besloten\\s+Vennootschap(?:\\s+met\\s+Beperkte\\s+Aansprakelijkheid)?",
+    "Naamloze\\s+Vennootschap",
+    "Gesellschaft\\s+mit\\s+beschr[äa]nkter\\s+Haftung(?:\\s+(?:und|and|&)\\s+Compagnie(?:\\s+Kommanditgesellschaft)?)?",
+    "Societas\\s+Europaea",
+    "Aktiengesellschaft",
+    "Kommanditgesellschaft(?:\\s+auf\\s+Aktien)?",
+    "Unternehmergesellschaft(?:\\s+haftungsbeschr[äa]nkt)?",
+    "Sendirian\\s+Berhad",
+    "Berhad",
+    "Societ[àa]\\s+a\\s+Responsabilit[àa]\\s+Limitata(?:\\s+Semplificata)?",
+    "Societ[àa]\\s+per\\s+Azioni",
+    "Sociedad\\s+An[óo]nima(?:\\s+(?:de\\s+Capital\\s+Variable|Unipersonal))?",
+    "Sociedad\\s+Limitada(?:\\s+Unipersonal)?",
+    "Sociedad\\s+de\\s+Responsabilidad\\s+Limitada(?:\\s+de\\s+Capital\\s+Variable)?",
+    "Soci[éte]\\s+[àa]\\s+Responsabilit[éte]\\s+Limit[éte]e",
+    "Soci[éte]\\s+par\\s+Actions\\s+Simplifi[éte]e(?:\\s+Unipersonnelle)?",
+    "Soci[éte]\\s+Anonyme",
+    "Sp[oó][lł]ka\\s+z\\s+ograniczon[aą]\\s+odpowiedzialno[sś]ci[aą]",
+    "Perseroan\\s+Terbatas",
+    "Commanditaire\\s+Vennootschap",
+    "Aktiebolag",
+    "Aksjeselskap",
+    "Osakeyhti[oö]",
+    "Anpartsselskab",
+    "Incorporated",
+    "Corporation",
+    "Limited",
+    "Company"
+  ].join("|");
+
+  const m = compName.match(new RegExp(`^(.*?)(?:,\\s*|\\s+)(${allCorporateSuffixesPattern})\\b(.*)$`, "i"));
   if (!m) return compName;
 
   const base = m[1].trim();
