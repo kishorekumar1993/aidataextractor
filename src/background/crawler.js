@@ -648,7 +648,9 @@ async function crawlWebsite(targetUrl, options = {}) {
       // STRICT PRIORITY ORDER:
       // Phase 1: Crawl dedicated Contact Us page(s) FIRST and wait for results before checking other pages.
       // Phase 2: Crawl About / Profile / Product / Restricted / Remaining pages AFTER Contact Us.
-      const isDedicatedContactUrl = (u) => /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint|iletisim|iletişim|bize-ulasin|bize-ulaşın|email|mail|inquiry|enquiry)/i.test(u || "") || /(?:聯絡我們|聯絡|联系我们|联系|聯繫我們|聯繫|お問い合わせ|お問合せ|問合せ|会社案内|連絡先|연락처|문의)/i.test(u || "");
+      const isDedicatedContactUrl = (u) =>
+        /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint|iletisim|iletişim|bize-ulasin|bize-ulaşın|email|mail|inquiry|enquiry|careers?|jobs?|employment|vacanc(?:y|ies)|vacatur(?:e|es)|werken[-_]?bij|recruitment|karriere|stellenangebote)/i.test(u || "") ||
+        /(?:聯絡我們|聯絡|联系我们|联系|聯繫我們|聯繫|お問い合わせ|お問合せ|問合せ|会社案内|連絡先|연락처|문의)/i.test(u || "");
       const contactPriorityLinks = [];
       const otherTopLinks = [];
       const seenPaths = new Set();
@@ -777,8 +779,12 @@ async function crawlWebsite(targetUrl, options = {}) {
           careerPageText += "\n" + pageText.slice(0, 3000);
         }
 
-        // Extract legal corporate names across this page
-        for (const cand of extractLegalCandidatesFromHtml(cText)) {
+        // Extract legal corporate names across this page (dynamically exclude third-party distributor/dealer sections)
+        const primaryOwnerHtml = cText.split(
+          /<(?:h[1-6]|strong|b|p|div)[^>]*>\s*(?:our\s+)?(?:distributors?|dealers?|stockists?|resellers?|sales\s+partners?|international\s+partners?|agents?)\s*<\/(?:h[1-6]|strong|b|p|div)>/i
+        )[0] || cText;
+
+        for (const cand of extractLegalCandidatesFromHtml(primaryOwnerHtml)) {
           allLegalCandidates.add(cand);
           if (!legalCandidateSources[cand]) {
             legalCandidateSources[cand] = cUrl;
@@ -850,11 +856,11 @@ async function crawlWebsite(targetUrl, options = {}) {
           const raw = (typeof c === "object" ? c.raw : c) || "";
           return raw.length >= 8 && (/\b(?:street|road|avenue|lane|drive|way|blvd|suite|unit|floor|park|zone|box|po\s*box|no\.?|number|\d{2,})\b/i.test(raw));
         });
-        const hasEmail = allDiscoveredEmails.size > 0;
+        const hasTwoEmails = allDiscoveredEmails.size >= 2;
         const hasPhone = dedicatedContactPhones.size > 0 || allDiscoveredPhones.size > 0;
-        const hasProducts = detectedProductCount >= 3 || detectedImageCount >= 3;
+        const hasProducts = detectedProductCount >= 3 && detectedImageCount >= 3;
         const hasName = allLegalCandidates.size > 0 || (copyrightText && hasCompleteLegalSuffix(copyrightText));
-        return hasAddr && hasEmail && hasPhone && hasProducts && hasName;
+        return hasAddr && hasTwoEmails && hasPhone && hasProducts && hasName;
       };
 
       // PHASE 1: Fetch dedicated Contact Us page(s) FIRST and wait before checking other pages
@@ -950,6 +956,50 @@ async function crawlWebsite(targetUrl, options = {}) {
               recordSubpageContent(settled.value.url || remainingCandidates[i], settled.value.html, { includeAddresses: true, includeProfileText: false });
             }
           }
+        }
+      }
+
+      // Dynamically scan same-domain linked PDFs if < 2 corporate emails were found on HTML pages
+      if (allDiscoveredEmails.size < 2 && !isCrawlTimeExceeded()) {
+        let siteRootDomain = "";
+        try {
+          siteRootDomain = extractRootDomain(finalUrl || targetUrl);
+        } catch (e) { }
+
+        const pdfLinks = [...(dedicatedContactHtml + "\n" + contactHtml + "\n" + mainHtml).matchAll(/href=["']([^"']+\.pdf(?:\?[^"']*)?)["']/gi)]
+          .map(m => ensureAbsoluteUrl(m[1], finalUrl))
+          .filter(u => {
+            if (!u || fetchedUrls.has(u)) return false;
+            try {
+              return !siteRootDomain || extractRootDomain(u) === siteRootDomain;
+            } catch (e) {
+              return false;
+            }
+          })
+          .slice(0, 2);
+
+        for (const pdfUrl of pdfLinks) {
+          if (pagesFetchedCount >= MAX_CRAWL_PAGES || isCrawlTimeExceeded()) break;
+          fetchedUrls.add(pdfUrl);
+          pagesFetchedCount++;
+          try {
+            const pdfCtrl = new AbortController();
+            const pdfTimer = setTimeout(() => pdfCtrl.abort(), 2500);
+            const pdfRes = await fetch(pdfUrl, { signal: pdfCtrl.signal });
+            clearTimeout(pdfTimer);
+            if (pdfRes && pdfRes.ok) {
+              const buf = await pdfRes.arrayBuffer();
+              const rawPdfText = new TextDecoder("latin1").decode(buf);
+              const pdfEmails = rawPdfText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+              for (const em of pdfEmails) {
+                const cleanEm = stripTrailingContactWordsFromEmail(em.toLowerCase().trim());
+                if (isValidCorporateEmail(cleanEm) && !isUnwantedEmail(cleanEm)) {
+                  allDiscoveredEmails.add(cleanEm);
+                  updateEmailSource(emailSourceMap, cleanEm, pdfUrl, finalUrl, targetUrl);
+                }
+              }
+            }
+          } catch (e) { }
         }
       }
     }

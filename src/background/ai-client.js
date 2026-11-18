@@ -15,10 +15,30 @@ function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
   const careerText = (careerRaw && careerRaw !== contactText) ? careerRaw : "";
   const profileRaw = compactSlice(crawlData.profilePageText, 1800);
   const profileText = (profileRaw && profileRaw !== contactText && profileRaw !== careerText) ? profileRaw : "";
+
+  // Dynamically collect crawled product/catalog subpage text so AI can verify product counts & descriptions
+  const productPagesText = Array.isArray(crawlData.crawledPages)
+    ? compactSlice(
+        crawlData.crawledPages
+          .filter(p => p && p.isProductPage && p.text)
+          .map(p => p.text)
+          .join("\n"),
+        2400
+      )
+    : "";
+
   const renderedText = compactSlice(crawlData.renderedText, 1800);
   const footerText = compactSlice(crawlData.footerText, 800);
   const bodyRaw = compactSlice(crawlData.bodyText, 2000);
   const bodyText = (bodyRaw && bodyRaw !== renderedText && bodyRaw !== careerText) ? bodyRaw : "";
+
+  // Dynamically prioritize legal company candidates matching the target domain before other candidates
+  const targetStem = cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl);
+  const sortedLegalCandidates = Array.from(new Set(crawlData.legalCompanyCandidates || [])).sort((a, b) => {
+    const aMatch = targetStem && cleanDomainStem(a).includes(targetStem) ? 1 : 0;
+    const bMatch = targetStem && cleanDomainStem(b).includes(targetStem) ? 1 : 0;
+    return bMatch - aMatch;
+  });
 
   const jsonSchemaSection = includeJsonSchemaHint ? `
 
@@ -230,7 +250,7 @@ Final URL (Destination): ${crawlData.finalUrl || crawlData.originalUrl}
 Redirect Detection: ${isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl) ? "REDIRECT DETECTED (Original domain redirected to a different destination domain -> MANDATORY: set websiteStatus to 'Redirect Site'). Evaluate all other 13 fields from the destination domain (" + (crawlData.finalUrl || crawlData.originalUrl) + ")." : "Same domain (Not a redirect)"}
 Page Title: ${(crawlData.title && !/(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare|ddos protection)/i.test(crawlData.title)) ? crawlData.title : toTitleCase(cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl))}
 Detected Website Brand / Logo: ${crawlData.logoText || crawlData.ogSiteName || toTitleCase(cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl))}
-Detected Official Legal Corporate Names: ${crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0 ? crawlData.legalCompanyCandidates.slice(0, 8).join(", ") : "(None)"}
+Detected Official Legal Corporate Names (Owner Priority): ${sortedLegalCandidates.length > 0 ? sortedLegalCandidates.slice(0, 8).join(", ") : "(None)"}
 Discovered Emails: ${(crawlData.emails || []).join(", ") || "(None)"}
 Detected Contact Phones: ${(crawlData.phones || []).join(", ") || "(None)"}
 Product Items / Units Detected: ${crawlData.detectedProductCount}
@@ -245,7 +265,7 @@ ${formattedAddressEvidence}
 DEDICATED CONTACT US PAGE CONTENT (FIRST PRIORITY):
 ${contactText}
 
-${careerText ? `CAREERS & VACANCIES SUBPAGE CONTENT:\n${careerText}\n\n` : ""}${profileText ? `ABOUT / PROFILE & OTHER PAGES CONTENT:\n${profileText}\n\n` : ""}${footerText ? `FOOTER CONTENT:\n${footerText}\n\n` : ""}${bodyText ? `PAGE BODY CONTENT:\n${bodyText}` : ""}${jsonSchemaSection}
+${productPagesText ? `PRODUCTS & CATALOG SUBPAGES CONTENT:\n${productPagesText}\n\n` : ""}${careerText ? `CAREERS & VACANCIES SUBPAGE CONTENT:\n${careerText}\n\n` : ""}${profileText ? `ABOUT / PROFILE & OTHER PAGES CONTENT:\n${profileText}\n\n` : ""}${footerText ? `FOOTER CONTENT:\n${footerText}\n\n` : ""}${bodyText ? `PAGE BODY CONTENT:\n${bodyText}` : ""}${jsonSchemaSection}
 `;
 }
 

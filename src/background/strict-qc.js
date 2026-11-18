@@ -935,6 +935,18 @@ function computeOwnCrawlProductCount(crawlData) {
 }
 
 /**
+ * Dynamic helper for period-less international corporate suffixes.
+ */
+function expandInternationalCorporateSuffixesDynamic(name) {
+  if (!name || typeof name !== "string") return name;
+  return name
+    .replace(/\bB\.?\s*V\.?\s*$/i, "Besloten Vennootschap")
+    .replace(/\bN\.?\s*V\.?\s*$/i, "Naamloze Vennootschap")
+    .replace(/\bS\.?\s*R\.?\s*L\.?\s*$/i, "Società a Responsabilità Limitata")
+    .replace(/\bS\.?\s*P\.?\s*A\.?\s*$/i, "Società per Azioni");
+}
+
+/**
  * Enforces all 14 instructions deterministically based on physical address evidence.
  */
 function applyStrictInstructions(data, crawlData, restrictedCheck) {
@@ -1122,23 +1134,25 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
       }
     } else if (compName) {
-      const curIsSlogan = typeof isSeoSloganOrTagline === "function" && isSeoSloganOrTagline(compName);
-      const dStem = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "");
-      const dStemNorm = normalizeNameForComparison(dStem);
-      const curNormComp = normalizeNameForComparison(compName);
-      const compMatchesDomain = dStemNorm && (curNormComp.includes(dStemNorm) || dStemNorm.includes(curNormComp));
-      const cleanLegalCandidates = ((crawlData && crawlData.legalCompanyCandidates) || []).filter(c => c && !hasCompanyProseNoise(cleanCompanyPrefixesAndSuffixes(c)));
-      const hasDomainMatchingCandidate = cleanLegalCandidates.some(c => {
-        const cNorm = normalizeNameForComparison(c);
-        return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm));
-      });
-      const hasSuffix = hasCompleteLegalSuffix(compName) || /\b(?:limited|ltd|incorporated|incorporation|inc|corporation|corp|llc|llp|pllc|plc|gmbh|ag|kg|sa|sl|srl|bv|nv|co|company|holdings|group)\b/i.test(compName);
+      if (crawlData && result._extractionMode !== "ai_only") {
+        const curIsSlogan = typeof isSeoSloganOrTagline === "function" && isSeoSloganOrTagline(compName);
+        const dStem = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "");
+        const dStemNorm = normalizeNameForComparison(dStem);
+        const curNormComp = normalizeNameForComparison(compName);
+        const compMatchesDomain = dStemNorm && (curNormComp.includes(dStemNorm) || dStemNorm.includes(curNormComp));
+        const cleanLegalCandidates = ((crawlData && crawlData.legalCompanyCandidates) || []).filter(c => c && !hasCompanyProseNoise(cleanCompanyPrefixesAndSuffixes(c)));
+        const hasDomainMatchingCandidate = cleanLegalCandidates.some(c => {
+          const cNorm = normalizeNameForComparison(c);
+          return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm));
+        });
 
-      if (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate)) {
-        compName = preferOfficialCompanyName(compName, crawlData);
-        compName = restoreLegalSuffixIfOmitted(compName, crawlData);
+        if (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate)) {
+          compName = preferOfficialCompanyName(compName, crawlData);
+          compName = restoreLegalSuffixIfOmitted(compName, crawlData);
+        }
       }
       compName = expandCompanyAbbreviations(compName, result.countryName || "");
+      compName = expandInternationalCorporateSuffixesDynamic(compName);
       compName = cleanCompanyPrefixesAndSuffixes(compName);
       compName = toTitleCase(compName);
       compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
@@ -1263,24 +1277,26 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     const hasApiProd = result.numberOfProducts !== undefined && result.numberOfProducts !== null && String(result.numberOfProducts).trim() !== "";
     const hasApiImg = result.productImages !== undefined && result.productImages !== null && String(result.productImages).trim() !== "";
     const hasApiDesc = result.numberOfProductDescriptions !== undefined && result.numberOfProductDescriptions !== null && String(result.numberOfProductDescriptions).trim() !== "";
-    if (hasApiImg) {
-      result.productImages = normalizeCountValue(result.productImages);
-      result.numberOfProducts = hasApiProd ? normalizeCountValue(result.numberOfProducts) : result.productImages;
-      result.numberOfProductDescriptions = hasApiDesc ? normalizeCountValue(result.numberOfProductDescriptions) : result.productImages;
-    } else if (hasApiProd) {
-      result.numberOfProducts = normalizeCountValue(result.numberOfProducts);
-      result.productImages = result.numberOfProducts;
-      result.numberOfProductDescriptions = hasApiDesc ? normalizeCountValue(result.numberOfProductDescriptions) : result.numberOfProducts;
-    } else if (result._extractionMode === "ai_only") {
-      // Pure AI Mode: Never compute product count from crawlData
+    if (result._extractionMode === "ai_only" && !hasApiImg && !hasApiProd) {
       result.productImages = "0";
       result.numberOfProducts = "0";
       result.numberOfProductDescriptions = "0";
+    } else if (hasApiImg || hasApiProd || hasApiDesc) {
+      const bestCount = normalizeCountValue(
+        Math.max(
+          hasApiImg ? (parseInt(normalizeCountValue(result.productImages), 10) || 0) : 0,
+          hasApiProd ? (parseInt(normalizeCountValue(result.numberOfProducts), 10) || 0) : 0,
+          hasApiDesc ? (parseInt(normalizeCountValue(result.numberOfProductDescriptions), 10) || 0) : 0
+        )
+      );
+      result.productImages = bestCount;
+      result.numberOfProducts = bestCount;
+      result.numberOfProductDescriptions = bestCount;
     } else {
-      const fallbackProdCount = computeOwnCrawlProductCount(crawlData);
-      result.productImages = fallbackProdCount;
-      result.numberOfProducts = fallbackProdCount;
-      result.numberOfProductDescriptions = fallbackProdCount;
+      const ownCount = computeOwnCrawlProductCount(crawlData);
+      result.productImages = ownCount;
+      result.numberOfProducts = ownCount;
+      result.numberOfProductDescriptions = ownCount;
     }
 
     populateEvidenceAndSourceLinks(result, crawlData, selectedAiCandidate, bestRaw);
@@ -1612,6 +1628,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // Expand abbreviations to full form and clean brackets per Rule 4
   compName = expandCompanyAbbreviations(compName, country);
+  compName = expandInternationalCorporateSuffixesDynamic(compName);
   compName = cleanCompanyPrefixesAndSuffixes(compName);
   // Remove brackets while preserving inner text
   compName = compName.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");

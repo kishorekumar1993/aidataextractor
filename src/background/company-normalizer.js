@@ -761,8 +761,10 @@ function restoreLegalSuffixIfOmitted(name, crawlData) {
     if (!cand || hasCompanyProseNoise(cand)) continue;
     const candTokensCount = cand.replace(/[^a-zA-Z0-9\s]/g, " ").trim().split(/\s+/).filter(Boolean).length;
     // Allow expanding a legal suffix (+1..6 words for multi-word suffixes like Sp. z o.o. / LLC / GMBH), but block unrelated extra leading prose words
-    const candStartsLikeClean = normalizeNameForComparison(cand).startsWith(normalizeNameForComparison(cleanName).slice(0, 6));
-    if (hasCompleteLegalSuffix(cand) && companyNamesMatch(cleanName, cand) && (candStartsLikeClean || candTokensCount <= cleanTokensCount + 4)) {
+    const candNorm = normalizeNameForComparison(cand);
+    const cleanNorm = normalizeNameForComparison(cleanName);
+    const candStartsLikeClean = candNorm.startsWith(cleanNorm);
+    if (hasCompleteLegalSuffix(cand) && candStartsLikeClean && (candTokensCount <= cleanTokensCount + 4)) {
       return cand;
     }
   }
