@@ -398,10 +398,10 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
 
     // Recheck loop: if attempt 1 fails, recheck again before switching candidate models
     for (let attempt = 1; attempt <= 2; attempt++) {
-      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 21000) break;
+      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 55000) break;
       try {
         const abortCtrl = new AbortController();
-        const timeoutPerModel = (modelToTry === candidateModels[0]) ? (attempt === 1 ? 8500 : 5000) : 4500;
+        const timeoutPerModel = (modelToTry === candidateModels[0]) ? (attempt === 1 ? 25000 : 15000) : 15000;
         const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
         let response;
         try {
@@ -439,7 +439,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
           }
           if (response.status === 400) {
             const retryCtrl = new AbortController();
-            const retryTimer = setTimeout(() => retryCtrl.abort(), 5000);
+            const retryTimer = setTimeout(() => retryCtrl.abort(), 15000);
             try {
               const fallbackRes = await fetch(url, {
                 method: "POST",
@@ -574,7 +574,7 @@ async function runOpenAiModelsWithFallback({ providerLabel, modelsEndpoint = "",
       if (!modelToTry || tried.has(modelToTry)) continue;
       tried.add(modelToTry);
 
-      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000) {
+      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 55000) {
         console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting ${providerLabel} calls.`);
         break;
       }
@@ -606,7 +606,7 @@ async function runOpenAiModelsWithFallback({ providerLabel, modelsEndpoint = "",
   if (directHit) return directHit;
 
   // Only query /models if direct attempts failed (excluding auth errors) to discover active models
-  const withinBudget = !(crawlStartTime > 0 && (Date.now() - crawlStartTime) > 22000);
+  const withinBudget = !(crawlStartTime > 0 && (Date.now() - crawlStartTime) > 55000);
   if (!isAuthError && modelsEndpoint && withinBudget) {
     const { models: liveModels, authError } = await resolveVerifiedChatModels(
       { modelsEndpoint, models: candidateModels },
@@ -637,7 +637,7 @@ async function callOpenAiCompatibleApi({ providerLabel, endpoint, modelsEndpoint
     attemptFn: async (modelToTry, idx) => {
       const sendChatRequest = async (useOptionalTuning) => {
         const abortCtrl = new AbortController();
-        const timeoutPerModel = (idx === 0) ? 10000 : 6000;
+        const timeoutPerModel = (idx === 0) ? 25000 : 15000;
         const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
         const bodyPayload = {
           model: modelToTry,

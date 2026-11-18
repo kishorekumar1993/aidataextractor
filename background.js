@@ -40,7 +40,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (e) { }
     }, 2000);
 
-    // Bounded safety timeout: 22s (well before Chrome's 30s message channel deadline)
+    // Bounded safety timeout: 60s (well-extended to prevent premature timeouts on deep crawl & AI extraction)
     let finished = false;
     const crawlAbortController = typeof AbortController !== "undefined" ? new AbortController() : null;
 
@@ -51,7 +51,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (crawlAbortController) {
         try { crawlAbortController.abort(); } catch (e) { }
       }
-      console.log("[Background] Crawl reached safety boundary (22s). Returning Manual Review / Retry Required before channel closes.");
+      console.log("[Background] Crawl reached safety boundary (60s). Returning Manual Review / Retry Required before channel closes.");
       try {
         const timeoutReview = {
           websiteStatus: "Manual Review",
@@ -73,8 +73,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           errorCategory: "Crawl Timeout",
           errorKeyword: "Connection Timeout / Slow Response",
           errorSourceUrl: request.url,
-          errorSnippet: "Website took longer than 22 seconds to respond or server is unresponsive. Retry Required / Manual Review.",
-          notWorkingReason: "Website took longer than 22 seconds to respond or server is unresponsive. Retry Required / Manual Review.",
+          errorSnippet: "Website took longer than 60 seconds to respond or server is unresponsive. Retry Required / Manual Review.",
+          notWorkingReason: "Website took longer than 60 seconds to respond or server is unresponsive. Retry Required / Manual Review.",
           _finalUrl: request.url,
           _originalUrl: request.url,
           _note: "Crawl timeout reached safety boundary - Marked for Manual Review / Retry Required"
@@ -84,7 +84,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (err) {
         try { sendResponse({ success: false, error: "Crawl timeout" }); } catch (e) { }
       }
-    }, 22000);
+    }, 60000);
 
     handleCrawlAndExtract(request.url, request.extractionMode, { abortSignal: crawlAbortController ? crawlAbortController.signal : null })
       .then(result => {
