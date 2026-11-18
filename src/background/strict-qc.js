@@ -937,13 +937,31 @@ function computeOwnCrawlProductCount(crawlData) {
 /**
  * Dynamic helper for period-less international corporate suffixes.
  */
-function expandInternationalCorporateSuffixesDynamic(name) {
+function expandInternationalCorporateSuffixesDynamic(name, crawlData, country = "") {
   if (!name || typeof name !== "string") return name;
-  return name
+  let res = name
     .replace(/\bB\.?\s*V\.?\s*$/i, "Besloten Vennootschap")
     .replace(/\bN\.?\s*V\.?\s*$/i, "Naamloze Vennootschap")
     .replace(/\bS\.?\s*R\.?\s*L\.?\s*$/i, "Società a Responsabilità Limitata")
     .replace(/\bS\.?\s*P\.?\s*A\.?\s*$/i, "Società per Azioni");
+
+  // Fix AI mistranslation: if AI output "Private Limited" for a Dutch entity or when site has BV / B.V.
+  const isDutchSite = (country && /netherland|dutch|holland/i.test(country)) ||
+    (crawlData && /(?:dutch|\.nl\b)/i.test(crawlData.finalUrl || crawlData.originalUrl || "")) ||
+    (crawlData && (crawlData.legalCompanyCandidates || []).some(c => /\bB\.?\s*V\.?\b/i.test(c)));
+
+  if (isDutchSite && /\b(?:Private Limited|Private, Limited)\b/i.test(res)) {
+    res = res.replace(/\b(?:Private Limited|Private, Limited)\b/gi, "Besloten Vennootschap");
+  }
+
+  if (crawlData && crawlData.legalCompanyCandidates && /\b(?:Private Limited|Private, Limited)\b/i.test(res)) {
+    const hasBvCandidate = crawlData.legalCompanyCandidates.some(c => /\b(?:b[\.\s]*v|bv|besloten\s+vennootschap)\b/i.test(c));
+    if (hasBvCandidate) {
+      res = res.replace(/\b(?:Private Limited|Private, Limited)\b/gi, "Besloten Vennootschap");
+    }
+  }
+
+  return res;
 }
 
 /**
@@ -1146,13 +1164,19 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
           return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm));
         });
 
-        if (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate)) {
+        const curHasWrongSuffix = /\b(?:private\s+limited|limited)\b/i.test(compName) &&
+          cleanLegalCandidates.some(c => {
+            const cNorm = normalizeNameForComparison(c);
+            return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm)) && /\b(?:b[\.\s]*v|bv|besloten\s+vennootschap|gmbh|ag|sa|sl|srl|spa)\b/i.test(c);
+          });
+
+        if (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate) || curHasWrongSuffix) {
           compName = preferOfficialCompanyName(compName, crawlData);
           compName = restoreLegalSuffixIfOmitted(compName, crawlData);
         }
       }
       compName = expandCompanyAbbreviations(compName, result.countryName || "");
-      compName = expandInternationalCorporateSuffixesDynamic(compName);
+      compName = expandInternationalCorporateSuffixesDynamic(compName, crawlData, result.countryName || "");
       compName = cleanCompanyPrefixesAndSuffixes(compName);
       compName = toTitleCase(compName);
       compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
@@ -1617,7 +1641,13 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm));
     });
 
-    if (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate)) {
+    const curHasWrongSuffix = /\b(?:private\s+limited|limited)\b/i.test(compName) &&
+      cleanLegalCandidates.some(c => {
+        const cNorm = normalizeNameForComparison(c);
+        return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm)) && /\b(?:b[\.\s]*v|bv|besloten\s+vennootschap|gmbh|ag|sa|sl|srl|spa)\b/i.test(c);
+      });
+
+    if (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate) || curHasWrongSuffix) {
       compName = preferOfficialCompanyName(compName, crawlData);
       compName = restoreLegalSuffixIfOmitted(compName, crawlData);
       compName = decodeHtmlEntities(compName);
@@ -1628,7 +1658,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // Expand abbreviations to full form and clean brackets per Rule 4
   compName = expandCompanyAbbreviations(compName, country);
-  compName = expandInternationalCorporateSuffixesDynamic(compName);
+  compName = expandInternationalCorporateSuffixesDynamic(compName, crawlData, country);
   compName = cleanCompanyPrefixesAndSuffixes(compName);
   // Remove brackets while preserving inner text
   compName = compName.replace(/[\(\[\{]\s*([^\)\]\}]+?)\s*[\)\]\}]/g, " $1 ");

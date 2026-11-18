@@ -2677,6 +2677,17 @@ async function runAll() {
     };
     const qcBare = ctx.applyStrictInstructions(aiBareBrand, mockCrawl, { isRestricted: false });
     assert.strictEqual(qcBare.companyName, 'Dutch Regulators', 'Bare brand without suffix must be preserved cleanly');
+
+    // 9. Strict QC: If AI mistranslated/expanded BV to "Private Limited" for a Dutch entity, Strict QC corrects to "Besloten Vennootschap"
+    const aiMistranslatedBv = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Dutch Regulators Private Limited',
+      countryName: 'Netherlands'
+    };
+    const qcCorrectedBv = ctx.applyStrictInstructions(aiMistranslatedBv, mockCrawl, { isRestricted: false });
+    assert.strictEqual(qcCorrectedBv.companyName, 'Dutch Regulators Besloten Vennootschap', 'Private Limited mistranslation of BV must be corrected to Besloten Vennootschap');
   });
 
   console.log('\n========================================================');
