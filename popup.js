@@ -130,7 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "strictFilter", "showFloatingWidget", "showInlineBtn", "autoQueueEnabled", "crawlMode"
   ], (res) => {
     if (extractionModeSelect) {
-      extractionModeSelect.value = res.extractionMode || "ai_first";
+      extractionModeSelect.value = (res.extractionMode === "own_crawl") ? "own_crawl" : "ai_only";
     }
 
     if (providerSelect) providerSelect.value = "gemini";
@@ -171,7 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Save Settings
   btnSaveKey.addEventListener("click", () => {
     const aiProvider = "gemini";
-    const extractionMode = extractionModeSelect ? extractionModeSelect.value : "ai_first";
+    const extractionMode = extractionModeSelect ? extractionModeSelect.value : "ai_only";
     const key = apiKeyInput.value.trim();
     savedModelsByProvider.gemini = modelSelect.value;
 

@@ -235,7 +235,7 @@
       const response = await AIExt.sendRuntimeMessage({
         action: "CRAWL_AND_EXTRACT",
         url: targetUrl,
-        extractionMode: state.extractionMode || "ai_first"
+        extractionMode: state.extractionMode || "ai_only"
       });
       if (progressTimer) {
         clearTimeout(progressTimer);
@@ -328,6 +328,19 @@
         }
         AIExt.renderPreview(data);
         AIExt.updateStatus(`⚠️ AI Only Mode: AI extraction failed (${data._note || "AI Error"}). Form prefill prevented.`, "error");
+        return;
+      }
+
+      // User mandate: All items should take in from AI only, don't do or take OWN crawl data
+      if (data && (data._extractionSource === "own_crawl_fallback" || (data._extractionSource === "own_crawl" && state.extractionMode !== "own_crawl"))) {
+        if (typeof AIExt.setQuickBtnState === "function") {
+          AIExt.setQuickBtnState("error", "⚠️ AI Required");
+        }
+        if (typeof AIExt.showFloatingToast === "function") {
+          AIExt.showFloatingToast("⚠️ AI Only: Own crawl data blocked per user mandate.", "warning", 3500);
+        }
+        AIExt.renderPreview(data);
+        AIExt.updateStatus("⚠️ AI Only Mode: All items must be from AI only. Own crawl data blocked.", "error");
         return;
       }
 

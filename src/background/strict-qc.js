@@ -1097,19 +1097,22 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       return result;
     }
 
+    // 1. Company Profile: Take directly from API (Pure AI: never take from crawl in AI Only mode)
     const apiProfile = normalizeAvailability(result.companyProfile);
     if (apiProfile) {
       result.companyProfile = apiProfile;
+    } else if (result._extractionMode === "ai_only") {
+      result.companyProfile = "Not Available";
     } else {
       const profileDetected = crawlData && (crawlData.hasCompanyProfile || checkCompanyProfilePresence(crawlData.mainHtml, crawlData.bodyText, crawlData.profilePageText));
       result.companyProfile = profileDetected ? "Available" : "Not Available";
     }
 
-    // 2. Company Name: Take directly from API with safe prefix/abbreviation cleanup; fall back to crawl ONLY if API returned empty
+    // 2. Company Name: Take directly from API; in AI Only mode, never fall back to crawl candidates
     let compName = decodeHtmlEntities(String(result.companyName || "").trim());
     compName = cleanCompanyPrefixesAndSuffixes(compName);
     compName = compName.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
-    if (!compName && crawlData) {
+    if (!compName && crawlData && result._extractionMode !== "ai_only") {
       const fallbackCand = [crawlData.logoText, crawlData.title, crawlData.copyrightText, ...(crawlData.legalCompanyCandidates || [])]
         .find(c => c && !hasCompanyProseNoise(cleanCompanyPrefixesAndSuffixes(c)));
       if (fallbackCand) {
@@ -1147,11 +1150,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     const selectedAiCandidate = aiAddrMatch.candidate || (crawlData && Array.isArray(crawlData.addressCandidates) && crawlData.addressCandidates[0]) || null;
     const bestRaw = selectedAiCandidate ? (typeof selectedAiCandidate === "object" ? selectedAiCandidate.raw : selectedAiCandidate) : "";
 
-    // If AI explicitly returned "Not Available", strictly keep "Not Available" (NEVER replace with crawl candidate!)
-    if (addr.toLowerCase() === "not available") {
+    // If AI explicitly returned "Not Available" or empty in AI Only mode, strictly keep "Not Available" (NEVER replace with crawl candidate!)
+    if (addr.toLowerCase() === "not available" || (result._extractionMode === "ai_only" && (!addr || addr.length < 3))) {
       result.companyAddress = "Not Available";
     } else if (!addr || addr.length < 3) {
-      // Fall back to local raw crawl ONLY if AI returned completely empty string ""
+      // Fall back to local raw crawl ONLY if AI returned completely empty string "" in non-AI-only mode
       result.companyAddress = bestRaw ? (typeof sanitizeRule6CompanyAddress === "function" ? sanitizeRule6CompanyAddress(bestRaw, result.companyName, country, crawlData) : bestRaw) : "Not Available";
     } else {
       // In AI mode, strictly sanitize AI address with Rule 6 (strip company name, country, trailing postal code, expand standard abbreviations)
@@ -1252,6 +1255,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.numberOfProducts = normalizeCountValue(result.numberOfProducts);
       result.productImages = result.numberOfProducts;
       result.numberOfProductDescriptions = hasApiDesc ? normalizeCountValue(result.numberOfProductDescriptions) : result.numberOfProducts;
+    } else if (result._extractionMode === "ai_only") {
+      // Pure AI Mode: Never compute product count from crawlData
+      result.productImages = "0";
+      result.numberOfProducts = "0";
+      result.numberOfProductDescriptions = "0";
     } else {
       const fallbackProdCount = computeOwnCrawlProductCount(crawlData);
       result.productImages = fallbackProdCount;

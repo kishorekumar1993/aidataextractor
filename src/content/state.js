@@ -4,7 +4,7 @@
   const state = (AIExt.state = AIExt.state || {
     cachedExtractedData: null,
     lastProcessedUrl: "",
-    extractionMode: "ai_first",
+    extractionMode: "ai_only", // Default: AI Only (all items from AI only; legacy support extractionMode: "ai_first")
     showFloatingWidget: true,
     showInlineBtn: true,
     autoQueueEnabled: false,
@@ -21,11 +21,11 @@
   });
 
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: false, autoQueueEnabled: false, crawlMode: "manual", autoSubmitNotWorkingEnabled: false, extractionMode: "ai_first" }, (res) => {
+    chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: false, autoQueueEnabled: false, crawlMode: "manual", autoSubmitNotWorkingEnabled: false, extractionMode: "ai_only" }, (res) => {
       if (res) {
         state.showFloatingWidget = res.showFloatingWidget !== false;
         state.showInlineBtn = res.showInlineBtn === true;
-        state.extractionMode = res.extractionMode || "ai_first";
+        state.extractionMode = (res.extractionMode === "own_crawl") ? "own_crawl" : "ai_only";
         if (res.crawlMode !== undefined) {
           state.autoQueueEnabled = res.crawlMode === "auto" || res.crawlMode === "continuous";
         } else if (res.autoQueueEnabled !== undefined) {
@@ -49,7 +49,7 @@
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === "sync") {
         if (changes.extractionMode) {
-          state.extractionMode = changes.extractionMode.newValue || "ai_first";
+          state.extractionMode = (changes.extractionMode.newValue === "own_crawl") ? "own_crawl" : "ai_only";
           const widgetMode = document.getElementById("ai-widget-extraction-mode");
           if (widgetMode) widgetMode.value = state.extractionMode;
         }

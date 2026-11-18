@@ -2937,7 +2937,7 @@ async function runAsyncTests() {
       assert.ok(res.classification === "FALSE_POSITIVE" || res.classification === "NO_RESTRICTED_CATEGORY", `Classification must be non-restricted for ${ac.url}`);
     }
 
-    // 2. Aircraft / Aerospace False Positives (Applications, Materials & Served Industries)
+    // 2. Aircraft / Aerospace Sites (Strictly Prohibited per User Specification: Any occurrence restricts)
     const aeroCases = [
       {
         url: "https://odu.de/industries",

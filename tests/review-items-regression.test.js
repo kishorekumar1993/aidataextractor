@@ -2483,6 +2483,57 @@ async function runAll() {
     assert.strictEqual(qcOther.companyName, '');
   });
 
+  // =========================================================================
+  // Item 107: All items taken from AI only - zero Own Crawl fallback or heuristic contamination
+  // =========================================================================
+  runTest('Item 107: All items taken from AI only - zero Own Crawl fallback or heuristic contamination', () => {
+    const { ctx } = createTestContext();
+
+    // 1. AI result in AI Only mode with missing address, company name, and products.
+    // Must NOT backfill from crawlData (logoText, addressCandidates, computeOwnCrawlProductCount)
+    const aiData = {
+      _isFromAi: true,
+      _extractionMode: 'ai_only',
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: '',
+      companyName: '',
+      countryName: 'United States Of America',
+      companyAddress: '',
+      state: 'Not Available',
+      city: 'Not Available',
+      emailId: 'sales@alphaprecision.com',
+      secondaryEmailId: '',
+      phoneNumber: '2125550199',
+      numberOfProducts: '',
+      productImages: '',
+      numberOfProductDescriptions: ''
+    };
+
+    const crawlData = {
+      title: 'Crawl Company Title',
+      logoText: 'Crawl Logo Name Inc',
+      copyrightText: '© 2026 Crawl Copyright Ltd',
+      hasCompanyProfile: true,
+      addressCandidates: [{ raw: '123 Crawl Street, Austin, Texas 78701', source: 'footer' }],
+      detectedProductCount: 15,
+      detectedImageCount: 15,
+      detectedDescCount: 15
+    };
+
+    const finalResult = ctx.applyStrictInstructions(aiData, crawlData, { isRestricted: false });
+
+    // Verification: Zero Own Crawl heuristic contamination
+    assert.strictEqual(finalResult.companyName, '', 'Must NOT backfill company name from crawlData logoText/title in AI Only mode');
+    assert.strictEqual(finalResult.companyAddress, 'Not Available', 'Must NOT backfill address from crawlData addressCandidates in AI Only mode');
+    assert.strictEqual(finalResult.companyProfile, 'Not Available', 'Must NOT backfill company profile from crawlData heuristics in AI Only mode');
+    assert.strictEqual(finalResult.numberOfProducts, '0', 'Must NOT backfill product counts from crawlData in AI Only mode');
+    assert.strictEqual(finalResult.productImages, '0');
+    assert.strictEqual(finalResult.numberOfProductDescriptions, '0');
+    assert.strictEqual(finalResult.emailId, 'sales@alphaprecision.com', 'Preserves pure AI email');
+    assert.strictEqual(finalResult.secondaryEmailId, '', 'Missing secondary email remains empty');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

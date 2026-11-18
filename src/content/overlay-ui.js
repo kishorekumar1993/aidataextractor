@@ -696,8 +696,8 @@
         <div class="ai-widget-mode-row" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; margin-bottom: 8px; font-size: 11.5px; color: #374151;">
           <span style="font-weight: 600;">Data Source:</span>
           <select id="ai-widget-extraction-mode" style="flex: 1; padding: 4px 6px; font-size: 11px; border-radius: 4px; border: 1px solid #cbd5e1; background: #f8fafc; color: #0f172a; font-weight: 600; cursor: pointer;">
-            <option value="ai_first" ${(state.extractionMode || "ai_first") === "ai_first" ? "selected" : ""}>🤖 AI First (Fallback to Own Crawl)</option>
-            <option value="ai_only" ${state.extractionMode === "ai_only" ? "selected" : ""}>🧠 AI Only (Strict)</option>
+            <option value="ai_only" ${state.extractionMode !== "own_crawl" && state.extractionMode !== "ai_first" || state.extractionMode === "ai_only" ? "selected" : ""}>🧠 AI Only (Strict)</option>
+            <option value="ai_first" ${state.extractionMode === "ai_first" ? "selected" : ""}>🤖 AI First (Fallback to Own Crawl)</option>
             <option value="own_crawl" ${state.extractionMode === "own_crawl" ? "selected" : ""}>🕷️ Own Crawl Only</option>
           </select>
         </div>
@@ -914,7 +914,7 @@
 
     const widgetModeSelect = document.getElementById("ai-widget-extraction-mode");
     if (widgetModeSelect) {
-      widgetModeSelect.value = state.extractionMode || "ai_first";
+      widgetModeSelect.value = state.extractionMode || "ai_only";
       widgetModeSelect.addEventListener("change", (e) => {
         const newMode = e.target.value;
         state.extractionMode = newMode;
