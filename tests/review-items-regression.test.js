@@ -2399,6 +2399,90 @@ async function runAll() {
     assert.strictEqual(qcResult.secondaryEmailId, 'support@acmemachinery.com');
   });
 
+  // =========================================================================
+  // Item 106: Floor Space Preservation (7Floor vs 7 Floor), Comprehensive 15 Prohibited Categories & "Other" Business Type
+  // =========================================================================
+  runTest('Item 106: Floor space preservation (7Floor -> 7Floor vs 7 Floor -> 7 Floor), 15 Prohibited categories & Business Type "Other"', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Floor Space Rule: If website has "7Floor" (no space), do not give space ("7Floor")
+    const addrNoSpace = '7Floor, Number 159, Chien-Kuo Road, Taoyuan District, Taoyuan City';
+    const normNoSpace = ctx.sanitizeRule6CompanyAddress(addrNoSpace, '', 'Taiwan');
+    assert.strictEqual(normNoSpace, '7Floor, Number 159, Chien-Kuo Road, Taoyuan District, Taoyuan City',
+      'Should preserve 7Floor without inserting space when source has no space');
+
+    // 2. Floor Space Rule: If website has "7 Floor" (with space), provide space ("7 Floor")
+    const addrWithSpace = '7 Floor, Number 159, Chien-Kuo Road, Taoyuan District, Taoyuan City';
+    const normWithSpace = ctx.sanitizeRule6CompanyAddress(addrWithSpace, '', 'Taiwan');
+    assert.strictEqual(normWithSpace, '7 Floor, Number 159, Chien-Kuo Road, Taoyuan District, Taoyuan City',
+      'Should preserve 7 Floor with space when source has space');
+
+    // 3. Hyphenated floor sub-units: 7Floor-1 (no space) vs 7 Floor-1 (with space)
+    const addrHyphenNoSpace = '7Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City';
+    const normHyphenNoSpace = ctx.sanitizeRule6CompanyAddress(addrHyphenNoSpace, '', 'Taiwan');
+    assert.strictEqual(normHyphenNoSpace, '7Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City');
+
+    const addrHyphenSpace = '7 Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City';
+    const normHyphenSpace = ctx.sanitizeRule6CompanyAddress(addrHyphenSpace, '', 'Taiwan');
+    assert.strictEqual(normHyphenSpace, '7 Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City');
+
+    // 4. Prohibited categories: All 15 official categories detected in words, menus, image attributes, backgrounds
+    const prohibitedKeywords = [
+      { text: 'Industries: Aerospace', expectedCat: 'Aerospace' },
+      { text: 'Industries: Medical', expectedCat: 'Medicine, Medical & Hospital' },
+      { text: 'Company Profile: ITAR Registration', expectedCat: 'Defence & Military' },
+      { text: 'Catalog: Defence Equipment', expectedCat: 'Defence & Military' },
+      { text: 'Products: Precision Knife and Blades', expectedCat: 'Weapons, Armor & Knives' },
+      { text: 'Specialty: Marine Operations', expectedCat: 'Marine' },
+      { text: 'Specialty: Commercial Ship and Boat Building', expectedCat: 'Ships & Boats' },
+      { text: 'Products: Chemical and Petrochemicals', expectedCat: 'Chemicals & Petrochemicals' },
+      { text: 'Products: Craft Brewery and Alcohol', expectedCat: 'Alcohol & Breweries' },
+      { text: 'Products: Pets and Animals', expectedCat: 'Animals & Pets' },
+      { text: 'Menu: Restaurant and Food', expectedCat: 'Food & Beverages' },
+      { text: 'About: University and Higher Education', expectedCat: 'School, College & Education' }
+    ];
+
+    for (const item of prohibitedKeywords) {
+      const check = ctx.detectRestrictedKeywords(item.text, '', [{ url: 'https://example.com', text: item.text }]);
+      assert.strictEqual(check.isRestricted, true, `Should detect restricted category for "${item.text}"`);
+    }
+
+    // 5. Image attribute detection: <source srcset="..."> and CSS background-image
+    const htmlWithPicture = '<html><body><picture><source srcset="/images/aerospace-wing.webp"><img src="/images/blank.png" alt="wing"></picture></body></html>';
+    const checkPicture = ctx.detectRestrictedKeywords('Precision Engineering', htmlWithPicture, [{ url: 'https://example.com', html: htmlWithPicture, text: 'Precision Engineering' }]);
+    assert.strictEqual(checkPicture.isRestricted, true, 'Should detect restricted keyword in <source srcset>');
+
+    const htmlWithBg = '<html><body><div style="background-image: url(\'/products/medical-device.jpg\')">Precision Parts</div></body></html>';
+    const checkBg = ctx.detectRestrictedKeywords('Precision Parts', htmlWithBg, [{ url: 'https://example.com', html: htmlWithBg, text: 'Precision Parts' }]);
+    assert.strictEqual(checkBg.isRestricted, true, 'Should detect restricted keyword in inline style background-image URL');
+
+    // 6. Business Type "Other" must strictly set websiteStatus to "Not Working" and clear other 12 fields
+    const dataWithOther = {
+      websiteStatus: 'Working',
+      businessType: 'Other',
+      companyName: 'Acme General Services',
+      countryName: 'United States Of America',
+      companyAddress: '100 Main Street, Dallas, Texas',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'info@acme.com',
+      phoneNumber: '2145550199',
+      numberOfProducts: '5',
+      productImages: '5',
+      numberOfProductDescriptions: '5'
+    };
+    const finalizedOther = ctx.finalizeParsedAiResult(dataWithOther, {});
+    assert.strictEqual(finalizedOther.websiteStatus, 'Not Working', 'Business Type "Other" must be Not Working');
+    assert.strictEqual(finalizedOther.companyAddress, '', 'Address must be empty when business type is Other');
+    assert.strictEqual(finalizedOther.companyName, '', 'Company name must be empty when business type is Other');
+    assert.strictEqual(finalizedOther.emailId, '', 'Email must be empty when business type is Other');
+
+    const qcOther = ctx.applyStrictInstructions(dataWithOther, { originalUrl: 'https://example.com' }, { isRestricted: false });
+    assert.strictEqual(qcOther.websiteStatus, 'Not Working', 'Strict QC must mark business type Other as Not Working');
+    assert.strictEqual(qcOther.companyAddress, '');
+    assert.strictEqual(qcOther.companyName, '');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

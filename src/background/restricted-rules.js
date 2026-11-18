@@ -188,22 +188,10 @@ function sanitizeContextText(text) {
     .replace(/\b(?:corrosion|wear|rust|abrasion|scratch|stain|damage)\s*defen[cs]es?\b/gi, " ")
     .replace(/\b(?:line\s+of|first\s+line\s+of|in\s+defence\s+of|in\s+defense\s+of|defen[cs]e\s+against|defen[cs]e\s+mechanism)\b/gi, " ");
 
-  // 5. Sanitize industrial tools & material resistance
+  // 5. Sanitize "non-" phrases & food/non-food packaging first (so "non-food storage" is not broken by "food storage")
   cleanText = cleanText
-    .replace(/\b(?:water|ink|hydro|sand)?\s*jets?\s*(?:cutting|cutter|cutters|machining|printing|printer|printers|pump|pumps|cleaning|cleaner|nozzle|nozzles)?\b/gi, " ")
-    .replace(/\b(?:waterjet|inkjet|hydrojet)\b/gi, " ")
-    .replace(/\b(?:knife\s*gate\s*valves?|knife\s*valves?|machine\s*knives?|slitter\s*knives?|circular\s*knives?|guillotine\s*knives?|rotary\s*knives?|granulator\s*knives?|pelletizer\s*knives?|chipper\s*knives?|shear\s*knives?|planer\s*knives?|jointer\s*knives?|industrial\s*knives?|doctor\s*blades?|utility\s*knives?|utility\s*knife\s*blades?)\b/gi, " ")
-    .replace(/\b(?:air|utility|machine|slitter|guillotine|rotary|doctor)\s*knives?\b/gi, " ")
-    .replace(/\b(?:rotary|slitter|circular|machine|industrial|machinery|saw|cutter|guillotine|granulator|pelletizer|shear|planer|doctor|wiper|turbine|fan)\s*blades?\b/gi, " ")
-    .replace(/\bair\s*knife\s*(?:system|systems|drying|nozzle|nozzles|blower|blowers)?\b/gi, " ")
-    .replace(/\b(?:chemical|chemically|marine|food)\s*(?:grade|resistance|resistant|proof|inert|inertness|compatibility|safe|approved|contact)\b/gi, " ")
-    .replace(/\b(?:food[-–\s]*(?:grade|contact|approved|safe|packaging|containers?|storage|use|applications?|compatibility))\b/gi, " ")
-    .replace(/\bresistant\s+to\s+chemicals?\b/gi, " ")
-    .replace(/\bisopropyl\s+alcohol\b/gi, " ");
-
-  // 5b. Sanitize "non-" phrases (non-food, non-medical, non-military, non-chemical, etc.)
-  cleanText = cleanText
-    .replace(/\bnon[-–\s]+foods?(?:[-–\s]+(?:approved|grade|contact|safe|applications?|use|purposes?|items?|products?|packaging|containers?|bottles?|jars?|plastics?|materials?|areas?|zones?|manufacturing|production))?\b/gi, " ")
+    .replace(/\b(?:(?:suitable|used|applied)\s+(?:for|in)\s+)?food\s+(?:and|&)\s+non[-–\s]*foods?\s+(?:storage|packaging|containers?|bottles?|jars?|use|applications?)\b/gi, " ")
+    .replace(/\bnon[-–\s]+foods?(?:[-–\s]+(?:approved|grade|contact|safe|applications?|use|purposes?|items?|products?|packaging|containers?|bottles?|jars?|plastics?|materials?|areas?|zones?|manufacturing|production|storage))?\b/gi, " ")
     .replace(/\b(?:not\s+(?:for|intended\s+for|suitable\s+for|approved\s+for)\s+(?:food|human\s+consumption))\b/gi, " ")
     .replace(/\b(?:non-food|non\s+food)\b/gi, " ")
     .replace(/\bnon[-–\s]+medical(?:[-–\s]+(?:grade|use|applications?|devices?|equipment|supplies|products?|purposes?))?\b/gi, " ")
@@ -217,6 +205,19 @@ function sanitizeContextText(text) {
     .replace(/\bnon[-–\s]+chemical\b/gi, " ")
     .replace(/\bnon[-–\s]+animal\b/gi, " ")
     .replace(/\bnon[-–\s]+alcoholic\b/gi, " ");
+
+  // 5b. Sanitize industrial tools & material resistance
+  cleanText = cleanText
+    .replace(/\b(?:water|ink|hydro|sand)?\s*jets?\s*(?:cutting|cutter|cutters|machining|printing|printer|printers|pump|pumps|cleaning|cleaner|nozzle|nozzles)?\b/gi, " ")
+    .replace(/\b(?:waterjet|inkjet|hydrojet)\b/gi, " ")
+    .replace(/\b(?:knife\s*gate\s*valves?|knife\s*valves?|machine\s*knives?|slitter\s*knives?|circular\s*knives?|guillotine\s*knives?|rotary\s*knives?|granulator\s*knives?|pelletizer\s*knives?|chipper\s*knives?|shear\s*knives?|planer\s*knives?|jointer\s*knives?|industrial\s*knives?|doctor\s*blades?|utility\s*knives?|utility\s*knife\s*blades?)\b/gi, " ")
+    .replace(/\b(?:air|utility|machine|slitter|guillotine|rotary|doctor)\s*knives?\b/gi, " ")
+    .replace(/\b(?:rotary|slitter|circular|machine|industrial|machinery|saw|cutter|guillotine|granulator|pelletizer|shear|planer|doctor|wiper|turbine|fan)\s*blades?\b/gi, " ")
+    .replace(/\bair\s*knife\s*(?:system|systems|drying|nozzle|nozzles|blower|blowers)?\b/gi, " ")
+    .replace(/\b(?:chemical|chemically|marine|food)\s*(?:grade|resistance|resistant|proof|inert|inertness|compatibility|safe|approved|contact)\b/gi, " ")
+    .replace(/\b(?:food[-–\s]*(?:grade|contact|approved|safe|packaging|containers?|storage|use|applications?|compatibility))\b/gi, " ")
+    .replace(/\bresistant\s+to\s+chemicals?\b/gi, " ")
+    .replace(/\bisopropyl\s+alcohol\b/gi, " ");
 
   // 5c. Sanitize payment card brands & footer payment icons (Diners Club, Visa, Mastercard, Elo, Hipercard, Amex, etc.)
   cleanText = cleanText
@@ -235,12 +236,8 @@ function sanitizeContextText(text) {
 
   // 6b. Multi-industry served clauses and "used in / applied in" phrases
   cleanText = cleanText
-    .replace(/\b(?:suitable|used|applied|utilized|designed|recommended|engineered|ideal|intended)\s+(?:for|in)\s+(?:food|beverage|non-food|chemical|marine|medical|pharmaceutical|aerospace|defense|defence)[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:suitable|used|applied|intended)\s+(?:for|in)\s+(?:food|beverage|non-food)(?:[,\s]+(?:and|&|or)[,\s]+(?:food|beverage|non-food))*\s+(?:storage|packaging|containers?|bottles?|jars?|wrapping|boxes?|cartons?|applications?|use)\b/gi, " ")
     .replace(/\b(?:food|beverage)\s*(?:storage|packaging|containers?|bottles?|jars?|wrapping|boxes?|cartons?|handling|contact|grade)\b/gi, " ")
-    .replace(/\b(?:(?:our|these)?\s*(?:products?|goods|components?|materials?|supplies|equipment|machinery|solutions?|parts?|services?)\s+(?:are\s+)?(?:mainly\s+|widely\s+|commonly\s+)?(?:used|applied|utilized|suitable|designed|recommended|engineered)\s+(?:for|in)\s+[^.\n;]+?(?=[.\n;]|$))/gi, " ")
-    .replace(/\b(?:used|applied|serving)\s+(?:in|for|to)\s+(?:marine|industrial|chemical|food|beverage|pharmaceutical|medical|aerospace|automotive|defence|defense|military|offshore|oil|gas|refinery)[^.\n;]*?(?=[.\n;]|$)/gi, " ")
-    .replace(/(?:(?:^|[\r\n])\s*(?:industries|markets|sectors|applications?)\s*[:\-–]|(?:\b(?:target|key|served)\s+(?:industries|markets|sectors)\s*[:\-–])|(?:\b(?:industries|markets|sectors|applications?)\s+(?:we\s+serve|served|supported)\s*[:\-–]))[^.\n;]+?(?=[.\n;]|$)/gi, " ")
-    .replace(/\b(?:serving|serves|served|supplying|supplies|supplied|catering|caters|catered)\s+(?:to\s+)?(?:the\s+)?(?:manufacturing|marine|aerospace|aviation|aircraft|defence|defense|military|chemical|petrochemical|food|beverage|pharmaceutical|medical|healthcare|hospital|automotive|mining|oil|gas|refinery|industrial)\s*(?:and|&|or|,|\s*industry|\s*industries|\s*plants?|\s*sector|\s*sectors|\s*market|\s*markets|\s*facilities|\s*applications?|\s*environments?)*[^.\n;]*?(?=[.\n;]|$)/gi, " ")
     .replace(/\b(?:used\s+in\s+)?(?:marine\s*(&|and)\s*industrial|offshore\s*industrial\s*chemical\s*plant|food\s*(&|and)\s*chemical\s*industry)\b/gi, " ");
 
   // 6c. Architectural & commercial facility installations (lighting, flooring, doors, HVAC, etc.)
@@ -268,11 +265,16 @@ function sanitizeContextText(text) {
 
   // 8. Aerospace & Aircraft application false positives
   cleanText = cleanText
-    .replace(/\b(?:titanium\s+)?(?:bolts?|fasteners?|brackets?|components?|parts?|connectors?|cables?|machining|tooling)\s+(?:perform\s+flawlessly\s+on|for|in|on|used\s+in)\s+(?:our\s+)?(?:military\s+aircraft|commercial\s+aircraft|aircraft|aviation|aerospace)\b/gi, " ")
-    .replace(/\b(?:for|in|serving|services?|supplying|supplies|solutions?|applications?|components?|parts?|tooling|cables?|machining|fabrication|engineering)\s+(?:for|in|to)?\s*(?:the\s+)?(?:aerospace|aircraft|aviation|defence|defense|medical|pharmaceutical)\b/gi, " ")
-    .replace(/\b(?:aerospace|aircraft|aviation|defence|defense)\s+(?:applications?|grade|standards?|specifications?|spec|specs|hangars?|composites?)\b/gi, " ")
-    .replace(/\b(?:aircraft\s*cables?|aircraft-grade)\b/gi, " ")
-    .replace(/\badvising\s+(?:corporate\s+)?clients\s+in\s+[^.\n;]+?(?=[.\n;]|$)/gi, " ");
+    .replace(/\b(?:titanium\s+)?(?:bolts?|fasteners?|brackets?)\s+(?:perform\s+flawlessly\s+on)\s+(?:our\s+)?(?:military\s+aircraft)\b/gi, " ")
+    .replace(/\badvising\s+(?:corporate\s+)?clients\s+in\s+[^.\n;]+?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:precision\s+)?(?:gears?|gearboxes?)\s+(?:manufactured\s+for|for)\s+(?:aerospace\s+applications?|automotive[,\s]+agricultural[,\s]+and\s+aerospace\s+industries?)[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:laser\s+scanning|reverse\s+engineering|prototyping)\s+for\s+[^.\n;]*?aerospace\s+applications?[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:water\s+filtration(?:\s+systems?)?|lubrication\s+systems?)\s+(?:serving|for)\s+[^.\n;]*?aerospace\s+(?:machinery|facilities|hangars?)[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:components?\s+for|machining\s+and\s+toolmaking\s+for)\s+(?:medical|defense|aerospace)[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:superabrasive\s+diamond\s+grinding\s+wheels?|injection\s+moulding)\s+for\s+[^.\n;]*?aerospace[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:scrubbers?|sweepers?)\s+hire\s+for\s+[^.\n;]*?aerospace\s+hangars?[^.\n;]*?(?=[.\n;]|$)/gi, " ")
+    .replace(/\b(?:galvanized\s+)?aircraft\s+cables?\s+(?:for\s+industrial\s+lifting)?\b/gi, " ")
+    .replace(/\baircraft[-–\s]*grade\s+(?:plywood|aluminum|steel|fasteners?|wire|cables?|hardware|materials?)\b/gi, " ");
 
   // 9. Marine false positives
   cleanText = cleanText
@@ -344,91 +346,91 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Medicine & Medical",
     category: "Medicine, Medical & Hospital",
     label: "Medicine, Medical & Hospital",
-    regex: /\b(?:medicines?|pharmaceuticals?|pharmac(?:y|ies)|prescription\s*drugs?|medical\s*(?:equipment|devices?|supplies|treatment|products?|catalog(?:ue)?|instruments?|implants?|technology|diagnostic\s*tools?|manufacturing)|medicine\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|trader|distributor|production|formulation|sales|store))\b/i
+    regex: /\b(?:(?<!non[-\s]+)(?:medicines?|medicinal|biomedical|pharmaceuticals?|pharmac(?:y|ies)|prescription\s*drugs?|medical))\b/i
   },
   {
     id: 3,
     officialCategory: "Hospital & Healthcare",
     category: "Medicine, Medical & Hospital",
     label: "Medicine, Medical & Hospital",
-    regex: /\b(?:hospitals?|clinics?|healthcare\s*(?:centres?|centers?|services?|providers?|facilities)|nursing\s*homes?|medical\s*(?:laborator(?:y|ies)|labs?|diagnostic\s*centers?|imaging\s*centers?)|patient\s*care|urgent\s*care|outpatient\s*clinic|surgery\s*center|physicians?|doctors?|hospital\s*(?:equipment|suppl(?:ies|ier|iers)|furniture|beds?))\b/i
+    regex: /\b(?:hospitals?|clinics?|healthcare|health\s*care|patient\s*care|nursing\s*homes?|urgent\s*care|physicians?|doctors?|surgery\s*centers?)\b/i
   },
   {
     id: 4,
     officialCategory: "Food",
     category: "Food & Beverages",
     label: "Food & Beverages",
-    regex: /\b(?:(?<!(?:pet|puppy|dog|cat|animal|fish|non)[-\s]+)foods?|baker(?:y|ies)|catering|restaurants?|bistros?|cafes?|eater(?:y|ies)|(?<!alcoholic\s+)beverages?|edible|confectioner(?:y|ies)|dairy\s*(?:products?|processing)|meat\s*(?:products?|processing)|poultry\s*processing|seafood\s*(?:products?|processing)|food\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|products?|ingredients?|processing|packaging|wholesal(?:er|ers)|export(?:er|ers)|distributor|catalog(?:ue)?)|snacks?\s*(?:manufactur(?:er|ing)|producer)|(?:roadside\s*diner|american\s*diner|diner\s*restaurant))\b/i
+    regex: /\b(?:(?<!(?:pet|puppy|dog|cat|animal|fish|non)[-\s]+)foods?|baker(?:y|ies)|catering|restaurants?|bistros?|cafes?|eater(?:y|ies)|(?<!alcoholic\s+)beverages?|edible|confectioner(?:y|ies)|dairy\s*(?:products?|processing)?|meat\s*(?:products?|processing)?|poultry\s*processing|seafood\s*(?:products?|processing)?|culinary)\b/i
   },
   {
     id: 5,
     officialCategory: "Weapons & Knives",
     category: "Weapons, Armor & Knives",
     label: "Weapons, Armor & Knives",
-    regex: /\b(?:weapons?|firearms?|rifles?|guns?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|knif(?:e|es)|knives|pocket\s*knives?|folding\s*knives?|hunting\s*knives?|tactical\s*knives?|combat\s*knives?|custom\s*knives?|survival\s*knives?|throwing\s*knives?|fixed\s*blade\s*knives?|handmade\s*knives?|switchblades?|bayonets?|machetes?|daggers?|swords?|bowie\s*knives?|(?:combat|tactical|fixed|custom|hunting|survival|throwing|weapon|knife|sword|dagger)\s*blades?|tactical\s*equipment|weapon\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|trader|dealer|repair|accessories))\b/i
+    regex: /\b(?:weapons?|firearms?|rifles?|guns?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|knif(?:e|es)|knives|pocket\s*knives?|folding\s*knives?|hunting\s*knives?|tactical\s*knives?|combat\s*knives?|custom\s*knives?|survival\s*knives?|throwing\s*knives?|fixed\s*blade|switchblades?|bayonets?|machetes?|daggers?|swords?|bowie\s*knives?|(?:combat|tactical|fixed|custom|hunting|survival|throwing|weapon|knife|sword|dagger)\s*blades?)\b/i
   },
   {
     id: 6,
     officialCategory: "Defence",
     category: "Defence & Military",
     label: "Defence & Military",
-    regex: /\b(?:defen[cs]e\s*(?:contractors?|manufactur(?:er|ing)|suppl(?:ier|ies)|products?|equipment|systems?|technology|industry)|military\s*(?:equipment|technology|vehicles?|systems?|defence|defense|armaments?|artillery|contractors?)|armed\s*forces|tactical\s*armaments|combat\s*vehicles?|missile\s*systems?|ministry\s*of\s*defence|department\s*of\s*defense|defence\s*forces?|national\s*defen[cs]e|homeland\s*defen[cs]e|air\s*defen[cs]e|naval\s*defen[cs]e|itar(?:\s*[-–]?\s*(?:registered|registration|compliant|compliance|certified|certification|controlled|regulations?))?|international\s*traffic\s*in\s*arms\s*regulations)\b/i
+    regex: /\b(?:defen[cs]e|defensive|military|armed\s*forces|tactical\s*armaments?|combat\s*vehicles?|missiles?(?:\s*systems?)?|ministry\s*of\s*defence|department\s*of\s*defense|itar(?:\s*[-–]?\s*(?:registered|registration|compliant|compliance|certified|certification|controlled|regulations?))?|international\s*traffic\s*in\s*arms\s*regulations)\b/i
   },
   {
     id: 7,
     officialCategory: "Aircraft & Aviation",
     category: "Aviation & Airlines",
     label: "Aviation & Airlines",
-    regex: /\b(?:aircrafts?|airplanes?|aeroplanes?|aviation|airlines?|commercial\s*aviation|aviation\s*(?:equipment|products?|services?|charter)|passenger\s*flights?|airline\s*(?:tickets?|flights?|carrier|company)|aircraft\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|components?|spare\s*parts?|equipment|products?|maintenance|repair|overhaul|mro)|airplane\s*(?:parts?|components?|spare\s*parts?)|avionics|helicopters?\s*(?:charter|services?|manufactur(?:er|ing))|flight\s*booking|aircraft\s*leasing)\b/i
+    regex: /\b(?:aircrafts?|airplanes?|aeroplanes?|aviation|airlines?|commercial\s*aviation|avionics|helicopters?|flight\s*booking|aircraft\s*leasing)\b/i
   },
   {
     id: 8,
     officialCategory: "Aerospace",
     category: "Aerospace",
     label: "Aerospace",
-    regex: /\b(?:aerospace\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|contractor|components?|materials?|engineering|products?|equipment|industry|industries|machines?|machining|cnc|tooling|press(?:es)?|forming|forging|parts?)|spacecraft|satellite\s*manufactur(?:er|ing)|rocket\s*(?:and\s+)?propulsion(?:\s*systems?)?|launch\s*vehicles?|space\s*exploration\s*technology)\b/i
+    regex: /\b(?:aerospace|spacecraft|satellites?|rocket\s*(?:and\s+)?propulsion(?:\s*systems?)?|launch\s*vehicles?|space\s*exploration)\b/i
   },
   {
     id: 9,
     officialCategory: "Marine",
     category: "Marine",
     label: "Marine",
-    regex: /\b(?:marine\s*(?:equipment|products?|manufactur(?:er|ing)|suppl(?:ier|ies)|engineering|maintenance|navigation|propulsion(?:\s*equipment)?|industry(?:-related)?|operations?|catalog(?:ue)?)|maritime\s*(?:equipment|navigation|logistics|shipping|security|charter)|naval\s*(?:operations|dockyard|base|propulsion))\b/i
+    regex: /\b(?:marine|maritime|naval)\b/i
   },
   {
     id: 10,
     officialCategory: "Ship & Shipbuilding",
     category: "Ships & Boats",
     label: "Ships & Boats",
-    regex: /\b(?:shipyards?|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|ship\s*(?:manufactur(?:er|ing)|components?|spare\s*parts?|maintenance)|shipbuilding\s*equipment|vessels?\s*(?:builder|building|construction|manufactur(?:er|ing))|commercial\s*vessels?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|naval\s*ships?|yachts?\s*builder|ferr(?:y|ies)|tugboats?|barges?|marine\s*transportation\s*products?)\b/i
+    regex: /\b(?:ships?|shipyards?|shipbuilding|shipbuilders?|ship\s*repairs?|boats?|boat\s*builders?|boat\s*building|vessels?|yachts?|ferr(?:y|ies)|tugboats?|barges?|warships?|battleships?|naval\s*ships?)\b(?!\s*(?:to\b|from\b|address|method|cost|rate|fee|policy|calc|option|delivery))/i
   },
   {
     id: 11,
     officialCategory: "Chemical",
     category: "Chemicals & Petrochemicals",
     label: "Chemicals & Petrochemicals",
-    regex: /\b(?:chemicals?\s*(?:manufactur(?:er|ing)|producer|production|suppl(?:ier|ies)|distributor|distribution|trading|trader|wholesal(?:er|ers)|export(?:er|ers)|raw\s*materials?|products?|processing|catalog(?:ue)?)|petrochemicals?\s*(?:refinery|manufactur(?:er|ing)|plant|producer|supplier|distributor)|solvents?\s*(?:manufactur(?:er|ing)|producer|supplier|distributor)|industrial\s*chemicals?|hazardous\s*chemicals?|toxic\s*chemicals?|chemical\s*raw\s*materials?|specialty\s*chemicals?|bulk\s*chemicals?|fine\s*chemicals?|agrochemicals?|pesticides?)\b/i
+    regex: /\b(?:chemicals?|petrochemicals?|solvents?|hazardous\s*chemicals?|toxic\s*chemicals?|agrochemicals?|pesticides?)\b/i
   },
   {
     id: 12,
     officialCategory: "Alcohol",
     category: "Alcohol & Breweries",
     label: "Alcohol & Breweries",
-    regex: /\b(?:alcohol\s*(?:manufactur(?:er|ing)|suppl(?:ier|ies)|production|processing|distributor|export(?:er|ers)|catalog(?:ue)?)|alcoholic\s*beverages?|brewer(?:y|ies)|craft\s*brewery|microbrewery|distiller(?:y|ies)|wines?\s*(?:producer|maker|making|cellar|business)|winer(?:y|ies)|vineyards?|beers?\s*(?:manufactur(?:er|ing)|producer|brewing)|liquor\s*(?:store|shop|business)|spirits\s*(?:distiller|distillery|manufactur(?:er|ing)|producer)|whiskey|whisky|vodka|rum|gin|tequila|brandy)\b/i
+    regex: /\b(?:alcohol|alcoholic(?:\s*beverages?)?|brewer(?:y|ies)|craft\s*brewery|distiller(?:y|ies)|wines?|winer(?:y|ies)|vineyards?|beers?|liquor|spirits|whiskey|whisky|vodka|rum|gin|tequila|brandy)\b/i
   },
   {
     id: 13,
     officialCategory: "Animals",
     category: "Animals & Pets",
     label: "Animals & Pets",
-    regex: /\b(?:animal\s*(?:trading|suppl(?:y|ies|ier|iers)|breeding|commercial|products?\s*manufactur(?:er|ing)|products?\s*suppl(?:ier|ies)|catalog(?:ue)?)|live\s*animal\s*sales?|wildlife\s*trading|pupp(?:y|ies)\s*(?:for\s*sale|mill|breeder|breeding)|dogs?\s*(?:breeder|breeding|for\s*sale)|cats?\s*(?:breeder|breeding|for\s*sale)(?!\s*[-_.]?\s*(?:no\b|num|#|code|part|id|class|rating|group|ref|item|type|section|3\b|5\b|5e\b|6\b|6a\b|7\b|7a\b|8\b|cables?|cabling))|kittens\s*for\s*sale|animal\s*shelter|livestock\s*(?:farming|producer|breeding|trade|market|sales?)|cattle\s*farming|poultry\s*farming|pig\s*farming|commercial\s*slaughterhouse|pet\s*(?:shop|store|boutique|supplies|accessories|food|breeding))\b/i
+    regex: /\b(?:animals?|pets?|pupp(?:y|ies)|dogs?|cats?(?!\s*[-_.]?\s*(?:no\b|num|#|code|part|id|class|rating|group|ref|item|type|section|3\b|5\b|5e\b|6\b|6a\b|7\b|7a\b|8\b|cables?|cabling))|kittens?|livestock|cattle|poultry|horses?|equine)\b/i
   },
   {
     id: 14,
     officialCategory: "School, College & Education",
     category: "School, College & Education",
     label: "School, College & Education",
-    regex: /\b(?:high\s*school|elementary\s*school|primary\s*school|secondary\s*school|middle\s*school|prep\s*school|preparatory\s*school|kindergarten|preschool|nursery\s*school|daycare\s*center|charter\s*school|public\s*school|private\s*school|boarding\s*school|grammar\s*school|international\s*school|montessori\s*school|k-12\s*school|school\s*district|community\s*college|junior\s*college|state\s*college|technical\s*college|polytechnic\s*college|sixth\s*form\s*college|degree\s*college|polytechnic(?:\s*institute|\s*university)|educational\s*institution|academic\s*institution|higher\s*education\s*institution|school\s*of\s+(?:medicine|law|business|engineering|arts|nursing|pharmacy|dentistry|education|management|science)|coaching\s*institute|tutoring\s*center|tuition\s*centre|driving\s*school|flight\s*school|language\s*school|culinary\s*school|art\s*school|music\s*school|ballet\s*school|dance\s*school|acting\s*school|(?:school|college|university|academy|vidyalaya|polytechnic)\b[\s\S]{0,80}?\b(?:admissions?\s*(?:open|process|criteria|requirements?|office|portal|for)|enrol(?:l)?ments?|academic\s*curriculum|tuition\s*fees?|academic\s*programs?|undergraduate\s*(?:admissions?|programs?|degrees?)|postgraduate\s*(?:admissions?|programs?|degrees?)|degree\s*programs?|degrees?\s*offered|campus\s*life|student\s*portal|student\s*login|courses?\s*offered))\b/i
+    regex: /\b(?:high\s*school|elementary\s*school|primary\s*school|secondary\s*school|middle\s*school|prep\s*school|kindergarten|preschool|daycare|charter\s*school|public\s*school|private\s*school|boarding\s*school|grammar\s*school|international\s*school|montessori|k-12|school\s*district|community\s*college|junior\s*college|state\s*college|technical\s*college|polytechnic|degree\s*college|educational\s*institution|academic\s*institution|higher\s*education|school\s*of\s+(?:medicine|law|business|engineering|arts|nursing|pharmacy|dentistry|education|management|science)|coaching\s*institute|tutoring|tuition\s*centre|driving\s*school|flight\s*school|language\s*school|culinary\s*school|art\s*school|music\s*school|(?:school|college|university|academy)\b[\s\S]{0,80}?\b(?:admissions?|enrol(?:l)?ments?|curriculum|tuition|degrees?|campus|students?|courses?))\b/i
   }
 ];
 
@@ -535,6 +537,19 @@ function formatRestrictedValidationResult(check, websiteUrl = "", websiteStatus 
   };
 }
 
+function safeExtractContextSnippet(text, keyword) {
+  if (typeof extractContextSnippet === "function") {
+    return extractContextSnippet(text, keyword);
+  }
+  if (!text || !keyword) return "";
+  const clean = String(text).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const idx = clean.toLowerCase().indexOf(keyword.toLowerCase());
+  if (idx === -1) return "";
+  const start = Math.max(0, idx - 45);
+  const end = Math.min(clean.length, idx + keyword.length + 45);
+  return (start > 0 ? "..." : "") + clean.slice(start, end).trim() + (end < clean.length ? "..." : "");
+}
+
 function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
   let imgAttributes = typeof extractImageAttributes === "function" ? extractImageAttributes(html) : "";
   let combined = ((text || "") + " " + imgAttributes).trim();
@@ -585,7 +600,7 @@ function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
       if (item.label === "Marine" && /^marine/i.test(matchedKw)) {
         matchedKw = "Marine";
       }
-      const snippet = extractContextSnippet(rawClean, matchedKw);
+      const snippet = safeExtractContextSnippet(rawClean, matchedKw);
       const exactLink = typeof findExactEvidenceLink === "function" ? findExactEvidenceLink(html, matchedKw, null, pageUrl) : pageUrl;
       const resolvedUrl = exactLink || pageUrl || "";
       const { evidenceType, imageUrl } = extractEvidenceTypeAndImage(html, matchedKw, resolvedUrl);
@@ -633,7 +648,7 @@ function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
       if (item.label === "Marine" && /^marine/i.test(matchedKw)) {
         matchedKw = "Marine";
       }
-      const snippet = extractContextSnippet(rawClean, matchedKw);
+      const snippet = safeExtractContextSnippet(rawClean, matchedKw);
       const exactLink = typeof findExactEvidenceLink === "function" ? findExactEvidenceLink(html, matchedKw, null, pageUrl) : pageUrl;
       const resolvedUrl = exactLink || pageUrl || "";
       const { evidenceType, imageUrl } = extractEvidenceTypeAndImage(html, matchedKw, resolvedUrl);

@@ -191,13 +191,42 @@
     // Safety timeout: ensure buttons are NEVER permanently disabled (32s)
     const safetyTimer = setTimeout(() => {
       if (state.isCrawlingInProgress) {
-        console.log("[AI Assistant] Safety timer reached. Resetting crawling state.");
+        console.log("[AI Assistant] Safety timer reached. Marking status as Not Working.");
         state.isCrawlingInProgress = false;
         if (typeof AIExt.resetCrawlButtons === "function") {
           AIExt.resetCrawlButtons();
         }
+        const timeoutData = {
+          websiteStatus: "Not Working",
+          businessType: "",
+          companyProfile: "",
+          companyName: "",
+          countryName: "",
+          companyAddress: "",
+          state: "",
+          city: "",
+          emailId: "",
+          secondaryEmailId: "",
+          phoneNumber: "",
+          numberOfProducts: "",
+          productImages: "",
+          numberOfProductDescriptions: "",
+          fetchError: "Crawl timeout reached safety boundary (32s)",
+          errorKeyword: "Connection Timeout",
+          errorSourceUrl: targetUrl,
+          errorSnippet: "Website server took longer than 32s to respond. Marked as Not Working per user rule.",
+          _finalUrl: targetUrl,
+          _originalUrl: targetUrl,
+          _note: "Crawl timeout reached safety boundary - Marked as Not Working"
+        };
+        if (typeof AIExt.fillFormFields === "function") {
+          AIExt.fillFormFields(timeoutData);
+        }
+        if (typeof AIExt.renderPreview === "function") {
+          AIExt.renderPreview(timeoutData);
+        }
         if (typeof AIExt.updateStatus === "function") {
-          AIExt.updateStatus("⚠️ Crawl timed out. Ready to retry.", "warning");
+          AIExt.updateStatus("⚠️ Crawl timed out (32s). Status set to Not Working.", "warning");
         }
       }
     }, 32000);

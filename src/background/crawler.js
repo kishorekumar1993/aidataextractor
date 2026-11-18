@@ -813,8 +813,11 @@ async function crawlWebsite(targetUrl, options = {}) {
           const chunkPromises = chunk.map(cUrl => {
             if (pagesFetchedCount >= MAX_CRAWL_PAGES) return Promise.resolve(null);
             if (!isPriority && isCrawlTimeExceeded()) return Promise.resolve(null);
+            const remainingTime = Math.max(500, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime));
+            const effectiveTimeout = Math.min(timeoutMs, remainingTime);
             return safeFetchHtml(cUrl, {
-              timeoutMs,
+              timeoutMs: effectiveTimeout,
+              signal: options.abortSignal,
               isPriorityContact: isPriority,
               headers: {
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -959,8 +962,9 @@ async function crawlWebsite(targetUrl, options = {}) {
     companySocials = extractOfficialSocialLinks(allCrawlText);
 
     // High-speed smart social check: if fewer than 2 emails discovered on website,
-    // check company's official Facebook/LinkedIn pages sequentially with tight 1.5s timeout for primary or secondary email.
-    const socialCandidates = [companySocials.facebook, companySocials.linkedin].filter(Boolean);
+    // check company's official Facebook page sequentially with tight 1.5s timeout for primary or secondary email.
+    // (LinkedIn blocks unauthenticated requests with authwalls/timeouts; excluded to prevent stalling crawl time budget)
+    const socialCandidates = [companySocials.facebook].filter(Boolean);
     if (allDiscoveredEmails.size < 2 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
       for (const socialUrl of socialCandidates) {
         if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
@@ -2048,9 +2052,29 @@ function extractImageAttributes(html) {
     if (m[1]) tokens.push(m[1].trim());
   }
 
-  // 2. Image src and data-src filenames (e.g. src="/products/medical-drill.jpg" -> "medical drill")
-  const imgSrcMatches = [...html.matchAll(/<img[^>]+(?:src|data-src)=["']([^"']+)["']/gi)];
+  // 2. Image src, data-src, and srcset filenames (e.g. src="/products/medical-drill.jpg" -> "medical drill")
+  const imgSrcMatches = [...html.matchAll(/<(?:img|source)[^>]+(?:src|data-src|srcset)=["']([^"']+)["']/gi)];
   for (const m of imgSrcMatches) {
+    const raw = (m[1] || "").trim();
+    if (!raw || /^(?:data:)/i.test(raw)) continue;
+    try {
+      const urls = raw.split(/,\s*/);
+      for (const u of urls) {
+        const cleanU = u.split(/\s+/)[0];
+        const pathname = new URL(cleanU, "http://localhost").pathname;
+        const filename = pathname.split("/").pop() || "";
+        const baseName = filename.replace(/\.[a-zA-Z0-9]+$/, "");
+        const words = baseName.replace(/[/\\_\-.]+/g, " ").trim();
+        if (words.length > 2) {
+          tokens.push(words);
+        }
+      }
+    } catch (e) { }
+  }
+
+  // 3. CSS background-image paths in inline style attributes (e.g. style="background-image: url('/images/aerospace-wing.jpg')")
+  const bgMatches = [...html.matchAll(/url\(["']?([^"')]+)["']?\)/gi)];
+  for (const m of bgMatches) {
     const raw = (m[1] || "").trim();
     if (!raw || /^(?:data:)/i.test(raw)) continue;
     try {
@@ -2064,19 +2088,29 @@ function extractImageAttributes(html) {
     } catch (e) { }
   }
 
-  // 3. Image captions and figcaptions
+  // 4. Image captions and figcaptions
   const captionMatches = [...html.matchAll(/<(?:figcaption|caption)[^>]*>([\s\S]*?)<\/(?:figcaption|caption)>/gi)];
   for (const m of captionMatches) {
     if (m[1]) tokens.push(stripHtml(m[1]).trim());
   }
 
-  // 4. Human-readable title and aria-label attributes on links and interactive elements
+  // 5. SVG <title> and <text> elements
+  const svgMatches = [...html.matchAll(/<svg[^>]*>([\s\S]*?)<\/svg>/gi)];
+  for (const m of svgMatches) {
+    const svgInner = m[1];
+    const textMatches = [...svgInner.matchAll(/<(?:title|desc|text)[^>]*>([\s\S]*?)<\/(?:title|desc|text)>/gi)];
+    for (const tm of textMatches) {
+      if (tm[1]) tokens.push(stripHtml(tm[1]).trim());
+    }
+  }
+
+  // 6. Human-readable title and aria-label attributes on links and interactive elements
   const linkMatches = [...html.matchAll(/<(?:a|button)[^>]+(?:title|aria-label)=["']([^"']+)["']/gi)];
   for (const m of linkMatches) {
     if (m[1]) tokens.push(m[1].trim());
   }
 
-  // 5. Anchor link URLs pathname words (e.g. href="/products/medical-equipment" -> "medical equipment")
+  // 7. Anchor link URLs pathname words (e.g. href="/products/medical-equipment" -> "medical equipment")
   const hrefMatches = [...html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)];
   for (const m of hrefMatches) {
     const raw = (m[1] || "").trim();
@@ -2090,7 +2124,7 @@ function extractImageAttributes(html) {
     } catch (e) { }
   }
 
-  // 6. Meta descriptions and keywords
+  // 8. Meta descriptions and keywords
   const metaMatches = [...html.matchAll(/<meta[^>]+(?:name|property)=["'](?:description|keywords|og:description|og:title)["'][^>]+content=["']([^"']+)["']/gi)];
   for (const m of metaMatches) {
     if (m[1]) tokens.push(m[1].trim());

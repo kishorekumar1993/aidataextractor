@@ -96,11 +96,11 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * "Restricted Site": Company business involves a prohibited category.
 - MANDATORY RULE FOR "Other", "Service Provider", "Online Shopping", & "Restricted Site": When the business type is classified as "Other", "Service Provider", "Online Shopping", or "Restricted Site", you MUST set "websiteStatus": "Not Working", "notWorkingReason": "Business Type [Type] outside allowed scope (Manufacturer to Wholesaler only)", AND leave all other 12 fields empty "".
 
-4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES & CONTEXTUAL EXCLUSIONS):
-- Evaluation Standard: Reject only when the company genuinely manufactures, sells, supplies, distributes, or provides services involving a prohibited category. Incidental mentions, customer industries, application references, or unrelated contextual words must not trigger rejection. Evaluate the actual products, services, and business operations.
+4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES):
+- Mandatory Directive: Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals, or School, College & Education. Even if these images or words appear anywhere on the site (navigation menus, industry lists, product categories, headers, footers, image alt/titles), do not work on that site. Mark "websiteStatus": "Not Working", "businessType": "Restricted Site", and leave all other 12 fields empty "".
 - The 14 Strictly Prohibited Categories:
   1. Porn & Adult (Pornographic sites/videos, adult entertainment, sexually explicit content/services, adult products)
-  2. Medicine & Medical (Medicine manufacturers/suppliers/distributors, pharmaceuticals, medical equipment/devices/supplies, medical device manufacturing, medical treatments)
+  2. Medicine & Medical (Medicine, pharmaceuticals, medical equipment/devices/supplies, medical device manufacturing, medical treatments, clinical healthcare)
   3. Hospital & Healthcare (Hospitals, clinics, healthcare centres, nursing homes, diagnostic labs, healthcare providers, hospital equipment/supplies)
   4. Food (Food manufacturers/suppliers, food products/ingredients, meat, seafood, dairy, bakery, beverages, food processing/wholesalers)
   5. Weapons & Knives (Weapons manufacturers/suppliers, knives, swords, daggers, blades, firearms, ammunition, military/defence weapons, tactical gear)
@@ -113,8 +113,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   12. Alcohol (Alcohol manufacturers/suppliers, beer, wine, liquor businesses, alcoholic beverage distributors/production)
   13. Animals (Animal trading/supply, live animal sales, animal breeding, animal product manufacturers/suppliers, wildlife trading)
   14. School, College & Education (Schools, colleges, universities, academies, polytechnics, educational institutes, coaching centres, tutoring/tuition classes, and academic institutions are strictly out of scope. Mark "Not Working" with all other 13 fields empty).
-- Contextual Exclusions (False Positive Prevention): An industrial machinery or physical goods manufacturer mentioning equipment used in food-processing plants, chemical storage tanks, hospital lighting, school furniture/uniforms/buses, knife gate valves, adult education, terms mentioning legal adult age, or cruelty-free cosmetics is NOT a prohibited category business. However, any company that manufactures, supplies, or catalogs specialized parts, machinery, tooling, or presses for aircraft/airplanes, aerospace, military/defense, or medical devices is a PROHIBITED category business and must be rejected as Not Working.
-- Output when Restricted: When a genuine restricted category business/product is detected, set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
+- Output when Restricted: When a restricted category business/product/word is detected anywhere on the site, set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
 
 5. COMPANY PROFILE VALIDATION:
 - Options: "Available" | "Not Available".
@@ -155,7 +154,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Return "" if websiteStatus is not Working.
 
 8. COMPANY ADDRESS (HEADQUARTERS EXTRACTION, FULL-FORM EXPANSIONS & QC):
-- CORE PRINCIPLE: WHAT WEBSITE HAS, TAKE THE SAME — EXPANSION ONLY, NO GRAMMAR CHANGES: Take the exact address as found on the website. DO NOT rewrite, paraphrase, or change words. Only expand standard abbreviations (St. -> Street, Rd. -> Road, Fl. -> Floor, No. -> Number, Ste. -> Suite, Bldg. -> Building). Do NOT make grammar changes (e.g. no ordinal suffixes on floors; '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor'). Do NOT invent new words not on the site.
+- CORE PRINCIPLE: WHAT WEBSITE HAS, TAKE THE SAME — EXPANSION ONLY, NO GRAMMAR CHANGES: Take the exact address as found on the website. DO NOT rewrite, paraphrase, or change words. Only expand standard abbreviations (St. -> Street, Rd. -> Road, Fl. -> Floor, No. -> Number, Ste. -> Suite, Bldg. -> Building). Do NOT make grammar changes (e.g. no ordinal suffixes on floors; '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor'). Do NOT invent new words not on the site. If website has '7Floor' (no space), do not give space ('7Floor'); if website has '7 Floor' (with space), provide space ('7 Floor').
 - Headquarters Priority: Global Headquarters / Corporate Headquarters > Head Office > Main Office > Registered Office (only if no physical HQ/Head/Main office exists). Never select a branch, warehouse, factory, showroom, or dealer when headquarters is available.
 - Complete Multi-Line Extraction & Sequence: Combine all lines into one comma-separated address in the exact sequence shown on the website. Retain premise, building, unit, suite, floor, street number, street name, locality, town, district, city, county, and state/province.
 - Postal Code Removal: Strip ALL numeric and alphanumeric postal codes, ZIP codes, and PIN codes (UK postcodes like B75 7BU, SW1A 1AA; Canadian like M5V 2T6; European; US 5-digit and ZIP+4). Retain Post Office Box numbers (e.g. "Post Office Box 1264").
@@ -170,7 +169,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * States / Provinces / Counties Globally: Expand ALL US states (MA -> Massachusetts, TX -> Texas, CA -> California, IL -> Illinois, etc.), Canadian provinces (ON -> Ontario, QC -> Quebec, BC -> British Columbia), Australian states (VIC -> Victoria, NSW -> New South Wales, QLD -> Queensland), UK/Irish counties (Northants -> Northamptonshire, Yorks -> Yorkshire, Co. Durham -> County Durham), Indian states & zones (MH -> Maharashtra, KA -> Karnataka, TN -> Tamil Nadu, GJ -> Gujarat, MIDC -> Maharashtra Industrial Development Corporation, GIDC -> Gujarat Industrial Development Corporation, Opp. -> Opposite, S.No. -> Survey Number), South African provinces (GP -> Gauteng, KZN -> KwaZulu-Natal), Malaysian/Indonesian states (Sgr -> Selangor, Jabar -> Jawa Barat, Jateng -> Jawa Tengah, Jatim -> Jawa Timur), Austrian/Swiss/German states (NÖ -> Niederösterreich, ZH -> Zürich, BW -> Baden-Württemberg), Brazilian/Mexican states (SP -> São Paulo, CDMX -> Ciudad de Mexico).
   * International Non-English Terms: France (Z.I. -> Zone Industrielle, Z.A. -> Zone Artisanale, Bd. -> Boulevard, Imp. -> Impasse, B.P. -> Boite Postale), Germany/Austria/Switzerland (Str. -> Strasse, Pl. -> Platz), Spain (C/ -> Calle, Avda. -> Avenida, Pol. Ind. -> Poligono Industrial, Ctra. -> Carretera), Italy (V.le -> Viale, C.so -> Corso, P.zza -> Piazza, Z.I. -> Zona Industriale), Netherlands/Belgium (Str. -> Straat, Wg. -> Weg, Pl. -> Plein, Ind. Terrein -> Industrieterrein), Poland (ul. -> Ulica, al. -> Aleja, pl. -> Plac, os. -> Osiedle), Portugal/Brazil (R. -> Rua, Av. -> Avenida, Rod. -> Rodovia), Mexico/LatAm (Col. -> Colonia, Fracc. -> Fraccionamiento, Calz. -> Calzada), Türkiye (Cad./Cd. -> Caddesi, Sk./Sok. -> Sokak, Bulv./Blv. -> Bulvari, Mah./Mh. -> Mahallesi, OSB -> Organize Sanayi Bolgesi, No./N:/No: -> Number), Indonesia (Jl./Jln. -> Jalan, Perum. -> Perumahan, RT/RW -> Rukun Tetangga/Rukun Warga, Kec. -> Kecamatan, Kab. -> Kabupaten, Kel. -> Kelurahan, Ds. -> Desa, Dk. -> Dukuh), Malaysia/Singapore (Jln. -> Jalan, Lrg. -> Lorong, Tmn. -> Taman, Bdr. -> Bandar, Kg. -> Kampung), Hong Kong/East Asia (N.T. -> New Territories, Kln. -> Kowloon, Pref. -> Prefecture).
 - Unit & Hash Preservation (#): Retain '#' for unit, apartment, or suite numbers verbatim (e.g. '#01-12', '#04-05', '#12-34', '#101'). NEVER convert '#01-12' to 'Floor' or '1 Floor-12'. Only expand '#' to 'Number' when used directly in front of a street or house number without letters or hyphens (e.g. '# 159' -> 'Number 159').
-- Floor Notation (No Ordinal Grammar Expansion): Never use ordinal grammar expansions for floor numbers. Always use cardinal numbers followed by 'Floor' (e.g. '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor', '6F-1' / '6F.-1' / '6F之1' -> '6 Floor-1', '5/F' -> '5 Floor'). Retain sub-unit hyphens as in '6 Floor-1'.
+- Floor Notation (No Ordinal Grammar Expansion & Spacing Preservation): Never use ordinal grammar expansions for floor numbers. Always use cardinal numbers (e.g. '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor'). CRITICAL SPACING RULE: What website has, take the exact same spacing. If website has '7Floor' (no space), do not give space ('7Floor'); if website has '7 Floor' (with space), provide space ('7 Floor'). Retain sub-unit hyphens as in '6 Floor-1'.
 - MANDATORY "No." -> "Number" EXPANSION: Whenever "No.", "No", "NO.", "Nos.", "N:", "No:", or "#" (before a street or building number) appears in the source address, YOU MUST ALWAYS EXPAND IT TO "Number " (e.g. "No. 62-6" -> "Number 62-6", "No.62-6" -> "Number 62-6", "No. 159" -> "Number 159", "No: 12" -> "Number 12", "NO. 8" -> "Number 8"). NEVER drop, omit, or strip "No." when it was present on the website!
 - SEPARATE CONCATENATED NUMBER & STREET: If the website ran the number and street name together without a space (e.g. "No.62-6JHONGCHE ROAD"), expand "No." to "Number " and separate the street name with a space and comma: "Number 62-6, Jhongche Road".
 - DO NOT INVENT "Number": If a street number is bare without any "No.", "No", or "#" (e.g. "40 Sarah Street", "220 Via Del Gregge"), DO NOT add "Number" (keep "40 Sarah Street", "220 Via Del Gregge").
@@ -302,6 +301,32 @@ function finalizeParsedAiResult(parsed, crawlData) {
 
   // Mandatory user rule: When AI extracts address, TAKE AI ADDRESS DIRECTLY.
   // DO NOT alter or strip words from AI address using crawl fragments.
+  // Address Floor spacing rule: "7Floor dont give space in address give space means u provide else dont give space"
+  if (parsed.companyAddress && typeof parsed.companyAddress === "string") {
+    parsed.companyAddress = parsed.companyAddress.replace(/\b(\d{1,3})(?:st|nd|rd|th)(\s*)Floor\b/gi, (m, num, sp) => `${num}${sp && sp.length > 0 ? " " : ""}Floor`);
+    parsed.companyAddress = parsed.companyAddress.replace(/\b(\d{1,3})(?:st|nd|rd|th)(\s*)Floor-(\d{1,4}[A-Za-z]?)\b/gi, (m, num, sp, sub) => `${num}${sp && sp.length > 0 ? " " : ""}Floor-${sub}`);
+  }
+
+  // Disallowed Business Type Check: If "Other", "Service Provider", "Online Shopping", or "Restricted Site" -> Mark Not Working!
+  const btLower = String(parsed.businessType || "").trim().toLowerCase();
+  const disallowedAiTypes = new Set(["other", "service provider", "online shopping", "restricted site"]);
+  if (disallowedAiTypes.has(btLower) && parsed.websiteStatus !== "Redirect Site") {
+    parsed.websiteStatus = "Not Working";
+    parsed.notWorkingReason = `Business Type "${parsed.businessType || "Other"}" outside allowed scope (Manufacturer to Wholesaler only)`;
+    parsed.businessType = "";
+    parsed.companyProfile = "";
+    parsed.companyName = "";
+    parsed.countryName = "";
+    parsed.companyAddress = "";
+    parsed.state = "";
+    parsed.city = "";
+    parsed.emailId = "";
+    parsed.secondaryEmailId = "";
+    parsed.phoneNumber = "";
+    parsed.numberOfProducts = "";
+    parsed.productImages = "";
+    parsed.numberOfProductDescriptions = "";
+  }
 
   if (parsed.websiteStatus === "Working" || parsed.websiteStatus === "Redirect Site") {
     if ((parsed.productImages === undefined || parsed.productImages === null || String(parsed.productImages).trim() === "") && parsed.numberOfProductImages) {

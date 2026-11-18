@@ -527,34 +527,43 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])Aly\.\s*(?=\d)/gi, '$1Alley ');
   a = a.replace(/(^|[,\s])Aly\b\s*(?=\d)/gi, '$1Alley ');
 
-  const toCleanFloor = (num) => {
+  const toCleanFloor = (num, hasSpace = true) => {
     const n = parseInt(num, 10);
-    if (isNaN(n)) return `${num} Floor`;
-    return `${n} Floor`;
+    const val = isNaN(n) ? num : n;
+    return hasSpace ? `${val} Floor` : `${val}Floor`;
   };
   const toOrdinalFloor = toCleanFloor;
 
   // Floor & Level abbreviations and sub-divisions:
   // 1. Hyphenated floor sub-divisions / unit reconciliation:
   // e.g. "1st Floor, unit 1", "6 Floor, Unit 1", "Floor 6, unit 1", "6 Floor Unit 1", "6 Floor, room 1" -> "6 Floor-1"
-  a = a.replace(/(^|[,\s])(?:(\d{1,3})(?:st|nd|rd|th)?\s+(?:Flr?|Floor)\.?|Floor\s+(\d{1,3}))[,\s]+(?:unit|suite|ste\.?|rm\.?|room|#)\s*[-#]?\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, n2, sub) => {
+  a = a.replace(/(^|[,\s])(?:(\d{1,3})(?:st|nd|rd|th)?(\s*)(?:Flr?|Floor)\.?|Floor\s+(\d{1,3}))[,\s]+(?:unit|suite|ste\.?|rm\.?|room|#)\s*[-#]?\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, sp, n2, sub) => {
     const fNum = n1 || n2;
-    return `${p1}${toCleanFloor(fNum)}-${sub.toUpperCase()}`;
+    const hasSpace = n2 ? true : (sp && sp.length > 0);
+    return `${p1}${toCleanFloor(fNum, hasSpace)}-${sub.toUpperCase()}`;
   });
 
   // 2. Hyphenated floor sub-divisions shorthand (e.g. "6F-1", "6F.-1", "6F - 1", "6/F-1", "6F之1" -> "6 Floor-1")
-  a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?\s*[-–之]\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, num, sub) => `${p1}${toCleanFloor(num)}-${sub.toUpperCase()}`);
+  a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?\s*[-–之]\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, num, sub) => `${p1}${toCleanFloor(num, true)}-${sub.toUpperCase()}`);
 
-  // 3. Hyphenated Floor words (e.g. "6th Floor - 1", "6th Floor -1", "Floor 6-1", "Floor 6 - 1" -> "6 Floor-1")
-  a = a.replace(/(^|[,\s])(?:(\d{1,3})(?:st|nd|rd|th)?\s+(?:Flr?|Floor)\.?|Floor\s+(\d{1,3}))\s*[-–]\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, n2, sub) => {
+  // 3. Hyphenated Floor words (e.g. "6th Floor - 1", "6th Floor -1", "Floor 6-1", "Floor 6 - 1" -> "6 Floor-1", "7Floor-1" -> "7Floor-1")
+  a = a.replace(/(^|[,\s])(?:(\d{1,3})(?:st|nd|rd|th)?(\s*)(?:Flr?|Floor)\.?|Floor\s+(\d{1,3}))\s*[-–]\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, sp, n2, sub) => {
     const fNum = n1 || n2;
-    return `${p1}${toCleanFloor(fNum)}-${sub.toUpperCase()}`;
+    const hasSpace = n2 ? true : (sp && sp.length > 0);
+    return `${p1}${toCleanFloor(fNum, hasSpace)}-${sub.toUpperCase()}`;
   });
 
-  // 4. Standard standalone Floor & Level abbreviations (e.g. "5/F.", "5/F", "5F.", "5F", "Fl. 5", "Flr 5", "Floor 5", "5th Fl", "1st Floor" -> "1 Floor")
-  a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toCleanFloor(num)}`);
-  a = a.replace(/(^|[,\s])(?:Flr?|Floor)\.?\s*(\d{1,3})(?:st|nd|rd|th)?\b/gi, (m, p1, num) => `${p1}${toCleanFloor(num)}`);
-  a = a.replace(/(^|[,\s])(\d{1,3})(?:st|nd|rd|th)?\s*(?:Flr?|Floor)\.?\b/gi, (m, p1, num) => `${p1}${toCleanFloor(num)}`);
+  // 4. Standard standalone Floor & Level abbreviations
+  // User Instruction: "7Floor dont give space in address give space means u provide else dont give space"
+  // If original website text has space ("7 Floor", "1st Floor", "5/F"), provide space ("7 Floor").
+  // If original website text has NO space ("7Floor", "7floor"), do NOT provide space ("7Floor").
+  a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s+)F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toCleanFloor(num, true)}`);
+  a = a.replace(/(^|[,\s])(\d{1,3})F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toCleanFloor(num, false)}`);
+  a = a.replace(/(^|[,\s])(?:Flr?|Floor)\.?\s*(\d{1,3})(?:st|nd|rd|th)?\b/gi, (m, p1, num) => `${p1}${toCleanFloor(num, true)}`);
+  a = a.replace(/(^|[,\s])(\d{1,3})(?:st|nd|rd|th)?(\s*)(?:Flr?|Floor)\.?\b/gi, (m, p1, num, sp) => {
+    const hasSpace = sp && sp.length > 0;
+    return `${p1}${toCleanFloor(num, hasSpace)}`;
+  });
   a = a.replace(/(^|[,\s])(?:G\s*\/\s*F\.?|GF\b|Gnd\s*Flr?\.?)/gi, "$1Ground Floor");
   a = a.replace(/(^|[,\s])(?:B\s*\/\s*F\.?|BF\b|Bsmt\b\.?)/gi, "$1Basement Floor");
   a = a.replace(/(^|[,\s])(?<!\b(?:Blok|Block|Kavling|Kav\.?|Lot|Plot|Unit|Suite|Ste\.?|Apartment|Apt\.?|Tower|Wing|Bay|Dock|Zone|Gate|Section|Sec\.?)\s+)B(\d{1,2})\b(?!\s*\d[A-Z]{2})/gi, "$1Basement $2");
@@ -2311,8 +2320,9 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
 
   // Remove any ordinal grammar expansions from floor numbers (e.g. "1st Floor" -> "1 Floor", "6th Floor-1" -> "6 Floor-1")
-  a = a.replace(/\b(\d{1,3})(?:st|nd|rd|th)\s+Floor\b/gi, "$1 Floor");
-  a = a.replace(/\b(\d{1,3})(?:st|nd|rd|th)\s+Floor-(\d{1,4}[A-Za-z]?)\b/gi, "$1 Floor-$2");
+  // User Instruction: "7Floor dont give space in address give space means u provide else dont give space"
+  a = a.replace(/\b(\d{1,3})(?:st|nd|rd|th)?(\s*)Floor\b/gi, (m, num, sp) => `${num}${sp && sp.length > 0 ? " " : ""}Floor`);
+  a = a.replace(/\b(\d{1,3})(?:st|nd|rd|th)?(\s*)Floor-(\d{1,4}[A-Za-z]?)\b/gi, (m, num, sp, sub) => `${num}${sp && sp.length > 0 ? " " : ""}Floor-${sub}`);
 
   a = a.replace(/\s+,/g, ",");
   a = a.replace(/,\s*,+/g, ", ");
