@@ -469,7 +469,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
             }
           }
           lastError = new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
-          if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 20000)) {
+          if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 50000)) {
             console.warn(`[AI Assistant] Gemini attempt 1 on ${modelToTry} returned ${response.status}. Rechecking again...`);
             await new Promise(r => setTimeout(r, 400));
             continue;
@@ -485,7 +485,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
         throw new Error(`Failed to parse structured JSON from Gemini model ${modelToTry}`);
       } catch (err) {
         lastError = err;
-        if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 20000)) {
+        if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 50000)) {
           console.warn(`[AI Assistant] Gemini attempt 1 on ${modelToTry} failed (${err.message}). Rechecking again...`);
           await new Promise(r => setTimeout(r, 400));
           continue;
