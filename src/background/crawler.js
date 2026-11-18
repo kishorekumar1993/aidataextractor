@@ -306,9 +306,9 @@ async function crawlWebsite(targetUrl, options = {}) {
     : (Number(options.crawlPageLimit) || 50);
 
   // Time budget guard: Ensure crawling respects the service worker lifecycle deadline (28s hard limit in MV3).
-  // Default: 16,000ms (16s) for responsive user feedback and ample AI time budget.
+  // Default: 8,500ms (8.5s) for responsive user feedback and ample AI time budget.
   const crawlStartTime = Date.now();
-  const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 16000;
+  const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 8500;
   const isCrawlTimeExceeded = () => (Date.now() - crawlStartTime) >= MAX_CRAWL_TIME_MS;
 
   const getCrawlBudgetUsed = () => pagesFetchedCount + (isBudgetExplicit && redirectChainInfo ? 1 : 0);
@@ -328,7 +328,7 @@ async function crawlWebsite(targetUrl, options = {}) {
     }
     pagesFetchedCount++;
     const remainingTime = Math.max(500, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime));
-    const effectiveTimeout = Math.min(fetchOpts.timeoutMs || 4000, remainingTime);
+    const effectiveTimeout = Math.min(fetchOpts.timeoutMs || 2500, remainingTime);
     return await fetchDecodedHtml(urlToFetch, { ...fetchOpts, timeoutMs: effectiveTimeout, signal: options.abortSignal || fetchOpts.signal });
   }
 
@@ -373,7 +373,7 @@ async function crawlWebsite(targetUrl, options = {}) {
   // 1. Upfront Multi-Hop 3xx Server-Side Redirect Chain Resolution
   // Follows all 301/302/303/307/308 hops (up to 4 hops budget) to discover the true final destination
   try {
-    const redirectTimeout = Math.min(3500, Math.max(1000, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
+    const redirectTimeout = Math.min(2500, Math.max(1000, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
     redirectChainInfo = await resolveRedirectChain(targetUrl, 4, { signal: options.abortSignal, timeoutMs: redirectTimeout });
     if (redirectChainInfo && redirectChainInfo.hops > 0 && redirectChainInfo.finalUrl && redirectChainInfo.finalUrl !== targetUrl) {
       if (isRedirectDomain(targetUrl, redirectChainInfo.finalUrl)) {
@@ -390,7 +390,7 @@ async function crawlWebsite(targetUrl, options = {}) {
 
   try {
     if (!mainRes) {
-      const mainTimeout = Math.min(7000, Math.max(1000, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
+      const mainTimeout = Math.min(4000, Math.max(1000, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
       mainRes = await safeFetchHtml(finalUrl, {
         timeoutMs: mainTimeout,
         headers: {
@@ -425,7 +425,7 @@ async function crawlWebsite(targetUrl, options = {}) {
       const targetFallbacks = fallbackUrls.slice(0, 2);
       for (const altUrl of targetFallbacks) {
         if (pagesFetchedCount >= MAX_CRAWL_PAGES || isCrawlTimeExceeded()) break;
-        const altTimeout = Math.min(5000, Math.max(800, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
+        const altTimeout = Math.min(2500, Math.max(800, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
         const res = await safeFetchHtml(altUrl, {
           timeoutMs: altTimeout,
           headers: {
@@ -815,7 +815,7 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       };
 
-      const fetchSubpageBatch = async (urls, timeoutMs = 5000, concurrency = 6, isPriority = false) => {
+      const fetchSubpageBatch = async (urls, timeoutMs = 2500, concurrency = 6, isPriority = false) => {
         if (!urls || urls.length === 0) return [];
         const results = [];
         for (let i = 0; i < urls.length; i += concurrency) {
@@ -956,50 +956,6 @@ async function crawlWebsite(targetUrl, options = {}) {
               recordSubpageContent(settled.value.url || remainingCandidates[i], settled.value.html, { includeAddresses: true, includeProfileText: false });
             }
           }
-        }
-      }
-
-      // Dynamically scan same-domain linked PDFs if < 2 corporate emails were found on HTML pages
-      if (allDiscoveredEmails.size < 2 && !isCrawlTimeExceeded()) {
-        let siteRootDomain = "";
-        try {
-          siteRootDomain = extractRootDomain(finalUrl || targetUrl);
-        } catch (e) { }
-
-        const pdfLinks = [...(dedicatedContactHtml + "\n" + contactHtml + "\n" + mainHtml).matchAll(/href=["']([^"']+\.pdf(?:\?[^"']*)?)["']/gi)]
-          .map(m => ensureAbsoluteUrl(m[1], finalUrl))
-          .filter(u => {
-            if (!u || fetchedUrls.has(u)) return false;
-            try {
-              return !siteRootDomain || extractRootDomain(u) === siteRootDomain;
-            } catch (e) {
-              return false;
-            }
-          })
-          .slice(0, 2);
-
-        for (const pdfUrl of pdfLinks) {
-          if (pagesFetchedCount >= MAX_CRAWL_PAGES || isCrawlTimeExceeded()) break;
-          fetchedUrls.add(pdfUrl);
-          pagesFetchedCount++;
-          try {
-            const pdfCtrl = new AbortController();
-            const pdfTimer = setTimeout(() => pdfCtrl.abort(), 4000);
-            const pdfRes = await fetch(pdfUrl, { signal: pdfCtrl.signal });
-            clearTimeout(pdfTimer);
-            if (pdfRes && pdfRes.ok) {
-              const buf = await pdfRes.arrayBuffer();
-              const rawPdfText = new TextDecoder("latin1").decode(buf);
-              const pdfEmails = rawPdfText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-              for (const em of pdfEmails) {
-                const cleanEm = stripTrailingContactWordsFromEmail(em.toLowerCase().trim());
-                if (isValidCorporateEmail(cleanEm) && !isUnwantedEmail(cleanEm)) {
-                  allDiscoveredEmails.add(cleanEm);
-                  updateEmailSource(emailSourceMap, cleanEm, pdfUrl, finalUrl, targetUrl);
-                }
-              }
-            }
-          } catch (e) { }
         }
       }
     }

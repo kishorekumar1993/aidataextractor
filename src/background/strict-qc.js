@@ -210,7 +210,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "", optio
   // Step 1: Deep crawl complete website across all pages, framesets, contact, products, footer, JSON-LD
   crawlResult = await crawlWebsite(targetUrl, {
     maxPages: settings.maxPages || settings.crawlPageLimit || undefined,
-    maxCrawlTimeMs: extractionMode === "own_crawl" ? 18000 : 15000,
+    maxCrawlTimeMs: extractionMode === "own_crawl" ? 10000 : 8500,
     abortSignal: options.abortSignal
   });
 

@@ -398,10 +398,10 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
 
     // Recheck loop: if attempt 1 fails, recheck again before switching candidate models
     for (let attempt = 1; attempt <= 2; attempt++) {
-      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 55000) break;
+      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 21000) break;
       try {
         const abortCtrl = new AbortController();
-        const timeoutPerModel = (modelToTry === candidateModels[0]) ? (attempt === 1 ? 25000 : 15000) : 15000;
+        const timeoutPerModel = (modelToTry === candidateModels[0]) ? (attempt === 1 ? 8500 : 5000) : 5000;
         const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
         let response;
         try {
@@ -469,7 +469,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
             }
           }
           lastError = new Error(`Gemini API error ${response.status} (${modelToTry}): ${errText}`);
-          if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 50000)) {
+          if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 20000)) {
             console.warn(`[AI Assistant] Gemini attempt 1 on ${modelToTry} returned ${response.status}. Rechecking again...`);
             await new Promise(r => setTimeout(r, 400));
             continue;
@@ -485,7 +485,7 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
         throw new Error(`Failed to parse structured JSON from Gemini model ${modelToTry}`);
       } catch (err) {
         lastError = err;
-        if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 50000)) {
+        if (attempt === 1 && (!crawlStartTime || (Date.now() - crawlStartTime) < 20000)) {
           console.warn(`[AI Assistant] Gemini attempt 1 on ${modelToTry} failed (${err.message}). Rechecking again...`);
           await new Promise(r => setTimeout(r, 400));
           continue;
@@ -606,7 +606,7 @@ async function runOpenAiModelsWithFallback({ providerLabel, modelsEndpoint = "",
   if (directHit) return directHit;
 
   // Only query /models if direct attempts failed (excluding auth errors) to discover active models
-  const withinBudget = !(crawlStartTime > 0 && (Date.now() - crawlStartTime) > 55000);
+  const withinBudget = !(crawlStartTime > 0 && (Date.now() - crawlStartTime) > 21000);
   if (!isAuthError && modelsEndpoint && withinBudget) {
     const { models: liveModels, authError } = await resolveVerifiedChatModels(
       { modelsEndpoint, models: candidateModels },
@@ -637,7 +637,7 @@ async function callOpenAiCompatibleApi({ providerLabel, endpoint, modelsEndpoint
     attemptFn: async (modelToTry, idx) => {
       const sendChatRequest = async (useOptionalTuning) => {
         const abortCtrl = new AbortController();
-        const timeoutPerModel = (idx === 0) ? 25000 : 15000;
+        const timeoutPerModel = (idx === 0) ? 10000 : 6000;
         const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
         const bodyPayload = {
           model: modelToTry,

@@ -55,7 +55,7 @@
       await ensureServiceWorkerAwake();
 
       let settled = false;
-      const timeoutMs = (message && message.action === "CRAWL_AND_EXTRACT") ? 62000 : 9000;
+      const timeoutMs = (message && message.action === "CRAWL_AND_EXTRACT") ? 25000 : 9000;
       const safetyTimer = setTimeout(() => {
         if (!settled) {
           settled = true;
