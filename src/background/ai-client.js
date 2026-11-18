@@ -124,6 +124,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
 6. COMPANY NAME STRICT VALIDATION:
 - Extract the complete company name displayed on the official website.
+- The company name MUST be the primary corporate entity of this website matching the website's domain and brand. NEVER select distributor, dealer, or partner company names (e.g. if the website is dutchregulators.com, extract the entity matching Dutch Regulators, NEVER an international distributor or agent).
 - Prefer the registered legal name when explicitly available (Footer copyright, About Us, Contact Us, Legal Notices, JSON-LD).
 - Corporate Suffix Expansions:
   * Standalone Co. -> Company (CRITICAL: If the website ends with "Co." and does NOT contain "Ltd." or "Limited", output "Company" ONLY — NEVER append ", Limited"!).
@@ -131,7 +132,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * Co., Ltd. / Co.,Ltd / Co. Ltd / Co Ltd -> Company, Limited (only when BOTH Co. and Ltd. are present on the site).
   * Inc. -> Incorporated, Corp. -> Corporation, LLC -> Limited Liability Company, LLP -> Limited Liability Partnership, PLC -> Public Limited Company.
   * Pty Ltd -> Proprietary Limited, Pte Ltd / Pvt Ltd -> Private Limited, Sdn Bhd -> Sendirian Berhad, Bhd -> Berhad.
-  * PT -> Perseroan Terbatas, Tbk -> Terbuka, CV -> Commanditaire Vennootschap, SE -> Societas Europaea, GmbH / Ges.m.b.H. -> Gesellschaft mit beschränkter Haftung, AG -> Aktiengesellschaft, KG -> Kommanditgesellschaft, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, B.V. -> Besloten Vennootschap, N.V. -> Naamloze Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, S.p.A. -> Società per Azioni, Sp. z o.o. -> Spółka z Ograniczoną Odpowiedzialnością, AB -> Aktiebolag, Oy -> Osakeyhtiö, A/S -> Aktieselskab, Ltda. -> Limitada.
+  * PT -> Perseroan Terbatas, Tbk -> Terbuka, CV -> Commanditaire Vennootschap, SE -> Societas Europaea, GmbH / Ges.m.b.H. -> Gesellschaft mit beschränkter Haftung, AG -> Aktiengesellschaft, KG -> Kommanditgesellschaft, Cie -> Compagnie, Cia -> Compañía, SARL -> Société à Responsabilité Limitée, SAS -> Société par Actions Simplifiée, B.V. / BV -> Besloten Vennootschap, N.V. / NV -> Naamloze Vennootschap, S.A. -> Sociedad Anónima / Société Anonyme, S.L. -> Sociedad Limitada, S.r.l. -> Società a Responsabilità Limitata, S.p.A. -> Società per Azioni, Sp. z o.o. -> Spółka z Ograniczoną Odpowiedzialnością, AB -> Aktiebolag, Oy -> Osakeyhtiö, A/S -> Aktieselskab, Ltda. -> Limitada.
   * Industry Words: Mfg. -> Manufacturing, Ind. -> Industries/Industrial, Intl. -> International, Eng. -> Engineering, Equip. -> Equipment, Prods. -> Products, Bros. -> Brothers, Tech. -> Technology, Sys. -> Systems, Svcs. -> Services, Ent. -> Enterprises, Solns. -> Solutions.
 - Rules:
   * NEVER invent corporate suffixes when only a brand name is provided or suffix is absent.
@@ -227,8 +228,8 @@ CAPITAL CITY RULE (MANDATORY EXCEPTION FOR BOTH STATE & CITY):
 Target URL (Original): ${crawlData.originalUrl}
 Final URL (Destination): ${crawlData.finalUrl || crawlData.originalUrl}
 Redirect Detection: ${isRedirectDomain(crawlData.originalUrl, crawlData.finalUrl) ? "REDIRECT DETECTED (Original domain redirected to a different destination domain -> MANDATORY: set websiteStatus to 'Redirect Site'). Evaluate all other 13 fields from the destination domain (" + (crawlData.finalUrl || crawlData.originalUrl) + ")." : "Same domain (Not a redirect)"}
-Page Title: ${/(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare|ddos protection)/i.test(crawlData.title || "") ? toTitleCase(cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl)) : crawlData.title}
-Detected Website Brand / Logo: ${crawlData.logoText || crawlData.ogSiteName || "(None)"}
+Page Title: ${(crawlData.title && !/(?:attention required|just a moment|access denied|403 forbidden|security check|cloudflare|ddos protection)/i.test(crawlData.title)) ? crawlData.title : toTitleCase(cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl))}
+Detected Website Brand / Logo: ${crawlData.logoText || crawlData.ogSiteName || toTitleCase(cleanDomainStem(crawlData.finalUrl || crawlData.originalUrl))}
 Detected Official Legal Corporate Names: ${crawlData.legalCompanyCandidates && crawlData.legalCompanyCandidates.length > 0 ? crawlData.legalCompanyCandidates.slice(0, 8).join(", ") : "(None)"}
 Discovered Emails: ${(crawlData.emails || []).join(", ") || "(None)"}
 Detected Contact Phones: ${(crawlData.phones || []).join(", ") || "(None)"}
@@ -1054,7 +1055,7 @@ function scoreTitleSegment(segment, domainStem, logoText, ogSiteName) {
 }
 
 function extractBestBrandFromTitle(title, domain, logoText = "", ogSiteName = "") {
-  if (!title) return "";
+  if (!title) return logoText || ogSiteName || (domain ? toTitleCase(cleanDomainStem(domain)) : "");
   if (/(?:attention required|just a moment|access denied|403 forbidden|404 not found|security check|cloudflare|ddos protection)/i.test(title)) {
     return domain ? toTitleCase(cleanDomainStem(domain)) : "";
   }

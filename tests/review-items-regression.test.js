@@ -2606,6 +2606,79 @@ async function runAll() {
     assert.notStrictEqual(finalized.secondaryEmailId, finalized.emailId, 'Secondary email must never duplicate primary');
   });
 
+  // =========================================================================
+  // Item 109: Robust Company Name Extraction (No Distributor Overwrite, HTML Tag Separation & Legal Suffix Expansion)
+  // (Works globally across all domains: dutchregulators.com, etc.)
+  // =========================================================================
+  runTest('Item 109: Robust Company Name Extraction (No Distributor Overwrite, HTML Tag Separation & Legal Suffix Expansion)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. stripHtml preserves line breaks from <br /> and does not glue tags to text
+    const rawHtml = '<div>Address<br />Dutch Regulators BV<br>Luzernestraat 8<br/>2153 GN Nieuw-Vennep</div>';
+    const stripped = ctx.stripHtml(rawHtml);
+    assert.ok(!stripped.includes('AddressDutch'), 'stripHtml must not glue "Address" and "Dutch" together');
+    assert.ok(stripped.includes('Dutch Regulators BV'), 'stripHtml must preserve "Dutch Regulators BV" cleanly');
+
+    // 2. rankLegalCandidates prioritizes company entities matching the domain stem over third-party distributors/agents
+    const candidateList = ['Impco-metall GmbH', 'Fluidcontrols Ltd', 'Dutch Regulators BV', 'Eisenbau s.r.l'];
+    const rankedCandidates = ctx.rankLegalCandidates(candidateList, 'https://www.dutchregulators.com');
+    assert.strictEqual(rankedCandidates[0], 'Dutch Regulators BV', 'Legal candidate matching domain stem must be ranked #1');
+
+    // 3. extractSiteLogoText retrieves brand from image src filename or H1 if alt/title is absent
+    const htmlWithLogoImg = '<header><img src="/images/logo Dutch Regulators_large.jpg"></header>';
+    const logoBrand = ctx.extractSiteLogoText(htmlWithLogoImg);
+    assert.strictEqual(logoBrand, 'Dutch Regulators', 'Logo brand must be extracted from logo filename');
+
+    // 4. extractBestBrandFromTitle falls back to logoText/domain when page title is empty
+    const brandFromTitle = ctx.extractBestBrandFromTitle('', 'https://www.dutchregulators.com', 'Dutch Regulators');
+    assert.strictEqual(brandFromTitle, 'Dutch Regulators', 'Falls back to logoText/domain stem when title is empty');
+
+    // 5. AI Prompt strictly enforces primary corporate entity matching domain/brand
+    const mockCrawl = {
+      originalUrl: 'https://www.dutchregulators.com',
+      finalUrl: 'https://www.dutchregulators.com',
+      title: '',
+      logoText: 'Dutch Regulators',
+      legalCompanyCandidates: ['Dutch Regulators BV', 'Impco-metall GmbH', 'Fluidcontrols Ltd']
+    };
+    const prompt = ctx.buildExtractionPrompt(mockCrawl, true);
+    assert.ok(prompt.includes('primary corporate entity of this website matching the website\'s domain and brand'), 'Prompt must instruct AI to select primary corporate entity matching domain');
+    assert.ok(prompt.includes('NEVER select distributor'), 'Prompt must forbid selecting distributor company names');
+
+    // 6. Strict QC: If AI returned registered entity "Dutch Regulators BV", expands BV -> "Besloten Vennootschap"
+    const aiWithBv = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Dutch Regulators BV',
+      countryName: 'Netherlands'
+    };
+    const qcBv = ctx.applyStrictInstructions(aiWithBv, mockCrawl, { isRestricted: false });
+    assert.strictEqual(qcBv.companyName, 'Dutch Regulators Besloten Vennootschap', 'Dutch Regulators BV must expand suffix BV to Besloten Vennootschap');
+
+    // 7. Strict QC: If AI mistakenly returned a distributor ("Impco-metall GmbH"), Strict QC overrides it with authentic domain entity
+    const aiDistributor = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Impco-metall GmbH',
+      countryName: 'Netherlands'
+    };
+    const qcDistributor = ctx.applyStrictInstructions(aiDistributor, mockCrawl, { isRestricted: false });
+    assert.strictEqual(qcDistributor.companyName, 'Dutch Regulators Besloten Vennootschap', 'Distributor name must be replaced by primary domain company entity');
+
+    // 8. Strict QC: If AI returned bare brand "Dutch Regulators", preserves bare brand cleanly without inventing suffix
+    const aiBareBrand = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Dutch Regulators',
+      countryName: 'Netherlands'
+    };
+    const qcBare = ctx.applyStrictInstructions(aiBareBrand, mockCrawl, { isRestricted: false });
+    assert.strictEqual(qcBare.companyName, 'Dutch Regulators', 'Bare brand without suffix must be preserved cleanly');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

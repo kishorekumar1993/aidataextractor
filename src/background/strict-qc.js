@@ -1121,7 +1121,23 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         compName = toTitleCase(compName);
         compName = restoreCommaBeforeCorporateSuffix(compName, crawlData);
       }
-    } else {
+    } else if (compName) {
+      const curIsSlogan = typeof isSeoSloganOrTagline === "function" && isSeoSloganOrTagline(compName);
+      const dStem = cleanDomainStem((crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "");
+      const dStemNorm = normalizeNameForComparison(dStem);
+      const curNormComp = normalizeNameForComparison(compName);
+      const compMatchesDomain = dStemNorm && (curNormComp.includes(dStemNorm) || dStemNorm.includes(curNormComp));
+      const cleanLegalCandidates = ((crawlData && crawlData.legalCompanyCandidates) || []).filter(c => c && !hasCompanyProseNoise(cleanCompanyPrefixesAndSuffixes(c)));
+      const hasDomainMatchingCandidate = cleanLegalCandidates.some(c => {
+        const cNorm = normalizeNameForComparison(c);
+        return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm));
+      });
+      const hasSuffix = hasCompleteLegalSuffix(compName) || /\b(?:limited|ltd|incorporated|incorporation|inc|corporation|corp|llc|llp|pllc|plc|gmbh|ag|kg|sa|sl|srl|bv|nv|co|company|holdings|group)\b/i.test(compName);
+
+      if (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate)) {
+        compName = preferOfficialCompanyName(compName, crawlData);
+        compName = restoreLegalSuffixIfOmitted(compName, crawlData);
+      }
       compName = expandCompanyAbbreviations(compName, result.countryName || "");
       compName = cleanCompanyPrefixesAndSuffixes(compName);
       compName = toTitleCase(compName);
@@ -1567,11 +1583,31 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
   } else if (!compName || compName.toLowerCase() === "not available") {
     // Only fall back to crawl data if AI returned empty or not available
-    compName = preferOfficialCompanyName(compName, crawlData);
-    compName = restoreLegalSuffixIfOmitted(compName, crawlData);
-    compName = decodeHtmlEntities(compName);
-    compName = compName.replace(/['’`]\s*s\b/gi, "'s");
-    compName = cleanCompanyPrefixesAndSuffixes(compName);
+    if (result._extractionMode !== "ai_only") {
+      compName = preferOfficialCompanyName(compName, crawlData);
+      compName = restoreLegalSuffixIfOmitted(compName, crawlData);
+      compName = decodeHtmlEntities(compName);
+      compName = compName.replace(/['’`]\s*s\b/gi, "'s");
+      compName = cleanCompanyPrefixesAndSuffixes(compName);
+    }
+  } else {
+    // AI returned a company name, but check if AI returned:
+    // 1) An SEO slogan or tagline (e.g. "We are high quality manufacturer")
+    // 2) An unrelated distributor / partner company when a domain-matching legal candidate exists on the site (e.g. Dutch Regulators vs Impco-metall GmbH)
+    // 3) An incomplete brand where an official legal candidate matching the domain has a registered suffix (e.g. Dutch Regulators vs Dutch Regulators BV)
+    const curIsSlogan = typeof isSeoSloganOrTagline === "function" && isSeoSloganOrTagline(compName);
+    const hasDomainMatchingCandidate = cleanLegalCandidates.some(c => {
+      const cNorm = normalizeNameForComparison(c);
+      return dStemNorm && (cNorm.includes(dStemNorm) || dStemNorm.includes(cNorm));
+    });
+
+    if (curIsSlogan || (!compMatchesDomain && hasDomainMatchingCandidate)) {
+      compName = preferOfficialCompanyName(compName, crawlData);
+      compName = restoreLegalSuffixIfOmitted(compName, crawlData);
+      compName = decodeHtmlEntities(compName);
+      compName = compName.replace(/['’`]\s*s\b/gi, "'s");
+      compName = cleanCompanyPrefixesAndSuffixes(compName);
+    }
   }
 
   // Expand abbreviations to full form and clean brackets per Rule 4

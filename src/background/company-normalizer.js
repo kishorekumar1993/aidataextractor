@@ -100,7 +100,7 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   name = name.replace(/^(?:(?:custom|high\s*quality|precision|leading|trusted|premier|specialist|specialists\s+in|industrial|commercial|global)\s+[A-Za-z0-9\s&,.'\-]+?)\s*[-–—|:•·]\s*(?=[A-Z0-9])/i, "").trim();
 
   // 2. Strip common unwanted leading prefixes (iterative loop to handle chained prefixes like "Submit scroll to top Contact")
-  const prefixRegex = /^(?:(?:company\s*information|company\s*details|contact\s*details|company\s*name|legal\s*name|registered\s*name|official\s*name|business\s*name|nazwa\s*firmy|firma|contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+(?:the|our)\s+(?:official\s+)?(?:website|site|home\s*page|store|portal)(?:\s+of)?)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo|facebook|instagram|linkedin|twitter|youtube|pinterest|tiktok|vimeo|social\s*media|follow\s*us|connect\s*with\s*us)\b[\s\-_|:•·,]*)+/i;
+  const prefixRegex = /^(?:(?:address|physical\s*address|postal\s*address|office\s*address|head\s*office|company\s*information|company\s*details|contact\s*details|company\s*name|legal\s*name|registered\s*name|official\s*name|business\s*name|nazwa\s*firmy|firma|contact(?:\s+us)?(?:\s+today)?|about(?:\s+us)?(?:\s+(?:the|our)\s+company)?|welcome(?:\s+to(?:\s+(?:the|our)\s+(?:official\s+)?(?:website|site|home\s*page|store|portal)(?:\s+of)?)?)?|visit(?:\s+us(?:\s+at)?)?|home(?:\s+page)?|find(?:\s+us(?:\s+at)?)?|meet(?:\s+our)?|discover|explore|introducing|overview\s+of|profile\s+of|call(?:\s+us)?|email(?:\s+us)?|click\s+here(?:\s+to)?|submit|scroll\s+to\s+top|back\s+to\s+top|read\s+more\s+about|learn\s+more\s+about|policy|privacy(?:\s+notice|\s+policy)?(?:\s+of)?|this\s+is\s+the\s+(?:privacy\s+notice|privacy\s+policy|website|official\s+site)\s+of|copyright(?:\s*(?:©|\(c\)))?(?:\s*\d{4})?(?:\s+by)?|powered\s+by|designed\s+by|website\s+by|skip\s+to\s+content|official\s+website\s+of|get\s+in\s+touch(?:\s+with)?|connect\s+with|menu|logo|facebook|instagram|linkedin|twitter|youtube|pinterest|tiktok|vimeo|social\s*media|follow\s*us|connect\s*with\s*us)\b[\s\-_|:•·,]*)+/i;
 
   let prev = "";
   while (prev !== name) {
@@ -261,6 +261,25 @@ function extractSiteLogoText(html) {
     if (val.length >= 2 && !/^(?:home|image|banner|site|first\s*slide|second\s*slide|third\s*slide|slide\s*\d+|carousel)$/i.test(val)) return val;
   }
 
+  // Look for logo image filename if alt/title is absent
+  const logoSrcMatch = searchArea.match(/<img[^>]+src=["']([^"']*(?:logo|brand)[^"']*)["'][^>]*>/i);
+  if (logoSrcMatch && logoSrcMatch[1]) {
+    const filename = logoSrcMatch[1].split(/[\/\\]/).pop().split(/[\?#]/)[0];
+    const cleanedFile = filename.replace(/\.(?:jpe?g|png|webp|svg|gif|avif)$/i, "").replace(/[-_+]/g, " ").replace(/\b(?:logo|brand|large|small|header|main|img|image|icon)\b/gi, "").trim();
+    if (cleanedFile.length >= 3 && cleanedFile.length <= 60 && !/^\d+$/.test(cleanedFile)) {
+      return cleanedFile;
+    }
+  }
+
+  // Look for prominent h1 heading on page if logoText is still missing
+  const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1Match && h1Match[1]) {
+    const h1Text = h1Match[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (h1Text && h1Text.length >= 3 && h1Text.length <= 60 && typeof isSeoSloganOrTagline === "function" && !isSeoSloganOrTagline(h1Text)) {
+      return h1Text;
+    }
+  }
+
   // Look for any image ONLY inside an explicit <header> with alt or title
   if (headerMatch) {
     const anyHeaderImg = searchArea.match(/<img[^>]+(?:alt|title)=["']([^"']{3,60})["']/i);
@@ -382,7 +401,7 @@ function companyNamesMatch(a, b) {
   if (sA.replace(/and/g, "") === sB || sB.replace(/and/g, "") === sA) return true;
 
   // Strip legal suffixes from stems
-  const stripLegal = (s) => s.replace(/(?:proprietarylimited|privatelimited|publiclimitedcompany|sendirianberhad|limitedliabilitycompany|limited|incorporated|corporation|berhad|gmbh|llc|llp|pllc|ptyltd|pteltd|pvtltd|sdnbhd|ltd|inc|plc|corp|co)$/g, "");
+  const stripLegal = (s) => s.replace(/(?:proprietarylimited|privatelimited|publiclimitedcompany|sendirianberhad|limitedliabilitycompany|beslotenvennootschap|naamlozevennootschap|societaseuropaea|limited|incorporated|corporation|berhad|gmbh|llc|llp|pllc|ptyltd|pteltd|pvtltd|sdnbhd|bvba|ltd|inc|plc|corp|bv|nv|co)$/g, "");
   const baseA = stripLegal(sA);
   const baseB = stripLegal(sB);
 
@@ -452,7 +471,7 @@ function preferOfficialCompanyName(name, crawlData) {
   let bestScore = -1;
 
   for (const official of allCandidates) {
-    const hasSuffix = hasCompleteLegalSuffix(official) || /\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|company|co)\b/i.test(official);
+    const hasSuffix = hasCompleteLegalSuffix(official) || /\b(?:ltd|limited|inc|llc|llp|corp|pty|pte|pvt|sdn|bhd|gmbh|plc|company|co|bv|nv|srl|spa|sl|sa)\b/i.test(official);
     const hasSymbolMatch = (
       (official.includes("&") && current.toLowerCase().includes(" and ")) ||
       (official.includes("+") && current.toLowerCase().includes(" plus ")) ||

@@ -1143,7 +1143,7 @@ async function crawlWebsite(targetUrl, options = {}) {
     copyrightText: copyrightText.slice(0, 500),
     copyrightSourceUrl: copyrightSourceUrl || finalUrl,
     ...extracted,
-    legalCompanyCandidates: Array.from(allLegalCandidates),
+    legalCompanyCandidates: rankLegalCandidates(Array.from(allLegalCandidates), finalUrl || targetUrl),
     legalCandidateSources,
     emailSourceMap,
     emails: rankEmails(Array.from(allDiscoveredEmails), targetUrl, emailSourceMap),
@@ -1331,8 +1331,9 @@ function stripHtml(html) {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
-    .replace(/<\/?(?:strong|b|em|i|span|u|font|mark|small|sub|sup)[^>]*>/gi, "")
-    .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/address|\/h[1-6])[^>]*>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?(?:strong|b\b|em|i\b|span|u\b|font|mark|small|sub|sup)[^>]*>/gi, "")
+    .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/address|\/h[1-6]|\/section|\/header|\/footer)[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/[^\S\r\n]+/g, " ")
@@ -1904,7 +1905,8 @@ function parseHtmlDetails(html, baseUrl) {
   const phoneLinks = [...html.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
   const waLinks = [...html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\?[^"']*phone=)(\+?\d{8,15})/gi)].map(m => "+" + m[1].replace(/^\+/, ""));
   const cleanHtmlForPhones = cleanHtml
-    .replace(/<\/?(?:strong|b|em|i|span|u|font|mark|small|sub|sup)[^>]*>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/?(?:strong|b\b|em|i\b|span|u\b|font|mark|small|sub|sup)[^>]*>/gi, "")
     .replace(/\b(?:aria-)?placeholder\s*=\s*"[^"]*"/gi, " ")
     .replace(/\b(?:aria-)?placeholder\s*=\s*'[^']*'/gi, " ");
   const contextPhoneRegex = /(?:(?:tel|telephone|phone|call|mobile|cell|whatsapp|contact|总机|總機|电话|電話|手机|手機|座机|座機)[\s:：]*|(?:bxs:phone-call|fa-phone|fa-mobile)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().-]{7,20})/gi;
@@ -1997,6 +1999,25 @@ function rankEmails(emails, targetDomain, emailSourceMap = {}) {
 
   scored.sort((a, b) => b.score - a.score);
   return scored.map(s => s.email);
+}
+
+/**
+ * Ranks legal company candidates discovered across the site.
+ * Prioritizes candidates matching the website domain stem, title, or brand over third-party distributors/partners.
+ */
+function rankLegalCandidates(candidates, targetUrl) {
+  if (!candidates || candidates.length <= 1) return candidates || [];
+  const domainClean = cleanDomainStem(targetUrl || "");
+  const domainCleanNorm = normalizeNameForComparison(domainClean);
+  return [...candidates].sort((a, b) => {
+    const aNorm = normalizeNameForComparison(a);
+    const bNorm = normalizeNameForComparison(b);
+    const aMatch = domainCleanNorm && (aNorm.includes(domainCleanNorm) || domainCleanNorm.includes(aNorm));
+    const bMatch = domainCleanNorm && (bNorm.includes(domainCleanNorm) || domainCleanNorm.includes(bNorm));
+    if (aMatch && !bMatch) return -1;
+    if (!aMatch && bMatch) return 1;
+    return 0;
+  });
 }
 
 /**
