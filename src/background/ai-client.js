@@ -11,12 +11,14 @@ function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
     : ((crawlData.detectedAddresses || []).slice(0, 10).join("\n") || "(No physical address candidates extracted from static HTML)");
 
   const contactText = compactSlice(crawlData.dedicatedContactText || crawlData.contactPageText, 2800);
+  const careerRaw = compactSlice(crawlData.careerPageText, 1800);
+  const careerText = (careerRaw && careerRaw !== contactText) ? careerRaw : "";
   const profileRaw = compactSlice(crawlData.profilePageText, 1800);
-  const profileText = (profileRaw && profileRaw !== contactText) ? profileRaw : "";
+  const profileText = (profileRaw && profileRaw !== contactText && profileRaw !== careerText) ? profileRaw : "";
   const renderedText = compactSlice(crawlData.renderedText, 1800);
   const footerText = compactSlice(crawlData.footerText, 800);
   const bodyRaw = compactSlice(crawlData.bodyText, 2000);
-  const bodyText = (bodyRaw && bodyRaw !== renderedText) ? bodyRaw : "";
+  const bodyText = (bodyRaw && bodyRaw !== renderedText && bodyRaw !== careerText) ? bodyRaw : "";
 
   const jsonSchemaSection = includeJsonSchemaHint ? `
 
@@ -207,10 +209,12 @@ CAPITAL CITY RULE (MANDATORY EXCEPTION FOR BOTH STATE & CITY):
 * Sovereign City-States (Singapore, Monaco, Vatican City, San Marino): In Singapore, the country itself functions as City, State, and Capital. For any address located in Singapore, BOTH "state": "Available" AND "city": "Available" MUST be selected.
 * This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
 
-10. CONTACT DETAILS (EMAIL & PHONE NUMBER):
-- "emailId": Select primary official corporate email (e.g. sales@, info@, contact@, enquiry@).
-- "secondaryEmailId": Select a distinct secondary corporate email (e.g. support@, service@). Never duplicate emailId in secondaryEmailId (return "" if duplicate or unavailable).
-- Exclude privacy@, dpo@, legal@, webmaster@, noreply@, and third-party host emails (shopify, wix).
+10. CONTACT DETAILS (PRIMARY & SECONDARY CORPORATE EMAILS & PHONE NUMBER):
+- "emailId": Select the primary official general or sales contact email for the company (e.g. info@, contact@, sales@, mail@, office@, enquiry@).
+- "secondaryEmailId": Select a distinct, genuine secondary corporate or departmental email found across any crawled page (e.g. career/job/vacancy email such as vacature@, vacancies@, careers@, jobs@, recruitment@, hr@, bewerbung@, or customer support/service such as support@, service@, or sales/quotes/office).
+  * Strict distinction: "secondaryEmailId" MUST NEVER duplicate "emailId". If only one email exists or all found emails are identical to "emailId", return "" (empty string).
+  * Exclude automated, privacy, and system bounce emails: privacy@, dpo@, legal@, webmaster@, abuse@, noreply@, no-reply@, and third-party platform host emails (shopify, wix, wordpress).
+  * Check Careers, Vacancies, Support, Contact, and Header/Footer across all crawled pages to discover distinct secondary departmental emails.
 - "phoneNumber": Domestic subscriber digits ONLY. Country calling codes (+1, +44, +60, +61, +65, +86, +91, +886, etc.) and leading trunk zeros (0) MUST ALWAYS BE STRIPPED. Protect domestic subscriber digits (Singapore 8-digit numbers like 65353907). Exclude fax and toll-free (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). Digits only (7 to 12 digits). Return "" if none found.
 
 11. PRODUCT IDENTIFICATION RULES (THREE INDEPENDENT COUNTS):
@@ -240,7 +244,7 @@ ${formattedAddressEvidence}
 DEDICATED CONTACT US PAGE CONTENT (FIRST PRIORITY):
 ${contactText}
 
-${profileText ? `ABOUT / PROFILE & OTHER PAGES CONTENT:\n${profileText}\n\n` : ""}${footerText ? `FOOTER CONTENT:\n${footerText}\n\n` : ""}${bodyText ? `PAGE BODY CONTENT:\n${bodyText}` : ""}${jsonSchemaSection}
+${careerText ? `CAREERS & VACANCIES SUBPAGE CONTENT:\n${careerText}\n\n` : ""}${profileText ? `ABOUT / PROFILE & OTHER PAGES CONTENT:\n${profileText}\n\n` : ""}${footerText ? `FOOTER CONTENT:\n${footerText}\n\n` : ""}${bodyText ? `PAGE BODY CONTENT:\n${bodyText}` : ""}${jsonSchemaSection}
 `;
 }
 
@@ -278,7 +282,9 @@ function finalizeParsedAiResult(parsed, crawlData) {
   }
   const primLower = (parsed.emailId || "").toLowerCase().trim();
   if ((!parsed.secondaryEmailId || !parsed.secondaryEmailId.trim() || parsed.secondaryEmailId.toLowerCase().trim() === primLower || !isValidCorporateEmail(parsed.secondaryEmailId) || isUnwantedEmail(parsed.secondaryEmailId)) && crawlEmails.length > 1) {
-    const second = crawlEmails.find(e => isValidCorporateEmail(e) && !isUnwantedEmail(e) && e.toLowerCase().trim() !== primLower);
+    const available = crawlEmails.filter(e => isValidCorporateEmail(e) && !isUnwantedEmail(e) && e.toLowerCase().trim() !== primLower);
+    const deptSecond = available.find(e => /^(?:vacanc|vacatur|career|job|recruit|hr|bewerbung|employment|hiring|support|service|order|sales|office|admin|kundendienst|klantenservice)/i.test(e));
+    const second = deptSecond || available[0];
     if (second) {
       parsed.secondaryEmailId = second;
     } else {

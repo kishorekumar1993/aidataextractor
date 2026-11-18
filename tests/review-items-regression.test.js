@@ -2534,6 +2534,78 @@ async function runAll() {
     assert.strictEqual(finalResult.secondaryEmailId, '', 'Missing secondary email remains empty');
   });
 
+  // =========================================================================
+  // Item 108: Global Vacancy & Career Subpage Crawling and Department Secondary Email Extraction
+  // (No hardcoding - works globally across languages: Dutch, English, German, French, Spanish)
+  // =========================================================================
+  runTest('Item 108: Global Vacancy & Career Subpage Crawling and Department Secondary Email Extraction', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Crawler Subpage Discovery: /vacancies, /vacatures, /careers, /karriere are discovered with high priority
+    const htmlWithVacancies = `
+      <nav>
+        <a href="/">Home</a>
+        <a href="/about-us">About Us</a>
+        <a href="/products">Products</a>
+        <a href="/vacancies">Vacancies</a>
+        <a href="/contact">Contact Us</a>
+      </nav>
+    `;
+    const links = ctx.discoverContactLinks(htmlWithVacancies, 'https://www.dutchregulators.com');
+    assert.ok(links.some(u => u.includes('/vacancies')), 'Crawler must discover /vacancies subpage');
+    const vacancyIndex = links.findIndex(u => u.includes('/vacancies'));
+    assert.ok(vacancyIndex >= 0 && vacancyIndex < 5, 'Vacancies subpage must be ranked in top priority subpages');
+
+    // Multi-language check: Dutch /vacatures and German /karriere
+    const htmlMultiLang = `
+      <div>
+        <a href="/over-ons">Over Ons</a>
+        <a href="/vacatures">Vacatures & Werken Bij</a>
+        <a href="/karriere">Karriere & Stellenangebote</a>
+      </div>
+    `;
+    const multiLinks = ctx.discoverContactLinks(htmlMultiLang, 'https://example.com');
+    assert.ok(multiLinks.some(u => u.includes('/vacatures')), 'Must discover Dutch /vacatures');
+    assert.ok(multiLinks.some(u => u.includes('/karriere')), 'Must discover German /karriere');
+
+    // 2. Email Ranking & Departmental Secondary Prioritization
+    const mockEmailSourceMap = {
+      'info@dutchregulators.com': 'https://www.dutchregulators.com/contact',
+      'vacature@dutchregulators.com': 'https://www.dutchregulators.com/vacancies'
+    };
+    const ranked = ctx.rankEmails(['vacature@dutchregulators.com', 'info@dutchregulators.com'], 'https://www.dutchregulators.com', mockEmailSourceMap);
+    assert.strictEqual(ranked[0], 'info@dutchregulators.com', 'Primary contact email on Contact page ranks #1');
+    assert.strictEqual(ranked[1], 'vacature@dutchregulators.com', 'Vacancy department email ranks #2');
+
+    // 3. AI Extraction Prompt: Section 10 instructs AI globally to identify distinct departmental secondary emails
+    const mockCrawlData = {
+      originalUrl: 'https://www.dutchregulators.com',
+      finalUrl: 'https://www.dutchregulators.com',
+      emails: ['info@dutchregulators.com', 'vacature@dutchregulators.com'],
+      phones: ['+31 20 1234567'],
+      careerPageText: 'Join our team at Dutch Regulators. Send your CV to vacature@dutchregulators.com.',
+      contactPageText: 'Contact Dutch Regulators at info@dutchregulators.com.',
+      detectedProductCount: 2,
+      detectedImageCount: 2,
+      detectedDescCount: 2
+    };
+    const prompt = ctx.buildExtractionPrompt(mockCrawlData, true);
+    assert.ok(prompt.includes('CAREERS & VACANCIES SUBPAGE CONTENT'), 'Prompt must include career/vacancies page content');
+    assert.ok(prompt.includes('vacature@') || prompt.includes('vacancies@'), 'Prompt instructions must guide vacancy email extraction');
+
+    // 4. finalizeParsedAiResult: Accurately extracts distinct primary and departmental secondary emails
+    const aiParsed = {
+      emailId: 'info@dutchregulators.com',
+      secondaryEmailId: '',
+      countryName: 'Netherlands',
+      phoneNumber: '201234567'
+    };
+    const finalized = ctx.finalizeParsedAiResult(aiParsed, mockCrawlData);
+    assert.strictEqual(finalized.emailId, 'info@dutchregulators.com', 'Primary email preserved');
+    assert.strictEqual(finalized.secondaryEmailId, 'vacature@dutchregulators.com', 'Secondary vacancy email recovered from crawl data');
+    assert.notStrictEqual(finalized.secondaryEmailId, finalized.emailId, 'Secondary email must never duplicate primary');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

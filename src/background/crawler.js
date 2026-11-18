@@ -276,6 +276,7 @@ async function crawlWebsite(targetUrl, options = {}) {
   let requiresManualReview = false;
   const addressCandidates = [];
   let profilePageText = "";
+  let careerPageText = "";
   let copyrightText = "";
   let copyrightSourceUrl = targetUrl;
   let primaryContactUrl = "";
@@ -771,6 +772,11 @@ async function crawlWebsite(targetUrl, options = {}) {
           profilePageText += "\n" + pageText;
         }
 
+        const isCareerPage = /(?:careers?|jobs?|employment|vacanc(?:y|ies)|vacatur(?:e|es)|werken[-_]?bij|sollicit(?:eren|atie)|recruitment|recruiting|hiring|openings?|opportunities|stellenangebote|karriere|lavora[-_]?con[-_]?noi|posizioni[-_]?aperte|offres?[-_]?d[-_]?emploi|recrutement|trabaja[-_]?con[-_]?nosotros|vacantes?|lowongan[-_]?kerja|karir|kariyer)/i.test(cUrl);
+        if (isCareerPage && careerPageText.length < 5000) {
+          careerPageText += "\n" + pageText.slice(0, 3000);
+        }
+
         // Extract legal corporate names across this page
         for (const cand of extractLegalCandidatesFromHtml(cText)) {
           allLegalCandidates.add(cand);
@@ -1133,6 +1139,7 @@ async function crawlWebsite(targetUrl, options = {}) {
     contactPageText: contactPageText.slice(0, 12000),
     footerText: footerText.slice(0, 4000),
     profilePageText: profilePageText.slice(0, 8000),
+    careerPageText: careerPageText.trim().slice(0, 6000),
     copyrightText: copyrightText.slice(0, 500),
     copyrightSourceUrl: copyrightSourceUrl || finalUrl,
     ...extracted,
@@ -1179,8 +1186,8 @@ function discoverContactLinks(html, baseUrl) {
     if (/\b(team|our-team|staff|management|people|leadership)\b/i.test(rawLower)) score += 6;
     if (/\b(locations|branches|branch|offices|stores)\b/i.test(rawLower)) score += 8;
     if (/\b(dealers|distributors|stockists|resellers|partners)\b/i.test(rawLower) || /\b(dealers|distributors|stockists|resellers|partners)\b/i.test(innerText)) score -= 50;
-    if (/\b(careers|career|jobs|job|employment|work-with-us|join-our-team)\b/i.test(rawLower)) score += 3;
-    if (/\b(careers|career|jobs|employment|work\s*with\s*us|join\s*our\s*team)\b/i.test(innerText)) score += 3;
+    if (/\b(careers?|jobs?|employment|vacanc(?:y|ies)|vacatur(?:e|es)|werken[-_]?bij|sollicit(?:eren|atie)|recruitment|recruiting|hiring|openings?|opportunities|stellenangebote|karriere|lavora[-_]?con[-_]?noi|posizioni[-_]?aperte|offres?[-_]?d[-_]?emploi|recrutement|trabaja[-_]?con[-_]?nosotros|vacantes?|lowongan[-_]?kerja|karir|kariyer)\b/i.test(rawLower)) score += 40;
+    if (/\b(careers?|jobs?|employment|vacanc(?:y|ies)|vacatur(?:e|es)|werken\s*bij|sollicit(?:eren|atie)|recruitment|recruiting|hiring|job\s*openings?|career\s*opportunities|stellenangebote|karriere|lavora\s*con\s*noi|posizioni\s*aperte|offres?\s*d['’\s]emploi|recrutement|trabaja\s*con\s*nosotros|vacantes?|lowongan\s*kerja)\b/i.test(innerText)) score += 40;
     if (/\b(feedback|complaints|directory)\b/i.test(rawLower)) score += 5;
     if (/\b(contact|contact\s*us|get\s*in\s*touch|reach\s*us|reach\s*out|kontakt|contacto|contáctenos|contatti|contattaci|contactez[-\s]*nous|nous\s*contacter|contato|fale\s*conosco|hubungi\s*kami|kontak\s*kami|kontak|iletisim|iletişim|email\s*us|e-mail|mail\s*us|send\s*(?:us\s*)?email|write\s*to\s*us|inquiry|enquiry)\b/i.test(innerText) || /(?:聯絡我們|聯絡|联系我们|联系|聯繫我們|聯繫|お問い合わせ|お問合せ|問合せ|会社案内|連絡先|연락처|문의|문의하기|고객센터)/i.test(innerText)) score += 120;
     if (/\b(industries|our\s*industries|industries\s*served|markets|markets\s*served|applications|sectors)\b/i.test(innerText)) score += 50;
@@ -1712,7 +1719,7 @@ function getSourcePagePriority(url, finalUrl = "", targetUrl = "") {
   if (/(?:^|[\/_.-])(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint)(?:$|[\/_.-])/i.test(u)) return 5;
   if ((finalUrl && norm(u) === norm(finalUrl)) || (targetUrl && norm(u) === norm(targetUrl))) return 4;
   if (/(?:^|[\/_.-])(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|corporate[-_]?profile|our[-_]?company|our[-_]?story|profile|quienes[-_]?somos|sobre[-_]?nosotros|chi[-_]?siamo|u(?:e)?ber[-_]?uns|a[-_]?propos|qui[-_]?sommes[-_]?nous|quem[-_]?somos|tentang[-_]?kami)(?:$|[\/_.-])/i.test(u)) return 3;
-  if (/(?:^|[\/_.-])(?:support|warranty|customer[-_]?service|service|inquir(?:y|ies)|quote)(?:$|[\/_.-])/i.test(u)) return 2;
+  if (/(?:^|[\/_.-])(?:support|warranty|customer[-_]?service|service|inquir(?:y|ies)|quote|careers?|jobs?|employment|vacanc(?:y|ies)|vacatur(?:e|es)|werken[-_]?bij|recruitment|recruiting|karriere|stellenangebote)(?:$|[\/_.-])/i.test(u)) return 2;
   if (/facebook\.com|linkedin\.com/i.test(u)) return 1;
   return 0;
 }
@@ -1968,6 +1975,8 @@ function rankEmails(emails, targetDomain, emailSourceMap = {}) {
     const src = (emailSourceMap && emailSourceMap[lower]) || "";
     if (/\b(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|kontakt|contacto|contactez|contato|hubungi|kontak|impressum)\b/i.test(src)) {
       score += 120; // Strict #1 priority: directly on Contact Us page
+    } else if (/\b(?:careers?|jobs?|employment|vacanc(?:y|ies)|vacatur(?:e|es)|werken[-_]?bij|recruitment|karriere|stellenangebote)\b/i.test(src)) {
+      score += 50; // Vacancy / Career page source
     } else if (src === targetDomain || (domainClean && src.includes(domainClean) && !/\/(?:warranty|terms|privacy|policy|faq)/i.test(src))) {
       score += 40; // Secondary: Home page or other pages
     } else if (/facebook\.com|linkedin\.com/i.test(src)) {
@@ -1976,8 +1985,8 @@ function rankEmails(emails, targetDomain, emailSourceMap = {}) {
 
     if (/^(sales|contact|enquir|info|mail|hello|office)/i.test(user)) {
       score += 50;
-    } else if (/^(service|support|orders|jobs|careers|admin|head|hq|ppi)/i.test(user)) {
-      score += 20;
+    } else if (/^(service|support|orders|jobs?|careers?|vacanc(?:y|ies)|vacatur(?:e|es)|werken[-_]?bij|recruitment|recruiting|hr|bewerbung|employment|hiring|admin|head|hq|ppi)/i.test(user)) {
+      score += 30;
     }
     if (/^(webmaster|abuse|privacy|compliance|legal|security|no-?reply|support@wordpress|support@wix)/i.test(user)) {
       score -= 100;
