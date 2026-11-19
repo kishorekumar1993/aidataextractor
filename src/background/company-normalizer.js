@@ -306,7 +306,7 @@ function extractSiteLogoText(html) {
  */
 function extractOfficialSocialLinks(html) {
   if (!html) return { facebook: null, linkedin: null };
-  const fbMatches = [...html.matchAll(/href=["'](https?:\/\/(?:www\.)?facebook\.com\/([A-Za-z0-9_.\-]+)\/?)(?:["'?>]|$)/gi)];
+  const fbMatches = [...html.matchAll(/(?:href=["']|(?:url|sameAs)["']?\s*:\s*["'])(https?:\/\/(?:www\.)?facebook\.com\/([A-Za-z0-9_.\-]+)\/?)(?:["'?>]|$)/gi)];
   let facebook = null;
   for (const m of fbMatches) {
     const rawUrl = m[1].trim();
@@ -317,7 +317,7 @@ function extractOfficialSocialLinks(html) {
     }
   }
 
-  const liMatches = [...html.matchAll(/href=["'](https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in)\/([A-Za-z0-9_.\-]+)\/?)(?:["'?>]|$)/gi)];
+  const liMatches = [...html.matchAll(/(?:href=["']|(?:url|sameAs)["']?\s*:\s*["'])(https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in)\/([A-Za-z0-9_.\-]+)\/?)(?:["'?>]|$)/gi)];
   let linkedin = null;
   for (const m of liMatches) {
     const rawUrl = m[1].trim();

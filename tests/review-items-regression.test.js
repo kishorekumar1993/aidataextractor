@@ -3284,6 +3284,104 @@ async function runAll() {
     assert.strictEqual(aiOnlyResult.phoneNumber, '', 'In explicit ai_only mode, phone must not be backfilled');
   });
 
+  // =========================================================================
+  // Item 116: Company-Stem ISP Secondary Email Support & Phone Whitespace/Tab/Quote Stripping
+  // =========================================================================
+  runTest('Item 116: Company-Stem ISP Secondary Email Support & Phone Whitespace/Tab/Quote Stripping', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Phone number whitespace, tab, and quote stripping
+    assert.strictEqual(ctx.cleanPhoneNumber('\t47360023', 'Taiwan'), '47360023', 'Phone with leading tab must be stripped to clean domestic digits');
+    assert.strictEqual(ctx.cleanPhoneNumber('"\t47360023"', 'Taiwan'), '47360023', 'Phone with quotes and tab must be stripped to clean domestic digits');
+    assert.strictEqual(ctx.cleanPhoneNumber('"  47360023 "', 'Taiwan'), '47360023', 'Phone with enclosing quotes and spaces must be stripped');
+
+    // 2. Dot-separated multiple phone numbers on Asian/Taiwanese websites
+    assert.strictEqual(ctx.cleanPhoneNumber('886-4-7360023.7360024', 'Taiwan'), '47360023', 'Dot-separated phone must extract primary number and strip country code');
+    assert.strictEqual(ctx.cleanPhoneNumber('TEL：886-4-7360023.7360024', 'Taiwan'), '47360023', 'TEL with fullwidth colon and dot separation must normalize to 47360023');
+    assert.strictEqual(ctx.cleanPhoneNumber('886-4-7360023~7360024', 'Taiwan'), '47360023', 'Tilde-separated phone range must take primary number');
+
+    // 3. Secondary Email on ISP / National domain where username matches company domain stem (e.g. zungsung@ms14.hinet.net)
+    const zungSungData = {
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Zung Sung Enterprise Company, Limited',
+      countryName: 'Taiwan',
+      companyAddress: 'Number 26 Lane 132 Section 1 Chung Xing Road, Homei Township, Changhua County',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'daisyyang@zungsung.com',
+      secondaryEmailId: 'zungsung@ms14.hinet.net', // Company stem ISP email
+      phoneNumber: '"\t47360023"', // Contaminated with tab and quotes
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    const crawlZungSung = {
+      originalUrl: 'http://www.zungsung.com',
+      finalUrl: 'http://www.zungsung.com',
+      emails: ['daisyyang@zungsung.com'],
+      phones: ['TEL：886-4-7360023.7360024']
+    };
+
+    const zungSungQc = ctx.applyStrictInstructions(zungSungData, crawlZungSung, {});
+    assert.strictEqual(zungSungQc.emailId, 'daisyyang@zungsung.com', 'Primary email must be preserved');
+    assert.strictEqual(zungSungQc.secondaryEmailId, 'zungsung@ms14.hinet.net', 'Secondary email matching company stem on HiNet ISP must be preserved and not rejected');
+    assert.strictEqual(zungSungQc.phoneNumber, '47360023', 'Phone number must have all quotes and tab artifacts stripped');
+
+    // 4. Secondary email fallback in Own Crawl / Hybrid mode when secondary email is omitted but crawl discovered distinct corporate email
+    const crawlMissingSecEmail = {
+      _isFromAi: false,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Zung Sung Enterprise Company, Limited',
+      countryName: 'Taiwan',
+      companyAddress: 'Number 26 Lane 132 Section 1 Chung Xing Road, Homei Township, Changhua County',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'daisyyang@zungsung.com',
+      secondaryEmailId: '', // Omitted
+      phoneNumber: '47360023',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    const crawlMultipleEmails = {
+      originalUrl: 'http://www.zungsung.com',
+      finalUrl: 'http://www.zungsung.com',
+      emails: ['daisyyang@zungsung.com', 'service@zungsung.com'],
+      phones: ['886-4-7360023']
+    };
+
+    const recoveredSec = ctx.applyStrictInstructions(crawlMissingSecEmail, crawlMultipleEmails, {});
+    assert.strictEqual(recoveredSec.secondaryEmailId, 'service@zungsung.com', 'Own Crawl / Hybrid mode should recover distinct corporate secondary email from crawlData');
+
+    // 5. AI mode preserving company-stem secondary email without stripping
+    const aiZungSung = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Zung Sung Enterprise Company, Limited',
+      countryName: 'Taiwan',
+      companyAddress: 'Number 26 Lane 132 Section 1 Chung Xing Road, Homei Township, Changhua County',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'daisyyang@zungsung.com',
+      secondaryEmailId: 'zungsung@ms14.hinet.net',
+      phoneNumber: '47360023',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+    const aiResult = ctx.applyStrictInstructions(aiZungSung, crawlZungSung, {});
+    assert.strictEqual(aiResult.secondaryEmailId, 'zungsung@ms14.hinet.net', 'AI mode must preserve valid company-stem secondary email');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

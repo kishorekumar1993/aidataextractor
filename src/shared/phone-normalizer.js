@@ -2,13 +2,13 @@
 
 function cleanPhoneNumber(rawPhone, country) {
   if (!rawPhone) return "";
-  let p = String(rawPhone).trim();
+  let p = String(rawPhone).replace(/[\t\r\n"']/g, " ").trim();
   if (!p) return "";
 
-  // If the raw phone contains multiple numbers or alternative lines (e.g. "503-788-8032 / 8033", "0113 250 8082 / 250 8083", "01234 567890, 01234 567891", "+1 503-788-8032 or 8033"),
+  // If the raw phone contains multiple numbers or alternative lines (e.g. "503-788-8032 / 8033", "0113 250 8082 / 250 8083", "886-4-7360023.7360024", "01234 567890, 01234 567891", "+1 503-788-8032 or 8033"),
   // split and test each candidate segment in order until a valid domestic number is found.
   const candidateParts = p
-    .split(/[\r\n|;]|\s+or\s+|\s*\\+\s*|\s*\/\s*|(?<=\d{3,}[-\s().]*),(?=\s*(?:[+(0-9]|tel|ph|call|mobile|office))/i)
+    .split(/[\r\n|;]|\s+or\s+|\s*\\+\s*|\s*\/\s*|(?<=\d{3,}[-\s().]*),(?=\s*(?:[+(0-9]|tel|ph|call|mobile|office))|(?<=\d{4,}[-\s()]*)\.(?=\s*\d{4,})|(?<=\d{4,}[-\s()]*)[~–—](?=\s*\d{4,})/i)
     .map(s => s.trim())
     .filter(Boolean);
 
@@ -21,7 +21,7 @@ function cleanPhoneNumber(rawPhone, country) {
 
 function normalizeSinglePhone(part, country) {
   if (!part) return "";
-  let p = String(part).trim();
+  let p = String(part).replace(/[\t\r\n"']/g, "").trim();
 
   p = p.replace(/^(?:tel\b|tele(?:phone)?\b|phone\b|call\b|contact\b|mobile\b|cell\b|fax\b|whatsapp\b|hotline\b|direct\b|office\b|main\b|sales\b|inquiries\b|t\b|ph\b|p\b|telefon\b|tél(?:éphone)?\b|telf\b|telefoon\b|fono\b|总机|總機|电话|電話|手机|手機|座机|座機)[\s.:：]*/i, "").trim();
 

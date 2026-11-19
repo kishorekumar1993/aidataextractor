@@ -303,7 +303,11 @@
 
   function setInputValue(element, val) {
     if (!element) return false;
-    const value = val !== undefined && val !== null ? String(val) : "";
+    let value = val !== undefined && val !== null ? String(val) : "";
+    const isTextarea = element.tagName && element.tagName.toLowerCase() === "textarea";
+    if (!isTextarea) {
+      value = value.replace(/[\t\r\n]/g, " ").trim();
+    }
 
     try {
       const isTextarea = element.tagName && element.tagName.toLowerCase() === "textarea";
@@ -923,7 +927,7 @@
     // 9. Email ID
     try {
       if (elements.emailId) {
-        let cleanEmail = data.emailId ? stripTrailingContactWordsFromEmail(String(data.emailId).trim()) : "";
+        let cleanEmail = data.emailId ? stripTrailingContactWordsFromEmail(String(data.emailId).replace(/[\t\r\n"']/g, "").trim()) : "";
         setInputValue(elements.emailId, cleanEmail);
         if (cleanEmail) {
           highlightField(elements.emailId);
@@ -936,7 +940,7 @@
     try {
       if (elements.secondaryEmailId) {
         try { elements.secondaryEmailId.setAttribute("autocomplete", "off"); } catch (e) { }
-        let secEmail = data.secondaryEmailId ? stripTrailingContactWordsFromEmail(String(data.secondaryEmailId || "").trim()) : "";
+        let secEmail = data.secondaryEmailId ? stripTrailingContactWordsFromEmail(String(data.secondaryEmailId || "").replace(/[\t\r\n"']/g, "").trim()) : "";
         const primEmail = data.emailId ? stripTrailingContactWordsFromEmail(String(data.emailId || "").trim()).toLowerCase() : "";
         if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test(secEmail) || secEmail.toLowerCase() === primEmail) {
           secEmail = "";
@@ -952,11 +956,12 @@
     // 11. Phone Number (Digits only, country code and leading zeroes stripped)
     try {
       if (elements.phoneNumber) {
-        let phoneVal = (data.phoneNumber && data.phoneNumber !== "Not Available") ? String(data.phoneNumber).trim() : "";
-        if (phoneVal && typeof cleanPhoneNumber === "function") {
+        let phoneVal = (data.phoneNumber && data.phoneNumber !== "Not Available") ? String(data.phoneNumber).replace(/[\t\r\n"']/g, "").trim() : "";
+        if (typeof cleanPhoneNumber === "function" && phoneVal) {
           const cleaned = cleanPhoneNumber(phoneVal, data.countryName || data.Country || "");
-          if (cleaned) phoneVal = cleaned;
+          phoneVal = cleaned || "";
         }
+        phoneVal = (phoneVal || "").replace(/[\t\r\n"']/g, "").trim();
         setInputValue(elements.phoneNumber, phoneVal);
         if (phoneVal) {
           highlightField(elements.phoneNumber);

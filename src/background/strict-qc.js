@@ -1359,6 +1359,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         }
       }
     }
+    result.phoneNumber = (result.phoneNumber || "").replace(/[\t\r\n"']/g, "").trim();
 
     // 8. Product counts: Take directly from API; mirror across all 3 fields. DO NOT recompute from crawl unless completely missing.
     result.productImages = result.productImages || result.numberOfProductImages;
@@ -2093,6 +2094,27 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     if (rawUrl) targetHostDomain = new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
   } catch (e) { }
 
+  const isCompanyDomainEmail = (candEmail, currentPrimEmail) => {
+    if (!candEmail || typeof candEmail !== "string") return false;
+    const candHost = (candEmail.split("@")[1] || "").toLowerCase();
+    if (!candHost) return false;
+    const primHost = (currentPrimEmail ? (currentPrimEmail.split("@")[1] || "").toLowerCase() : "");
+    if (primHost && (candHost === primHost || candHost.endsWith("." + primHost) || primHost.endsWith("." + candHost))) return true;
+    if (targetHostDomain && (candHost === targetHostDomain || candHost.endsWith("." + targetHostDomain))) return true;
+
+    // ISP & Regional Business Portal corporate email recognition:
+    // If the email username matches the company domain stem or company name stem (e.g. zungsung@ms14.hinet.net for zungsung.com)
+    const candUser = (candEmail.split("@")[0] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const stem = (targetHostDomain || "").split(".")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+    const nameStem = (result.companyName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (candUser && ((stem && (candUser === stem || candUser.includes(stem) || stem.includes(candUser))) || (nameStem && (candUser.length >= 4 && nameStem.includes(candUser))))) {
+      if (/\b(?:hinet\.net|seed\.net\.tw|netvigator\.com|hkbn\.net|163\.com|126\.com|qq\.com|foxmail\.com|sina\.com|aliyun\.com|btconnect\.com|btinternet\.com|talk21\.com|t-online\.de|tin\.it|wanadoo\.fr|orange\.fr|bigpond\.com|optusnet\.com\.au|singnet\.com\.sg|starhub\.net\.sg)\b/i.test(candHost)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   // 9. Primary Email ID
   let email = stripTrailingContactWordsFromEmail((result.emailId || "").trim().toLowerCase());
   if (email && (isUnwantedEmail(email) || !isValidCorporateEmail(email))) {
@@ -2102,10 +2124,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (email && isGenericWebmail(email) && !crawlEmails.includes(email)) {
     email = "";
   }
-  // Reject email if not in crawlEmails and does not match target host domain
+  // Reject email if not in crawlEmails and does not match target host domain or company stem
   if (email && !crawlEmails.includes(email)) {
     const emHost = (email.split("@")[1] || "").toLowerCase();
-    if (!targetHostDomain || (emHost !== targetHostDomain && !emHost.endsWith("." + targetHostDomain))) {
+    const matchesTarget = targetHostDomain && (emHost === targetHostDomain || emHost.endsWith("." + targetHostDomain));
+    if (!matchesTarget && !isCompanyDomainEmail(email, "")) {
       email = "";
     }
   }
@@ -2119,16 +2142,6 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
 
   // 10. Secondary Email ID (Double Check: if secondary email is available, ALWAYS take it!)
   let secEmail = stripTrailingContactWordsFromEmail((result.secondaryEmailId || "").trim().toLowerCase());
-  const primHost = email ? (email.split("@")[1] || "").toLowerCase() : "";
-
-  const isCompanyDomainEmail = (candEmail) => {
-    if (!candEmail || typeof candEmail !== "string") return false;
-    const candHost = (candEmail.split("@")[1] || "").toLowerCase();
-    if (!candHost) return false;
-    if (primHost && (candHost === primHost || candHost.endsWith("." + primHost) || primHost.endsWith("." + candHost))) return true;
-    if (targetHostDomain && (candHost === targetHostDomain || candHost.endsWith("." + targetHostDomain))) return true;
-    return false;
-  };
 
   // If Gemini provided a secondary email, validate it
   if (secEmail) {
@@ -2138,7 +2151,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       isUnwantedEmail(secEmail)
     ) {
       secEmail = "";
-    } else if (!isCompanyDomainEmail(secEmail) && !crawlEmails.includes(secEmail)) {
+    } else if (!isCompanyDomainEmail(secEmail, email) && !crawlEmails.includes(secEmail)) {
       // Reject only if it's completely unverified (neither matching company domain nor discovered in crawl HTML/socials)
       secEmail = "";
     }
@@ -2178,7 +2191,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       if (phone) break;
     }
   }
-  result.phoneNumber = phone;
+  result.phoneNumber = (phone || "").replace(/[\t\r\n"']/g, "").trim();
 
   // 12. Number of Products, 13. Product Images, 14. Number of Product Descriptions
   const parseCount = (val) => {
