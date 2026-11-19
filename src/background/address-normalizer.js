@@ -2287,7 +2287,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   }
 
   // 12. Strip country names from address per Rule 6
-  a = a.replace(/\b(?:United\s*States\s*Of\s*America|United\s*States|USA|U\.S\.A\.|Great\s*Britain|United\s*Kingdom|UK|U\.K\.|England|Scotland|Wales|Northern\s*Ireland|Canada|Germany|Deutschland|German|France|French|Spain|Espa[nñ]a|Italia|Italy|Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Turkiey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|Southafrica|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
+  a = a.replace(/\b(?:(?:The\s+)?United\s*States\s*Of\s*America|(?:The\s+)?United\s*States|USA|U\.S\.A\.|Great\s*Britain|(?:The\s+)?United\s*Kingdom|UK|U\.K\.|England|Scotland|Wales|Northern\s*Ireland|Canada|Germany|Deutschland|German|France|French|Spain|Espa[nñ]a|Italia|Italy|(?:The\s+)?Netherlands|Nederland|Holland|Austria|[OÖ]sterreich|Oesterreich|Switzerland|Schweiz|Suisse|Svizzera|Croatia|Hrvatska|Turkiye|T[uü]rkiye|Turkey|Turkiey|Czech\s*Republic|Czechia|Brunei\s*Darussalam|Brunei|New\s*Zealand|Aotearoa|Malaysia|Indonesia|Republik\s*Indonesia|Singapore|Japan|Peoples?\s*Republic\s*of\s*China|China|India|South\s*Africa|Southafrica|United\s*Arab\s*Emirates|UAE|Kingdom\s*of\s*Bahrain|Bahrain|Sultanate\s*of\s*Oman|Oman|Saudi\s*Arabia|South\s*Korea|Republic\s*of\s*Korea|North\s*Korea|Hong\s*Kong|Vietnam|(?:The\s+)?Philippines|Thailand|Poland|Polska|Portugal|Greece|Sweden|Norway|Denmark|Finland|Belgium|Hungary|Romania|Bulgaria|Slovakia|Slovenia|Serbia|Ukraine|Russia|Belarus|Estonia|Latvia|Lithuania|Luxembourg|Iceland|Greenland|Malta|Cyprus|Andorra|Liechtenstein|Albania|Moldova|North\s*Macedonia|Armenia|Azerbaijan|Kazakhstan|Uzbekistan|Israel|Egypt|Morocco|Tunisia|Algeria|Qatar|Kuwait|Jordan|Lebanon|Iran|Iraq|Syria|Afghanistan|Pakistan|Bangladesh|Sri\s*Lanka|Nepal|Bhutan|Myanmar|Cambodia|Maldives|Mongolia|Mexico|Brazil|Argentina|Colombia|Peru|Uruguay|Paraguay|Bolivia|Costa\s*Rica|Panama|Guatemala|Nicaragua|Belize|Guyana|Suriname|Jamaica|Bahamas|Barbados|Dominican\s*Republic|Cayman\s*Islands|Saint\s*Lucia|Trinidad\s*and\s*Tobago|Fiji|Papua\s*New\s*Guinea|Samoa|Vanuatu|Nigeria|Kenya|Ghana|Ethiopia|Tanzania|Uganda|Rwanda|Botswana|Namibia|Zambia|Zimbabwe|Mozambique|Angola|Madagascar|Mauritius|Seychelles|Sierra\s*Leone|Sudan)\b/gi, " ");
   a = a.replace(/(?<!\b(?:Western|South)\s+)\bAustralia\b/gi, " ");
   a = a.replace(/\b(r\.?o\.?c\.?|republic\s*of\s*china|taiwan)\b/gi, " ");
   a = a.replace(/(?:中華民國|台灣|臺灣|中国|中國)/g, " ");
@@ -2362,6 +2362,13 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   // Restore authentic symbols (e.g. '+' in "Units 3 + 4") if AI or parser expanded them to "And" or "Plus"
   if (crawlData && typeof restoreOriginalSymbolsInCompanyAddress === "function") {
     a = restoreOriginalSymbolsInCompanyAddress(a, crawlData);
+  }
+
+  // Restore on-site commas (put comma if available on website; remove if not available)
+  if (crawlData && typeof restoreAddressCommasFromRaw === "function") {
+    const candTexts = (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).filter(Boolean);
+    const allEv = `${(crawlData.contactPageText || "")} ${(crawlData.footerText || "")} ${(crawlData.profilePageText || "")} ${(crawlData.dedicatedContactText || "")} ${candTexts.join(" ")}`;
+    a = restoreAddressCommasFromRaw(a, allEv);
   }
 
   return a || "Not Available";
@@ -2476,30 +2483,174 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
     return addr;
   }
 
+  let result = addr;
   // Case 1: Raw candidate has trailing components missing from addr (e.g. City / County / State / District / Township)
   // e.g. addr: "Number 159, Yongke East Road, Yongkang District"
   // rawClean: "Number 159, Yongke East Road, Yongkang District, Tainan City"
   if (normRaw.startsWith(normAi) && normRaw.length > normAi.length) {
-    return rawClean;
-  }
-
-  // Case 2: Raw candidate has leading premise / building / unit / estate missing from addr
-  // e.g. addr: "12 Industrie Road, Penrose, Auckland"
-  // rawClean: "Unit 4, 12 Industrie Road, Penrose, Auckland"
-  if (normRaw.endsWith(normAi) && normRaw.length > normAi.length) {
-    return rawClean;
-  }
-
-  // Case 3: Token coverage - if rawClean covers all major tokens of addr and has strictly more tokens
-  // E.g. rawClean has intermediate village or road section or industrial park that AI dropped
-  const aiTokens = normAi.split(" ").filter(t => t.length > 1);
-  const rawTokens = normRaw.split(" ").filter(t => t.length > 1);
-  if (aiTokens.length >= 2) {
-    const matchCount = aiTokens.filter(t => rawTokens.includes(t)).length;
-    if ((matchCount / aiTokens.length) >= 0.8 && rawTokens.length > aiTokens.length) {
-      return rawClean;
+    result = rawClean;
+  } else if (normRaw.endsWith(normAi) && normRaw.length > normAi.length) {
+    // Case 2: Raw candidate has leading premise / building / unit / estate missing from addr
+    result = rawClean;
+  } else {
+    // Case 3: Token coverage - if rawClean covers all major tokens of addr and has strictly more tokens
+    const aiTokens = normAi.split(" ").filter(t => t.length > 1);
+    const rawTokens = normRaw.split(" ").filter(t => t.length > 1);
+    if (aiTokens.length >= 2) {
+      const matchCount = aiTokens.filter(t => rawTokens.includes(t)).length;
+      if ((matchCount / aiTokens.length) >= 0.8 && rawTokens.length > aiTokens.length) {
+        result = rawClean;
+      }
     }
   }
 
-  return addr;
+  if (typeof restoreAddressCommasFromRaw === "function") {
+    result = restoreAddressCommasFromRaw(result, rawText);
+  }
+  return result;
+}
+
+/**
+ * Reconciles address commas against the authentic on-site raw address evidence:
+ * - If a comma was NOT present at that location on the website -> remove comma (leave without comma).
+ * - If a comma WAS present at that location on the website -> add / preserve comma.
+ * - If rawEvidence does not contain the tokens (e.g. synthetic test suites), preserve existing punctuation safely.
+ */
+function restoreAddressCommasFromRaw(addr, rawEvidence = "") {
+  if (!addr || typeof addr !== "string") return addr;
+  if (!rawEvidence) return addr;
+
+  const cleanRaw = (typeof rawEvidence === "object" && rawEvidence !== null)
+    ? (rawEvidence.raw || JSON.stringify(rawEvidence))
+    : String(rawEvidence || "");
+
+  if (!cleanRaw.trim() || cleanRaw.length < 5) return addr;
+
+  const escapeRegex = s => s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+
+  const buildTokenPattern = (tok) => {
+    const lower = tok.toLowerCase().replace(/^[^\w\u00C0-\u024F]+|[^\w\u00C0-\u024F]+$/gu, "");
+    if (!lower) return escapeRegex(tok);
+    if (lower === "road") return "(?:road|rd)\\.?";
+    if (lower === "street") return "(?:street|st)\\.?";
+    if (lower === "avenue") return "(?:avenue|ave)\\.?";
+    if (lower === "boulevard") return "(?:boulevard|blvd)\\.?";
+    if (lower === "drive") return "(?:drive|dr)\\.?";
+    if (lower === "lane") return "(?:lane|ln)\\.?";
+    if (lower === "building") return "(?:building|bldg)\\.?";
+    if (lower === "suite") return "(?:suite|ste)\\.?";
+    if (lower === "floor") return "(?:floor|fl|flr)\\.?";
+    if (lower === "district") return "(?:district|dist)\\.?";
+    if (lower === "township") return "(?:township|twp)\\.?";
+    if (lower === "county") return "(?:county|cty)\\.?";
+    if (lower === "number") return "(?:number|no|nos|n|#)\\.?";
+    return escapeRegex(tok) + "\\.?";
+  };
+
+  // Step 1: Remove commas that did NOT exist on the website (preserving decimal numbers like 5,5 km)
+  const parts = addr.split(/,(?!\d)\s*/);
+  let reconciled = addr;
+  if (parts.length > 1) {
+    const reconciledParts = [parts[0]];
+
+    for (let i = 0; i < parts.length - 1; i++) {
+      const leftPart = parts[i].trim();
+      const rightPart = parts[i + 1].trim();
+
+      const leftTokens = leftPart.split(/\s+/).filter(Boolean);
+      const rightTokens = rightPart.split(/\s+/).filter(Boolean);
+      const lastLeft = leftTokens[leftTokens.length - 1] || "";
+      const firstRight = rightTokens[0] || "";
+
+      if (!lastLeft || !firstRight) {
+        reconciledParts.push(rightPart);
+        continue;
+      }
+
+      // Mandatory Rule 6 preservation: Always place/keep comma before State/Province
+      const isRightState = (typeof hasStateInAddress === "function") && hasStateInAddress(rightPart, "");
+      if (isRightState) {
+        reconciledParts.push(", " + rightPart);
+        continue;
+      }
+
+      // Mandatory premise separator: Premise indicators (Suite, Unit, Bldg, Kavling) before street/locality always keep comma
+      const isPremise = /\b(?:lot|lots|unit|units|suite|suites|ste|bldg|bldgs|building|buildings|floor|fl|flr|level|block|blocks|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+[A-Za-z0-9]+$/i.test(leftPart);
+      if (isPremise) {
+        reconciledParts.push(", " + rightPart);
+        continue;
+      }
+
+      // Check if lastLeft is a number (e.g. '8' in 'Luzernestraat 8, Nieuw-Vennep' vs '1008' in 'Number 1008, Hou Chuang Road')
+      const isNumber = /^\d+[A-Za-z]?$/.test(lastLeft);
+      if (isNumber) {
+        const numHasComma = new RegExp('\\b' + lastLeft + '\\s*,', 'i').test(cleanRaw);
+        if (numHasComma) {
+          reconciledParts.push(', ' + rightPart);
+        } else {
+          reconciledParts.push(' ' + rightPart);
+        }
+        continue;
+      }
+
+      // Administrative divisions before thoroughfare/street (Mahallesi, Kecamatan, Desa) keep comma
+      const isAdminDiv = /\b(?:mahallesi|mah|mh|kecamatan|kec|desa|ds|kelurahan|kel|dukuh|dk)\b/i.test(lastLeft);
+      if (isAdminDiv) {
+        reconciledParts.push(", " + rightPart);
+        continue;
+      }
+
+      // If both lastLeft and firstRight are in cleanRaw on the same line without a comma:
+      const leftPat = buildTokenPattern(lastLeft);
+      const leftInRaw = new RegExp(leftPat, 'i').test(cleanRaw);
+      const rightInRaw = new RegExp('\\b' + firstRight + '\\b', 'i').test(cleanRaw);
+
+      if (leftInRaw && rightInRaw) {
+        const sameLineNoComma = new RegExp(leftPat + '[ \\t]+' + firstRight + '\\b', 'i');
+        const hasCommaBetween = new RegExp(leftPat + '\\s*,', 'i');
+        if (sameLineNoComma.test(cleanRaw) && !hasCommaBetween.test(cleanRaw)) {
+          reconciledParts.push(' ' + rightPart);
+          continue;
+        }
+      }
+
+      // Otherwise preserve existing comma
+      reconciledParts.push(', ' + rightPart);
+    }
+
+    reconciled = reconciledParts.join("").replace(/\s+,/g, ",").replace(/\s+/g, " ").trim();
+  }
+
+  // Step 2: Add commas that DID exist on the website if missing in addr
+  const words = reconciled.split(/\s+/).filter(Boolean);
+  let reconstructed = "";
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const isLast = (i === words.length - 1);
+    if (isLast) {
+      reconstructed += word;
+      break;
+    }
+
+    if (word.endsWith(",")) {
+      reconstructed += word + " ";
+      continue;
+    }
+
+    const nextWord = words[i + 1];
+    const wordPat = buildTokenPattern(word);
+    const nextPat = buildTokenPattern(nextWord.replace(/,$/, ""));
+
+    // Check if raw evidence specifically has `word,` followed by `nextWord` or postcode/state
+    const rawHasCommaBetween = new RegExp(wordPat + "\\s*,\\s*(?:" + nextPat + "|\\d{4,6})", "i").test(cleanRaw);
+    if (rawHasCommaBetween) {
+      reconstructed += word + ", ";
+    } else {
+      reconstructed += word + " ";
+    }
+  }
+
+  let finalAddr = reconstructed.replace(/\s+,/g, ",").replace(/\s+/g, " ").trim();
+  finalAddr = finalAddr.replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+  return finalAddr;
 }

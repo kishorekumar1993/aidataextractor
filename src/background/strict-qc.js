@@ -976,6 +976,30 @@ function expandInternationalCorporateSuffixesDynamic(name, crawlData, country = 
       res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Osakeyhtiö");
     } else if (hasLegal(/\b(?:a[\.\s]*s|as)\b/i)) {
       res = res.replace(/\b(?:Private\s+Limited|Private,\s*Limited)\b/gi, "Aktieselskab");
+    } else {
+      // Universal safeguard: If Private Limited was hallucinated on a website that doesn't mention Pte/Pvt/Private Limited:
+      const allSiteText = (crawlData ? [
+        crawlData.title,
+        crawlData.copyrightText,
+        crawlData.mainHtml,
+        crawlData.bodyText,
+        crawlData.dedicatedContactText,
+        ...(crawlData.legalCompanyCandidates || [])
+      ].filter(Boolean).join(" ") : "");
+      const siteMentionsPrivateLimited = /\b(?:p[\.\s]*t[\.\s]*e|p[\.\s]*v[\.\s]*t|private\s+limited)\b/i.test(allSiteText);
+      if (!siteMentionsPrivateLimited) {
+        const domStem = cleanDomainStem(crawlData ? (crawlData.finalUrl || crawlData.originalUrl) : "");
+        const matchingLegal = legalCands.find(c => {
+          const cNorm = normalizeNameForComparison(c);
+          return domStem && (cNorm.includes(domStem) || domStem.includes(cNorm)) && hasCompleteLegalSuffix(c);
+        });
+        if (matchingLegal) {
+          res = expandCompanyAbbreviations(matchingLegal, country);
+        } else {
+          res = res.replace(/,\s*(?:Private\s+Limited|Private,\s*Limited)\b/gi, "")
+                   .replace(/\s+(?:Private\s+Limited|Private,\s*Limited)\b/gi, "");
+        }
+      }
     }
   }
 
@@ -1235,6 +1259,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         : (addr || "Not Available");
       if (bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
         cleanAddr = reconcileAddressWithRawEvidence(cleanAddr, bestRaw, result.companyName, country, crawlData, true);
+      }
+      if (typeof restoreAddressCommasFromRaw === "function") {
+        const candTexts = ((crawlData && crawlData.addressCandidates) || []).map(c => typeof c === "object" ? c.raw : c).filter(Boolean);
+        const allEv = `${(crawlData && crawlData.contactPageText || "")} ${(crawlData && crawlData.footerText || "")} ${(crawlData && crawlData.profilePageText || "")} ${(crawlData && crawlData.dedicatedContactText || "")} ${candTexts.join(" ")}`;
+        cleanAddr = restoreAddressCommasFromRaw(cleanAddr, allEv);
       }
       result.companyAddress = cleanAddr || "Not Available";
     }

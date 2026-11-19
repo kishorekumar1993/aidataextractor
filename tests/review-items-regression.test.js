@@ -2828,6 +2828,63 @@ async function runAll() {
     );
   });
 
+  // =========================================================================
+  // Item 111: Address on-site comma preservation & hallucinated comma removal (dutchregulators.com)
+  // =========================================================================
+  runTest('Item 111: Address on-site comma preservation & hallucinated comma removal (dutchregulators.com vs waytrain.com)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Dutch Regulators: Website address has NO commas -> output WITHOUT commas
+    const crawlDutch = {
+      originalUrl: 'http://www.dutchregulators.com',
+      finalUrl: 'https://www.dutchregulators.com/',
+      title: 'Dutch Regulators',
+      legalCompanyCandidates: ['Dutch Regulators BV'],
+      addressCandidates: [{ raw: 'Luzernestraat 8 2153 GN NIEUW-VENNEP The Netherlands' }],
+      contactPageText: 'Dutch Regulators BV\nLuzernestraat 8\n2153 GN NIEUW-VENNEP\nThe Netherlands'
+    };
+    const aiDutchWithHallucinations = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Dutch Regulators Private Limited', // Mistakenly hallucinated Private Limited
+      countryName: 'Netherlands',
+      companyAddress: 'Luzernestraat 8, Nieuw-Vennep' // Mistakenly injected comma
+    };
+    const qcDutch = ctx.applyStrictInstructions(aiDutchWithHallucinations, crawlDutch, { isRestricted: false });
+    assert.strictEqual(
+      qcDutch.companyName,
+      'Dutch Regulators Besloten Vennootschap',
+      'Dutch Regulators BV must expand to Besloten Vennootschap, never Private Limited'
+    );
+    assert.strictEqual(
+      qcDutch.companyAddress,
+      'Luzernestraat 8 Nieuw-Vennep',
+      'Address must NOT have comma after house number 8 when website had no comma'
+    );
+
+    // 2. Waytrain: Website address HAS commas -> output WITH authentic commas preserved
+    const crawlWaytrain = {
+      originalUrl: 'http://www.waytrain.com',
+      finalUrl: 'https://www.waytrain.com/',
+      addressCandidates: [{ raw: 'No.1008, Hou Chuang Rd., Pei Tun Dist., Taichung 40679, Taiwan' }]
+    };
+    const aiWaytrain = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Way Train Industries Co., Ltd.',
+      countryName: 'Taiwan',
+      companyAddress: 'Number 1008, Hou Chuang Road, Pei Tun District, Taichung'
+    };
+    const qcWaytrain = ctx.applyStrictInstructions(aiWaytrain, crawlWaytrain, { isRestricted: false });
+    assert.strictEqual(
+      qcWaytrain.companyAddress,
+      'Number 1008, Hou Chuang Road, Pei Tun District, Taichung',
+      'Address must preserve authentic on-site commas'
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

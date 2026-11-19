@@ -28,6 +28,14 @@ async function resolveRedirectChain(initialUrl, maxHops = 8, options = {}) {
   const timeoutMs = options.timeoutMs || 6000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  if (options.signal) {
+    if (options.signal.aborted) {
+      clearTimeout(timeoutId);
+      return { finalUrl: currentUrl, hops, isRedirectLoop: false, loopUrl: null, error: "Aborted" };
+    }
+    options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
   let isRedirectLoop = false;
   let loopUrl = null;
   let redirectError = null;
@@ -41,7 +49,7 @@ async function resolveRedirectChain(initialUrl, maxHops = 8, options = {}) {
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         },
-        signal: options.signal || controller.signal
+        signal: controller.signal
       });
       const loc = res.headers.get("location");
       if (loc && ((res.status >= 300 && res.status < 400) || res.type === "opaqueredirect")) {
@@ -305,10 +313,10 @@ async function crawlWebsite(targetUrl, options = {}) {
     ? Number(options.maxPages)
     : (Number(options.crawlPageLimit) || 50);
 
-  // Time budget guard: Ensure crawling respects the service worker lifecycle deadline (28s hard limit in MV3).
-  // Default: 8,500ms (8.5s) for responsive user feedback and ample AI time budget.
+  // Time budget guard: Ensure crawling leaves ample budget for extraction and respects background limits.
+  // Default: 12,000ms (12s) for deep multi-subpage crawling.
   const crawlStartTime = Date.now();
-  const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 8500;
+  const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 12000;
   const isCrawlTimeExceeded = () => (Date.now() - crawlStartTime) >= MAX_CRAWL_TIME_MS;
 
   const getCrawlBudgetUsed = () => pagesFetchedCount + (isBudgetExplicit && redirectChainInfo ? 1 : 0);

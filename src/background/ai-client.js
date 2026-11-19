@@ -186,7 +186,11 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
 8. COMPANY ADDRESS (HEADQUARTERS EXTRACTION, FULL-FORM EXPANSIONS & QC):
 - CORE PRINCIPLE: WHAT WEBSITE HAS, TAKE THE SAME — EXPANSION ONLY, NO GRAMMAR CHANGES: Take the exact address as found on the website. DO NOT rewrite, paraphrase, or change words. Only expand standard abbreviations (St. -> Street, Rd. -> Road, Fl. -> Floor, No. -> Number, Ste. -> Suite, Bldg. -> Building). Do NOT make grammar changes (e.g. no ordinal suffixes on floors; '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor'). Do NOT invent new words not on the site. If website has '7Floor' (no space), do not give space ('7Floor'); if website has '7 Floor' (with space), provide space ('7 Floor').
-- MANDATORY COMMA RULE IN ADDRESS: "If comma is present on the website, put comma. If comma is NOT present on the website, do NOT invent or put comma." Strictly mirror the on-site punctuation. Never insert an invented comma between bare street number and street name (e.g. "604 Progress Drive", NOT "604, Progress Drive"; "Luzernestraat 8", NOT "Luzernestraat, 8"). Commas are only used to separate distinct multi-line address parts into a single line or before State/Province (e.g. "Cincinnati, Ohio").
+- MANDATORY COMMA RULE IN ADDRESS:
+  * "If comma is available on the website, put comma. If NOT available on the website, do NOT add comma (leave without comma)."
+  * Strictly mirror the on-site punctuation. If the source website address does NOT have a comma between components or lines (e.g. "Luzernestraat 8\n2153 GN NIEUW-VENNEP"), output WITHOUT comma: "Luzernestraat 8 Nieuw-Vennep".
+  * If the source website address DOES have commas (e.g. "No.1008, Hou Chuang Rd., Pei Tun Dist., Taichung" or "100 Main Street, Suite 400, Chicago, Illinois"), output WITH commas: "Number 1008, Hou Chuang Road, Pei Tun District, Taichung" or "100 Main Street, Suite 400, Chicago, Illinois".
+  * NEVER invent or inject commas where the website did not have them!
 - Headquarters Priority: Global Headquarters / Corporate Headquarters > Head Office > Main Office > Registered Office (only if no physical HQ/Head/Main office exists). Never select a branch, warehouse, factory, showroom, or dealer when headquarters is available.
 - Complete Multi-Line Extraction & Sequence: Combine all lines into one comma-separated address in the exact sequence shown on the website. Retain premise, building, unit, suite, floor, street number, street name, locality, town, district, city, county, and state/province.
 - Postal Code Removal: Strip ALL numeric and alphanumeric postal codes, ZIP codes, and PIN codes (UK postcodes like B75 7BU, SW1A 1AA; Canadian like M5V 2T6; European; US 5-digit and ZIP+4). Retain Post Office Box numbers (e.g. "Post Office Box 1264").
@@ -206,7 +210,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - SEPARATE CONCATENATED NUMBER & STREET: If the website ran the number and street name together without a space (e.g. "No.62-6JHONGCHE ROAD"), expand "No." to "Number " and separate the street name with a space and comma: "Number 62-6, Jhongche Road".
 - DO NOT INVENT "Number": If a street number is bare without any "No.", "No", or "#" (e.g. "40 Sarah Street", "220 Via Del Gregge"), DO NOT add "Number" (keep "40 Sarah Street", "220 Via Del Gregge").
 - Preserve Verbatim: Symbols ('+', '&', '#', '/'), diacritics, and authentic non-English proper names.
-- Comma Separation: Separate distinct components with commas in their original order. ALWAYS put a comma before State/Province (e.g. "Prince George, British Columbia", "Cincinnati, Ohio"). Never put commas inside a street name or industrial park name. Address must not end with a comma or period.
+- Comma Separation: Follow the website's original punctuation strictly: put commas only where present in the original website address; do not invent commas where the website had none. Never put commas inside a street name or industrial park name. Address must not end with a comma or period.
 - Return "Not Available" if a Working website has no verifiable physical headquarters address. Return "" if not Working.
 
 9. STATE & CITY STRICT QUALITY CONTROL VALIDATION:
@@ -426,7 +430,7 @@ function buildGeminiRequestBody(prompt) {
 async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlStartTime = 0 }) {
   let lastError = null;
   for (const modelToTry of candidateModels) {
-    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 21000) {
+    if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 38000) {
       console.warn(`[AI Assistant] Total elapsed time (${Date.now() - crawlStartTime}ms) nearing limit. Halting AI calls.`);
       break;
     }
@@ -435,13 +439,13 @@ async function callGeminiExtractionApi({ apiKey, candidateModels, prompt, crawlS
 
     // Recheck loop: if attempt 1 fails, recheck again before switching candidate models
     for (let attempt = 1; attempt <= 2; attempt++) {
-      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 21000) break;
+      if (crawlStartTime > 0 && (Date.now() - crawlStartTime) > 38000) break;
       try {
         const abortCtrl = new AbortController();
-        const remainingBudget = crawlStartTime > 0 ? Math.max(5000, 21000 - (Date.now() - crawlStartTime)) : 14000;
+        const remainingBudget = crawlStartTime > 0 ? Math.max(5000, 40000 - (Date.now() - crawlStartTime)) : 22000;
         const timeoutPerModel = (modelToTry === candidateModels[0])
-          ? (attempt === 1 ? Math.min(13000, remainingBudget) : Math.min(6000, remainingBudget))
-          : Math.min(6000, remainingBudget);
+          ? (attempt === 1 ? Math.min(18000, remainingBudget) : Math.min(8000, remainingBudget))
+          : Math.min(8000, remainingBudget);
         const abortTimer = setTimeout(() => abortCtrl.abort(), timeoutPerModel);
         let response;
         try {

@@ -534,7 +534,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
       if (/\b(?:mon|tue|wed|thu|fri|sat|sun)\b[\s\S]*?(?:am|pm)/i.test(l)) return false;
       return true;
     });
-    const combinedBlock = blockLines.join(", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    const combinedBlock = blockLines.join(" ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
       addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
@@ -606,7 +606,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
       if (/@|mailto:|data-cfemail/i.test(l)) return false;
       return true;
     });
-    const combinedBlock = labelLines.join(", ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    const combinedBlock = labelLines.join(" ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
       addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
@@ -1016,7 +1016,7 @@ function extractLikelyAddress(text) {
     for (let i = 0; i <= lines.length - windowSize; i++) {
       const slice = lines.slice(i, i + windowSize);
       if (slice.some(isJunk)) continue;
-      const combined = slice.join(", ");
+      const combined = slice.join(" ").replace(/\s*,\s*,\s*/g, ", ").trim();
       if (combined.length >= 15 && combined.length <= 250) {
         if (typeof isFullAddressCandidate === "function" && isFullAddressCandidate(combined)) {
           return combined;
