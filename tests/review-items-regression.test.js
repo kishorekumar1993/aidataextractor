@@ -3178,6 +3178,20 @@ async function runAll() {
     );
     assert.strictEqual(lightCheck.isRestricted, false, 'firstlight-products.co.uk must NOT be marked restricted for Bistro lighting, Gun Metal finishes, or ship style bulkheads');
 
+    // 3b. dinkle.com (Dinkle Enterprise Co., Ltd. - Terminal Blocks & Connectors)
+    // False positive: "...Through Connections" is Dinkle's enterprise spirit, which means to works with customers for mutual benefit.
+    const dinkleHtml = `
+      <title>Dinkle Enterprise Co., Ltd. | Terminal Blocks & Electrical Connectors</title>
+      <p>"...Through Connections" is Dinkle's enterprise spirit, which means to works with customers for mutual benefit.</p>
+      <p>Terminal blocks, interface modules, and electronic housings for industrial automation.</p>
+    `;
+    const dinkleCheck = ctx.detectRestrictedKeywords(
+      "Through Connections is Dinkle enterprise spirit, which means to works with customers for mutual benefit. Terminal blocks manufacturer.",
+      dinkleHtml,
+      [{ url: "https://www.dinkle.com/en/home", html: dinkleHtml, text: "enterprise spirit" }]
+    );
+    assert.strictEqual(dinkleCheck.isRestricted, false, 'dinkle.com must NOT be marked restricted for "enterprise spirit"');
+
     // 4. Verify all 3 produce "Working" status and extract valid business entities in applyStrictInstructions
     const crawlBilliard = {
       originalUrl: 'http://www.billiardmfg.com',
