@@ -3505,6 +3505,82 @@ async function runAll() {
     );
   });
 
+  // =========================================================================
+  // Item 118: Multi-line Address Crawling, Table Extraction & Secondary Email Fallback
+  // =========================================================================
+  runTest('Item 118: Multi-line Address Crawling, Table Extraction & Secondary Email Fallback', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Multi-line table address with <br> and separate cells
+    const contactHtml = `
+      <table>
+        <tr>
+          <th>Address:</th>
+          <td>
+            Number 26 Lane 132 Section 1 Chung Xing Road<br>
+            Homei Township<br>
+            Changhua County
+          </td>
+        </tr>
+      </table>
+    `;
+
+    const candidates = [];
+    ctx.extractHtmlAddresses(contactHtml, candidates, 'contact', 'https://www.zungsung.com/contact');
+    assert.ok(candidates.length > 0, 'Must extract address candidate from contact table');
+    const matchedAddr = candidates.find(c => (typeof c === 'object' ? c.raw : c).includes('Chung Xing Road'));
+    assert.ok(matchedAddr, 'Must extract Chung Xing Road address');
+    const rawAddr = typeof matchedAddr === 'object' ? matchedAddr.raw : matchedAddr;
+    assert.ok(
+      rawAddr.includes('Homei Township') && rawAddr.includes('Changhua County'),
+      `Address candidate must include town and county (got: ${rawAddr})`
+    );
+
+    // 2. Secondary Email Fallback in hybrid mode when AI returned empty secondaryEmailId
+    const aiResult = {
+      _isFromAi: true,
+      _extractionMode: 'ai_first',
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Zung Sung Enterprise Company, Limited',
+      countryName: 'Taiwan',
+      companyAddress: 'Number 26 Lane 132 Section 1 Chung Xing Road, Homei Township, Changhua County',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'daisyyang@zungsung.com',
+      secondaryEmailId: '', // AI omitted secondary email
+      phoneNumber: '47360023',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    const crawlData = {
+      finalUrl: 'http://www.zungsung.com',
+      originalUrl: 'http://www.zungsung.com',
+      emails: ['daisyyang@zungsung.com', 'zungsung@ms14.hinet.net'],
+      phones: ['04-7360023'],
+      addressCandidates: [{ raw: 'Number 26 Lane 132 Section 1 Chung Xing Road, Homei Township, Changhua County', source: 'contact' }]
+    };
+
+    const finalResult = ctx.applyStrictInstructions(aiResult, crawlData, {});
+    assert.strictEqual(finalResult.emailId, 'daisyyang@zungsung.com', 'Primary email must be preserved');
+    assert.strictEqual(
+      finalResult.secondaryEmailId,
+      'zungsung@ms14.hinet.net',
+      'Secondary email must fall back to second corporate email found in crawl data'
+    );
+
+    // 3. Strict ai_only mode preserves empty secondary email without crawl fallback
+    const aiOnlyResult = {
+      ...aiResult,
+      _extractionMode: 'ai_only'
+    };
+    const finalAiOnly = ctx.applyStrictInstructions(aiOnlyResult, crawlData, {});
+    assert.strictEqual(finalAiOnly.secondaryEmailId, '', 'In ai_only mode, missing secondary email must remain empty');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

@@ -36,8 +36,12 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
   if (!rawText || typeof rawText !== "string") return;
   const decoded = decodeHtmlEntities(rawText);
   let cleaned = decoded
+    .replace(/<br\s*\/?>/gi, ", ")
+    .replace(/<\/(?:p|div|li|tr|td|th|dd|dt|address|h[1-6])>/gi, ", ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
+    .replace(/[\r\n]+/g, ", ")
+    .replace(/\s*,\s*(?:,\s*)+/g, ", ")
     .replace(/^[^\w\d#]*(?:["']\s*>?|>|\/?>)\s*/g, "")
     .replace(/^[^a-zA-Z0-9#]+/g, "")
     .replace(/^(?:[A-Za-z0-9&,.'\-()\[\]\s]{2,100}?\s+)?(?:registered\s+in\s+[A-Za-z\s]+(?::\s*[\dA-Za-z]+)?\.?\s*,?\s*)?(?:registered\s*office|registered\s*agent|domicilio\s*social)\s*[:：\-–,\s]+/i, "")
@@ -364,15 +368,34 @@ function mergeTaiwanMapEmbed(q, hnear) {
   return null;
 }
 
+function safeDecodeMapUri(str) {
+  if (!str) return "";
+  try {
+    return decodeURIComponent(str.replace(/&amp;/gi, "&").replace(/\\u0026/g, "&"));
+  } catch (e) {
+    try {
+      return decodeURI(str.replace(/&amp;/gi, "&"));
+    } catch (e2) {
+      return str.replace(/%([0-9a-fA-F]{2})/g, (_, hex) => {
+        try {
+          return String.fromCharCode(parseInt(hex, 16));
+        } catch (_) {
+          return "%" + hex;
+        }
+      });
+    }
+  }
+}
+
 function extractMapAddresses(html, targetList, pageUrl = "") {
   if (!html) return;
   const decodedHtml = decodeHtmlEntities(html);
-  const mapRegex = /(?:google\.[a-z.]+\/maps|maps\.google(?:\.[a-z.]+)?|baidu\.com|openstreetmap)[^"'>\s]*/gi;
+  const mapRegex = /(?:google\.[a-z.]+\/maps|maps\.google(?:\.[a-z.]+)?|apple\.com\/maps|maps\.apple\.com|bing\.com\/maps|baidu\.com|openstreetmap)[^"'>\s]*/gi;
   let match;
   while ((match = mapRegex.exec(decodedHtml)) !== null) {
     const rawUrl = match[0];
     try {
-      const decoded = decodeURIComponent(rawUrl.replace(/&amp;/gi, "&"));
+      const decoded = safeDecodeMapUri(rawUrl);
       let query = "";
 
       // 1. Standard query parameters (?q=..., ?query=..., ?place=..., ?destination=..., ?daddr=..., ?saddr=..., ?hnear=...)
@@ -410,12 +433,13 @@ function extractMapAddresses(html, targetList, pageUrl = "") {
         }
       }
 
-      // 4. Embedded Google Maps !2s<Address> parameter
-      if (!query || /^[-\d.,\s]+$/.test(query)) {
-        const pbMatch = decoded.match(/!2s([^!&"'>]+)/i);
-        if (pbMatch) {
-          const pbCandidate = pbMatch[1].replace(/\+/g, " ").trim();
-          if (pbCandidate.length > 8 && !/^[-\d.,\s]+$/.test(pbCandidate)) {
+      // 4. Embedded Google Maps !2s<Address> parameter (can be multiple for place name and formatted address)
+      const pbMatches = [...decoded.matchAll(/!2s([^!&"'>]+)/gi)];
+      for (const pbm of pbMatches) {
+        let pbCandidate = safeDecodeMapUri(pbm[1]).replace(/\+/g, " ").trim();
+        if (pbCandidate.length > 8 && !/^[-\d.,\s]+$/.test(pbCandidate) && !/^\d+$/.test(pbCandidate)) {
+          addAddressCandidate(targetList, pbCandidate, "map", false, "map", pageUrl, "Google Maps");
+          if (!query || /^[-\d.,\s]+$/.test(query)) {
             query = pbCandidate;
           }
         }
@@ -534,7 +558,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
       if (/\b(?:mon|tue|wed|thu|fri|sat|sun)\b[\s\S]*?(?:am|pm)/i.test(l)) return false;
       return true;
     });
-    const combinedBlock = blockLines.join(" ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    const combinedBlock = blockLines.join(", ").replace(/\s*,\s*(?:,\s*)+/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
       addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
@@ -606,7 +630,7 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
       if (/@|mailto:|data-cfemail/i.test(l)) return false;
       return true;
     });
-    const combinedBlock = labelLines.join(" ").replace(/\s*,\s*,\s*/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
+    const combinedBlock = labelLines.join(", ").replace(/\s*,\s*(?:,\s*)+/g, ", ").replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
     if (combinedBlock.length > 10) {
       addAddressCandidate(targetList, combinedBlock, ctx.source, ctx.isHq, ctx.locType, pageUrl);
     }
@@ -617,6 +641,16 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   let elm;
   while ((elm = elementorListRegex.exec(processedHtml)) !== null) {
     const raw = stripHtml(elm[1]).trim();
+    if (raw.length > 8) {
+      addAddressCandidate(targetList, raw, defaultSource, false, "contact", pageUrl);
+    }
+  }
+
+  // 5c. Key-Value table rows and definition lists (e.g. <tr><th>Address:</th><td>...</td></tr> or <dt>Address</dt><dd>...</dd>)
+  const kvRegex = /<(?:tr|div|dl)[^>]*>[\s\S]{0,100}?<(?::th|td|dt|span|div)[^>]*>\s*(?:where\s+(?:you\s+can\s+)?find\s+us|our\s+(?:office|address|location|factory|showroom)|address|alamat|kantor|direcci[oó]n|domicilio|sede|ubicaci[oó]n|地址|廠址|厂址)\s*[:：]?\s*<\/(?:th|td|dt|span|div)>[\s\S]{0,100}?<(?::td|dd|span|div)[^>]*>([\s\S]{10,400}?)<\/(?:td|dd|span|div)>/gi;
+  let kvm;
+  while ((kvm = kvRegex.exec(processedHtml)) !== null) {
+    const raw = stripHtml(kvm[1]).replace(/\n+/g, ", ").replace(/\s*,\s*(?:,\s*)+/g, ", ").trim();
     if (raw.length > 8) {
       addAddressCandidate(targetList, raw, defaultSource, false, "contact", pageUrl);
     }

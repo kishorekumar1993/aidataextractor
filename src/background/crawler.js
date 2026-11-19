@@ -1653,7 +1653,7 @@ function stripHtml(html) {
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/?(?:strong|b\b|em|i\b|span|u\b|font|mark|small|sub|sup)[^>]*>/gi, "")
-    .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/address|\/h[1-6]|\/section|\/header|\/footer)[^>]*>/gi, "\n")
+    .replace(/<(?:br|\/p|\/div|\/li|\/tr|\/td|\/th|\/dd|\/dt|\/address|\/h[1-6]|\/section|\/header|\/footer)[^>]*>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/gi, " ")
     .replace(/[^\S\r\n]+/g, " ")

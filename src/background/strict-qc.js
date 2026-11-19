@@ -851,6 +851,36 @@ function resolveBestAddressCandidateAndSource(addrStr, crawlData, preferredCandi
   return { candidate: matchedCand, pageUrl: isEmptyAddr ? "" : resolvedUrl };
 }
 
+function isCompanyDomainEmail(candEmail, currentPrimEmail = "", targetHostOrUrl = "", companyName = "") {
+  if (!candEmail || typeof candEmail !== "string") return false;
+  const candHost = (candEmail.split("@")[1] || "").toLowerCase();
+  if (!candHost) return false;
+  const primHost = (currentPrimEmail ? (currentPrimEmail.split("@")[1] || "").toLowerCase() : "");
+  if (primHost && (candHost === primHost || candHost.endsWith("." + primHost) || primHost.endsWith("." + candHost))) return true;
+
+  let targetHost = targetHostOrUrl;
+  try {
+    if (targetHost && targetHost.includes("/")) {
+      targetHost = new URL(targetHost.startsWith("http") ? targetHost : `http://${targetHost}`).hostname;
+    }
+  } catch (_) {}
+  targetHost = (targetHost || "").replace(/^www\./i, "").toLowerCase();
+
+  if (targetHost && (candHost === targetHost || candHost.endsWith("." + targetHost))) return true;
+
+  // ISP & Regional Business Portal corporate email recognition:
+  // If the email username matches the company domain stem or company name stem (e.g. zungsung@ms14.hinet.net for zungsung.com)
+  const candUser = (candEmail.split("@")[0] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const stem = (targetHost || "").split(".")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+  const nameStem = (companyName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (candUser && ((stem && (candUser === stem || candUser.includes(stem) || stem.includes(candUser))) || (nameStem && (candUser.length >= 4 && nameStem.includes(candUser))))) {
+    if (/\b(?:hinet\.net|seed\.net\.tw|netvigator\.com|hkbn\.net|163\.com|126\.com|qq\.com|foxmail\.com|sina\.com|aliyun\.com|btconnect\.com|btinternet\.com|talk21\.com|t-online\.de|tin\.it|wanadoo\.fr|orange\.fr|bigpond\.com|optusnet\.com\.au|singnet\.com\.sg|starhub\.net\.sg)\b/i.test(candHost)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Populates all UI/QC source URLs and evidence snippets consistently for both AI and fallback paths.
  */
@@ -1345,6 +1375,22 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.secondaryEmailId.toLowerCase() === ("mailto" + result.emailId.toLowerCase())
     )) {
       result.secondaryEmailId = "";
+    }
+
+    // If AI did not return a valid corporate secondary email and mode is ai_first, fall back to high-confidence crawled emails
+    if (!result.secondaryEmailId && result._extractionMode === "ai_first" && crawlData && Array.isArray(crawlData.emails) && crawlData.emails.length > 1) {
+      const primLower = (result.emailId || "").toLowerCase().trim();
+      const validCrawlEmails = crawlData.emails
+        .map(e => stripTrailingContactWordsFromEmail(String(e || "").trim().toLowerCase()))
+        .filter(e => e && isValidCorporateEmail(e) && !isUnwantedEmail(e) && e !== primLower);
+
+      if (validCrawlEmails.length > 0) {
+        // Priority 1: Departmental secondary email (vacancies, careers, hr, support, sales, office, info, etc.)
+        const deptSecond = validCrawlEmails.find(e => /^(?:vacanc|vacatur|career|job|recruit|hr|bewerbung|employment|hiring|support|service|order|sales|office|admin|kundendienst|klantenservice)/i.test(e));
+        // Priority 2: Company domain or ISP corporate email matching company stem (e.g. zungsung@ms14.hinet.net)
+        const domainSecond = validCrawlEmails.find(e => isCompanyDomainEmail(e, primLower, (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "", result.companyName));
+        result.secondaryEmailId = deptSecond || domainSecond || "";
+      }
     }
 
     // 7. Phone Number: Take from API directly (cleaned via calling-code & toll-free rules).
@@ -2094,25 +2140,8 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     if (rawUrl) targetHostDomain = new URL(rawUrl).hostname.replace(/^www\./i, "").toLowerCase();
   } catch (e) { }
 
-  const isCompanyDomainEmail = (candEmail, currentPrimEmail) => {
-    if (!candEmail || typeof candEmail !== "string") return false;
-    const candHost = (candEmail.split("@")[1] || "").toLowerCase();
-    if (!candHost) return false;
-    const primHost = (currentPrimEmail ? (currentPrimEmail.split("@")[1] || "").toLowerCase() : "");
-    if (primHost && (candHost === primHost || candHost.endsWith("." + primHost) || primHost.endsWith("." + candHost))) return true;
-    if (targetHostDomain && (candHost === targetHostDomain || candHost.endsWith("." + targetHostDomain))) return true;
-
-    // ISP & Regional Business Portal corporate email recognition:
-    // If the email username matches the company domain stem or company name stem (e.g. zungsung@ms14.hinet.net for zungsung.com)
-    const candUser = (candEmail.split("@")[0] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const stem = (targetHostDomain || "").split(".")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
-    const nameStem = (result.companyName || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (candUser && ((stem && (candUser === stem || candUser.includes(stem) || stem.includes(candUser))) || (nameStem && (candUser.length >= 4 && nameStem.includes(candUser))))) {
-      if (/\b(?:hinet\.net|seed\.net\.tw|netvigator\.com|hkbn\.net|163\.com|126\.com|qq\.com|foxmail\.com|sina\.com|aliyun\.com|btconnect\.com|btinternet\.com|talk21\.com|t-online\.de|tin\.it|wanadoo\.fr|orange\.fr|bigpond\.com|optusnet\.com\.au|singnet\.com\.sg|starhub\.net\.sg)\b/i.test(candHost)) {
-        return true;
-      }
-    }
-    return false;
+  const isCompanyDomainEmailLocal = (candEmail, currentPrimEmail) => {
+    return isCompanyDomainEmail(candEmail, currentPrimEmail, targetHostDomain, result.companyName);
   };
 
   // 9. Primary Email ID
@@ -2128,7 +2157,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   if (email && !crawlEmails.includes(email)) {
     const emHost = (email.split("@")[1] || "").toLowerCase();
     const matchesTarget = targetHostDomain && (emHost === targetHostDomain || emHost.endsWith("." + targetHostDomain));
-    if (!matchesTarget && !isCompanyDomainEmail(email, "")) {
+    if (!matchesTarget && !isCompanyDomainEmailLocal(email, "")) {
       email = "";
     }
   }
@@ -2151,7 +2180,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       isUnwantedEmail(secEmail)
     ) {
       secEmail = "";
-    } else if (!isCompanyDomainEmail(secEmail, email) && !crawlEmails.includes(secEmail)) {
+    } else if (!isCompanyDomainEmailLocal(secEmail, email) && !crawlEmails.includes(secEmail)) {
       // Reject only if it's completely unverified (neither matching company domain nor discovered in crawl HTML/socials)
       secEmail = "";
     }
@@ -2162,7 +2191,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     // Priority 1: distinct corporate email from same company domain
     let cand = crawlEmails.find(e => {
       const emLower = stripTrailingContactWordsFromEmail((e || "").trim().toLowerCase());
-      return emLower && emLower !== email && isValidCorporateEmail(emLower) && !isUnwantedEmail(emLower) && isCompanyDomainEmail(emLower);
+      return emLower && emLower !== email && isValidCorporateEmail(emLower) && !isUnwantedEmail(emLower) && isCompanyDomainEmailLocal(emLower);
     });
     // Priority 2: any distinct corporate email discovered on website/socials during crawl (e.g. branch, sister brand, ISP, or social channel email)
     if (!cand) {
