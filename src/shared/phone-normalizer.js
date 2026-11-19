@@ -233,17 +233,17 @@ function normalizeSinglePhone(part, country) {
   // Country-specific length validation
   const len = digits.length;
   if (cLower.includes("south africa") || cLower.includes("southafrica")) {
-    if (len !== 9) return "";
+    if (len < 7 || len > 9) return "";
   } else if (isNorthAmerica) {
     if (len !== 10) return "";
   } else if (cLower.includes("taiwan")) {
-    if (len < 8 || len > 9) return "";
-  } else if (cLower.includes("united kingdom") || cLower.includes("england")) {
+    if (len < 7 || len > 9) return "";
+  } else if (cLower.includes("united kingdom") || cLower.includes("england") || cLower.includes("scotland") || cLower.includes("wales") || cLower.includes("northern ireland") || cLower.includes("great britain") || cLower === "uk") {
     if (len < 9 || len > 10) return "";
   } else if (cLower.includes("india")) {
     if (len !== 10) return "";
   } else if (cLower.includes("australia")) {
-    if (len !== 9) return "";
+    if (len < 8 || len > 9) return "";
   } else if (cLower.includes("malaysia")) {
     if (len < 8 || len > 10) return "";
   } else if (cLower.includes("new zealand")) {
@@ -256,8 +256,12 @@ function normalizeSinglePhone(part, country) {
     if (len !== 9) return "";
   } else if (cLower.includes("france") || cLower.includes("french")) {
     if (len !== 9) return "";
+  } else if (cLower.includes("germany") || cLower.includes("deutschland") || cLower.includes("german")) {
+    if (len < 6 || len > 12) return "";
+  } else if (cLower.includes("italy") || cLower.includes("italia")) {
+    if (len < 7 || len > 11) return "";
   } else {
-    if (len < 8 || len > 12) return "";
+    if (len < 7 || len > 12) return "";
   }
 
   return digits;

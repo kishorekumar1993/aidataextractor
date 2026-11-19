@@ -148,16 +148,32 @@
     elements.secondaryEmailId = document.getElementById("inputSecondaryEmail") || document.getElementById("secondary-email-id") || document.getElementById("secondaryEmail") || document.getElementById("secondary_email") || document.getElementById("altEmail") || document.getElementById("alternateEmail");
     elements.phoneNumber = document.getElementById("inputPhone") ||
       document.getElementById("phone-number") ||
+      document.getElementById("phone_number") ||
+      document.getElementById("phonenumber") ||
       document.getElementById("phone") ||
       document.getElementById("phoneNumber") ||
       document.getElementById("inputPhoneNumber") ||
+      document.getElementById("input_phone") ||
+      document.getElementById("txtPhone") ||
+      document.getElementById("txtPhoneNumber") ||
       document.getElementById("telephone") ||
       document.getElementById("inputTelephone") ||
+      document.getElementById("mobile") ||
+      document.getElementById("contact_number") ||
+      document.getElementById("contactNumber") ||
       document.querySelector('input[type="tel"]') ||
       document.querySelector('input[name="phoneNumber"]') ||
+      document.querySelector('input[name="phone_number"]') ||
+      document.querySelector('input[name="phonenumber"]') ||
       document.querySelector('input[name="phone"]') ||
       document.querySelector('input[name="inputPhone"]') ||
-      document.querySelector('input[name="telephone"]');
+      document.querySelector('input[name="inputPhoneNumber"]') ||
+      document.querySelector('input[name="txtPhone"]') ||
+      document.querySelector('input[name="txtPhoneNumber"]') ||
+      document.querySelector('input[name="telephone"]') ||
+      document.querySelector('input[name="contact_number"]') ||
+      document.querySelector('input[name="contactNumber"]') ||
+      document.querySelector('input[name="mobile"]');
     elements.numberOfProducts = document.getElementById("selectProductCount") || document.getElementById("number-of-product");
     elements.productImages = document.getElementById("selectProductImage") || document.getElementById("image-product");
     elements.numberOfProductDescriptions = document.getElementById("selectProductDescription") || document.getElementById("desc-of-product");
@@ -254,7 +270,7 @@
       elements.phoneNumber = allInputs.find(inp => {
         if (inp === elements.companyName || inp === elements.companyAddress || inp === elements.countryName || inp === elements.emailId || inp === elements.secondaryEmailId) return false;
         const ctx = getElementContext(inp);
-        return ctx.includes("phone") || ctx.includes("mobile") || ctx.includes("tel") || (inp.placeholder || "").toLowerCase().includes("phone") || inp.type === "tel";
+        return ctx.includes("phone") || ctx.includes("mobile") || ctx.includes("tel") || ctx.includes("contact no") || ctx.includes("contact num") || (inp.placeholder || "").toLowerCase().includes("phone") || inp.type === "tel";
       });
     }
 

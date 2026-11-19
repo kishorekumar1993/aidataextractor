@@ -1915,8 +1915,11 @@ function parseHtmlDetails(html, baseUrl) {
   // Extract & Rank Emails across the complete website HTML
   const rankedEmails = extractEmailsFromHtml(html, hostDomain);
 
-  // Extract Phone Numbers strictly from telephone contexts (including tel:, icon labels, JSON-LD, meta, and WhatsApp)
-  const phoneLinks = [...html.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
+  // Extract Phone Numbers from telephone contexts, links, JSON-LD, meta, and standard domestic/international patterns
+  const phoneLinks = [
+    ...html.matchAll(/href=["'](?:tel:|callto:|wtai:\/\/wp\/mc;)([^"']+)["']/gi),
+    ...html.matchAll(/data-(?:phone|tel|telephone)=["']([^"']+)["']/gi)
+  ].map(m => m[1]);
   const waLinks = [...html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\?[^"']*phone=)(\+?\d{8,15})/gi)].map(m => "+" + m[1].replace(/^\+/, ""));
 
   // JSON-LD schema "telephone"
@@ -1937,28 +1940,61 @@ function parseHtmlDetails(html, baseUrl) {
   const cleanHtmlForPhones = cleanHtml
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/?(?:strong|b\b|em|i\b|span|u\b|font|mark|small|sub|sup)[^>]*>/gi, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec))
+    .replace(/&#x([0-9a-f]+);/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/\b(?:aria-)?placeholder\s*=\s*"[^"]*"/gi, " ")
     .replace(/\b(?:aria-)?placeholder\s*=\s*'[^']*'/gi, " ");
-  const contextPhoneRegex = /(?:(?:tel\b|tele(?:phone)?\b|phone\b|call\b|contact\b|mobile\b|cell\b|whatsapp\b|hotline\b|direct\b|office\b|main\b|sales\b|inquiries\b|t\b|ph\b|p\b|telefon\b|tél(?:éphone)?\b|telf\b|telefoon\b|fono\b|总机|總機|电话|電話|手机|手機|座机|座機)[\s.:：]*|(?:bxs:phone-call|fa-phone|fa-mobile|icon-phone|feather-phone)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().#\/-]{7,32}(?:\s*(?:ext|x|#)\.?\s*\d+)?)/gi;
+
+  const contextPhoneRegex = /(?:(?:tel\b|tele(?:phone)?\b|phone\b|call\b|contact\b|mobile\b|cell\b|whatsapp\b|hotline\b|direct\b|office\b|main\b|sales\b|inquir(?:y|ies)\b|service\b|support\b|headquarters\b|hq\b|t\b|ph\b|p\b|telefon\b|tél(?:éphone)?\b|telf\b|telefoon\b|fono\b|总机|總機|电话|電話|手机|手機|座机|座機)(?:[^\w\n<]{0,25}(?:number|no\.?|line|us|now|at|our|team))?[\s.:：\/-]*|(?:bxs:phone-call|fa-phone|fa-mobile|icon-phone|feather-phone)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().#\/-]{7,32}(?:\s*(?:ext|x|#)\.?\s*\d+)?)/gi;
   let pMatch;
   const contextPhones = [];
   while ((pMatch = contextPhoneRegex.exec(cleanHtmlForPhones)) !== null) {
     contextPhones.push(pMatch[1].trim());
   }
 
-  // International standard format phone matches in text (e.g. +44 113 250 8082, +1 (503) 788-8032)
-  const intlPhoneRegex = /(?:^|[^\d+])(\+(?:1|44|886|61|60|65|86|91|49|33|39|34|31|41|43|32|27|62|90|81|82|52|55)\s*\(?0?\)?[\s.-]*\d{1,5}[\s.-]*\d{3,4}[\s.-]*\d{3,4})/g;
-  const intlPhones = [];
-  let ipMatch;
-  while ((ipMatch = intlPhoneRegex.exec(cleanHtmlForPhones)) !== null) {
-    intlPhones.push(ipMatch[1].trim());
+  // Domestic and International standard phone pattern matchers across cleanHtmlForPhones and bodyText
+  const domesticPhoneRegexes = [
+    // US / Canada / North America: (503) 788-8032 or 503-788-8032 or 1-503-788-8032
+    /(?:^|[^\d])(?:\+?1[-.\s]*)?(?:\((\d{3})\)|\b(\d{3}))[-.\s]+(\d{3})[-.\s]+(\d{4})\b(?:\s*(?:ext|x|#)\.?\s*\d+)?/gi,
+    // UK: 0113 250 8082, (0113) 250 8082, +44 113 250 8082
+    /(?:^|[^\d])(?:\+?44\s*\(?0?\)?|0)\d{2,4}[-.\s]+\d{3,4}[-.\s]+\d{3,4}\b/gi,
+    // Taiwan: 04-2426-3838, (02) 2345-6789, +886-4-2426-3838
+    /(?:^|[^\d])(?:\+?886[-.\s]*)?(?:\(0?\d{1,2}\)|0?\d{1,2})[-.\s]+\d{3,4}[-.\s]+\d{4}\b(?:\s*#\s*\d+)?/gi,
+    // Australia: (03) 9562 0780 or 0412 345 678
+    /(?:^|[^\d])(?:\+?61\s*\(?0?\)?|0)\d{1,2}[-.\s]+\d{3,4}[-.\s]+\d{3,4}\b/gi,
+    // International standard format (e.g. +44 113 250 8082, +49 30 1234567, +33 1 23 45 67 89)
+    /(?:^|[^\d+])(\+(?:1|44|886|61|60|65|86|91|49|33|39|34|31|41|43|32|27|62|90|81|82|52|55)\s*\(?0?\)?[\s.-]*\d{1,5}[\s.-]*\d{3,4}[\s.-]*\d{3,4})/g
+  ];
+
+  const patternPhones = [];
+  const textToScan = cleanHtmlForPhones + "\n" + stripHtml(cleanHtml);
+  for (const rx of domesticPhoneRegexes) {
+    let m;
+    while ((m = rx.exec(textToScan)) !== null) {
+      const matchText = (m[0] || "").trim().replace(/^[^\d+(]+/, "").trim();
+      if (matchText) patternPhones.push(matchText);
+    }
   }
 
-  const candidatePhones = [...phoneLinks, ...jsonLdPhones, ...metaPhones, ...contextPhones, ...intlPhones, ...waLinks];
+  const candidatePhones = [
+    ...phoneLinks,
+    ...jsonLdPhones,
+    ...metaPhones,
+    ...contextPhones,
+    ...patternPhones,
+    ...waLinks
+  ];
   const uniquePhones = [];
   for (const rawP of candidatePhones) {
     const trimmed = String(rawP || "").trim();
     if (!trimmed) continue;
+    // Exclude obvious dates e.g. 2024-11-19 or 19/11/2024
+    if (/^\b(?:19|20)\d\d[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01])\b/.test(trimmed)) continue;
+    if (/^\b(?:0[1-9]|[12]\d|3[01])[-/.](?:0[1-9]|1[0-2])[-/.](?:19|20)\d\d\b/.test(trimmed)) continue;
+    // Exclude dimensions e.g. 1920x1080 or 800 x 600
+    if (/^\d{3,4}\s*[xX*]\s*\d{3,4}$/.test(trimmed)) continue;
+
     const digitsOnly = trimmed.replace(/\D/g, "");
     const canClean = typeof cleanPhoneNumber === "function" && Boolean(cleanPhoneNumber(trimmed, ""));
     if ((canClean || (digitsOnly.length >= 7 && digitsOnly.length <= 25)) && !uniquePhones.includes(trimmed)) {

@@ -1348,11 +1348,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
 
     // 7. Phone Number: Take from API directly (cleaned via calling-code & toll-free rules).
-    result.phoneNumber = cleanPhoneNumber(result.phoneNumber, result.countryName);
+    result.phoneNumber = cleanPhoneNumber(result.phoneNumber, result.countryName) || cleanPhoneNumber(result.phoneNumber, "");
     // If AI did not return a phone number or returned an invalid one, and mode is not ai_only, fall back to crawled phones
     if (!result.phoneNumber && result._extractionMode !== "ai_only" && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
       for (const candP of crawlData.phones) {
-        const cleaned = cleanPhoneNumber(candP, result.countryName);
+        const cleaned = cleanPhoneNumber(candP, result.countryName) || cleanPhoneNumber(candP, "");
         if (cleaned) {
           result.phoneNumber = cleaned;
           break;
@@ -2171,10 +2171,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.secondaryEmailId = secEmail;
 
   // 11. Phone Number: Country-specific cleaning & validation (Strictly no toll-free, no country code, no leading zeros)
-  let phone = cleanPhoneNumber(result.phoneNumber, country);
+  let phone = cleanPhoneNumber(result.phoneNumber, country) || cleanPhoneNumber(result.phoneNumber, "");
   if (!phone && crawlData.phones && crawlData.phones.length > 0) {
     for (const cand of crawlData.phones) {
-      phone = cleanPhoneNumber(cand, country);
+      phone = cleanPhoneNumber(cand, country) || cleanPhoneNumber(cand, "");
       if (phone) break;
     }
   }
