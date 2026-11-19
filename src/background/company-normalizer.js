@@ -1,5 +1,37 @@
 // Company name extraction, prose-noise filtering, legal suffix matching, and abbreviation expansion.
 
+// Safe helper bindings for modular or standalone environments
+if (typeof decodeHtmlEntities !== "function") {
+  try {
+    const textUtils = require("../shared/text-utils.js");
+    if (textUtils && typeof textUtils.decodeHtmlEntities === "function") {
+      decodeHtmlEntities = textUtils.decodeHtmlEntities;
+    }
+  } catch (e) {
+    decodeHtmlEntities = (s) => (s ? String(s).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'") : "");
+  }
+}
+if (typeof stripHtml !== "function") {
+  try {
+    const textUtils = require("../shared/text-utils.js");
+    if (textUtils && typeof textUtils.stripHtml === "function") {
+      stripHtml = textUtils.stripHtml;
+    }
+  } catch (e) {
+    stripHtml = (s) => (s ? String(s).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "");
+  }
+}
+if (typeof stripBoundarySpecialChars !== "function") {
+  try {
+    const textUtils = require("../shared/text-utils.js");
+    if (textUtils && typeof textUtils.stripBoundarySpecialChars === "function") {
+      stripBoundarySpecialChars = textUtils.stripBoundarySpecialChars;
+    }
+  } catch (e) {
+    stripBoundarySpecialChars = (s) => (s ? String(s).replace(/^[^\w\s(]+|[^\w\s).]+$/g, "").trim() : "");
+  }
+}
+
 function extractCopyrightCompanyName(html) {
   if (!html) return "";
   const decoded = decodeHtmlEntities(html);
@@ -113,7 +145,7 @@ function cleanCompanyPrefixesAndSuffixes(rawName) {
   // 3. Strip trailing marketing taglines / SEO categories / profile fields if corporate legal suffix is already present
   // e.g. "Danzer UK Limited - Timber Merchants Suppliers of Hardwoods" -> "Danzer UK Limited"
   // e.g. "YUKIWA SEIKO USA INC. Drill Chucks, Tool Holder..." -> "YUKIWA SEIKO USA INC."
-  const legalSuffixCutoff = new RegExp(`\\b(${LEGAL_ENTITY_SUFFIX_CORE}|Limited\\s+Liability\\s+(?:Company|Partnership)|Public\\s+Limited\\s+Company|Proprietary\\s+Limited|Private\\s+Limited|Sendirian\\s+Berhad|Joint\\s+Stock\\s+Company|Societas\\s+Europaea|Soci[eé]t[eé]\\s+[aà]\\s+Responsabilit[eé]\\s+Limit[eé]e|Soci[eé]t[eé]\\s+par\\s+Actions\\s+Simplifi[eé]e|Societ[aà]\\s+per\\s+Azioni|Societ[aà]\\s+a\\s+Responsabilit[aà]\\s+Limitata|Aktiebolag|Aksjeselskap|Osakeyhti[oö])\\b(?:\\s*[-–—|:•·,]\\s*|\\s+(?:Drill|Tool|Rotary|Spring|Chucks|Holder|Tables|Collets|Manufacturer|Supplier|Wholesaler|Distributor|Products|Services|Solutions|Store|Shop|Leading|Specialists|Machining|Precision|Online|Official|CEO|VAT|NIP|KRS|Tel|Phone|Email|Address|All\\s+Rights|Is\\s+A|Began|Started|Provides|Offers|Manufactures)\\b|\\.\\s+[A-Z]).*$`, "i");
+  const legalSuffixCutoff = new RegExp(`\\b(${LEGAL_ENTITY_SUFFIX_CORE}|Limited\\s+Liability\\s+(?:Company|Partnership)|Public\\s+Limited\\s+Company|Proprietary\\s+Limited|Private\\s+Limited|Sendirian\\s+Berhad|Joint\\s+Stock\\s+Company|Societas\\s+Europaea|Soci[eé]t[eé]\\s+[aà]\\s+Responsabilit[eé]\\s+Limit[eé]e|Soci[eé]t[eé]\\s+par\\s+Actions\\s+Simplifi[eé]e|Societ[aà]\\s+per\\s+Azioni|Societ[aà]\\s+a\\s+Responsabilit[aà]\\s+Limitata|Aktiebolag|Aksjeselskap|Osakeyhti[oö])\\b(?:\\s*[-–—|:•·,]\\s*|\\s+(?:Drill|Tool|Rotary|Spring|Chucks|Holder|Tables|Collets|Manufacturer|Supplier|Wholesaler|Distributor|Products|Services|Solutions|Store|Shop|Leading|Specialists|Machining|Precision|Online|Official|CEO|VAT|NIP|KRS|Tel|Phone|Email|Address|All\\s+Rights|Is\\s+A|Began|Started|Provides|Offers|Manufactures)\\b|\\.\\s+(?:[A-Z][a-z]{2,}\\s+[a-z]|We\\b|Our\\b|The\\b|All\\s+rights)\\b).*$`, "i");
   name = name.replace(legalSuffixCutoff, "$1");
 
   // 4. Strip trailing SEO taglines even without separator if starts with " - Manufacturer of...", " | Suppliers of..."

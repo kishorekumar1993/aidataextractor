@@ -282,6 +282,7 @@ async function crawlWebsite(targetUrl, options = {}) {
   let httpStatus = 0;
   let isBlocked = false;
   let requiresManualReview = false;
+  let errorKeyword = "";
   const addressCandidates = [];
   let profilePageText = "";
   let careerPageText = "";
@@ -1149,6 +1150,7 @@ async function crawlWebsite(targetUrl, options = {}) {
     pagesFetchedCount,
     maxPages: MAX_CRAWL_PAGES,
     isBlocked: isBlocked || (httpStatus === 403 || httpStatus === 401 || httpStatus === 429),
+    errorKeyword: errorKeyword || (isBlocked || httpStatus === 403 || httpStatus === 401 || httpStatus === 429 ? "Security Check / Anti-bot" : ""),
     requiresManualReview: (requiresManualReview || status === "Manual Review") && !isBlocked && httpStatus !== 403 && httpStatus !== 401 && httpStatus !== 429,
     contactPageText: contactPageText.slice(0, 12000),
     footerText: footerText.slice(0, 4000),

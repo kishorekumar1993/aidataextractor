@@ -62,11 +62,9 @@
     const writeTask = nonWorkingWriteQueue.then(async () => {
       try {
         let existingRecords = [];
-        let lastSyncTime = null;
         if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-          const data = await chrome.storage.local.get([NON_WORKING_STORAGE_KEY, NON_WORKING_SYNC_TIME_KEY]);
+          const data = await chrome.storage.local.get([NON_WORKING_STORAGE_KEY]);
           existingRecords = Array.isArray(data[NON_WORKING_STORAGE_KEY]) ? data[NON_WORKING_STORAGE_KEY] : [];
-          lastSyncTime = data[NON_WORKING_SYNC_TIME_KEY] || null;
         }
 
         const { merged, addedCount } = typeof mergeErrorRecords === "function"
@@ -234,7 +232,6 @@
           [NON_WORKING_STORAGE_KEY]: [],
           [WORKING_STORAGE_KEY]: []
         });
-        await chrome.storage.local.remove([NON_WORKING_STORAGE_KEY, WORKING_STORAGE_KEY]);
       }
       return { success: true };
     } catch (err) {

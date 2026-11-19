@@ -1,4 +1,53 @@
 // Multi-provider AI extraction (Gemini & Groq), key validation, and heuristic fallback extraction.
+
+// Safe helper bindings for modular or standalone environments
+if (typeof cleanPhoneNumber !== "function") {
+  try {
+    const pn = require("../shared/phone-normalizer.js");
+    if (pn && typeof pn.cleanPhoneNumber === "function") cleanPhoneNumber = pn.cleanPhoneNumber;
+  } catch (e) { }
+}
+if (typeof normalizeCountryName !== "function") {
+  try {
+    const loc = require("./location-qc.js");
+    if (loc && typeof loc.normalizeCountryName === "function") normalizeCountryName = loc.normalizeCountryName;
+  } catch (e) { }
+}
+if (typeof hasCityInAddress !== "function") {
+  try {
+    const loc = require("./location-qc.js");
+    if (loc && typeof loc.hasCityInAddress === "function") hasCityInAddress = loc.hasCityInAddress;
+  } catch (e) { }
+}
+if (typeof computeOwnCrawlProductCount !== "function") {
+  try {
+    const qc = require("./strict-qc.js");
+    if (qc && typeof qc.computeOwnCrawlProductCount === "function") computeOwnCrawlProductCount = qc.computeOwnCrawlProductCount;
+  } catch (e) { }
+}
+if (typeof stripBoundarySpecialChars !== "function") {
+  try {
+    const tu = require("../shared/text-utils.js");
+    if (tu && typeof tu.stripBoundarySpecialChars === "function") stripBoundarySpecialChars = tu.stripBoundarySpecialChars;
+  } catch (e) {
+    stripBoundarySpecialChars = (s) => (s ? String(s).replace(/^[^\w\s(]+|[^\w\s).]+$/g, "").trim() : "");
+  }
+}
+if (typeof normalizeNameForComparison !== "function") {
+  try {
+    const cn = require("./company-normalizer.js");
+    if (cn && typeof cn.normalizeNameForComparison === "function") normalizeNameForComparison = cn.normalizeNameForComparison;
+  } catch (e) { }
+}
+if (typeof decodeHtmlEntities !== "function") {
+  try {
+    const tu = require("../shared/text-utils.js");
+    if (tu && typeof tu.decodeHtmlEntities === "function") decodeHtmlEntities = tu.decodeHtmlEntities;
+  } catch (e) {
+    decodeHtmlEntities = (s) => (s ? String(s).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'") : "");
+  }
+}
+
 function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
   const compactSlice = (text, maxLen) => String(text || "").replace(/\s+/g, " ").trim().slice(0, maxLen);
   const formattedAddressEvidence = (crawlData.addressCandidates && crawlData.addressCandidates.length > 0)
@@ -1931,10 +1980,10 @@ async function validateRestrictedCategoryWithAi(crawlData, aiConfig = {}, crawlS
   }
 
   try {
-    let rawResultText = "";
+    let apiRes = null;
     if (cfg.provider === "gemini") {
       const candidateModels = [cfg.model, "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
-      rawResultText = await callGeminiExtractionApi({
+      apiRes = await callGeminiExtractionApi({
         apiKey: cfg.apiKey,
         candidateModels,
         prompt,
@@ -1942,7 +1991,7 @@ async function validateRestrictedCategoryWithAi(crawlData, aiConfig = {}, crawlS
       });
     } else {
       const candidateModels = [cfg.model, "llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
-      rawResultText = await callOpenAiCompatibleApi({
+      apiRes = await callOpenAiCompatibleApi({
         providerLabel: cfg.provider.toUpperCase(),
         endpoint: cfg.endpoint || "https://api.groq.com/openai/v1/chat/completions",
         apiKey: cfg.apiKey,
@@ -1952,7 +2001,7 @@ async function validateRestrictedCategoryWithAi(crawlData, aiConfig = {}, crawlS
       });
     }
 
-    const parsed = parseAiJsonPayload(rawResultText);
+    const parsed = (apiRes && apiRes.parsed) ? apiRes.parsed : (typeof apiRes === "string" ? parseAiJsonPayload(apiRes) : null);
     if (parsed && typeof parsed === "object") {
       return parsed;
     }
