@@ -3046,6 +3046,67 @@ async function runAll() {
     assert.strictEqual(qcResult.companyAddress, '50 Industrial Parkway, Detroit');
   });
 
+  // =========================================================================
+  // Item 113: Contact Address vs Google Maps Address (Take Google Map if it has additional words)
+  // =========================================================================
+  runTest('Item 113: Contact Address vs Google Maps Address (Take Google Map if it has additional words)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Verify buildExtractionPrompt includes the mandatory prompt instruction
+    const mockCrawlData = {
+      originalUrl: 'https://example.com',
+      finalUrl: 'https://example.com',
+      title: 'Precision Tools',
+      addressCandidates: [
+        { raw: 'No. 1008 Hou Chuang Rd., Taichung', source: 'contact', isEnglish: true },
+        { raw: 'No. 1008, Hou Chuang Rd., Pei Tun Dist., Taichung', source: 'Google Maps', isEnglish: true }
+      ]
+    };
+    const prompt = ctx.buildExtractionPrompt(mockCrawlData);
+    assert.ok(
+      prompt.includes('CONTACT ADDRESS vs. GOOGLE MAPS ADDRESS RULE'),
+      'Prompt must contain CONTACT ADDRESS vs. GOOGLE MAPS ADDRESS RULE'
+    );
+    assert.ok(
+      prompt.includes('take the Google Map address') || prompt.includes('TAKE THE GOOGLE MAP ADDRESS'),
+      'Prompt must instruct taking the Google Map address with additional words'
+    );
+
+    // 2. Verify candidate selection prefers the fuller Google Maps candidate when it has additional words for the same location
+    const candidates = [
+      { raw: 'No. 1008 Hou Chuang Rd., Taichung 40679, Taiwan', source: 'contact', isEnglish: true, priority: 6 },
+      { raw: 'No. 1008, Hou Chuang Rd., Pei Tun Dist., Taichung 40679, Taiwan', source: 'Google Maps', isEnglish: true, priority: 6 }
+    ];
+    const selection = ctx.verifyAndSelectAddress(null, candidates, mockCrawlData);
+    assert.ok(selection.selectedCandidate, 'A candidate must be selected');
+    assert.ok(
+      selection.selectedCandidate.raw.includes('Pei Tun Dist.'),
+      'Selected candidate must be the Google Maps address containing additional words (Pei Tun Dist.)'
+    );
+
+    // 3. Verify end-to-end QC with AI data taking Google Maps address with additional words
+    const aiData = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Way Train Industries Co., Ltd.',
+      countryName: 'Taiwan',
+      companyAddress: 'Number 1008, Hou Chuang Road, Pei Tun District, Taichung'
+    };
+    const crawlData = {
+      originalUrl: 'https://www.waytrain.com',
+      finalUrl: 'https://www.waytrain.com/',
+      addressCandidates: candidates
+    };
+    const qcResult = ctx.applyStrictInstructions(aiData, crawlData, { isRestricted: false });
+    assert.strictEqual(
+      qcResult.companyAddress,
+      'Number 1008, Hou Chuang Road, Pei Tun District, Taichung',
+      'Address must include the additional words from Google Map (Pei Tun District)'
+    );
+    assert.strictEqual(qcResult.city, 'Available', 'Pei Tun District qualifies City as Available');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

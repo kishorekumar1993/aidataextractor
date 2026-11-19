@@ -196,6 +196,11 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
 8. COMPANY ADDRESS (HEADQUARTERS EXTRACTION, FULL-FORM EXPANSIONS & QC):
 - CORE PRINCIPLE: WHAT WEBSITE HAS, TAKE THE SAME — EXPANSION ONLY, NO GRAMMAR CHANGES: Take the exact address as found on the website. DO NOT rewrite, paraphrase, or change words. Only expand standard abbreviations (St. -> Street, Rd. -> Road, Fl. -> Floor, No. -> Number, Ste. -> Suite, Bldg. -> Building). Do NOT make grammar changes (e.g. no ordinal suffixes on floors; '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor'). Do NOT invent new words not on the site. If website has '7Floor' (no space), do not give space ('7Floor'); if website has '7 Floor' (with space), provide space ('7 Floor').
+- CONTACT ADDRESS vs. GOOGLE MAPS ADDRESS RULE (MANDATORY):
+  * "If contact address and Google Map are for the same location, but Google Map has additional words (e.g. Village, Sub-District, District, Industrial Park, Building Name, Road Section, Municipality, or County), YOU MUST TAKE THE GOOGLE MAP ADDRESS (or include the additional words from Google Map)."
+  * When both static contact text (from Contact Us page, footer, or body) and an embedded Google Map or Google Maps link are present for the same company location, compare them:
+    - If the Google Map address contains additional words or more complete administrative/geographic components that the static contact text omitted or shortened, take the Google Map address containing those additional words.
+    - Example: Contact page text says "No. 1008 Hou Chuang Rd., Taichung" but Google Map gives "No. 1008, Hou Chuang Rd., Pei Tun Dist., Taichung" -> The Google Map address has the additional words "Pei Tun Dist." (Pei Tun District), so take the Google Map address: "Number 1008, Hou Chuang Road, Pei Tun District, Taichung".
 - MANDATORY COMMA RULE IN ADDRESS:
   * "If comma is available on the website, put comma. If NOT available on the website, do NOT add comma (leave without comma)."
   * Strictly mirror the on-site punctuation. If the source website address does NOT have a comma between components or lines (e.g. "Luzernestraat 8\n2153 GN NIEUW-VENNEP"), output WITHOUT comma: "Luzernestraat 8 Nieuw-Vennep".
@@ -280,7 +285,7 @@ Product Items / Units Detected: ${crawlData.detectedProductCount}
 Product Images Detected: ${crawlData.detectedImageCount}
 Product Descriptions Detected: ${crawlData.detectedDescCount}
 
-${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2))}\n\n` : ""}${renderedText ? `VISUAL DOM TEXT:\n${renderedText}\n\n` : ""}PRIORITY RULE FOR EXTRACTION: Check the DEDICATED CONTACT US PAGE FIRST for address, emails, phone numbers, and country before checking Footer, About, or Homepage content.
+${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2))}\n\n` : ""}${renderedText ? `VISUAL DOM TEXT:\n${renderedText}\n\n` : ""}PRIORITY RULE FOR EXTRACTION: Check the DEDICATED CONTACT US PAGE FIRST for address, emails, phone numbers, and country before checking Footer, About, or Homepage content. (Note: If contact address and Google Map are for the same location and Google Map contains additional words, take the Google Map address).
 
 PHYSICAL ADDRESS EVIDENCE FOUND ON WEBSITE:
 ${formattedAddressEvidence}
