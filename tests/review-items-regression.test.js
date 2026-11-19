@@ -3105,6 +3105,18 @@ async function runAll() {
       'Address must include the additional words from Google Map (Pei Tun District)'
     );
     assert.strictEqual(qcResult.city, 'Available', 'Pei Tun District qualifies City as Available');
+
+    // 4. Verify reverse: When Contact address is fuller than Map address, Contact address is chosen
+    const reverseCandidates = [
+      { raw: 'Unit 3, Precision House, 45 Industrial Way, Leeds LS1 2AB, England', source: 'contact', isEnglish: true, priority: 6 },
+      { raw: '45 Industrial Way, Leeds LS1 2AB, England', source: 'Google Maps', isEnglish: true, priority: 6 }
+    ];
+    const reverseSelection = ctx.verifyAndSelectAddress(null, reverseCandidates, mockCrawlData);
+    assert.ok(reverseSelection.selectedCandidate, 'A candidate must be selected in reverse comparison');
+    assert.ok(
+      reverseSelection.selectedCandidate.raw.includes('Unit 3, Precision House'),
+      'Selected candidate must be the fuller Contact address containing Unit 3, Precision House'
+    );
   });
 
   // =========================================================================

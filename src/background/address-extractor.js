@@ -956,16 +956,20 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
       if (cRaw.toLowerCase().includes(bestRaw.toLowerCase()) && cRaw.length > bestRaw.length) {
         bestCandidate = c;
         bestRaw = cRaw;
-      } else if (c && c.source && /map/i.test(c.source)) {
-        // If Google Map and contact address are for the same location, but Google Map has additional words (e.g. district, village, industrial park), take the Google Map candidate
-        const normTokens = s => s.toLowerCase().replace(/[^a-z0-9]/g, " ").split(/\s+/).filter(t => t.length > 2);
-        const bestTokens = normTokens(bestRaw);
-        const cTokens = normTokens(cRaw);
-        if (bestTokens.length >= 2) {
-          const matchedCount = bestTokens.filter(t => cTokens.includes(t)).length;
-          if ((matchedCount / bestTokens.length) >= 0.7 && cTokens.length > bestTokens.length) {
-            bestCandidate = c;
-            bestRaw = cRaw;
+      } else {
+        // Compare Contact Address vs Map Address: take whichever one has the fuller address (more tokens / additional words)
+        const isCMap = !!(c && c.source && /map/i.test(c.source));
+        const isBestMap = !!(bestCandidate && bestCandidate.source && /map/i.test(bestCandidate.source));
+        if (isCMap !== isBestMap) {
+          const normTokens = s => s.toLowerCase().replace(/[^a-z0-9]/g, " ").split(/\s+/).filter(t => t.length > 2);
+          const bestTokens = normTokens(bestRaw);
+          const cTokens = normTokens(cRaw);
+          if (bestTokens.length >= 2 && cTokens.length >= 2) {
+            const matchedCount = bestTokens.filter(t => cTokens.includes(t)).length;
+            if ((matchedCount / Math.min(bestTokens.length, cTokens.length)) >= 0.6 && cTokens.length > bestTokens.length) {
+              bestCandidate = c;
+              bestRaw = cRaw;
+            }
           }
         }
       }
