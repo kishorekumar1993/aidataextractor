@@ -3223,6 +3223,67 @@ async function runAll() {
     assert.strictEqual(lightQc.websiteStatus, 'Working', 'firstlight-products must be Working');
   });
 
+  // =========================================================================
+  // Item 115: Robust Phone and Email Extraction, Extension Handling, Multi-Line Splitting & Crawl Fallback
+  // =========================================================================
+  runTest('Item 115: Robust Phone and Email Extraction, Extension Handling, Multi-Line Splitting & Crawl Fallback', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Phone number with extensions
+    assert.strictEqual(ctx.cleanPhoneNumber('(503) 788-8032 ext. 101', 'United States Of America'), '5037888032', 'US phone with ext. 101 must strip extension and preserve 10 digits');
+    assert.strictEqual(ctx.cleanPhoneNumber('(503) 788-8032 x102', 'United States Of America'), '5037888032', 'US phone with x102 must strip extension');
+    assert.strictEqual(ctx.cleanPhoneNumber('+886-4-2426-3838 #12', 'Taiwan'), '424263838', 'Taiwan phone with #12 must strip extension and calling code');
+    assert.strictEqual(ctx.cleanPhoneNumber('(0113) 250 8082 extension 24', 'United Kingdom'), '1132508082', 'UK phone with extension 24 must strip extension and leading zero');
+
+    // 2. Phone numbers with multi-line delimiters (/, or, \, commas)
+    assert.strictEqual(ctx.cleanPhoneNumber('503-788-8032 / 8033', 'United States Of America'), '5037888032', 'US slash multi-line must take first valid number');
+    assert.strictEqual(ctx.cleanPhoneNumber('0113 250 8082 / 250 8083', 'United Kingdom'), '1132508082', 'UK slash multi-line must take first valid number');
+    assert.strictEqual(ctx.cleanPhoneNumber('+1 (503) 788-8032 or 8033', 'United States Of America'), '5037888032', 'US "or" multi-line must take first valid number');
+
+    // 3. Phone label prefixes and (0) international formatting
+    assert.strictEqual(ctx.cleanPhoneNumber('T: +44 (0) 113 250 8082', 'United Kingdom'), '1132508082', 'UK phone with T: and (0) must normalize correctly');
+    assert.strictEqual(ctx.cleanPhoneNumber('Ph: (503) 788-8032', 'United States Of America'), '5037888032', 'US phone with Ph: prefix must strip label');
+    assert.strictEqual(ctx.cleanPhoneNumber('Office: 503-788-8032', 'United States Of America'), '5037888032', 'US phone with Office: prefix must strip label');
+
+    // 4. Default / AI First mode: If AI misses email or phone, strict QC must recover from crawlData
+    const aiMissingData = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Billiard Manufacturing Company',
+      countryName: 'United States Of America',
+      companyAddress: '5505 Southeast Johnson Creek Boulevard, Portland, Oregon',
+      state: 'Available',
+      city: 'Available',
+      emailId: '', // AI omitted email
+      secondaryEmailId: '',
+      phoneNumber: '', // AI omitted phone
+      numberOfProducts: '2',
+      productImages: '2',
+      numberOfProductDescriptions: '2'
+    };
+
+    const crawlWithContacts = {
+      emails: ['sales@billiardmfg.com', 'info@billiardmfg.com'],
+      phones: ['(503) 788-8032 ext. 101', '503-788-8033'],
+      addressCandidates: [{ raw: '5505 Southeast Johnson Creek Boulevard, Portland, Oregon', source: 'contact' }]
+    };
+
+    const recovered = ctx.applyStrictInstructions(aiMissingData, crawlWithContacts, {});
+    assert.strictEqual(recovered.emailId, 'sales@billiardmfg.com', 'Strict QC must recover verified corporate email from crawlData when AI returns empty');
+    assert.strictEqual(recovered.phoneNumber, '5037888032', 'Strict QC must recover verified phone with extension from crawlData when AI returns empty');
+
+    // 5. ai_only mode: If _extractionMode is explicitly ai_only, empty AI email/phone must remain empty
+    const aiOnlyMissing = {
+      ...aiMissingData,
+      _extractionMode: 'ai_only'
+    };
+    const aiOnlyResult = ctx.applyStrictInstructions(aiOnlyMissing, crawlWithContacts, {});
+    assert.strictEqual(aiOnlyResult.emailId, '', 'In explicit ai_only mode, email must not be backfilled');
+    assert.strictEqual(aiOnlyResult.phoneNumber, '', 'In explicit ai_only mode, phone must not be backfilled');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

@@ -1915,27 +1915,54 @@ function parseHtmlDetails(html, baseUrl) {
   // Extract & Rank Emails across the complete website HTML
   const rankedEmails = extractEmailsFromHtml(html, hostDomain);
 
-  // Extract Phone Numbers strictly from telephone contexts (including tel:, icon labels, and WhatsApp)
+  // Extract Phone Numbers strictly from telephone contexts (including tel:, icon labels, JSON-LD, meta, and WhatsApp)
   const phoneLinks = [...html.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
   const waLinks = [...html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\?[^"']*phone=)(\+?\d{8,15})/gi)].map(m => "+" + m[1].replace(/^\+/, ""));
+
+  // JSON-LD schema "telephone"
+  const jsonLdPhones = [];
+  const jsonLdPhoneMatches = [...html.matchAll(/"telephone"\s*:\s*["']([^"']+)["']/gi)];
+  for (const jm of jsonLdPhoneMatches) {
+    if (jm[1]) jsonLdPhones.push(jm[1].trim());
+  }
+
+  // Microdata & Meta tags (e.g. itemprop="telephone", property="og:phone_number", name="telephone", data-phone)
+  const metaPhones = [];
+  const metaPhoneMatches = [...html.matchAll(/(?:itemprop=["']telephone["']|property=["']og:phone_number["']|name=["']telephone["']|data-phone=["'])(?:[^>]*?content=["']([^"']+)["']|[^>]*?>([^<]+)<)/gi)];
+  for (const mm of metaPhoneMatches) {
+    const val = (mm[1] || mm[2] || "").trim();
+    if (val) metaPhones.push(val);
+  }
+
   const cleanHtmlForPhones = cleanHtml
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/?(?:strong|b\b|em|i\b|span|u\b|font|mark|small|sub|sup)[^>]*>/gi, "")
     .replace(/\b(?:aria-)?placeholder\s*=\s*"[^"]*"/gi, " ")
     .replace(/\b(?:aria-)?placeholder\s*=\s*'[^']*'/gi, " ");
-  const contextPhoneRegex = /(?:(?:tel|telephone|phone|call|mobile|cell|whatsapp|contact|总机|總機|电话|電話|手机|手機|座机|座機)[\s:：]*|(?:bxs:phone-call|fa-phone|fa-mobile)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().-]{7,20})/gi;
+  const contextPhoneRegex = /(?:(?:tel\b|tele(?:phone)?\b|phone\b|call\b|contact\b|mobile\b|cell\b|whatsapp\b|hotline\b|direct\b|office\b|main\b|sales\b|inquiries\b|t\b|ph\b|p\b|telefon\b|tél(?:éphone)?\b|telf\b|telefoon\b|fono\b|总机|總機|电话|電話|手机|手機|座机|座機)[\s.:：]*|(?:bxs:phone-call|fa-phone|fa-mobile|icon-phone|feather-phone)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().#\/-]{7,32}(?:\s*(?:ext|x|#)\.?\s*\d+)?)/gi;
   let pMatch;
   const contextPhones = [];
   while ((pMatch = contextPhoneRegex.exec(cleanHtmlForPhones)) !== null) {
     contextPhones.push(pMatch[1].trim());
   }
 
-  const candidatePhones = [...phoneLinks, ...contextPhones, ...waLinks];
+  // International standard format phone matches in text (e.g. +44 113 250 8082, +1 (503) 788-8032)
+  const intlPhoneRegex = /(?:^|[^\d+])(\+(?:1|44|886|61|60|65|86|91|49|33|39|34|31|41|43|32|27|62|90|81|82|52|55)\s*\(?0?\)?[\s.-]*\d{1,5}[\s.-]*\d{3,4}[\s.-]*\d{3,4})/g;
+  const intlPhones = [];
+  let ipMatch;
+  while ((ipMatch = intlPhoneRegex.exec(cleanHtmlForPhones)) !== null) {
+    intlPhones.push(ipMatch[1].trim());
+  }
+
+  const candidatePhones = [...phoneLinks, ...jsonLdPhones, ...metaPhones, ...contextPhones, ...intlPhones, ...waLinks];
   const uniquePhones = [];
   for (const rawP of candidatePhones) {
-    const digitsOnly = rawP.replace(/\D/g, "");
-    if (digitsOnly.length >= 7 && digitsOnly.length <= 15 && !uniquePhones.includes(rawP)) {
-      uniquePhones.push(rawP);
+    const trimmed = String(rawP || "").trim();
+    if (!trimmed) continue;
+    const digitsOnly = trimmed.replace(/\D/g, "");
+    const canClean = typeof cleanPhoneNumber === "function" && Boolean(cleanPhoneNumber(trimmed, ""));
+    if ((canClean || (digitsOnly.length >= 7 && digitsOnly.length <= 25)) && !uniquePhones.includes(trimmed)) {
+      uniquePhones.push(trimmed);
     }
   }
 

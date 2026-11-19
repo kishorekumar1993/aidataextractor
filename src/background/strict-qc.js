@@ -1320,10 +1320,17 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
     }
 
-    // 6. Email ID & Secondary Email ID: Take from API directly. DO NOT combine crawl emails.
+    // 6. Email ID & Secondary Email ID: Take from API directly.
     result.emailId = stripTrailingContactWordsFromEmail(String(result.emailId || "").trim().toLowerCase());
     if (result.emailId && (!isValidCorporateEmail(result.emailId) || isUnwantedEmail(result.emailId))) {
       result.emailId = "";
+    }
+    // If AI did not return a valid corporate email and mode is not ai_only, fall back to high-confidence crawled emails
+    if (!result.emailId && result._extractionMode !== "ai_only" && crawlData && Array.isArray(crawlData.emails) && crawlData.emails.length > 0) {
+      const validCrawlEmail = crawlData.emails.find(e => isValidCorporateEmail(e) && !isUnwantedEmail(e));
+      if (validCrawlEmail) {
+        result.emailId = stripTrailingContactWordsFromEmail(validCrawlEmail.toLowerCase().trim());
+      }
     }
 
     result.secondaryEmailId = stripTrailingContactWordsFromEmail(String(result.secondaryEmailId || "").trim().toLowerCase());
@@ -1340,8 +1347,18 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       result.secondaryEmailId = "";
     }
 
-    // 7. Phone Number: Take from API directly (cleaned via calling-code & toll-free rules). DO NOT combine crawl phones.
+    // 7. Phone Number: Take from API directly (cleaned via calling-code & toll-free rules).
     result.phoneNumber = cleanPhoneNumber(result.phoneNumber, result.countryName);
+    // If AI did not return a phone number or returned an invalid one, and mode is not ai_only, fall back to crawled phones
+    if (!result.phoneNumber && result._extractionMode !== "ai_only" && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
+      for (const candP of crawlData.phones) {
+        const cleaned = cleanPhoneNumber(candP, result.countryName);
+        if (cleaned) {
+          result.phoneNumber = cleaned;
+          break;
+        }
+      }
+    }
 
     // 8. Product counts: Take directly from API; mirror across all 3 fields. DO NOT recompute from crawl unless completely missing.
     result.productImages = result.productImages || result.numberOfProductImages;

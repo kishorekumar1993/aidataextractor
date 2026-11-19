@@ -271,12 +271,12 @@ CAPITAL CITY RULE (MANDATORY EXCEPTION FOR BOTH STATE & CITY):
 * This rule applies even if the address does not separately mention a State, County, Province, or Prefecture.
 
 10. CONTACT DETAILS (PRIMARY & SECONDARY CORPORATE EMAILS & PHONE NUMBER):
-- "emailId": Select the primary official general or sales contact email for the company (e.g. info@, contact@, sales@, mail@, office@, enquiry@).
+- "emailId": Select the primary official general or sales contact email for the company (e.g. info@, contact@, sales@, mail@, office@, enquiry@). Check "Discovered Emails" and contact pages first. DO NOT return "" if valid corporate emails are discovered.
 - "secondaryEmailId": Select a distinct, genuine secondary corporate or departmental email found across any crawled page (e.g. career/job/vacancy email such as vacature@, vacancies@, careers@, jobs@, recruitment@, hr@, bewerbung@, or customer support/service such as support@, service@, or sales/quotes/office).
   * Strict distinction: "secondaryEmailId" MUST NEVER duplicate "emailId". If only one email exists or all found emails are identical to "emailId", return "" (empty string).
   * Exclude automated, privacy, and system bounce emails: privacy@, dpo@, legal@, webmaster@, abuse@, noreply@, no-reply@, and third-party platform host emails (shopify, wix, wordpress).
   * Check Careers, Vacancies, Support, Contact, and Header/Footer across all crawled pages to discover distinct secondary departmental emails.
-- "phoneNumber": Domestic subscriber digits ONLY. Country calling codes (+1, +44, +60, +61, +65, +86, +91, +886, etc.) and leading trunk zeros (0) MUST ALWAYS BE STRIPPED. Protect domestic subscriber digits (Singapore 8-digit numbers like 65353907). Exclude fax and toll-free (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). Digits only (7 to 12 digits). Return "" if none found.
+- "phoneNumber": Primary domestic contact subscriber digits ONLY. Check "Detected Contact Phones" and contact pages. If the phone has extensions (e.g. ext. 101, #12) or multi-phone slashes (e.g. 503-788-8032 / 8033), extract the primary domestic phone number. Country calling codes (+1, +44, +60, +61, +65, +86, +91, +886, etc.) and leading trunk zeros (0) MUST ALWAYS BE STRIPPED. Protect domestic subscriber digits (Singapore 8-digit numbers like 65353907). Exclude fax and toll-free (800, 888, 877, 866, 855, 844, 833, 1800, 1300, 0800). Digits only (7 to 12 digits). DO NOT return "" if a contact phone number is present on the site.
 
 11. PRODUCT IDENTIFICATION RULES (THREE INDEPENDENT COUNTS):
 - "numberOfProducts": Count distinct physical products offered (not repeated images of the same product). Scale: "0" | "1" | "2" | "3" (for 3 or more).
@@ -353,10 +353,11 @@ function finalizeParsedAiResult(parsed, crawlData) {
     }
   }
 
-  // Clean domestic phone number; fall back to crawl phone ONLY if AI returned completely empty
+  // Clean domestic phone number; fall back to crawl phone if AI phone is empty or cleaned to empty
   if (parsed.phoneNumber && typeof cleanPhoneNumber === "function") {
     parsed.phoneNumber = cleanPhoneNumber(parsed.phoneNumber, parsed.countryName);
-  } else if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
+  }
+  if (!parsed.phoneNumber && crawlData && Array.isArray(crawlData.phones) && crawlData.phones.length > 0) {
     for (const p of crawlData.phones) {
       const cl = typeof cleanPhoneNumber === "function" ? cleanPhoneNumber(p, parsed.countryName) : p;
       if (cl) {

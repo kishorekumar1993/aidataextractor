@@ -3,13 +3,38 @@
 function cleanPhoneNumber(rawPhone, country) {
   if (!rawPhone) return "";
   let p = String(rawPhone).trim();
+  if (!p) return "";
 
-  p = p.replace(/^(?:tel|call|phone|contact|mobile|fax|whatsapp)[\s.:]*/i, "").trim();
+  // If the raw phone contains multiple numbers or alternative lines (e.g. "503-788-8032 / 8033", "0113 250 8082 / 250 8083", "01234 567890, 01234 567891", "+1 503-788-8032 or 8033"),
+  // split and test each candidate segment in order until a valid domestic number is found.
+  const candidateParts = p
+    .split(/[\r\n|;]|\s+or\s+|\s*\\+\s*|\s*\/\s*|(?<=\d{3,}[-\s().]*),(?=\s*(?:[+(0-9]|tel|ph|call|mobile|office))/i)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  for (const part of candidateParts) {
+    const res = normalizeSinglePhone(part, country);
+    if (res) return res;
+  }
+  return "";
+}
+
+function normalizeSinglePhone(part, country) {
+  if (!part) return "";
+  let p = String(part).trim();
+
+  p = p.replace(/^(?:tel\b|tele(?:phone)?\b|phone\b|call\b|contact\b|mobile\b|cell\b|fax\b|whatsapp\b|hotline\b|direct\b|office\b|main\b|sales\b|inquiries\b|t\b|ph\b|p\b|telefon\b|tél(?:éphone)?\b|telf\b|telefoon\b|fono\b|总机|總機|电话|電話|手机|手機|座机|座機)[\s.:：]*/i, "").trim();
 
   // Immediate rejection of explicit toll-free keywords
   if (/\b(?:toll[-\s]*free|free[-\s]*phone|green[-\s]*line)\b/i.test(p)) {
     return "";
   }
+
+  // Strip international trunk (0) notation e.g. +44 (0) 113 250 8082 -> +44 113 250 8082, or (0) 113 250 8082 -> 113 250 8082
+  p = p.replace(/(\+?\d{1,4}[-\s]*)?\(\s*0\s*\)[-\s]*/gi, (m, prefix) => prefix || "");
+
+  // Strip extension notation e.g. ext. 101, x102, #12, poste 5, ramal 123, 分机 808
+  p = p.replace(/(?:(?:\bext(?:ension)?|\bx|\bposte|\bramal|\banexo|分机|分機)\.?|#)\s*\d+.*$/i, "").trim();
 
   const cLower = (country || "").toLowerCase();
   const hasPlus = p.startsWith("+");
