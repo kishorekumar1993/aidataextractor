@@ -2885,6 +2885,116 @@ async function runAll() {
     );
   });
 
+  // =========================================================================
+  // Item 112: Prevention of False-Positive Rejections for Horsepower Engines & Industrial Gun Tools
+  // =========================================================================
+  runTest('Item 112: Prevention of False-Positive Rejections for Horsepower Engines & Industrial Gun Tools', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Engineering Horsepower / Engine power output must NOT trigger Category 13 Animals false positive
+    const horsepowerSamples = [
+      'We manufacture 50 Horse Power Engine and electric motors for industrial plants.',
+      'Heavy duty 250 horsepower diesel engines and hydraulic pumps.',
+      'Single cylinder 15 horse power motor with shaft horsepower rating of 12 bhp.',
+      'Industrial compressors with 10 hp power rating and heavy duty drives.'
+    ];
+
+    for (const sample of horsepowerSamples) {
+      const res = ctx.detectRestrictedKeywordsSingle(sample, '', 'https://example-engine.com');
+      assert.strictEqual(
+        res.restricted,
+        false,
+        `Horsepower engineering text must NOT be restricted as Animal: "${sample}"`
+      );
+    }
+
+    // 2. Industrial Manufacturing Tools ("Guns") & Gun Drilling must NOT trigger Category 5 Weapons false positive
+    const industrialGunSamples = [
+      'Industrial pipe gun and pneumatic tube expansion tools.',
+      'Manual grease gun and automated factory lubrication equipment.',
+      'Heavy duty heat gun and hot air shrink tubing tools.',
+      'Professional paint spray gun and finishing systems.',
+      'Industrial hot melt glue gun for packaging and carton sealing.',
+      'Pneumatic nail gun and framing stapler tools.',
+      'Silicon caulking gun and polyurethane foam gun dispensers.',
+      'Blind rivet gun and pneumatic riveting machinery.',
+      'High pressure air blow gun for workshop chip removal.',
+      'CNC deep hole gun drilling machines and precision gun drill tooling.'
+    ];
+
+    for (const sample of industrialGunSamples) {
+      const res = ctx.detectRestrictedKeywordsSingle(sample, '', 'https://example-tools.com');
+      assert.strictEqual(
+        res.restricted,
+        false,
+        `Industrial tool / gun drilling must NOT be restricted as Weapon: "${sample}"`
+      );
+    }
+
+    // 3. Genuine Prohibited Items MUST still be strictly detected and rejected
+    const genuineAnimals = [
+      'Breeding farm selling thoroughbred live horses and jumping ponies.',
+      'Puppy breeding kennel with purebred golden retriever dogs and kittens.'
+    ];
+    for (const sample of genuineAnimals) {
+      const res = ctx.detectRestrictedKeywordsSingle(sample, '', 'https://example-animals.com');
+      assert.strictEqual(res.restricted, true, `Real live animal trading must be restricted: "${sample}"`);
+      assert.strictEqual(res.official_category, 'Animals');
+    }
+
+    const genuineWeapons = [
+      'Firearms dealer selling handguns, shotguns, and combat assault weapons.',
+      'Handcrafted tactical combat knives and military survival swords.'
+    ];
+    for (const sample of genuineWeapons) {
+      const res = ctx.detectRestrictedKeywordsSingle(sample, '', 'https://example-weapons.com');
+      assert.strictEqual(res.restricted, true, `Real firearms and weapons must be restricted: "${sample}"`);
+      assert.strictEqual(res.official_category, 'Weapons & Knives');
+    }
+
+    // 4. End-to-end QC verification: A website producing "Horse Power Engine" and "Pipe Gun"
+    // must retain "Working" status and preserve all 15 fields
+    const toolCompanyCrawl = {
+      originalUrl: 'https://www.industrialpowerengine.com',
+      finalUrl: 'https://www.industrialpowerengine.com/',
+      title: 'Industrial Power Engine & Tool Co., Ltd.',
+      legalCompanyCandidates: ['Industrial Power Engine & Tool Co., Ltd.'],
+      bodyText: 'We produce 100 Horse Power Engine units, high pressure pipe gun tools, and precision gun drilling machine parts.',
+      contactPageText: 'Address: 50 Industrial Parkway, Detroit, Michigan 48201. Email: info@industrialpowerengine.com. Phone: 3135550199',
+      addressCandidates: [{ raw: '50 Industrial Parkway, Detroit, MI 48201', source: 'contact' }]
+    };
+
+    const restrictedCheck = ctx.detectRestrictedKeywords(
+      toolCompanyCrawl.bodyText + ' ' + toolCompanyCrawl.contactPageText,
+      '',
+      []
+    );
+    assert.strictEqual(restrictedCheck.isRestricted, false, 'Industrial power tool company must NOT be flagged restricted');
+
+    const aiData = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Industrial Power Engine & Tool Company Limited',
+      countryName: 'United States Of America',
+      companyAddress: '50 Industrial Parkway, Detroit',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'info@industrialpowerengine.com',
+      phoneNumber: '3135550199',
+      numberOfProducts: '10',
+      productImages: '10',
+      numberOfProductDescriptions: '10'
+    };
+
+    const qcResult = ctx.applyStrictInstructions(aiData, toolCompanyCrawl, restrictedCheck);
+    assert.strictEqual(qcResult.websiteStatus, 'Working', 'Website status must remain Working');
+    assert.strictEqual(qcResult.companyName, 'Industrial Power Engine & Tool Company, Limited');
+    assert.strictEqual(qcResult.emailId, 'info@industrialpowerengine.com');
+    assert.strictEqual(qcResult.companyAddress, '50 Industrial Parkway, Detroit');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

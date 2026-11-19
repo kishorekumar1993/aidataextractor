@@ -120,7 +120,10 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
 4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES):
 - Mandatory Directive: Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals, or School, College & Education. Even if these images or words appear anywhere on the site (navigation menus, industry lists, product categories, headers, footers, image alt/titles), do not work on that site. Mark "websiteStatus": "Not Working", "businessType": "Restricted Site", and leave all other 12 fields empty "".
-- FALSE-POSITIVE EXEMPTION: General industrial machinery, bandsaw, cutting tool, fastener, valve, or component manufacturers that merely list workpiece cutting materials or served industries in an applications menu (e.g. "Applications: Car Parts | Metallic Materials | Aeronautical Parts", "Food packaging machinery", "Marine hardware") are PERMITTED ("Working") if their actual manufactured products are general industrial machines/tools (e.g. bandsaws, CNC machine tools) and NOT aircraft/spacecraft/weapons itself.
+- FALSE-POSITIVE EXEMPTIONS:
+  * General industrial machinery, bandsaw, cutting tool, fastener, valve, or component manufacturers that merely list workpiece cutting materials or served industries in an applications menu (e.g. "Applications: Car Parts | Metallic Materials | Aeronautical Parts", "Food packaging machinery", "Marine hardware") are PERMITTED ("Working") if their actual manufactured products are general industrial machines/tools (e.g. bandsaws, CNC machine tools) and NOT aircraft/spacecraft/weapons itself.
+  * Mechanical power metrics (e.g. "Horse Power Engine", "Horsepower", "HP", "BHP", "Horse Power Motor") are engineering measurements of engine/motor power output and are NOT live animals or pets. Sites manufacturing, selling, or specifying horsepower engines, electric motors, pumps, or industrial power equipment are PERMITTED ("Working").
+  * Industrial workshop, manufacturing, and construction tools (e.g. "Pipe Gun", "Grease Gun", "Heat Gun", "Spray Gun", "Paint Spray Gun", "Glue Gun", "Hot Melt Glue Gun", "Nail Gun", "Caulking Gun", "Foam Gun", "Rivet Gun", "Blow Gun", "Air Blow Gun", "Staple Gun", "Stud Gun", "Torque Gun", "Tape Gun", "Bar Code Gun", "Infrared Thermometer Gun") and machining metal-cutting processes ("Gun Drill", "Gun Drilling", "Gun Reamer", "Gun Boring", "Gun Tap") are tools and machinery operations, NOT weapons or firearms. Sites manufacturing, servicing, or distributing industrial tools, drilling machines, or workshop equipment are PERMITTED ("Working").
 - The 14 Strictly Prohibited Categories:
   1. Porn & Adult (Pornographic sites/videos, adult entertainment, sexually explicit content/services, adult products)
   2. Medicine & Medical (Medicine, pharmaceuticals, medical equipment/devices/supplies, medical device manufacturing, medical treatments, clinical healthcare)
@@ -1777,6 +1780,8 @@ Do not reject a website merely because a restricted word appears in an unrelated
 - "Defence against cyber attacks" or "pest defense" is not military defence.
 - "We ship worldwide", "shipping policy", "family ownership", "partnership" is not shipbuilding.
 - "Knife-edge technology", "knife gate valves", or machine slitter blades is not a knife product.
+- "Horse power engine", "horsepower", "100 hp" is an engineering mechanical engine/motor power metric, NOT live animals or pets.
+- Industrial tools and workshop equipment such as "pipe gun", "grease gun", "heat gun", "spray gun", "paint gun", "glue gun", "nail gun", "caulking gun", "foam gun", "rivet gun", "blow gun", "air gun", "staple gun", "stud gun", "barcode gun", "temperature gun", or precision machining processes like "gun drilling", "gun drill", "gun reamer", "gun boring", "gun tap" are industrial machinery and workshop tools, NOT weapons or firearms.
 - "Aircraft mode", "aircraft-grade aluminum" or titanium fasteners used in aircraft is not an aircraft manufacturer.
 - "Whiskey Creek" as a project location or color name is not alcohol.
 
