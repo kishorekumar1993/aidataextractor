@@ -200,7 +200,12 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - Return "" if websiteStatus is not Working.
 
 8. COMPANY ADDRESS (HEADQUARTERS EXTRACTION, FULL-FORM EXPANSIONS & QC):
-- CORE PRINCIPLE: WHAT WEBSITE HAS, TAKE THE SAME — EXPANSION ONLY, NO GRAMMAR CHANGES: Take the exact address as found on the website. DO NOT rewrite, paraphrase, or change words. Only expand standard abbreviations (St. -> Street, Rd. -> Road, Fl. -> Floor, No. -> Number, Ste. -> Suite, Bldg. -> Building). Do NOT make grammar changes (e.g. no ordinal suffixes on floors; '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor'). Do NOT invent new words not on the site. If website has '7Floor' (no space), do not give space ('7Floor'); if website has '7 Floor' (with space), provide space ('7 Floor').
+- CORE PRINCIPLE: ADDRESS AS IT IS — EXPANSION OF ABBREVIATIONS ONLY, DO NOT GIVE ANY NEW OR MISS WORDS:
+  * "Take the address as it is directly from the website. Do NOT give any new words or miss any words. Do expansion of abbreviations ONLY."
+  * Do NOT give any new words: Never invent, hallucinate, paraphrase, or add words that are not explicitly present in the address on the website.
+  * Do NOT miss any words: Never truncate, drop, or omit any building name, premise, unit, suite, floor, street number, street name, district, town, city, county, or state that appears in the website's address. Retain all components in the original sequence.
+  * Do expansion of abbreviations ONLY: Expand standard abbreviations to their full official forms (St. -> Street, Rd. -> Road, Ave. -> Avenue, Blvd. -> Boulevard, Ste. -> Suite, Bldg. -> Building, Fl. -> Floor, Dist. -> District, Twp. -> Township, No. -> Number, P.O. Box -> Post Office Box).
+  * Do NOT make grammar changes (e.g. no ordinal suffixes on floors; '1st Floor' -> '1 Floor', '2nd Floor' -> '2 Floor'). If website has '7Floor' (no space), keep '7Floor' (no space); if website has '7 Floor' (with space), keep '7 Floor' (with space).
 - CONTACT ADDRESS vs. GOOGLE MAPS ADDRESS RULE (MANDATORY):
   * "If contact address and Google Map are for the same location, but Google Map has additional words (e.g. Village, Sub-District, District, Industrial Park, Building Name, Road Section, Municipality, or County), YOU MUST TAKE THE GOOGLE MAP ADDRESS (or include the additional words from Google Map)."
   * When both static contact text (from Contact Us page, footer, or body) and an embedded Google Map or Google Maps link are present for the same company location, compare them:
@@ -212,7 +217,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * If the source website address DOES have commas (e.g. "No.1008, Hou Chuang Rd., Pei Tun Dist., Taichung" or "100 Main Street, Suite 400, Chicago, Illinois"), output WITH commas: "Number 1008, Hou Chuang Road, Pei Tun District, Taichung" or "100 Main Street, Suite 400, Chicago, Illinois".
   * NEVER invent or inject commas where the website did not have them!
 - Headquarters Priority: Global Headquarters / Corporate Headquarters > Head Office > Main Office > Registered Office (only if no physical HQ/Head/Main office exists). Never select a branch, warehouse, factory, showroom, or dealer when headquarters is available.
-- Complete Multi-Line Extraction & Sequence: Combine all lines into one comma-separated address in the exact sequence shown on the website. Retain premise, building, unit, suite, floor, street number, street name, locality, town, district, city, county, and state/province.
+- Complete Multi-Line Extraction & Sequence: Combine all lines into one single-line address in the exact sequence shown on the website without inventing commas between lines (follow the MANDATORY COMMA RULE: if comma was present on the website, put comma; if comma was NOT present on the website, do NOT add comma). Retain premise, building, unit, suite, floor, street number, street name, locality, town, district, city, county, and state/province.
 - Postal Code Removal: Strip ALL numeric and alphanumeric postal codes, ZIP codes, and PIN codes (UK postcodes like B75 7BU, SW1A 1AA; Canadian like M5V 2T6; European; US 5-digit and ZIP+4). Retain Post Office Box numbers (e.g. "Post Office Box 1264").
 - Noise Removal: Strip company names, office labels (e.g. "Physical Address:"), country names, telephone/fax numbers, email addresses, URLs, and map links from the address field.
 - Mandatory Full-Form Abbreviation Expansions:
