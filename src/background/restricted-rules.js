@@ -120,7 +120,7 @@ const CANDIDATE_CATEGORY_KEYWORDS = [
   { label: "Marine", regex: /\b(?:marine|maritime|naval)\b/i },
   { label: "Ship & Shipbuilding", regex: /\b(?:ship|ships|shipyard|shipbuilding|boat|boats|vessel|vessels|yacht|yachts)\b/i },
   { label: "Chemical", regex: /\b(?:chemicals?|petrochemicals?|solvents?|hazardous\s*chemicals?)\b/i },
-  { label: "Alcohol", regex: /\b(?:alcohol|brewery|breweries|distillery|distilleries|wine|beer|whiskey|whisky|liquor|spirits)\b/i },
+  { label: "Alcohol", regex: /\b(?:alcohol|brewery|breweries|distillery|distilleries|wine|beer|whiskey|whisky|liquor|distilled\s*spirits?|neutral\s*spirits?|spirits\s*(?:distiller|distillery|producer|manufacturer|drinks?)|(?:wine|liquor)\s*(?:and|&)\s*spirits)\b/i },
   { label: "Animals", regex: /\b(?:animals?|pets?|puppy|puppies|dogs?|cats?|livestock|cattle)\b/i },
   { label: "School, College & Education", regex: /\b(?:school|schools|college|colleges|university|universities|academy|academies|education|polytechnic)\b/i }
 ];
@@ -378,6 +378,7 @@ function sanitizeContextText(text) {
   cleanText = cleanText
     .replace(/\b(?:spirit\s*levels?|magnetic\s*spirit\s*levels?|torpedo\s*spirit\s*levels?|bubble\s*levels?)\b/gi, " ")
     .replace(/\b(?:enterprise|corporate|company|business|team|school|high|good|human|entrepreneurial|pioneering|artisan|craftsman|working|creative|innovative|innovation|guiding|founder|core|fighting|true|community|public|brand|service)\s*spirits?\b/gi, " ")
+    .replace(/\b[a-z0-9_-]*(?:'s)?\s*spirits?\b/gi, " ")
     .replace(/\bspirits?\s+of\s+[a-z]+\b/gi, " ")
     .replace(/\b(?:in\s+the\s+spirit\s+of|spirit\s+and\s+mission|spirit\s+and\s+culture|values\s+and\s+spirit|ethos\s+and\s+spirit)\b/gi, " ")
     .replace(/\bcotton\s*gins?(?:\s*(?:stands?|machinery|parts?|motors?|feeders?|cleaners?))?\b/gi, " ")
@@ -525,7 +526,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Alcohol",
     category: "Alcohol & Breweries",
     label: "Alcohol & Breweries",
-    regex: /\b(?:alcohol|alcoholic(?:\s*beverages?)?|brewer(?:y|ies)|craft\s*brewery|distiller(?:y|ies)|(?<!(?:color|colors|cloth|felt|finish|swatch|titanium|taupe|olive|purple|gray|grey|blue|green|spruce|black|red|word|marked|named)\s+)wines?(?!\s*(?:rooms?|racks?|cabinets?|storage|coolers?|chillers?|cellars?\s*(?:furniture|doors?|racks?)|furniture|caddies|caddy|holders?|carafes?|red|burgundy|color|colour|simonis|cloth|felt|fabric|swatch|options?|choice|finish|leather|vinyl|upholstery|texture))|winer(?:y|ies)|vineyards?|beers?|liquor|(?<!(?:enterprise|corporate|company|business|team|school|high|good|human|entrepreneurial|pioneering|artisan|craftsman|working|creative|innovative|innovation|guiding|founder|core|fighting|true|community|public|brand|service|the|our|in\s+the)[-\s]+)spirits\b(?!\s*(?:levels?|bubble|guide|guides|world|nature))|(?:distilled|alcoholic|neutral)\s*spirits?|whiskey|whisky|vodka|rum|(?<!cotton\s+)gin\b|tequila|brandy)\b/i
+    regex: /\b(?:alcohol|alcoholic(?:\s*beverages?)?|brewer(?:y|ies)|craft\s*brewery|distiller(?:y|ies)|(?<!(?:color|colors|cloth|felt|finish|swatch|titanium|taupe|olive|purple|gray|grey|blue|green|spruce|black|red|word|marked|named)\s+)wines?(?!\s*(?:rooms?|racks?|cabinets?|storage|coolers?|chillers?|cellars?\s*(?:furniture|doors?|racks?)|furniture|caddies|caddy|holders?|carafes?|red|burgundy|color|colour|simonis|cloth|felt|fabric|swatch|options?|choice|finish|leather|vinyl|upholstery|texture))|winer(?:y|ies)|vineyards?|beers?|liquor|(?:distilled|alcoholic|neutral)\s*spirits?|spirits\s*(?:distiller(?:y|ies)?|producers?|manufacturers?|bottlers?|wholesalers?|distributors?|drinks?)|(?:wines?|liquors?|beers?)\s*(?:and|&)\s*spirits|spirits\s*(?:and|&)\s*(?:wines?|liquors?|beers?)|whiskey|whisky|vodka|rum|(?<!cotton\s+)gin\b|tequila|brandy)\b/i
   },
   {
     id: 13,

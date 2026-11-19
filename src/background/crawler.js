@@ -25,7 +25,7 @@ async function resolveRedirectChain(initialUrl, maxHops = 8, options = {}) {
   let hops = 0;
   const visited = new Set();
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 6000;
+  const timeoutMs = options.timeoutMs || 2000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   if (options.signal) {
@@ -112,7 +112,7 @@ function isIrrelevantUrl(urlStr) {
  */
 async function fetchDecodedHtml(url, options = {}) {
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs || 7000; // Controlled, configurable timeout (Item 16)
+  const timeoutMs = options.timeoutMs || 4000; // Controlled, configurable timeout (Item 16)
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   if (options.signal) {
@@ -304,6 +304,8 @@ async function crawlWebsite(targetUrl, options = {}) {
   let detectedImageCount = 0;
   let detectedDescCount = 0;
   let logoText = "";
+  let pdfExtractedText = "";
+  const discoveredDocumentUrls = new Set();
 
   // Crawl budget: Complete website crawl across all discovered internal pages (Contact, About, Products, Services, Profile, Legal, etc.)
   // When options.maxPages is explicitly specified, respect it; otherwise crawl complete website (up to 50 pages).
@@ -315,9 +317,9 @@ async function crawlWebsite(targetUrl, options = {}) {
     : (Number(options.crawlPageLimit) || 50);
 
   // Time budget guard: Ensure crawling leaves ample budget for extraction and respects background limits.
-  // Default: 12,000ms (12s) for deep multi-subpage crawling.
+  // Default: 6,000ms (6s) for fast multi-subpage crawling.
   const crawlStartTime = Date.now();
-  const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 12000;
+  const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 6000;
   const isCrawlTimeExceeded = () => (Date.now() - crawlStartTime) >= MAX_CRAWL_TIME_MS;
 
   const getCrawlBudgetUsed = () => pagesFetchedCount + (isBudgetExplicit && redirectChainInfo ? 1 : 0);
@@ -382,7 +384,7 @@ async function crawlWebsite(targetUrl, options = {}) {
   // 1. Upfront Multi-Hop 3xx Server-Side Redirect Chain Resolution
   // Follows all 301/302/303/307/308 hops (up to 4 hops budget) to discover the true final destination
   try {
-    const redirectTimeout = Math.min(2500, Math.max(1000, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
+    const redirectTimeout = Math.min(1500, Math.max(800, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
     redirectChainInfo = await resolveRedirectChain(targetUrl, 4, { signal: options.abortSignal, timeoutMs: redirectTimeout });
     if (redirectChainInfo && redirectChainInfo.hops > 0 && redirectChainInfo.finalUrl && redirectChainInfo.finalUrl !== targetUrl) {
       if (isRedirectDomain(targetUrl, redirectChainInfo.finalUrl)) {
@@ -399,7 +401,7 @@ async function crawlWebsite(targetUrl, options = {}) {
 
   try {
     if (!mainRes) {
-      const mainTimeout = Math.min(4000, Math.max(1000, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
+      const mainTimeout = Math.min(3000, Math.max(800, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime)));
       mainRes = await safeFetchHtml(finalUrl, {
         timeoutMs: mainTimeout,
         headers: {
@@ -646,7 +648,9 @@ async function crawlWebsite(targetUrl, options = {}) {
     // Discover Product, Catalog, Category, Services & Prohibited Category Candidate Pages
     const productCandidates = discoverProductAndCatalogLinks(mainHtml, finalUrl);
     // Discover Linked PDF Documents (Company Profile, Catalog, Brochure, Contact Sheets, Datasheets)
-    const discoveredDocumentUrls = new Set(discoverDocumentLinks(mainHtml, finalUrl));
+    for (const d of discoverDocumentLinks(mainHtml, finalUrl)) {
+      discoveredDocumentUrls.add(d);
+    }
     const fetchedUrls = new Set([finalUrl]);
 
     // PRE-AI CRAWL SHORT-CIRCUIT:
@@ -832,7 +836,7 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       };
 
-      const fetchSubpageBatch = async (urls, timeoutMs = 2500, concurrency = 6, isPriority = false) => {
+      const fetchSubpageBatch = async (urls, timeoutMs = 1800, concurrency = 8, isPriority = false) => {
         if (!urls || urls.length === 0) return [];
         const results = [];
         for (let i = 0; i < urls.length; i += concurrency) {
@@ -868,22 +872,22 @@ async function crawlWebsite(targetUrl, options = {}) {
         return results;
       };
 
-      const hasCoreDataAcquired = () => {
+      const hasCoreDataAcquired = (allowSingleEmail = false) => {
         const hasAddr = addressCandidates.length > 0 && addressCandidates.some(c => {
           const raw = (typeof c === "object" ? c.raw : c) || "";
           return raw.length >= 8 && (/\b(?:street|road|avenue|lane|drive|way|blvd|suite|unit|floor|park|zone|box|po\s*box|no\.?|number|\d{2,})\b/i.test(raw));
         });
-        const hasTwoEmails = allDiscoveredEmails.size >= 2;
+        const hasEmail = allowSingleEmail ? allDiscoveredEmails.size >= 1 : allDiscoveredEmails.size >= 2;
         const hasPhone = dedicatedContactPhones.size > 0 || allDiscoveredPhones.size > 0;
-        const hasProducts = detectedProductCount >= 3 && detectedImageCount >= 3;
+        const hasProducts = detectedProductCount >= 3 || detectedImageCount >= 3;
         const hasName = allLegalCandidates.size > 0 || (copyrightText && hasCompleteLegalSuffix(copyrightText));
-        return hasAddr && hasTwoEmails && hasPhone && hasProducts && hasName;
+        return hasAddr && hasEmail && hasPhone && hasName;
       };
 
       // PHASE 1: Fetch dedicated Contact Us page(s) FIRST and wait before checking other pages
       // Dedicated Contact Us page is the #1 highest priority on the website — always fetch it!
       if (contactPriorityLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES) {
-        const contactResults = await fetchSubpageBatch(contactPriorityLinks, 3000, 4, true);
+        const contactResults = await fetchSubpageBatch(contactPriorityLinks, 2000, 8, true);
         for (let i = 0; i < contactPriorityLinks.length; i++) {
           const cUrl = contactPriorityLinks[i];
           const settled = contactResults[i];
@@ -894,7 +898,7 @@ async function crawlWebsite(targetUrl, options = {}) {
       }
 
       // Fast-exit if core data already fully acquired after Phase 1
-      const isEarlyComplete = hasCoreDataAcquired();
+      let isEarlyComplete = hasCoreDataAcquired(false);
       if (isEarlyComplete) {
         console.log(`[Crawler] ⚡ All 14 fields data signals fully acquired after Phase 1 (${pagesFetchedCount} pages). Concluding crawl early!`);
       }
@@ -902,10 +906,10 @@ async function crawlWebsite(targetUrl, options = {}) {
       // PHASE 2: After Contact Us, fetch remaining priority subpages (filtering out zero-value calculators, videos, tools)
       const candidateSubpages = isEarlyComplete ? [] : otherTopLinks.filter(u => {
         return !/(?:calculator|calc|video|movie|film|photo|gallery|media|timeline|event|webinar|news|blog|article|tag|press|tool|tools|faq|login|signin|register|signup|cart|checkout|basket|pay|sitemap)/i.test(u);
-      }).slice(0, 10);
+      }).slice(0, 15);
 
       if (candidateSubpages.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
-        const subpageResults = await fetchSubpageBatch(candidateSubpages, 2500, 6);
+        const subpageResults = await fetchSubpageBatch(candidateSubpages, 1800, 8);
         for (let i = 0; i < candidateSubpages.length; i++) {
           const cUrl = candidateSubpages[i];
           const settled = subpageResults[i];
@@ -918,8 +922,13 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       }
 
+      if (!isEarlyComplete && hasCoreDataAcquired(true)) {
+        console.log(`[Crawler] ⚡ Core data acquired after Phase 2 (${pagesFetchedCount} pages). Concluding crawl early!`);
+        isEarlyComplete = true;
+      }
+
       // PHASE 3: Complete Website Deep Pass - Only run if core data still missing and budget allows
-      if (!hasCoreDataAcquired() && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded() && typeof discoverAllInternalLinks === "function") {
+      if (!isEarlyComplete && !hasCoreDataAcquired(true) && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded() && typeof discoverAllInternalLinks === "function") {
         const secondaryLinks = [];
         for (const page of crawledPages) {
           if (!page.html) continue;
@@ -967,7 +976,7 @@ async function crawlWebsite(targetUrl, options = {}) {
 
         if (remainingCandidates.length > 0) {
           for (const u of remainingCandidates) fetchedUrls.add(u);
-          const batchResults = await fetchSubpageBatch(remainingCandidates, 3500, 4, true);
+          const batchResults = await fetchSubpageBatch(remainingCandidates, 2000, 6, true);
           for (let i = 0; i < batchResults.length; i++) {
             const settled = batchResults[i];
             if (settled && settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
@@ -979,13 +988,13 @@ async function crawlWebsite(targetUrl, options = {}) {
 
       // PHASE 4: Fetch Linked PDF Documents (Company Profile, Catalog, Brochure, Contact PDFs)
       // Extracts corporate emails (primary and secondary) and contact phone numbers embedded in PDF text & streams
-      if (discoveredDocumentUrls.size > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
-        const docCandidates = Array.from(discoveredDocumentUrls).filter(u => !fetchedUrls.has(u)).slice(0, 3);
+      if (allDiscoveredEmails.size < 2 && discoveredDocumentUrls.size > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
+        const docCandidates = Array.from(discoveredDocumentUrls).filter(u => !fetchedUrls.has(u)).slice(0, 2);
         for (const docUrl of docCandidates) {
           if (isCrawlTimeExceeded() || pagesFetchedCount >= MAX_CRAWL_PAGES) break;
           fetchedUrls.add(docUrl);
           try {
-            const docRes = await fetchBinaryDocument(docUrl, { timeoutMs: 3000 });
+            const docRes = await fetchBinaryDocument(docUrl, { timeoutMs: 1800 });
             if (docRes && docRes.ok && docRes.buffer) {
               pagesFetchedCount++;
               const docData = await extractDataFromPdf(docRes.buffer);
@@ -996,8 +1005,11 @@ async function crawlWebsite(targetUrl, options = {}) {
               for (const ph of docData.phones) {
                 allDiscoveredPhones.add(ph);
               }
-              if (docData.text && docData.text.length > 50 && profilePageText.length < 5000) {
-                profilePageText += "\n" + docData.text.slice(0, 2000);
+              if (docData.text && docData.text.length > 30) {
+                pdfExtractedText += (pdfExtractedText ? "\n\n" : "") + `[PDF Document: ${docUrl}]\n` + docData.text.slice(0, 2500);
+                if (profilePageText.length < 5000) {
+                  profilePageText += "\n" + docData.text.slice(0, 2000);
+                }
               }
             }
           } catch (e) { }
@@ -1022,7 +1034,7 @@ async function crawlWebsite(targetUrl, options = {}) {
     // check company's official Facebook page sequentially with tight 1.5s timeout for primary or secondary email.
     // (LinkedIn blocks unauthenticated requests with authwalls/timeouts; excluded to prevent stalling crawl time budget)
     const socialCandidates = [companySocials.facebook].filter(Boolean);
-    if (allDiscoveredEmails.size < 2 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
+    if (allDiscoveredEmails.size === 0 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
       for (const socialUrl of socialCandidates) {
         if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
         const normSocial = normalizeCrawlUrl(socialUrl);
@@ -1030,7 +1042,7 @@ async function crawlWebsite(targetUrl, options = {}) {
         fetchedUrls.add(normSocial);
         try {
           const sRes = await safeFetchHtml(socialUrl, {
-            timeoutMs: 1500,
+            timeoutMs: 1200,
             headers: {
               "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
@@ -1205,6 +1217,8 @@ async function crawlWebsite(targetUrl, options = {}) {
     primaryAboutUrl: primaryAboutUrl || (contactLinks.find(u => /\b(?:about|about[-_]?us|aboutus|who[-_]?we[-_]?are|company[-_]?profile|profile)\b/i.test(u)) || ""),
     companySocials,
     crawledPages,
+    pdfUrls: Array.from(discoveredDocumentUrls),
+    pdfExtractedText: pdfExtractedText.slice(0, 8000),
     renderedText: mainHtml ? stripHtml(mainHtml).slice(0, 15000) : "",
     jsonLd: extractJsonLdBlocks(mainHtml)
   };
@@ -1371,7 +1385,7 @@ function discoverAllInternalLinks(html, baseUrl) {
 function discoverDocumentLinks(html, baseUrl) {
   if (!html || !baseUrl) return [];
   const candidates = [];
-  const linkRegex = /<(?:a|link|embed|iframe|object)\s+[^>]*?(?:href|src|data)=["']([^"']+\.pdf(?:[?#][^"']*)?)["'][^>]*>([\s\S]*?<\/(?:a|link|embed|iframe|object)>)?/gi;
+  const linkRegex = /<(?:a|link|embed|iframe|object)\s+[^>]*?(?:href|src|data|data-href|data-url|data-file|data-src)=["']([^"']+\.pdf(?:[?#][^"']*)?)["'][^>]*>([\s\S]*?<\/(?:a|link|embed|iframe|object)>)?/gi;
   let match;
   let baseHost = "";
   try {
@@ -1404,8 +1418,9 @@ function discoverDocumentLinks(html, baseUrl) {
     try {
       const resolved = new URL(raw, baseUrl);
       const linkHost = resolved.hostname.replace(/^www\./i, "").toLowerCase();
-      // Allow same host or subdomains
-      if (linkHost !== baseHost && !linkHost.endsWith("." + baseHost)) {
+      const isCdn = /(?:amazonaws\.com|blob\.core\.windows\.net|storage\.googleapis\.com|cloudinary\.com|cloudfront\.net)/i.test(linkHost);
+      // Allow same host, subdomains, or trusted corporate document CDNs
+      if (linkHost !== baseHost && !linkHost.endsWith("." + baseHost) && !isCdn) {
         continue;
       }
       resolved.hash = "";

@@ -3581,6 +3581,69 @@ async function runAll() {
     assert.strictEqual(finalAiOnly.secondaryEmailId, '', 'In ai_only mode, missing secondary email must remain empty');
   });
 
+  // =========================================================================
+  // Item 119: Enterprise Spirit False Positive Prevention & PDF URLs in Prompt
+  // =========================================================================
+  await runAsyncTest('Item 119: Enterprise Spirit False Positive Prevention & PDF URLs in Prompt', async () => {
+    const { ctx } = createTestContext();
+
+    // 1. Dinkle Enterprise with "...Through Connections" is Dinkle's enterprise spirit
+    const dinkleHtml = `
+      <html>
+        <head><title>Dinkle Enterprise Co., Ltd. - Terminal Blocks</title></head>
+        <body>
+          <p>"...Through Connections" is Dinkle's enterprise spirit, which means to works with customers for mutual benefit.</p>
+          <p>Dinkle manufactures industrial terminal blocks, electronic housings, and interface modules.</p>
+          <a href="/catalog/terminal-blocks.pdf">Product Catalog PDF</a>
+          <a href="/contact">Contact</a>
+        </body>
+      </html>
+    `;
+
+    const dinkleCheck = ctx.detectRestrictedKeywords(
+      '"...Through Connections" is Dinkle\'s enterprise spirit, which means to works with customers for mutual benefit. Terminal blocks manufacturer.',
+      dinkleHtml,
+      [{ url: "https://www.dinkle.com/en/home", html: dinkleHtml, text: "enterprise spirit" }]
+    );
+    assert.strictEqual(dinkleCheck.isRestricted, false, 'dinkle.com must NOT be marked restricted for "Dinkle\'s enterprise spirit"');
+    assert.strictEqual(dinkleCheck.classification, 'NO_RESTRICTED_CATEGORY');
+
+    // 2. Discovered PDF URLs and text inclusion in Gemini extraction prompt
+    const crawlData = {
+      originalUrl: 'https://www.dinkle.com',
+      finalUrl: 'https://www.dinkle.com/en/home',
+      title: 'Dinkle Enterprise Co., Ltd.',
+      mainHtml: dinkleHtml,
+      renderedText: 'Dinkle manufactures terminal blocks. Contact: info@dinkle.com',
+      bodyText: 'Dinkle manufactures terminal blocks. Contact: info@dinkle.com',
+      contactPageText: 'Email: info@dinkle.com, Phone: +886 2 22997450',
+      pdfUrls: ['https://www.dinkle.com/catalog/terminal-blocks.pdf', 'https://www.dinkle.com/docs/corporate-profile.pdf'],
+      pdfExtractedText: 'Dinkle Global Export Contact: export@dinkle.com, Service: service@dinkle.com',
+      detectedProductCount: 3,
+      detectedImageCount: 3,
+      detectedDescCount: 3,
+      crawledPages: []
+    };
+
+    const prompt = ctx.buildExtractionPrompt(crawlData);
+    assert.ok(
+      prompt.includes('DISCOVERED PDF DOCUMENT URLS FOR SECONDARY EMAIL & CATALOG CHECK'),
+      'Prompt must contain DISCOVERED PDF DOCUMENT URLS section'
+    );
+    assert.ok(
+      prompt.includes('https://www.dinkle.com/catalog/terminal-blocks.pdf'),
+      'Prompt must contain the discovered PDF URLs for Gemini to inspect'
+    );
+    assert.ok(
+      prompt.includes('PDF DOCUMENT SECONDARY EMAIL CHECK MANDATE'),
+      'Prompt must instruct Gemini to check PDF URLs/documents for secondary emails'
+    );
+    assert.ok(
+      prompt.includes('export@dinkle.com'),
+      'Prompt must contain the extracted PDF text for secondary email discovery'
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

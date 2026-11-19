@@ -59,6 +59,10 @@ function buildExtractionPrompt(crawlData, includeJsonSchemaHint = false) {
     }).join("\n")
     : ((crawlData.detectedAddresses || []).slice(0, 10).join("\n") || "(No physical address candidates extracted from static HTML)");
 
+  const formattedPdfEvidence = (crawlData.pdfUrls && crawlData.pdfUrls.length > 0)
+    ? crawlData.pdfUrls.slice(0, 20).map((u, idx) => `${idx + 1}. ${u}`).join("\n")
+    : "(No downloadable PDF document links discovered on website)";
+
   const contactText = compactSlice(crawlData.dedicatedContactText || crawlData.contactPageText, 2800);
   const careerRaw = compactSlice(crawlData.careerPageText, 1800);
   const careerText = (careerRaw && careerRaw !== contactText) ? careerRaw : "";
@@ -321,7 +325,11 @@ CAPITAL CITY RULE (MANDATORY EXCEPTION FOR BOTH STATE & CITY):
 
 10. CONTACT DETAILS (PRIMARY & SECONDARY CORPORATE EMAILS & PHONE NUMBER):
 - "emailId": Select the primary official general or sales contact email for the company (e.g. info@, contact@, sales@, mail@, office@, enquiry@). Check "Discovered Emails" and contact pages first. DO NOT return "" if valid corporate emails are discovered.
-- "secondaryEmailId": Select a distinct, genuine secondary corporate or departmental email found across any crawled page (e.g. career/job/vacancy email such as vacature@, vacancies@, careers@, jobs@, recruitment@, hr@, bewerbung@, or customer support/service such as support@, service@, or sales/quotes/office).
+- "secondaryEmailId": Select a distinct, genuine secondary corporate or departmental email found across any crawled page or inside the company's linked PDF documents.
+  * PDF DOCUMENT SECONDARY EMAIL CHECK MANDATE:
+    - Review the "DISCOVERED PDF DOCUMENT URLS FOR SECONDARY EMAIL & CATALOG CHECK" provided below (e.g. catalogs, company profiles, brochures, contact sheets, datasheets).
+    - Inspect and check inside these PDF documents and URLs for authentic secondary corporate or departmental contact emails (such as export@, sales@, support@, service@, careers@, vacancies@, info@, hr@, overseas@, or company-stem ISP accounts like company@ms14.hinet.net, company@163.com).
+    - If a genuine secondary corporate email is present inside any of the company's PDF documents or PDF text, extract and output it as "secondaryEmailId".
   * Strict distinction: "secondaryEmailId" MUST NEVER duplicate "emailId". If only one email exists or all found emails are identical to "emailId", return "" (empty string).
   * Exclude automated, privacy, and system bounce emails: privacy@, dpo@, legal@, webmaster@, abuse@, noreply@, no-reply@, and third-party platform host emails (shopify, wix, wordpress).
   * Check Careers, Vacancies, Support, Contact, and Header/Footer across all crawled pages to discover distinct secondary departmental emails.
@@ -347,7 +355,10 @@ Product Items / Units Detected: ${crawlData.detectedProductCount}
 Product Images Detected: ${crawlData.detectedImageCount}
 Product Descriptions Detected: ${crawlData.detectedDescCount}
 
-${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2))}\n\n` : ""}${renderedText ? `VISUAL DOM TEXT:\n${renderedText}\n\n` : ""}PRIORITY RULE FOR EXTRACTION: Check the DEDICATED CONTACT US PAGE FIRST for address, emails, phone numbers, and country before checking Footer, About, or Homepage content. (Note: If contact address and Google Map are for the same location and Google Map contains additional words, take the Google Map address).
+DISCOVERED PDF DOCUMENT URLS FOR SECONDARY EMAIL & CATALOG CHECK:
+${formattedPdfEvidence}
+
+${crawlData.pdfExtractedText ? `EXTRACTED CONTENT FROM WEBSITE PDF DOCUMENTS:\n${compactSlice(crawlData.pdfExtractedText, 3500)}\n\n` : ""}${crawlData.jsonLd && crawlData.jsonLd.length > 0 ? `SCHEMA.ORG JSON-LD BUSINESS DATA:\n${JSON.stringify(crawlData.jsonLd.slice(0, 2))}\n\n` : ""}${renderedText ? `VISUAL DOM TEXT:\n${renderedText}\n\n` : ""}PRIORITY RULE FOR EXTRACTION: Check the DEDICATED CONTACT US PAGE FIRST for address, emails, phone numbers, and country before checking Footer, About, or Homepage content. (Note: If contact address and Google Map are for the same location and Google Map contains additional words, take the Google Map address).
 
 PHYSICAL ADDRESS EVIDENCE FOUND ON WEBSITE:
 ${formattedAddressEvidence}
