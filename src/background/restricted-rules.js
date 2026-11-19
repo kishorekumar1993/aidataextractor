@@ -570,7 +570,7 @@ function extractEvidenceTypeAndImage(html = "", matchedKw = "", pageUrl = "") {
   // 2. Check if product catalog / product listing
   const normUrl = String(pageUrl || "").toLowerCase();
   if (/(?:products?|catalog|catalogue|shop|item|model|parts?)/i.test(normUrl) ||
-      /<(?:div|section|article|li)[^>]+(?:class|id)=["'][^"']*(?:product|catalog|item)[^"']*["']/i.test(rawHtml)) {
+    /<(?:div|section|article|li)[^>]+(?:class|id)=["'][^"']*(?:product|catalog|item)[^"']*["']/i.test(rawHtml)) {
     evidenceType = "Product";
     return { evidenceType, imageUrl };
   }
@@ -583,7 +583,7 @@ function extractEvidenceTypeAndImage(html = "", matchedKw = "", pageUrl = "") {
 
   // 4. Check if corporate overview / business activity
   if (/(?:about|profile|company|overview|what-we-do)/i.test(normUrl) ||
-      /\b(?:we\s+(?:are|manufacture|produce|supply|distribute|export)|our\s+(?:company|business|mission|factory))\b/i.test(rawHtml)) {
+    /\b(?:we\s+(?:are|manufacture|produce|supply|distribute|export)|our\s+(?:company|business|mission|factory))\b/i.test(rawHtml)) {
     evidenceType = "Business Activity";
     return { evidenceType, imageUrl };
   }

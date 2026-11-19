@@ -47,6 +47,7 @@ function createTestContext(customFetch) {
     AbortController,
     TextDecoder,
     Buffer,
+    zlib: require('zlib'),
     atob: typeof atob === 'function' ? atob : (s) => Buffer.from(s, 'base64').toString('binary'),
     btoa: typeof btoa === 'function' ? btoa : (s) => Buffer.from(s, 'binary').toString('base64'),
     setTimeout,
@@ -3380,6 +3381,114 @@ async function runAll() {
     };
     const aiResult = ctx.applyStrictInstructions(aiZungSung, crawlZungSung, {});
     assert.strictEqual(aiResult.secondaryEmailId, 'zungsung@ms14.hinet.net', 'AI mode must preserve valid company-stem secondary email');
+  });
+
+  // =========================================================================
+  // Item 117: Linked PDF Document Discovery & Email/Phone Extraction
+  // =========================================================================
+  await runAsyncTest('Item 117: Linked PDF Document Discovery & Primary/Secondary Email Extraction', async () => {
+    const { ctx } = createTestContext();
+
+    // 1. Verify discoverDocumentLinks finds on-domain PDF links and prioritizes contact/profile/catalog
+    const sampleHtml = `
+      <html>
+        <body>
+          <a href="/wp-content/uploads/2023/11/company-profile.pdf">Company Profile (PDF)</a>
+          <a href="/assets/docs/product-catalog.pdf">Download 2024 Product Catalog</a>
+          <a href="/contact-sheet.pdf">Contact Details PDF</a>
+          <a href="https://external-vendor.com/privacy.pdf">External Privacy Policy</a>
+        </body>
+      </html>
+    `;
+    const docLinks = ctx.discoverDocumentLinks(sampleHtml, 'http://www.industrialcorp.com');
+    assert.ok(docLinks.length >= 3, 'Must discover all internal PDF document links');
+    assert.ok(docLinks.some(u => u.includes('contact-sheet.pdf')), 'Must discover contact-sheet.pdf');
+    assert.ok(docLinks.some(u => u.includes('company-profile.pdf')), 'Must discover company-profile.pdf');
+    assert.ok(!docLinks.some(u => u.includes('external-vendor.com')), 'Must exclude external domain PDF links');
+
+    // 2. Test PDF extraction with FlateDecode stream containing emails and phone
+    const zlib = require('zlib');
+    const streamContent = 'BT /F1 12 Tf (For overseas inquiries contact export@industrialcorp.com or service@industrialcorp.com Tel: +1-847-555-4321) Tj ET /URI (mailto:sales@industrialcorp.com)';
+    const deflated = zlib.deflateSync(Buffer.from(streamContent));
+    const testPdfBuffer = Buffer.concat([
+      Buffer.from('%PDF-1.4\n1 0 obj\n<< /Filter /FlateDecode >>\nstream\n'),
+      deflated,
+      Buffer.from('\nendstream\nendobj\n%%EOF')
+    ]);
+
+    const pdfData = await ctx.extractDataFromPdf(testPdfBuffer);
+    assert.ok(pdfData.emails.includes('export@industrialcorp.com'), 'Must extract email from FlateDecode compressed stream');
+    assert.ok(pdfData.emails.includes('service@industrialcorp.com'), 'Must extract secondary email from stream');
+    assert.ok(pdfData.emails.includes('sales@industrialcorp.com'), 'Must extract email from mailto URI annotation');
+    assert.ok(pdfData.phones.some(p => p.includes('847') && p.includes('4321')), 'Must extract contact phone number from PDF');
+
+    // 3. Test End-to-End Crawl & Strict QC Integration
+    // Homepage only has primary sales email, while linked brochure PDF has secondary export email
+    const homepageHtml = `
+      <html>
+        <head><title>Industrial Corp Ltd</title></head>
+        <body>
+          <h1>Industrial Corp Ltd</h1>
+          <p>Contact our main office at <a href="mailto:sales@industrialcorp.com">sales@industrialcorp.com</a></p>
+          <a href="/downloads/brochure.pdf">Download Corporate Brochure</a>
+          <footer>100 Factory Lane, Elgin, Illinois, United States</footer>
+        </body>
+      </html>
+    `;
+
+    // Mock fetch for crawler: returns HTML for homepage and binary PDF for brochure
+    const mockPdfFetch = async (url) => {
+      const uStr = String(url);
+      if (uStr.endsWith('brochure.pdf')) {
+        return {
+          ok: true,
+          status: 200,
+          url: uStr,
+          headers: { get: () => 'application/pdf' },
+          arrayBuffer: async () => testPdfBuffer
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        url: uStr,
+        redirected: false,
+        headers: { get: () => 'text/html; charset=utf-8' },
+        arrayBuffer: async () => Buffer.from(homepageHtml, 'utf8')
+      };
+    };
+
+    const { ctx: crawlCtx } = createTestContext(mockPdfFetch);
+    const crawlResult = await crawlCtx.crawlWebsite('http://www.industrialcorp.com');
+
+    assert.ok(crawlResult.emails.length >= 2, 'Must discover at least 2 emails across website and PDF');
+    assert.ok(crawlResult.emails.includes('sales@industrialcorp.com'), 'Must have primary sales email');
+    assert.ok(crawlResult.emails.includes('export@industrialcorp.com') || crawlResult.emails.includes('service@industrialcorp.com'), 'Must have secondary email from PDF');
+
+    // QC Evaluation: verify primary and distinct secondary email assignment
+    const aiDraft = {
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Industrial Corp Limited',
+      countryName: 'United States Of America',
+      companyAddress: '100 Factory Lane, Elgin, Illinois',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'sales@industrialcorp.com',
+      secondaryEmailId: '', // AI omitted secondary email
+      phoneNumber: '8475554321',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    const finalQc = crawlCtx.applyStrictInstructions(aiDraft, crawlResult, {});
+    assert.strictEqual(finalQc.emailId, 'sales@industrialcorp.com', 'Primary email must be sales@industrialcorp.com');
+    assert.ok(
+      finalQc.secondaryEmailId === 'export@industrialcorp.com' || finalQc.secondaryEmailId === 'service@industrialcorp.com',
+      `Secondary email must be assigned from PDF discovered emails (got: ${finalQc.secondaryEmailId})`
+    );
   });
 
   console.log('\n========================================================');

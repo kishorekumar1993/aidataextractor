@@ -645,6 +645,8 @@ async function crawlWebsite(targetUrl, options = {}) {
     contactLinks = discoverContactLinks(mainHtml, finalUrl);
     // Discover Product, Catalog, Category, Services & Prohibited Category Candidate Pages
     const productCandidates = discoverProductAndCatalogLinks(mainHtml, finalUrl);
+    // Discover Linked PDF Documents (Company Profile, Catalog, Brochure, Contact Sheets, Datasheets)
+    const discoveredDocumentUrls = new Set(discoverDocumentLinks(mainHtml, finalUrl));
     const fetchedUrls = new Set([finalUrl]);
 
     // PRE-AI CRAWL SHORT-CIRCUIT:
@@ -822,6 +824,12 @@ async function crawlWebsite(targetUrl, options = {}) {
             copyrightSourceUrl = cUrl;
           }
         }
+
+        // Collect priority downloadable PDF document links on this subpage
+        const subDocLinks = discoverDocumentLinks(cText, cUrl);
+        for (const dl of subDocLinks) {
+          discoveredDocumentUrls.add(dl);
+        }
       };
 
       const fetchSubpageBatch = async (urls, timeoutMs = 2500, concurrency = 6, isPriority = false) => {
@@ -939,7 +947,7 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       }
       // Double check for secondary email: if fewer than 2 corporate emails discovered so far,
-      // concurrently fetch remaining contact, support, privacy, policy, terms, legal, and warranty subpages from contactLinks
+      // concurrently fetch remaining contact, support, careers, privacy, policy, terms, legal, and warranty subpages from contactLinks
       if (allDiscoveredEmails.size < 2 && contactLinks && contactLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
         const remainingCandidates = contactLinks
           .map(l => normalizeCrawlUrl(l, finalUrl))
@@ -947,6 +955,7 @@ async function crawlWebsite(targetUrl, options = {}) {
           .sort((a, b) => {
             const score = (u) => {
               if (/(?:contact|kontakt|contacto|contatti|impressum)/i.test(u)) return 20;
+              if (/(?:careers?|jobs?|employment|vacanc(?:y|ies)|vacatur(?:e|es)|werken[-_]?bij|recruitment|recruiting|hiring|stellenangebote|karriere)/i.test(u)) return 19;
               if (/(?:email|mail|inquiry|enquiry|feedback)/i.test(u)) return 18;
               if (/(?:about|profile|support|customer[-_]?service|service|warranty)/i.test(u)) return 14;
               if (/(?:privacy|policy|legal|terms)/i.test(u)) return 8;
@@ -965,6 +974,33 @@ async function crawlWebsite(targetUrl, options = {}) {
               recordSubpageContent(settled.value.url || remainingCandidates[i], settled.value.html, { includeAddresses: true, includeProfileText: false });
             }
           }
+        }
+      }
+
+      // PHASE 4: Fetch Linked PDF Documents (Company Profile, Catalog, Brochure, Contact PDFs)
+      // Extracts corporate emails (primary and secondary) and contact phone numbers embedded in PDF text & streams
+      if (discoveredDocumentUrls.size > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
+        const docCandidates = Array.from(discoveredDocumentUrls).filter(u => !fetchedUrls.has(u)).slice(0, 3);
+        for (const docUrl of docCandidates) {
+          if (isCrawlTimeExceeded() || pagesFetchedCount >= MAX_CRAWL_PAGES) break;
+          fetchedUrls.add(docUrl);
+          try {
+            const docRes = await fetchBinaryDocument(docUrl, { timeoutMs: 3000 });
+            if (docRes && docRes.ok && docRes.buffer) {
+              pagesFetchedCount++;
+              const docData = await extractDataFromPdf(docRes.buffer);
+              for (const em of docData.emails) {
+                allDiscoveredEmails.add(em);
+                updateEmailSource(emailSourceMap, em, docUrl, finalUrl, targetUrl);
+              }
+              for (const ph of docData.phones) {
+                allDiscoveredPhones.add(ph);
+              }
+              if (docData.text && docData.text.length > 50 && profilePageText.length < 5000) {
+                profilePageText += "\n" + docData.text.slice(0, 2000);
+              }
+            }
+          } catch (e) { }
         }
       }
     }
@@ -1328,6 +1364,274 @@ function discoverAllInternalLinks(html, baseUrl) {
   return links;
 }
 
+/**
+ * Discovers linked PDF documents on the website (Brochures, Catalogues, Company Profiles, Contact PDFs, Datasheets).
+ * Prioritizes high-value corporate documents containing company contact information, secondary emails, and identity evidence.
+ */
+function discoverDocumentLinks(html, baseUrl) {
+  if (!html || !baseUrl) return [];
+  const candidates = [];
+  const linkRegex = /<(?:a|link|embed|iframe|object)\s+[^>]*?(?:href|src|data)=["']([^"']+\.pdf(?:[?#][^"']*)?)["'][^>]*>([\s\S]*?<\/(?:a|link|embed|iframe|object)>)?/gi;
+  let match;
+  let baseHost = "";
+  try {
+    baseHost = new URL(baseUrl).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch (e) {
+    return [];
+  }
+
+  const seen = new Set();
+  while ((match = linkRegex.exec(html)) !== null) {
+    const raw = (match[1] || "").trim();
+    if (!raw || /^(?:javascript:|mailto:|tel:|#|data:)/i.test(raw)) continue;
+    const innerText = match[2] ? match[2].replace(/<[^>]+>/g, "").trim().toLowerCase() : "";
+    const rawLower = raw.toLowerCase();
+
+    let score = 10;
+    // High priority keywords for company contact, profile, catalog, brochure
+    if (/(?:contact|about|profile|company|corporate|overview|brochure|catalog|catalogue|spec|manual|info|flyer|directory|sheet|presentation|line[-_]?card)/i.test(rawLower) ||
+        /(?:contact|about|profile|company|corporate|overview|brochure|catalog|catalogue|spec|manual|info|flyer|directory|sheet|presentation|line[-_]?card)/i.test(innerText)) {
+      score += 40;
+    }
+    if (/(?:contact|profile|about|company[-_]?profile|brochure|catalog)/i.test(rawLower) || /(?:contact|profile|about|company\s*profile|brochure|catalog)/i.test(innerText)) {
+      score += 30;
+    }
+    // Demote terms/privacy/invoice PDFs
+    if (/(?:privacy|terms|cookie|gdpr|invoice|receipt)/i.test(rawLower)) {
+      score -= 20;
+    }
+
+    try {
+      const resolved = new URL(raw, baseUrl);
+      const linkHost = resolved.hostname.replace(/^www\./i, "").toLowerCase();
+      // Allow same host or subdomains
+      if (linkHost !== baseHost && !linkHost.endsWith("." + baseHost)) {
+        continue;
+      }
+      resolved.hash = "";
+      const cleanUrl = resolved.href;
+      if (!seen.has(cleanUrl)) {
+        seen.add(cleanUrl);
+        candidates.push({ url: cleanUrl, score });
+      }
+    } catch (e) { }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates.map(c => c.url);
+}
+
+/**
+ * Fetches binary document content (e.g. PDF files) with configurable timeout and size limit guard.
+ */
+async function fetchBinaryDocument(url, options = {}) {
+  const controller = new AbortController();
+  const timeoutMs = options.timeoutMs || 3500;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  if (options.signal) {
+    if (options.signal.aborted) {
+      clearTimeout(timeoutId);
+      return { ok: false, buffer: null, error: "Aborted" };
+    }
+    options.signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "Accept": "application/pdf,application/octet-stream,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        ...(options.headers || {})
+      }
+    });
+
+    if (!res.ok) {
+      return { ok: false, status: res.status, buffer: null, error: `HTTP ${res.status}` };
+    }
+
+    const arrayBuffer = await res.arrayBuffer();
+    // Safety cap: slice to at most 2MB to prevent large memory overhead
+    const sliced = arrayBuffer.byteLength > 2 * 1024 * 1024 ? arrayBuffer.slice(0, 2 * 1024 * 1024) : arrayBuffer;
+    return {
+      ok: true,
+      status: res.status,
+      url: res.url,
+      buffer: typeof Buffer !== "undefined" ? Buffer.from(sliced) : new Uint8Array(sliced)
+    };
+  } catch (err) {
+    return { ok: false, buffer: null, error: err.message };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Robust, cross-environment PDF text, stream and email/phone extractor.
+ * Supports raw uncompressed text/annotations and FlateDecode streams via zlib (Node) and DecompressionStream (Browser).
+ */
+async function extractDataFromPdf(bufferOrArray) {
+  const emails = new Set();
+  const phones = new Set();
+  let extractedText = "";
+
+  if (!bufferOrArray) return { emails: [], phones: [], text: "" };
+
+  let uint8;
+  let rawStr = "";
+
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(bufferOrArray)) {
+    uint8 = new Uint8Array(bufferOrArray.buffer, bufferOrArray.byteOffset, bufferOrArray.byteLength);
+    rawStr = bufferOrArray.toString("latin1");
+  } else if (bufferOrArray instanceof Uint8Array) {
+    uint8 = bufferOrArray;
+    let s = "";
+    const len = Math.min(uint8.length, 1000000);
+    for (let i = 0; i < len; i++) {
+      s += String.fromCharCode(uint8[i]);
+    }
+    rawStr = s;
+  } else if (bufferOrArray instanceof ArrayBuffer) {
+    uint8 = new Uint8Array(bufferOrArray);
+    let s = "";
+    const len = Math.min(uint8.length, 1000000);
+    for (let i = 0; i < len; i++) {
+      s += String.fromCharCode(uint8[i]);
+    }
+    rawStr = s;
+  } else if (typeof bufferOrArray === "string") {
+    rawStr = bufferOrArray;
+  }
+
+  const addEmail = (em) => {
+    if (!em) return;
+    const clean = stripTrailingContactWordsFromEmail(String(em).toLowerCase().trim());
+    if (isValidCorporateEmail(clean) && !isUnwantedEmail(clean)) {
+      emails.add(clean);
+    }
+  };
+
+  const addPhone = (ph) => {
+    if (!ph) return;
+    const clean = String(ph).replace(/[\t\r\n"']/g, "").trim();
+    if (clean && clean.replace(/\D/g, "").length >= 7) {
+      phones.add(clean);
+    }
+  };
+
+  // 1. Scan raw PDF text for uncompressed mailto URIs and emails
+  const uriMatches = [...rawStr.matchAll(/\/URI\s*\((?:mailto:)?([^)]+)\)/gi)];
+  for (const m of uriMatches) {
+    const found = m[1].match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+    for (const f of found) addEmail(f);
+  }
+  const rawMatches = rawStr.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+  for (const m of rawMatches) addEmail(m);
+
+  // 2. Scan and decompress FlateDecode streams
+  const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  let match;
+  while ((match = streamRegex.exec(rawStr)) !== null) {
+    const streamStart = match.index + match[0].indexOf("\n") + 1;
+    const streamEnd = match.index + match[0].lastIndexOf("endstream");
+    if (streamStart >= streamEnd || !uint8) continue;
+
+    const chunk = uint8.subarray(streamStart, streamEnd);
+    if (!chunk || chunk.length < 4) continue;
+
+    let decompressedStr = "";
+
+    // Node.js zlib synchronous decompression
+    if (typeof zlib !== "undefined" && zlib && zlib.inflateSync) {
+      try {
+        decompressedStr = zlib.inflateSync(chunk).toString("utf8");
+      } catch (e1) {
+        try {
+          decompressedStr = zlib.inflateRawSync(chunk).toString("utf8");
+        } catch (e2) {}
+      }
+    } else if (typeof require === "function") {
+      try {
+        const zl = require("zlib");
+        if (zl && zl.inflateSync) {
+          try {
+            decompressedStr = zl.inflateSync(chunk).toString("utf8");
+          } catch (e1) {
+            try {
+              decompressedStr = zl.inflateRawSync(chunk).toString("utf8");
+            } catch (e2) {}
+          }
+        }
+      } catch (e) {}
+    }
+
+    // Modern Web DecompressionStream fallback (Chrome service worker / Node 17+)
+    if (!decompressedStr && typeof DecompressionStream !== "undefined") {
+      try {
+        const ds = new DecompressionStream("deflate");
+        const resp = new Response(chunk);
+        const decompStream = resp.body.pipeThrough(ds);
+        decompressedStr = await new Response(decompStream).text();
+      } catch (eWeb1) {
+        try {
+          const dsRaw = new DecompressionStream("deflate-raw");
+          const resp = new Response(chunk);
+          const decompStream = resp.body.pipeThrough(dsRaw);
+          decompressedStr = await new Response(decompStream).text();
+        } catch (eWeb2) {}
+      }
+    }
+
+    if (decompressedStr) {
+      if (extractedText.length < 8000) {
+        extractedText += " " + decompressedStr;
+      }
+      // Direct email regex match on decompressed stream
+      const streamEms = decompressedStr.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+      for (const se of streamEms) addEmail(se);
+
+      // Mailto URIs inside stream
+      const streamUris = [...decompressedStr.matchAll(/(?:mailto:)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/gi)];
+      for (const su of streamUris) addEmail(su[1]);
+
+      // PDF text in parentheses: e.g. (sales@domain.com) Tj or [(info) -10 (@domain.com)] TJ
+      const parenMatches = [...decompressedStr.matchAll(/\(([^)]+)\)/g)];
+      let combinedParenText = "";
+      for (const pm of parenMatches) {
+        combinedParenText += pm[1] + " ";
+      }
+      const parenEms = combinedParenText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+      for (const pe of parenEms) addEmail(pe);
+
+      // Extract phone numbers from decompressed text
+      const phoneMatches = [...decompressedStr.matchAll(/(?:Tel|Phone|Telephone|Mobile|T|P)[\s.:]*([+\d\s().-]{7,25})/gi)];
+      for (const ph of phoneMatches) {
+        const rawPh = ph[1].trim();
+        if (typeof cleanPhoneNumber === "function") {
+          const cleaned = cleanPhoneNumber(rawPh, "");
+          if (cleaned) addPhone(cleaned);
+        } else if (rawPh.replace(/\D/g, "").length >= 7) {
+          addPhone(rawPh);
+        }
+      }
+    }
+  }
+
+  return {
+    emails: Array.from(emails),
+    phones: Array.from(phones),
+    text: extractedText.trim()
+  };
+}
+
+async function extractEmailsFromPdf(bufferOrArray) {
+  const data = await extractDataFromPdf(bufferOrArray);
+  return data.emails;
+}
+
 function extractFooterText(html) {
   if (!html) return "";
   const footerMatch = html.match(/<footer[^>]*>([\s\S]*?)<\/footer>/i) ||
@@ -1623,11 +1927,23 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     }
   }
 
-  // 4. Decode all mailto: links (including multiple comma/semicolon separated emails and ?cc= / ?bcc= parameters)
-  const mailtoBlocks = [...html.matchAll(/(?:href=["']|data-[a-z0-9_-]*=["'])\s*mailto:([^"'>\s]+)/gi)];
+  // 3e. Decode JavaScript string concatenated emails: e.g. "sales" + "@" + "company.com" or 'info' + '@' + 'company.com'
+  const concatMatches = [...html.matchAll(/["']([a-zA-Z0-9._%+-]+)["']\s*\+\s*["']@["']\s*\+\s*["']([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
+  for (const cm of concatMatches) {
+    const recon = `${cm[1]}@${cm[2]}`.toLowerCase().trim();
+    if (isValidCorporateEmail(recon) && !isUnwantedEmail(recon)) candidateEmails.add(recon);
+  }
+  const concatMatches2 = [...html.matchAll(/["']([a-zA-Z0-9._%+-]+)@["']\s*\+\s*["']([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
+  for (const cm of concatMatches2) {
+    const recon = `${cm[1]}@${cm[2]}`.toLowerCase().trim();
+    if (isValidCorporateEmail(recon) && !isUnwantedEmail(recon)) candidateEmails.add(recon);
+  }
+
+  // 4. Decode all mailto: links (including onclick, window.open, multiple comma/semicolon separated emails and ?cc= / ?bcc= parameters)
+  const mailtoBlocks = [...html.matchAll(/\bmailto:\s*([^"'>\s;]+)/gi)];
   for (const mb of mailtoBlocks) {
     try {
-      const decodedMailto = decodeURIComponent(mb[1]).replace(/%40|&#64;/gi, "@");
+      const decodedMailto = decodeURIComponent(mb[1]).replace(/%40|&#64;|&commat;/gi, "@");
       const subEmails = decodedMailto.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
       for (const se of subEmails) {
         const cleanSe = se.toLowerCase().trim();
@@ -1644,39 +1960,41 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     .replace(/\b(?:aria-)?placeholder\s*=\s*'[^']*'/gi, " ");
 
   // 5. Extract emails from data attributes, hidden inputs, meta tags, and structured attributes
-  const attrMatches = [...htmlWithoutPlaceholders.matchAll(/(?:data-[a-z0-9_-]*(?:email|mail|contact)|value|content|title|alt)=["']([a-zA-Z0-9._%+-]+(?:@|%40|&#64;)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
+  const attrMatches = [...htmlWithoutPlaceholders.matchAll(/(?:data-[a-z0-9_-]*(?:email|mail|contact)|value|content|title|alt)=["']([a-zA-Z0-9._%+-]+(?:@|%40|&#64;|&commat;)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
   for (const am of attrMatches) {
-    const rawEm = am[1].replace(/%40|&#64;/gi, "@").toLowerCase().trim();
+    const rawEm = am[1].replace(/%40|&#64;|&commat;/gi, "@").toLowerCase().trim();
     if (isValidCorporateEmail(rawEm) && !isUnwantedEmail(rawEm)) {
       candidateEmails.add(rawEm);
     }
   }
 
   // 6. Extract emails from JSON-LD, script hydration, Next.js / Nuxt state, and social profile JSON before stripping scripts
-  const scriptMatches = [...htmlWithoutPlaceholders.matchAll(/[a-zA-Z0-9._%+-]+(?:@|\\u0040|%40)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)];
+  const scriptMatches = [...htmlWithoutPlaceholders.matchAll(/[a-zA-Z0-9._%+-]+(?:@|\\u0040|%40|&#64;)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)];
   for (const sm of scriptMatches) {
-    const emClean = sm[0].replace(/\\u0040|%40/gi, "@").toLowerCase().trim();
+    const emClean = sm[0].replace(/\\u0040|%40|&#64;/gi, "@").toLowerCase().trim();
     if (isValidCorporateEmail(emClean) && !isUnwantedEmail(emClean)) {
       candidateEmails.add(emClean);
     }
   }
 
   // 7. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] / AT / DOT
-  // Strip <script> and <style> tags to avoid capturing error tracking, analytics tokens, and bundle code
+  // Strip anti-spam honeypot tags, <script> and <style> tags to avoid capturing error tracking and bundle code
   const emailSearchText = htmlWithoutPlaceholders
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
     .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, " ")
+    .replace(/<(?:span|div|b|i|font|p)[^>]*?(?:style=["'][^"']*?display:\s*none[^"']*?|class=["'][^"']*?(?:hidden|hide|d-none|invisible|antispam)[^"']*?)[^>]*>[\s\S]*?<\/(?:span|div|b|i|font|p)>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec))
-    .replace(/&#x([0-9a-f]+);/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/&amp;/g, "&")
+    .replace(/&#(\d+);?/g, (m, dec) => String.fromCharCode(dec))
+    .replace(/&#x([0-9a-f]+);?/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&amp;/gi, "&")
     .replace(/&commat;/gi, "@")
+    .replace(/&period;/gi, ".")
     .replace(/%40/gi, "@")
-    // Bracketed and spaced at / dot normalization
-    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_|\bAT\b)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\bDOT\b|\.)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
-    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_|\bAT\b)\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2")
-    .replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\bDOT\b)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
+    // Bracketed, slashed, hyphenated, and spaced at / dot normalization
+    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_|\/\s*at\s*\/|-\s*at\s*-|\s+at\s+|\bAT\b)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\/\s*dot\s*\/|-\s*dot\s*-|\s+dot\s+|\bDOT\b|\.)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
+    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_|\/\s*at\s*\/|-\s*at\s*-|\bAT\b)\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2")
+    .replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\/\s*dot\s*\/|-\s*dot\s*-|\bDOT\b)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
     .replace(/([a-zA-Z0-9._%+-]+)\s+@\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, "$1@$2")
     .replace(/([a-zA-Z0-9._%+-]+)@\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, "$1@$2")
     .replace(/([a-zA-Z0-9._%+-]+)\s+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, "$1@$2");
