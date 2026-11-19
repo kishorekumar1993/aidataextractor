@@ -103,7 +103,7 @@ function normalizeCrawlUrl(rawUrl, baseUrl = "") {
  */
 function isIrrelevantUrl(urlStr) {
   if (!urlStr || typeof urlStr !== "string") return true;
-  return /(?:cart|checkout|basket|my-account|account|login|signin|signup|register|wishlist|\.pdf$|\.zip$|\.tar$|\.gz$|wp-content\/uploads\/|feed\/|rss\/|tag\/|author\/|comment|replytocom|search\?)/i.test(urlStr);
+  return /(?:cart|checkout|basket|my-account|account|login|signin|signup|register|wishlist|\.pdf$|\.zip$|\.tar$|\.gz$|wp-content\/uploads\/|\bfeed(?:\/|$|\?)|\brss(?:\/|$|\?)|tag\/|author\/|comment|replytocom|search\?|\.(?:css|js|ico|xml|rss|svg)(?:\?|$)|mobirise\.(?:com|co|site))/i.test(urlStr);
 }
 
 /**

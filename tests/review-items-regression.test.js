@@ -3107,6 +3107,110 @@ async function runAll() {
     assert.strictEqual(qcResult.city, 'Available', 'Pei Tun District qualifies City as Available');
   });
 
+  // =========================================================================
+  // Item 114: Prevention of False-Positive Rejections for billiardmfg, metalcabinets, and firstlight-products
+  // =========================================================================
+  runTest('Item 114: Prevention of False-Positive Rejections for billiardmfg, metalcabinets, and firstlight-products', () => {
+    const { ctx } = createTestContext();
+
+    // 1. billiardmfg.com (Golden West Billiards - Billiard & Pool Table Manufacturer)
+    // Common false positives: Wine swatch/cloth, Marine Blue cloth, shipping verbs, wet bars/beverage coolers
+    const billiardHtml = `
+      <title>Golden West Billiards | Custom Pool Tables & Game Room Accessories</title>
+      <h1>Custom Billiard Tables Handcrafted in Portland Oregon</h1>
+      <p>Golden West Billiards ships merchandise to locations within the United States using premier freight carriers.</p>
+      <p>Our game room accessories include custom wet bars, beverage fridges, and dedicated wine racks for entertaining.</p>
+      <label>Choose Cloth Color:</label>
+      <select>
+        <option value="Marine Blue">Marine Blue</option>
+        <option value="Tournament Blue Wine">Tournament Blue Wine</option>
+        <option value="Wine">Wine</option>
+      </select>
+      <img src="img_wine_simonis.png" alt="Close-up of wine fabric texture with the word 'Wine'." title="Wine Simonis">
+    `;
+    const billiardCheck = ctx.detectRestrictedKeywords(
+      "Custom Billiard Tables Handcrafted in Portland Oregon. Golden West Billiards ships merchandise to locations within the United States.",
+      billiardHtml,
+      [{ url: "https://billiardmfg.com/product/austin/", html: billiardHtml, text: "Billiard table with Wine cloth options" }]
+    );
+    assert.strictEqual(billiardCheck.isRestricted, false, 'billiardmfg.com must NOT be marked restricted for Wine swatches, Marine Blue, or shipping verbs');
+
+    // 2. metalcabinets.co.uk (Metal Cabinet Sales Limited - Sheet Metal Enclosures & Consoles)
+    // Common false positives: "commonly used in the food and beverage industry", "from an industrial control room to a ships control bridge"
+    const metalHtml = `
+      <title>Metal Cabinet Sales Ltd | Stainless Steel Enclosures & Control Desks</title>
+      <p>Our stainless steel modular enclosures are commonly used in the food and beverage industry where regular cleaning is essential.</p>
+      <p>Control Desks & Consoles are designed for diverse environments, from an industrial control room to a ships control bridge.</p>
+      <footer>Powered by Mobirise Website Builder</footer>
+    `;
+    const metalCheck = ctx.detectRestrictedKeywords(
+      "Stainless steel modular enclosures and sheet metal fabrication.",
+      metalHtml,
+      [{ url: "http://www.metalcabinets.co.uk/Stainless_Steal_Enclosures.html", html: metalHtml, text: "commonly used in the food and beverage industry" }]
+    );
+    assert.strictEqual(metalCheck.isRestricted, false, 'metalcabinets.co.uk must NOT be marked restricted for food industry mentions or ships control bridge');
+
+    // 3. firstlight-products.co.uk (Firstlight Products Limited - Lighting Manufacturer)
+    // Common false positives: "Bistro lighting / pendants", "Scenic Single Wall Light in Gun Metal", "solid brass ship style bulkhead"
+    const lightHtml = `
+      <title>Firstlight Products Limited | Contemporary & Traditional Lighting</title>
+      <p>Explore our Bistro pendants and chandeliers designed for modern dining spaces.</p>
+      <p>Scenic Single Wall Light in Gun Metal finish with IP44 exterior rating.</p>
+      <p>Traditional solid brass ship style bulkhead with frosted glass for coastal illumination.</p>
+    `;
+    const lightCheck = ctx.detectRestrictedKeywords(
+      "Contemporary & Traditional Lighting manufacturer.",
+      lightHtml,
+      [{ url: "http://www.firstlight-products.co.uk/products/outdoor", html: lightHtml, text: "Scenic Single Wall Light in Gun Metal" }]
+    );
+    assert.strictEqual(lightCheck.isRestricted, false, 'firstlight-products.co.uk must NOT be marked restricted for Bistro lighting, Gun Metal finishes, or ship style bulkheads');
+
+    // 4. Verify all 3 produce "Working" status and extract valid business entities in applyStrictInstructions
+    const crawlBilliard = {
+      originalUrl: 'http://www.billiardmfg.com',
+      finalUrl: 'https://billiardmfg.com/',
+      title: 'Golden West Billiards',
+      addressCandidates: [{ raw: '5505 SE. Johnson Creek Blvd. Portland, Oregon 97206', source: 'map', isEnglish: true }]
+    };
+    const billiardQc = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Golden West Billiards',
+      countryName: 'United States Of America',
+      companyAddress: '5505 Southeast Johnson Creek Boulevard Portland, Oregon'
+    }, crawlBilliard, billiardCheck);
+    assert.strictEqual(billiardQc.websiteStatus, 'Working', 'billiardmfg must be Working');
+    assert.strictEqual(billiardQc.businessType, 'Manufacturer');
+
+    const crawlMetal = {
+      originalUrl: 'http://www.metalcabinets.co.uk',
+      finalUrl: 'http://www.metalcabinets.co.uk/',
+      title: 'Metal Cabinet Sales Ltd'
+    };
+    const metalQc = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Metal Cabinet Sales Limited',
+      countryName: 'England',
+      companyAddress: 'Units 1-3 Moorfield Road, Moorfield Industrial Estate, Yeadon, Leeds'
+    }, crawlMetal, metalCheck);
+    assert.strictEqual(metalQc.websiteStatus, 'Working', 'metalcabinets must be Working');
+
+    const crawlLight = {
+      originalUrl: 'http://www.firstlight-products.co.uk',
+      finalUrl: 'https://www.firstlight-products.co.uk/',
+      title: 'Firstlight Products Ltd'
+    };
+    const lightQc = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Distributor',
+      companyName: 'Firstlight Products Limited',
+      countryName: 'United Kingdom',
+      companyAddress: '22 Erica Road, Stacey Bushes, Milton Keynes, Buckinghamshire'
+    }, crawlLight, lightCheck);
+    assert.strictEqual(lightQc.websiteStatus, 'Working', 'firstlight-products must be Working');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
