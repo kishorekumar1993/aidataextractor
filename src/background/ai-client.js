@@ -124,6 +124,13 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * General industrial machinery, bandsaw, cutting tool, fastener, valve, or component manufacturers that merely list workpiece cutting materials or served industries in an applications menu (e.g. "Applications: Car Parts | Metallic Materials | Aeronautical Parts", "Food packaging machinery", "Marine hardware") are PERMITTED ("Working") if their actual manufactured products are general industrial machines/tools (e.g. bandsaws, CNC machine tools) and NOT aircraft/spacecraft/weapons itself.
   * Mechanical power metrics (e.g. "Horse Power Engine", "Horsepower", "HP", "BHP", "Horse Power Motor") are engineering measurements of engine/motor power output and are NOT live animals or pets. Sites manufacturing, selling, or specifying horsepower engines, electric motors, pumps, or industrial power equipment are PERMITTED ("Working").
   * Industrial workshop, manufacturing, and construction tools (e.g. "Pipe Gun", "Grease Gun", "Heat Gun", "Spray Gun", "Paint Spray Gun", "Glue Gun", "Hot Melt Glue Gun", "Nail Gun", "Caulking Gun", "Foam Gun", "Rivet Gun", "Blow Gun", "Air Blow Gun", "Staple Gun", "Stud Gun", "Torque Gun", "Tape Gun", "Bar Code Gun", "Infrared Thermometer Gun") and machining metal-cutting processes ("Gun Drill", "Gun Drilling", "Gun Reamer", "Gun Boring", "Gun Tap") are tools and machinery operations, NOT weapons or firearms. Sites manufacturing, servicing, or distributing industrial tools, drilling machines, or workshop equipment are PERMITTED ("Working").
+  * PET plastics (Polyethylene Terephthalate, APET, RPET, CPET, PET bottles, PET preforms, PET packaging, PET sheet, PET strapping) are industrial plastics and packaging materials, NOT live domestic animals or pets. Sites producing or recycling plastic bottles, thermoformed packaging, or resins are PERMITTED ("Working").
+  * Carpentry tools ("Spirit Level", "Bubble Level") and agricultural machinery ("Cotton Gin") are tools and machines, NOT drinking alcohol or distilleries.
+  * Corporate branch locations ("Satellite Office", "Satellite Location", "Satellite Facility") are physical company branches, NOT orbital spacecraft or aerospace equipment.
+  * First-aid disclaimers / Material Safety Data Sheets ("seek medical attention if inhaled / contacted with eyes") and employee benefits ("medical, dental, vision insurance", "medical leave") are safety warnings and HR policies, NOT medical clinics or pharmaceutical businesses.
+  * Industrial machine knives (e.g. rotary slitter knives, granulator knives, guillotine knives, planer knives, shear knives, air knives, knife gate valves) are machine cutting tools and industrial valves, NOT tactical weapons.
+  * ASME pressure vessels, reactor vessels, storage vessels, mixing vessels, and dewar vessels are steel tanks, autoclaves, and boilers, NOT watercraft or shipbuilding.
+  * Metallurgy material resistance grades ("Marine grade stainless steel", "marine grade aluminum", "naval brass") are alloy specifications, NOT shipbuilders or marine transport.
 - The 14 Strictly Prohibited Categories:
   1. Porn & Adult (Pornographic sites/videos, adult entertainment, sexually explicit content/services, adult products)
   2. Medicine & Medical (Medicine, pharmaceuticals, medical equipment/devices/supplies, medical device manufacturing, medical treatments, clinical healthcare)
@@ -1772,18 +1779,19 @@ Search for category-related keywords and images. If a restricted product or cate
 
 ## 5. False-Positive Prevention
 Do not reject a website merely because a restricted word appears in an unrelated context.
-- "Adult learning", "adult education", "adult students", "responsible adult", "adult of legal age" in terms/policies is not pornography.
-- "Medical attention" in an unrelated safety disclaimer is not a medical business.
+- "Adult learning", "adult education", "adult students", "responsible adult", "adult of legal age" in terms/policies, and "adult clothing / sizes / helmets" is not pornography.
+- "Medical attention" in an unrelated safety disclaimer (MSDS/SDS) or "medical insurance / benefits" on a careers page is not a medical business.
 - "Food for thought" is not a food business; machinery/conveyors/packaging supplied to food plants is not a food business.
-- "Chemical reaction" in educational text, or "chemical-resistant" materials/coatings/tanks is not a chemical manufacturer.
-- "Animal kingdom" as an idiom, or "cruelty-free / not tested on animals" or "safe for animals" is not animal trading/sales.
-- "Defence against cyber attacks" or "pest defense" is not military defence.
-- "We ship worldwide", "shipping policy", "family ownership", "partnership" is not shipbuilding.
-- "Knife-edge technology", "knife gate valves", or machine slitter blades is not a knife product.
+- "Chemical reaction" in educational text, or "chemical-resistant" materials/coatings/tanks or "solvent-free" adhesives is not a chemical manufacturer.
+- "Animal kingdom" as an idiom, or "cruelty-free / not tested on animals", or "PET bottles / PET plastics (Polyethylene Terephthalate)" is not animal trading/sales.
+- "Defence against cyber attacks", "pest defense", or "defensive driving" is not military defence.
+- "We ship worldwide", "shipping policy", "family ownership", "partnership", or "industrial pressure vessels" is not shipbuilding.
+- "Knife-edge technology", "knife gate valves", machine slitter knives, granulator knives, or air knives is not a weapon/knife product.
 - "Horse power engine", "horsepower", "100 hp" is an engineering mechanical engine/motor power metric, NOT live animals or pets.
 - Industrial tools and workshop equipment such as "pipe gun", "grease gun", "heat gun", "spray gun", "paint gun", "glue gun", "nail gun", "caulking gun", "foam gun", "rivet gun", "blow gun", "air gun", "staple gun", "stud gun", "barcode gun", "temperature gun", or precision machining processes like "gun drilling", "gun drill", "gun reamer", "gun boring", "gun tap" are industrial machinery and workshop tools, NOT weapons or firearms.
 - "Aircraft mode", "aircraft-grade aluminum" or titanium fasteners used in aircraft is not an aircraft manufacturer.
-- "Whiskey Creek" as a project location or color name is not alcohol.
+- "Satellite office" or "satellite branch" is a corporate physical branch location, NOT orbital aerospace spacecraft.
+- "Whiskey Creek" as a project location or color name, "spirit level" as a leveling hand tool, or "cotton gin" as an agricultural machine is not alcohol.
 
 Important distinction:
 - A genuine restricted product, image, service, or business relationship is sufficient for rejection.

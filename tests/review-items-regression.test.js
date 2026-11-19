@@ -2931,7 +2931,45 @@ async function runAll() {
       );
     }
 
-    // 3. Genuine Prohibited Items MUST still be strictly detected and rejected
+    // 3. Additional Industrial & Material False-Positive Protections Across All 14 Categories
+    const additionalFalsePositiveSamples = [
+      // Category 13: PET plastics / packaging (Polyethylene Terephthalate)
+      { text: 'Manufacturer of high quality PET bottles, PET preforms, and APET thermoformed packaging.', desc: 'PET bottles & packaging' },
+      { text: 'Supplier of recycled RPET plastic resin and PET strapping bands.', desc: 'RPET plastic & strapping' },
+      // Category 5: Industrial machine knives & air knives
+      { text: 'We manufacture precision rotary slitter knives, granulator knives, and industrial shear knives.', desc: 'Rotary slitter knives' },
+      { text: 'High efficiency air knives and air knife drying blowers for packaging lines.', desc: 'Air knife drying systems' },
+      { text: 'Heavy duty knife gate valves for wastewater and slurry pipeline control.', desc: 'Knife gate valves' },
+      { text: 'Navigating international trade barriers can be a double-edged sword for manufacturers.', desc: 'Double-edged sword idiom' },
+      // Category 12: Spirit levels & cotton gin
+      { text: 'Precision magnetic spirit level with aluminum box frame for carpenters.', desc: 'Spirit level tool' },
+      { text: 'Manufacturer of cotton gin machinery and agricultural seed processing stands.', desc: 'Cotton gin machinery' },
+      // Category 8: Corporate satellite branch offices
+      { text: 'Global manufacturing headquarters in Chicago with satellite offices in Dallas and Munich.', desc: 'Satellite branch offices' },
+      // Category 10: Pressure vessels
+      { text: 'ASME certified manufacturer of stainless steel pressure vessels and reactor tanks.', desc: 'Industrial pressure vessels' },
+      // Category 2 & 3: Medical benefits & MSDS first-aid disclaimers
+      { text: 'Careers: Competitive salary, 401(k), paid vacation, and medical insurance coverage.', desc: 'Employee medical benefits' },
+      { text: 'First aid: If spray contacts eyes, flush thoroughly with water and seek medical attention.', desc: 'MSDS first aid disclaimer' },
+      // Category 1: Adult apparel & helmets
+      { text: 'Store offering safety helmets and sports apparel for adults and youth.', desc: 'Adult apparel & helmets' },
+      // Category 9: Marine grade stainless steel & naval brass
+      { text: 'Custom machined bushings manufactured from marine grade stainless steel and naval brass.', desc: 'Marine grade steel & naval brass' },
+      // Category 14: Corporate manufacturing campus & university research collaboration
+      { text: 'Our advanced manufacturing campus features 100,000 sq ft of automated robotics.', desc: 'Corporate manufacturing campus' },
+      { text: 'Company founded as a high-tech spinoff from Cambridge University engineering faculty.', desc: 'University research spinoff' }
+    ];
+
+    for (const item of additionalFalsePositiveSamples) {
+      const res = ctx.detectRestrictedKeywordsSingle(item.text, '', 'https://example-industrial.com');
+      assert.strictEqual(
+        res.restricted,
+        false,
+        `Industrial phrase must NOT trigger false restricted rejection (${item.desc}): "${item.text}"`
+      );
+    }
+
+    // 4. Genuine Prohibited Items MUST still be strictly detected and rejected
     const genuineAnimals = [
       'Breeding farm selling thoroughbred live horses and jumping ponies.',
       'Puppy breeding kennel with purebred golden retriever dogs and kittens.'
@@ -2952,7 +2990,20 @@ async function runAll() {
       assert.strictEqual(res.official_category, 'Weapons & Knives');
     }
 
-    // 4. End-to-end QC verification: A website producing "Horse Power Engine" and "Pipe Gun"
+    const genuineOtherCategories = [
+      { text: 'Hardcore adult videos and explicit adult webcam entertainment.', cat: 'Porn & Adult' },
+      { text: 'Medical clinic offering patient care, clinical surgeries, and prescription drugs.', cat: 'Medicine & Medical' },
+      { text: 'Family bakery and Italian restaurant serving gourmet meals and catering.', cat: 'Food' },
+      { text: 'Commercial shipyard building cargo ships and luxury yachts.', cat: 'Ship & Shipbuilding' },
+      { text: 'Distillery producing craft whiskey, vodka, gin, and distilled spirits.', cat: 'Alcohol' }
+    ];
+    for (const item of genuineOtherCategories) {
+      const res = ctx.detectRestrictedKeywordsSingle(item.text, '', 'https://example-prohibited.com');
+      assert.strictEqual(res.restricted, true, `Genuine prohibited category must be restricted: "${item.text}"`);
+      assert.strictEqual(res.official_category, item.cat);
+    }
+
+    // 5. End-to-end QC verification: A website producing "Horse Power Engine" and "Pipe Gun"
     // must retain "Working" status and preserve all 15 fields
     const toolCompanyCrawl = {
       originalUrl: 'https://www.industrialpowerengine.com',

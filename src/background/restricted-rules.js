@@ -339,6 +339,66 @@ function sanitizeContextText(text) {
     .replace(/\b(?:bull\s*gears?|bull\s*wheels?|cat\s*heads?|catheads?)\b/gi, " ")
     .replace(/\b(?:butterfly\s*valves?|spider\s*couplings?|spider\s*gears?|crow\s*bars?|crowbars?|alligator\s*shears?|alligator\s*clips?)\b/gi, " ");
 
+  // 18. PET (Polyethylene Terephthalate) plastics, packaging, and medical PET scans false positives
+  cleanText = cleanText
+    .replace(/\b(?:pet|apet|rpet|cpet|petg)\s*(?:bottles?|preforms?|sheets?|films?|packaging|containers?|resins?|flakes?|recycled|recycling|straps?|strapping|pellets?|extrusions?|molding|moulding|thermoforming|grades?|materials?|products?|jars?|vials?|blisters?|clamshells?|closures?|performances?)\b/gi, " ")
+    .replace(/\b(?:bottles?|preforms?|sheets?|films?|packaging|containers?|resins?|flakes?|straps?)\s*(?:made\s+of\s+|in\s+)?(?:pet|apet|rpet|cpet|petg)\b/gi, " ")
+    .replace(/\bpolyethylene\s*terephthalate\b/gi, " ")
+    .replace(/\bpet\s*scans?\b/gi, " ")
+    .replace(/\b(?:fuel\s*)?petcocks?\b/gi, " ")
+    .replace(/\bstopcocks?\b/gi, " ");
+
+  // 19. Medical benefits, MSDS first-aid disclaimers, and medical-grade materials false positives
+  cleanText = cleanText
+    .replace(/\b(?:seek|obtain|call|consult|contact|get)\s+(?:immediate\s+)?(?:medical\s+(?:attention|advice|assistance|aid|treatment|evaluation)|a\s+(?:physician|doctor))\b/gi, " ")
+    .replace(/\b(?:in\s+case\s+of\s+(?:medical\s+emergency|eye\s+contact|ingestion|inhalation)|first\s+aid\s*(?:measures?|instructions?|steps?|treatment)?[:\-–]?)[^.\n;]{0,120}?\b(?:medical|physician|doctor|hospital|clinic)\b/gi, " ")
+    .replace(/\b(?:comprehensive\s+)?(?:medical|health|dental|vision)\s+(?:insurance|benefits?|coverage|plan|plans|care\s+plan|leave)\b/gi, " ")
+    .replace(/\b(?:benefits?|compensation\s*[:\-–]?)[^.\n;]{0,120}?\b(?:medical|dental|vision|health\s*insurance)\b/gi, " ")
+    .replace(/\bmedical[-–\s]*grade\s+(?:silicone|rubber|tubing|plastics?|polymers?|resins?|steel|stainless\s*steel|titanium|alloys?|wire|cables?|cleanrooms?|power\s*supplies|connectors?|fasteners?|coatings?|materials?)\b/gi, " ")
+    .replace(/\b(?:doctor\s*(?:blades?|rolls?|ing\s*blades?|systems?)|asset\s*health|machine\s*health|system\s*health)\b/gi, " ");
+
+  // 20. Spirit levels (carpentry tool), cotton gin, alcohol-free products, and industrial solvents false positives
+  cleanText = cleanText
+    .replace(/\b(?:spirit\s*levels?|magnetic\s*spirit\s*levels?|torpedo\s*spirit\s*levels?|bubble\s*levels?)\b/gi, " ")
+    .replace(/\b(?:team|school|high|good|human|entrepreneurial|pioneering)\s*spirits?\b/gi, " ")
+    .replace(/\bcotton\s*gins?(?:\s*(?:stands?|machinery|parts?|motors?|feeders?|cleaners?))?\b/gi, " ")
+    .replace(/\b(?:isopropyl|rubbing|denatured|polyvinyl|cetyl|stearyl|cetearyl|benzyl)\s*alcohols?\b/gi, " ")
+    .replace(/\balcohol[-–\s]*(?:free|wipes?|prep\s*pads?|cleaners?|degreasers?)\b/gi, " ")
+    .replace(/\b(?:non[-–\s]*alcoholic|alcohol\s*free)\s*(?:beverages?|drinks?|sanitizers?|products?|beer|wines?)\b/gi, " ")
+    .replace(/\b(?:ginger|root)\s*beers?\b/gi, " ")
+    .replace(/\bwine\s*(?:red|color|glass(?:es)?|coolers?|chillers?)\b/gi, " ")
+    .replace(/\b(?:solvent[-–\s]*free|zero[-–\s]*solvent|cleaning\s*solvents?)\b/gi, " ");
+
+  // 21. Corporate satellite offices/facilities and audio/TV satellite false positives
+  cleanText = cleanText
+    .replace(/\bsatellite\s*(?:offices?|branch(?:es)?|locations?|facilities|sites?|plants?|centers?|warehouses?|speakers?|tv|dish(?:es)?|cables?)\b/gi, " ");
+
+  // 22. Non-watercraft vessels and boat idioms false positives
+  cleanText = cleanText
+    .replace(/\b(?:pressure|reactor|storage|process|jacketed|mixing|containment|expansion|dewar|vacuum|filter)\s*vessels?\b/gi, " ")
+    .replace(/\b(?:gravy|sauce|weighing|weight)\s*boats?\b/gi, " ")
+    .replace(/\bboat\s*(?:neck|neckline|necks|necklines)\b/gi, " ")
+    .replace(/\bin\s+the\s+same\s+boat\b/gi, " ")
+    .replace(/\bnaval\s*brass\b/gi, " ");
+
+  // 23. Industrial machine knives, air knives, knife gate valves, electrical knife switches, and sword idioms false positives
+  cleanText = cleanText
+    .replace(/\b(?:double|two)[-–\s]*edged\s*swords?\b/gi, " ")
+    .replace(/\b(?:knife\s*gate\s*valves?|knife\s*disconnect(?:or)?|knife\s*switch(?:es)?|knife\s*fuses?|knife[-–\s]*edge)\b/gi, " ")
+    .replace(/\b(?:rotary|slitter|machine|industrial|granulator|pelletizer|shear|planer|jointer|circular|packaging|coater|chipper|guillotine)\s*knives\b/gi, " ")
+    .replace(/\bair\s*knif(?:e|es)\b/gi, " ");
+
+  // 24. Corporate / manufacturing campuses and founder university degrees false positives
+  cleanText = cleanText
+    .replace(/\b(?:corporate|manufacturing|factory|industrial|headquarters|company|technology|research)\s*campus(?:es)?\b/gi, " ")
+    .replace(/\b(?:founded|spinoff|spun\s*out|originated|collaborated|partnered)\s*(?:by|from|with|in\s*partnership\s*with)\s*[^.\n;]{0,80}?\b(?:university|college|polytechnic|institute|academy)\b/gi, " ")
+    .replace(/\b(?:holds?\s+a|earned\s+a|with\s+a)?\s*(?:bachelor|master|doctorate|phd|degree|diploma)\s*(?:from|in)\s*[^.\n;]{0,80}?\b(?:university|college)\b/gi, " ");
+
+  // 25. Animal engineering hardware terms false positives
+  cleanText = cleanText
+    .replace(/\b(?:watchdog\s*(?:timers?|circuits?)|dog\s*point\s*(?:set\s*)?screws?)\b/gi, " ")
+    .replace(/\b(?:spider\s*(?:fittings?|brackets?|gaskets?)|fish\s*plates?|fish\s*tapes?|rat\s*tail\s*files?|overhead\s*cranes?|gantry\s*cranes?|mobile\s*cranes?|crane\s*scales?)\b/gi, " ");
+
   return cleanText;
 }
 
@@ -363,7 +423,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Porn & Adult",
     category: "Adult & Porn",
     label: "Adult & Porn",
-    regex: /\b(?:porn(?:o|ography|ographic)?|adults?|sex\s*(?:shop|store|worker|work|trade|industry|club|dolls?|toys?|cam|chat|video|service|show|entertainment|novelty|novelties|dating|products?)|cyber\s*sex|phone\s*sex|explicit\s*sex|escorts?|brothels?|erotica?|sensual\s*massage|strip\s*clubs?|adult\s*toys?|dildos?|vibrators?|fetish(?:es)?|onlyfans)\b/i
+    regex: /\b(?:porn(?:o|ography|ographic)?|adult\s*(?:entertainment|content|industry|videos?|movies?|films?|sites?|websites?|novelty|novelties|stores?|shops?|dating|webcams?|services?|chats?|massage|products?|games?|erotica|fun|nightclub|club|arcades?|bookstores?|theaters?|theatres?|magazines?|escorts?|performers?|models?|livestreams?|personals?|toys?|cam|chat|video|service|show|dolls?)|(?:18\+|explicit|hardcore|erotic|xxx)\s+adults?|sex\s*(?:shop|store|worker|work|trade|industry|club|dolls?|toys?|cam|chat|video|service|show|entertainment|novelty|novelties|dating|products?)|cyber\s*sex|phone\s*sex|explicit\s*sex|escorts?|brothels?|erotica?|sensual\s*massage|strip\s*clubs?|adult\s*toys?|dildos?|vibrators?|fetish(?:es)?|onlyfans)\b/i
   },
   {
     id: 2,
@@ -391,7 +451,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Weapons & Knives",
     category: "Weapons, Armor & Knives",
     label: "Weapons, Armor & Knives",
-    regex: /\b(?:weapons?|firearms?|rifles?|(?<!(?:pipe|grease|heat|hot\s*air|spray|paint|glue|hot\s*glue|nail|caulk|caulking|foam|expanding\s*foam|rivet|riveting|blow|air\s*blow|air|pneumatic|staple|stapling|stud|tie|torque|tape|electron|flame\s*spray|thermal\s*spray|plasma\s*spray|sand\s*blast|mortar|grout|sealer|sealant|dispens(?:er|ing)|cartridge|solder(?:ing)?|desoldering|tufting|tag(?:ging)?|price|label(?:ling)?|barcode|bar\s*code|scanner|temp(?:erature)?|thermometer|radar|co2|dry\s*ice)[-\s]+)guns?(?!\s*(?:drills?|drilling|boring|reamers?|reaming|taps?|tapping|machines?|machining|tools?|nozzles?|applicators?|extruders?|welders?|welding|dispensers?|dispensing|tips?|hoses?|accessories))|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|knif(?:e|es)|knives|pocket\s*knives?|folding\s*knives?|hunting\s*knives?|tactical\s*knives?|combat\s*knives?|custom\s*knives?|survival\s*knives?|throwing\s*knives?|fixed\s*blade|switchblades?|bayonets?|machetes?|daggers?|swords?|bowie\s*knives?|(?:combat|tactical|fixed|custom|hunting|survival|throwing|weapon|knife|sword|dagger)\s*blades?)\b/i
+    regex: /\b(?:weapons?|firearms?|rifles?|(?<!(?:pipe|grease|heat|hot\s*air|spray|paint|glue|hot\s*glue|nail|caulk|caulking|foam|expanding\s*foam|rivet|riveting|blow|air\s*blow|air|pneumatic|staple|stapling|stud|tie|torque|tape|electron|flame\s*spray|thermal\s*spray|plasma\s*spray|sand\s*blast|mortar|grout|sealer|sealant|dispens(?:er|ing)|cartridge|solder(?:ing)?|desoldering|tufting|tag(?:ging)?|price|label(?:ling)?|barcode|bar\s*code|scanner|temp(?:erature)?|thermometer|radar|co2|dry\s*ice)[-\s]+)guns?(?!\s*(?:drills?|drilling|boring|reamers?|reaming|taps?|tapping|machines?|machining|tools?|nozzles?|applicators?|extruders?|welders?|welding|dispensers?|dispensing|tips?|hoses?|accessories))|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|(?<!(?:air|utility|machine|slitter|guillotine|rotary|granulator|pelletizer|chipper|shear|planer|jointer|industrial|circular|packaging|coater|disconnect|switch|terminal)[-\s]+)knif(?:e|es)|(?<!(?:air|utility|machine|slitter|guillotine|rotary|granulator|pelletizer|chipper|shear|planer|jointer|industrial|circular|packaging)[-\s]+)knives(?!\s*(?:gate|valves?|switch(?:es)?|disconnect|fuses?|blades?|coaters?|rollers?|drying|systems?))|pocket\s*knives?|folding\s*knives?|hunting\s*knives?|tactical\s*knives?|combat\s*knives?|custom\s*knives?|survival\s*knives?|throwing\s*knives?|fixed\s*blade|switchblades?|bayonets?|machetes?|daggers?|(?<!(?:double|two)[-–\s]*edged\s*)swords?|bowie\s*knives?|(?:combat|tactical|fixed|custom|hunting|survival|throwing|weapon|knife|sword|dagger)\s*blades?)\b/i
   },
   {
     id: 6,
@@ -412,7 +472,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Aerospace",
     category: "Aerospace",
     label: "Aerospace",
-    regex: /\b(?:aerospace|spacecraft|satellites?|rocket\s*(?:and\s+)?propulsion(?:\s*systems?)?|launch\s*vehicles?|space\s*exploration)\b/i
+    regex: /\b(?:aerospace|spacecraft|satellites?(?!\s*(?:office|offices|branch|branches|location|locations|facility|facilities|site|sites|speaker|speakers|tv|dish|cable))|rocket\s*(?:and\s+)?propulsion(?:\s*systems?)?|launch\s*vehicles?|space\s*exploration)\b/i
   },
   {
     id: 9,
@@ -426,7 +486,7 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Ship & Shipbuilding",
     category: "Ships & Boats",
     label: "Ships & Boats",
-    regex: /\b(?:ships?|shipyards?|shipbuilding|shipbuilders?|ship\s*repairs?|boats?|boat\s*builders?|boat\s*building|vessels?|yachts?|ferr(?:y|ies)|tugboats?|barges?|warships?|battleships?|naval\s*ships?)\b(?!\s*(?:to\b|from\b|address|method|cost|rate|fee|policy|calc|option|delivery))/i
+    regex: /\b(?:ships?|shipyards?|shipbuilding|shipbuilders?|ship\s*repairs?|boats?|boat\s*builders?|boat\s*building|(?<!(?:pressure|reactor|storage|process|jacketed|mixing|containment|expansion|dewar|vacuum|filter|blood)[-\s]+)vessels?|yachts?|ferr(?:y|ies)|tugboats?|barges?|warships?|battleships?|naval\s*ships?)\b(?!\s*(?:to\b|from\b|address|method|cost|rate|fee|policy|calc|option|delivery))/i
   },
   {
     id: 11,
@@ -440,14 +500,14 @@ const STRICT_OFFICIAL_CATEGORIES = [
     officialCategory: "Alcohol",
     category: "Alcohol & Breweries",
     label: "Alcohol & Breweries",
-    regex: /\b(?:alcohol|alcoholic(?:\s*beverages?)?|brewer(?:y|ies)|craft\s*brewery|distiller(?:y|ies)|wines?|winer(?:y|ies)|vineyards?|beers?|liquor|spirits|whiskey|whisky|vodka|rum|gin|tequila|brandy)\b/i
+    regex: /\b(?:alcohol|alcoholic(?:\s*beverages?)?|brewer(?:y|ies)|craft\s*brewery|distiller(?:y|ies)|wines?|winer(?:y|ies)|vineyards?|beers?|liquor|(?<!(?:team|school|high|good|human|entrepreneurial|pioneering)[-\s]+)spirits?(?!\s*(?:levels?|bubble))|whiskey|whisky|vodka|rum|(?<!cotton\s+)gin\b|tequila|brandy)\b/i
   },
   {
     id: 13,
     officialCategory: "Animals",
     category: "Animals & Pets",
     label: "Animals & Pets",
-    regex: /\b(?:animals?|pets?|pupp(?:y|ies)|dogs?(?!\s*[-–]?\s*(?:clutch|clutches|clamp|clamps|leg|legs|point|points))|cats?(?!\s*[-_.]?\s*(?:no\b|num|#|code|part|id|class|rating|group|ref|item|type|section|3\b|5\b|5e\b|6\b|6a\b|7\b|7a\b|8\b|cables?|cabling|head|heads|track|tracks|tread|treads|alyst|alysts|alytic))|kittens?|livestock|cattle|poultry|horses?(?!\s*[-–]?\s*(?:power|powers|engine|engines|motor|motors|rating|capacity|output|head|heads|saw|drawn|shoe|shoes))|equine)\b/i
+    regex: /\b(?:animals?|(?<!(?:polyethylene\s*terephthalate|recycled|virgin|sheet|film|preform|resin|bottle|container|strap|packaging|molding|extrusion)[-\s]+)pets?(?!\s*(?:bottles?|preforms?|sheets?|films?|packaging|containers?|resins?|flakes?|recycled|recycling|straps?|strapping|pellets?|extrusions?|molding|moulding|grades?|scans?|cock|cocks))|pupp(?:y|ies)|dogs?(?!\s*[-–]?\s*(?:clutch|clutches|clamp|clamps|leg|legs|point|points))|cats?(?!\s*[-_.]?\s*(?:no\b|num|#|code|part|id|class|rating|group|ref|item|type|section|3\b|5\b|5e\b|6\b|6a\b|7\b|7a\b|8\b|cables?|cabling|head|heads|track|tracks|tread|treads|alyst|alysts|alytic|hode|hodes))|kittens?|livestock|cattle|poultry|horses?(?!\s*[-–]?\s*(?:power|powers|engine|engines|motor|motors|rating|capacity|output|head|heads|saw|drawn|shoe|shoes))|equine)\b/i
   },
   {
     id: 14,
