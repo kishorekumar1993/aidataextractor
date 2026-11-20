@@ -621,6 +621,8 @@ async function crawlWebsite(targetUrl, options = {}) {
       }
       const homePhoneLinks = [...mainHtml.matchAll(/href=["']tel:([^"']+)["']/gi)].map(m => m[1]);
       for (const p of homePhoneLinks) allDiscoveredPhones.add(p);
+      const homeDetails = parseHtmlDetails(mainHtml, finalUrl);
+      for (const p of homeDetails.phones) allDiscoveredPhones.add(p);
     }
 
     // Extract Footer text & Footer address candidates
@@ -629,13 +631,26 @@ async function crawlWebsite(targetUrl, options = {}) {
     if (footerMatch) {
       footerText = stripHtml(footerMatch[1]);
       extractHtmlAddresses(footerMatch[1], addressCandidates, "footer", finalUrl);
+      if (typeof extractLikelyAddress === "function") {
+        const footerLikely = extractLikelyAddress(footerText);
+        if (footerLikely && footerLikely.length >= 10) {
+          addAddressCandidate(addressCandidates, footerLikely, "footer", false, "footer", finalUrl);
+        }
+      }
     }
 
     // Extract from Homepage body (tagged as "homepage" so dedicated Contact Us page takes #1 priority)
+    extractEmbeddedScriptAddresses(mainHtml, addressCandidates, finalUrl);
     extractJsonLdAddresses(mainHtml, addressCandidates, finalUrl);
     extractMapAddresses(mainHtml, addressCandidates, finalUrl);
     extractMetaAddresses(mainHtml, addressCandidates, finalUrl);
     extractHtmlAddresses(mainHtml, addressCandidates, "homepage", finalUrl);
+    if (typeof extractLikelyAddress === "function") {
+      const homeLikely = extractLikelyAddress(stripHtml(mainHtml));
+      if (homeLikely && homeLikely.length >= 10) {
+        addAddressCandidate(addressCandidates, homeLikely, "homepage", false, "homepage", finalUrl);
+      }
+    }
 
     // Extract official registered legal company candidates across homepage
     for (const cand of extractLegalCandidatesFromHtml(mainHtml)) {
@@ -664,8 +679,8 @@ async function crawlWebsite(targetUrl, options = {}) {
       // Phase 1: Crawl dedicated Contact Us page(s) FIRST and wait for results before checking other pages.
       // Phase 2: Crawl About / Profile / Product / Restricted / Remaining pages AFTER Contact Us.
       const isDedicatedContactUrl = (u) =>
-        /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint|iletisim|iletişim|bize-ulasin|bize-ulaşın|email|mail|inquiry|enquiry|careers?|jobs?|employment|vacanc(?:y|ies)|vacatur(?:e|es)|werken[-_]?bij|recruitment|karriere|stellenangebote)/i.test(u || "") ||
-        /(?:聯絡我們|聯絡|联系我们|联系|聯繫我們|聯繫|お問い合わせ|お問合せ|問合せ|会社案内|連絡先|연락처|문의)/i.test(u || "");
+        /(?:contact|contact[-_]?us|contactus|get[-_]?in[-_]?touch|reach[-_]?us|reach[-_]?out|location|locations|branch|branches|office|offices|headquarter|headquarters|kontakt|contacto|contactenos|contatti|contattaci|contactez[-_]?nous|nous[-_]?contacter|contato|fale[-_]?conosco|hubungi|kontak|impressum|imprint|iletisim|iletişim|bize-ulasin|bize-ulaşın|email|mail|inquiry|enquiry|careers?|jobs?|employment|vacanc(?:y|ies)|vacatur(?:e|es)|werken[-_]?bij|recruitment|karriere|stellenangebote)/i.test(u || "") ||
+        /(?:聯絡我們|聯絡|联系我们|联系|聯繫我們|聯繫|お問い合わせ|お問合せ|問合せ|会社案内|連絡先|연락처|문의|위치|오시는길)/i.test(u || "");
       const contactPriorityLinks = [];
       const otherTopLinks = [];
       const seenPaths = new Set();
@@ -783,6 +798,12 @@ async function crawlWebsite(targetUrl, options = {}) {
           extractMapAddresses(cText, addressCandidates, cUrl);
           extractMetaAddresses(cText, addressCandidates, cUrl);
           extractHtmlAddresses(cText, addressCandidates, pageSource, cUrl);
+          if (typeof extractLikelyAddress === "function") {
+            const subLikely = extractLikelyAddress(pageText);
+            if (subLikely && subLikely.length >= 10) {
+              addAddressCandidate(addressCandidates, subLikely, pageSource, isContactPage, isContactPage ? "contact" : pageSource, cUrl);
+            }
+          }
         }
 
         if (includeProfileText && (isProfilePage || /\b(?:company\s+profile|our\s+story|about\s+us|who\s+we\s+are)\b/i.test(pageText.slice(0, 5000)))) {
@@ -1823,9 +1844,61 @@ function isValidCorporateEmail(email) {
  * Handles mailto links, Cloudflare obfuscation, ROT13 encoding (WordPress Email Encoder),
  * decodeURIComponent/hex scripts, HTML numeric entities, URL encoding, and [at] patterns.
  */
+/**
+ * Safe entity decoder fallback for crawler contexts
+ */
+function decodeEntitiesCrawler(str) {
+  if (!str || typeof str !== "string") return "";
+  if (typeof decodeHtmlEntities === "function") return decodeHtmlEntities(str);
+  return str
+    .replace(/&#(\d+);?/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&#x([0-9a-fA-F]+);?/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, "&")
+    .replace(/&plus;/gi, "+")
+    .replace(/&commat;/gi, "@")
+    .replace(/&period;/gi, ".")
+    .replace(/&colon;/gi, ":")
+    .replace(/&semi;/gi, ";")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\u00A0/g, " ");
+}
+
+function decodeURIComponentSafe(uri) {
+  if (!uri || typeof uri !== "string") return "";
+  try {
+    return decodeURIComponent(uri);
+  } catch (e) {
+    return uri;
+  }
+}
+
+/**
+ * Robustly extracts corporate emails across all complex obfuscation schemes:
+ * Joomla email cloaking (plg_content_emailcloak), JavaScript string & variable assembly,
+ * String.fromCharCode, Array join, RTL direction / bidi-override, Cloudflare XOR, ROT13, Base64,
+ * dataset / split attributes, honeypot tag removal, HTML numeric & hex entities, and text [at] / [dot] patterns.
+ */
 function extractEmailsFromHtml(html, hostDomain = "") {
   if (!html || typeof html !== "string") return [];
   const candidateEmails = new Set();
+
+  const addCandidate = (raw) => {
+    if (!raw) return;
+    const clean = stripTrailingContactWordsFromEmail(String(raw).toLowerCase().trim());
+    if (isValidCorporateEmail(clean) && !isUnwantedEmail(clean)) {
+      candidateEmails.add(clean);
+    }
+  };
+
+  const extractFromText = (text) => {
+    if (!text || typeof text !== "string") return;
+    const matches = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+    for (const m of matches) addCandidate(m);
+  };
 
   // 1. Decode Cloudflare Email Protection (data-cfemail or /cdn-cgi/l/email-protection#)
   const cfMatches = [...html.matchAll(/(?:data-cfemail=["']|email-protection#)([a-f0-9]{4,})/gi)];
@@ -1837,7 +1910,7 @@ function extractEmailsFromHtml(html, hostDomain = "") {
       for (let n = 2; n < hex.length; n += 2) {
         decoded += String.fromCharCode(parseInt(hex.substr(n, 2), 16) ^ key);
       }
-      if (/@/.test(decoded)) candidateEmails.add(decoded.toLowerCase().trim());
+      if (/@/.test(decoded)) addCandidate(decoded);
     } catch (e) { }
   }
 
@@ -1845,17 +1918,16 @@ function extractEmailsFromHtml(html, hostDomain = "") {
   const rotMatches = [...html.matchAll(/data-enc-email=["']([a-zA-Z0-9._%+-]+(?:@|\[at\]|\(at\))[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
   for (const rm of rotMatches) {
     const rawEnc = rm[1].replace(/\[at\]|\(at\)/gi, "@");
-    const decoded = decodeRot13(rawEnc).toLowerCase().trim();
-    if (/@/.test(decoded)) candidateEmails.add(decoded);
+    const decoded = decodeRot13(rawEnc);
+    if (/@/.test(decoded)) addCandidate(decoded);
   }
 
   // 3. Decode inline URI / URIComponent scripts (e.g. innerHTML = decodeURIComponent("%73%61%6c%65%73..."))
   const uriEncodedMatches = [...html.matchAll(/(?:decodeURIComponent|decodeURI|unescape)\s*\(\s*["']([^"']+)["']\s*\)/gi)];
   for (const um of uriEncodedMatches) {
     try {
-      const decoded = decodeURIComponent(um[1]).toLowerCase().trim();
-      const emMatches = decoded.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-      for (const em of emMatches) candidateEmails.add(em);
+      const decoded = decodeURIComponentSafe(um[1]);
+      extractFromText(decoded);
     } catch (e) { }
   }
 
@@ -1868,27 +1940,7 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     if (typeof Buffer !== "undefined") {
       try { return Buffer.from(b64, 'base64').toString('binary'); } catch (e) { }
     }
-    try {
-      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-      let output = "";
-      let clean = String(b64).replace(/[^A-Za-z0-9+/=]/g, "");
-      let idx = 0;
-      while (idx < clean.length) {
-        const enc1 = chars.indexOf(clean.charAt(idx++));
-        const enc2 = chars.indexOf(clean.charAt(idx++));
-        const enc3 = chars.indexOf(clean.charAt(idx++));
-        const enc4 = chars.indexOf(clean.charAt(idx++));
-        const chr1 = (enc1 << 2) | (enc2 >> 4);
-        const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
-        const chr3 = ((enc3 & 3) << 6) | enc4;
-        output += String.fromCharCode(chr1);
-        if (enc3 !== 64 && enc3 !== -1) output += String.fromCharCode(chr2);
-        if (enc4 !== 64 && enc4 !== -1) output += String.fromCharCode(chr3);
-      }
-      return output;
-    } catch (e) {
-      return "";
-    }
+    return "";
   };
 
   const b64Matches = [...html.matchAll(/(?:atob|base64_decode)\s*\(\s*["']([A-Za-z0-9+/=]{8,})["']\s*\)|data-(?:b64|base64|enc)=["']([A-Za-z0-9+/=]{8,})["']/gi)];
@@ -1896,80 +1948,135 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     try {
       const b64Str = bm[1] || bm[2];
       if (b64Str) {
-        const dec = decodeBase64Safe(b64Str).toLowerCase().trim();
-        const emMatches = dec.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-        for (const em of emMatches) {
-          if (isValidCorporateEmail(em) && !isUnwantedEmail(em)) candidateEmails.add(em);
-        }
+        const dec = decodeBase64Safe(b64Str);
+        extractFromText(dec);
       }
     } catch (e) { }
   }
 
-  // 3c. Decode dataset / split attribute emails (e.g. data-user="sales" data-domain="company.com")
-  const userDomainMatches = [...html.matchAll(/(?:data-user|data-name|data-prefix)=["']([^"']+)["'][^>]*?(?:data-domain|data-host|data-suffix)=["']([^"']+)["']/gi)];
-  for (const ud of userDomainMatches) {
-    const u = (ud[1] || "").trim();
-    const d = (ud[2] || "").trim().replace(/^@/, "");
-    if (u && d && !d.includes("@") && d.includes(".")) {
-      const reconstructed = `${u}@${d}`.toLowerCase();
-      if (isValidCorporateEmail(reconstructed) && !isUnwantedEmail(reconstructed)) {
-        candidateEmails.add(reconstructed);
+  // 3c. Decode dataset / split attribute emails (e.g. data-user="sales" data-domain="company.com" or data-tld="com")
+  const splitAttrMatches = [...html.matchAll(/<[^>]*(?:data-(?:user|name|prefix|email-prefix)=["']([^"']+)["'])[^>]*>/gi)];
+  for (const sm of splitAttrMatches) {
+    const fullTag = sm[0];
+    const uMatch = fullTag.match(/data-(?:user|name|prefix|email-prefix)=["']([^"']+)["']/i);
+    const dMatch = fullTag.match(/data-(?:domain|host|suffix|email-domain)=["']([^"']+)["']/i);
+    const tldMatch = fullTag.match(/data-(?:tld|ext|extension)=["']([^"']+)["']/i);
+    if (uMatch && dMatch) {
+      let u = uMatch[1].trim();
+      let d = dMatch[1].trim().replace(/^@/, "");
+      if (tldMatch && !d.includes(".")) {
+        d = `${d}.${tldMatch[1].trim().replace(/^\./, "")}`;
       }
-    }
-  }
-  const domainUserMatches = [...html.matchAll(/(?:data-domain|data-host|data-suffix)=["']([^"']+)["'][^>]*?(?:data-user|data-name|data-prefix)=["']([^"']+)["']/gi)];
-  for (const du of domainUserMatches) {
-    const d = (du[1] || "").trim().replace(/^@/, "");
-    const u = (du[2] || "").trim();
-    if (u && d && !d.includes("@") && d.includes(".")) {
-      const reconstructed = `${u}@${d}`.toLowerCase();
-      if (isValidCorporateEmail(reconstructed) && !isUnwantedEmail(reconstructed)) {
-        candidateEmails.add(reconstructed);
+      if (u && d && !d.includes("@") && d.includes(".")) {
+        addCandidate(`${u}@${d}`);
       }
     }
   }
 
-  // 3d. Decode reverse text (CSS rtl / unicode-bidi:bidi-override emails, e.g. moc.ynapmoc@selas)
-  const rtlMatches = [...html.matchAll(/(?:direction\s*:\s*rtl|unicode-bidi\s*:\s*bidi-override|class=["'][^"']*(?:rtl|reverse)[^"']*["'])[^>]*>([\s\S]*?)<\//gi)];
+  // 3d. Decode reverse text (CSS rtl / unicode-bidi:bidi-override / <bdo dir="rtl"> / class="reverse" / dir="rtl")
+  const rtlMatches = [...html.matchAll(/<(?:bdo|span|div|p|a|li|b|i)\b[^>]*(?:dir=["']?rtl["']?|direction\s*:\s*rtl|unicode-bidi\s*:\s*bidi-override|class=["'][^"']*(?:rtl|reverse|rev)[^"']*["'])[^>]*>([\s\S]*?)<\/(?:bdo|span|div|p|a|li|b|i)>/gi)];
   for (const rm of rtlMatches) {
-    const inner = (rm[1] || "").replace(/<[^>]+>/g, "").trim();
-    if (inner && inner.includes("@")) {
+    const inner = decodeEntitiesCrawler(stripHtml(rm[1])).trim();
+    if (inner) {
       const reversed = inner.split("").reverse().join("");
-      const emMatches = reversed.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-      for (const em of emMatches) {
-        if (isValidCorporateEmail(em) && !isUnwantedEmail(em)) candidateEmails.add(em);
-      }
+      extractFromText(reversed);
     }
   }
 
-  // 3e. Decode JavaScript string concatenated emails: e.g. "sales" + "@" + "company.com" or 'info' + '@' + 'company.com'
-  const concatMatches = [...html.matchAll(/["']([a-zA-Z0-9._%+-]+)["']\s*\+\s*["']@["']\s*\+\s*["']([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
-  for (const cm of concatMatches) {
-    const recon = `${cm[1]}@${cm[2]}`.toLowerCase().trim();
-    if (isValidCorporateEmail(recon) && !isUnwantedEmail(recon)) candidateEmails.add(recon);
-  }
-  const concatMatches2 = [...html.matchAll(/["']([a-zA-Z0-9._%+-]+)@["']\s*\+\s*["']([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
-  for (const cm of concatMatches2) {
-    const recon = `${cm[1]}@${cm[2]}`.toLowerCase().trim();
-    if (isValidCorporateEmail(recon) && !isUnwantedEmail(recon)) candidateEmails.add(recon);
+  // 3e. Process <script> blocks BEFORE stripping: Joomla cloaking, variable concatenation, String.fromCharCode, Array join
+  const scriptBlocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+  for (const sb of scriptBlocks) {
+    const rawScript = sb[1];
+    if (!rawScript || (!/mailto|@|&#64;|addy|fromCharCode|reverse|join|prefix|document\.write/i.test(rawScript))) continue;
+
+    const scriptDecoded = decodeEntitiesCrawler(rawScript);
+
+    // 3e-1. String.fromCharCode(...)
+    const fromCharCodeMatches = [...scriptDecoded.matchAll(/String\.fromCharCode\s*\(\s*([\d\s,xXa-fA-F]+)\s*\)/gi)];
+    for (const fcm of fromCharCodeMatches) {
+      try {
+        const charCodes = fcm[1].split(",").map(c => {
+          const t = c.trim();
+          return t.startsWith("0x") || t.startsWith("0X") ? parseInt(t, 16) : parseInt(t, 10);
+        });
+        const reconstructed = String.fromCharCode(...charCodes);
+        extractFromText(reconstructed);
+      } catch (e) { }
+    }
+
+    // 3e-2. Array join: ['sales', 'domain.com'].join('@') or ['info', 'domain', 'com'].join('.')
+    const arrayJoinMatches = [...scriptDecoded.matchAll(/\[([^\]]+)\]\.join\s*\(\s*['"]([^'"]*)['"]\s*\)/gi)];
+    for (const aj of arrayJoinMatches) {
+      try {
+        const items = aj[1].split(",").map(s => {
+          const m = s.trim().match(/^['"]([^'"]*)['"]$/);
+          return m ? m[1] : "";
+        });
+        const separator = aj[2] || "";
+        const reconstructed = items.join(separator);
+        extractFromText(reconstructed);
+      } catch (e) { }
+    }
+
+    // 3e-3. Multi-part literal string concatenation: e.g. "contact" + "@" + "brand" + ".com"
+    const concatLiteralMatches = [...scriptDecoded.matchAll(/(?:'[^']*'|"[^"]*")(?:\s*\+\s*(?:'[^']*'|"[^"]*"))+/g)];
+    for (const clm of concatLiteralMatches) {
+      const expr = clm[0];
+      const strParts = [...expr.matchAll(/['"]([^'"]*)['"]/g)].map(x => x[1]).join("");
+      extractFromText(strParts);
+    }
+
+    // 3e-4. Variable assignment & concatenation tracking (e.g. Joomla addy42191, user + '@' + domain)
+    try {
+      const vars = {};
+      const lines = scriptDecoded.split(/\r?\n/);
+      for (const line of lines) {
+        const statements = line.split(";").map(s => s.trim()).filter(Boolean);
+        for (const stmt of statements) {
+          const assignMatch = stmt.match(/^(?:var|let|const)?\s*([a-zA-Z0-9_$]+)\s*(\+=|=)\s*(.+)$/);
+          if (!assignMatch) continue;
+          const [, varName, op, expr] = assignMatch;
+          const tokens = expr.split(/\s*\+\s*/);
+          let resolved = "";
+          let valid = true;
+          for (const token of tokens) {
+            const strMatch = token.match(/^['"]([^'"]*)['"]$/);
+            if (strMatch) {
+              resolved += strMatch[1];
+            } else if (Object.prototype.hasOwnProperty.call(vars, token)) {
+              resolved += vars[token];
+            } else {
+              valid = false;
+              break;
+            }
+          }
+          if (valid) {
+            if (op === "+=") {
+              vars[varName] = (vars[varName] || "") + resolved;
+            } else {
+              vars[varName] = resolved;
+            }
+          }
+        }
+      }
+      for (const val of Object.values(vars)) {
+        extractFromText(val);
+      }
+    } catch (e) { }
   }
 
-  // 4. Decode all mailto: links (including onclick, window.open, multiple comma/semicolon separated emails and ?cc= / ?bcc= parameters)
-  const mailtoBlocks = [...html.matchAll(/\bmailto:\s*([^"'>\s;]+)/gi)];
+  // 4. Decode all mailto: links (including HTML entity encoded, URI encoded, semicolon/comma delimited, onclick, window.open)
+  const mailtoBlocks = [...html.matchAll(/(?:href\s*=\s*["']|onclick\s*=\s*["']|window\.open\s*\(\s*["']|\b)((?:mailto:|&#109;&#97;&#105;&#108;&#116;&#111;|%6d%61%69%6c%74%6f)[^"'>\s]+)/gi)];
   for (const mb of mailtoBlocks) {
     try {
-      const decodedMailto = decodeURIComponent(mb[1]).replace(/%40|&#64;|&commat;/gi, "@");
-      const subEmails = decodedMailto.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-      for (const se of subEmails) {
-        const cleanSe = se.toLowerCase().trim();
-        if (isValidCorporateEmail(cleanSe) && !isUnwantedEmail(cleanSe)) {
-          candidateEmails.add(cleanSe);
-        }
-      }
+      const rawMailto = mb[1];
+      const decodedEntities = decodeEntitiesCrawler(rawMailto);
+      const decodedMailto = decodeURIComponentSafe(decodedEntities).replace(/%40|&#64;|&commat;/gi, "@");
+      extractFromText(decodedMailto);
     } catch (e) { }
   }
 
-  // Strip form placeholder attributes BEFORE scanning raw HTML or script hydration so dummy emails like placeholder="e.g., example@mail.com" never extract
+  // Strip form placeholder attributes BEFORE scanning raw HTML or script hydration so dummy emails never extract
   const htmlWithoutPlaceholders = html
     .replace(/\b(?:aria-)?placeholder\s*=\s*"[^"]*"/gi, " ")
     .replace(/\b(?:aria-)?placeholder\s*=\s*'[^']*'/gi, " ");
@@ -1977,39 +2084,36 @@ function extractEmailsFromHtml(html, hostDomain = "") {
   // 5. Extract emails from data attributes, hidden inputs, meta tags, and structured attributes
   const attrMatches = [...htmlWithoutPlaceholders.matchAll(/(?:data-[a-z0-9_-]*(?:email|mail|contact)|value|content|title|alt)=["']([a-zA-Z0-9._%+-]+(?:@|%40|&#64;|&commat;)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["']/gi)];
   for (const am of attrMatches) {
-    const rawEm = am[1].replace(/%40|&#64;|&commat;/gi, "@").toLowerCase().trim();
-    if (isValidCorporateEmail(rawEm) && !isUnwantedEmail(rawEm)) {
-      candidateEmails.add(rawEm);
-    }
+    const rawEm = decodeEntitiesCrawler(am[1]).replace(/%40|&#64;|&commat;/gi, "@").toLowerCase().trim();
+    addCandidate(rawEm);
   }
 
   // 6. Extract emails from JSON-LD, script hydration, Next.js / Nuxt state, and social profile JSON before stripping scripts
   const scriptMatches = [...htmlWithoutPlaceholders.matchAll(/[a-zA-Z0-9._%+-]+(?:@|\\u0040|%40|&#64;)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g)];
   for (const sm of scriptMatches) {
     const emClean = sm[0].replace(/\\u0040|%40|&#64;/gi, "@").toLowerCase().trim();
-    if (isValidCorporateEmail(emClean) && !isUnwantedEmail(emClean)) {
-      candidateEmails.add(emClean);
-    }
+    addCandidate(emClean);
   }
 
-  // 7. Decode HTML numeric & hex entities, and normalize explicit obfuscation [at] / (at) / [dot] / AT / DOT
-  // Strip anti-spam honeypot tags, <script> and <style> tags to avoid capturing error tracking and bundle code
+  // 7. Honeypot stripping & Text normalization
+  // Strip spambot honeypots (display:none spans, hidden tags, comments) by removing them COMPLETELY (not space)
+  // so split emails like sales<span>trap</span>@domain.com rejoin cleanly
   const emailSearchText = htmlWithoutPlaceholders
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
     .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, " ")
-    .replace(/<(?:span|div|b|i|font|p)[^>]*?(?:style=["'][^"']*?display:\s*none[^"']*?|class=["'][^"']*?(?:hidden|hide|d-none|invisible|antispam)[^"']*?)[^>]*>[\s\S]*?<\/(?:span|div|b|i|font|p)>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(?:span|div|b|i|font|p)[^>]*?(?:style=["'][^"']*?display:\s*none[^"']*?|class=["'][^"']*?(?:hidden|hide|d-none|invisible|antispam)[^"']*?)[^>]*>[\s\S]*?<\/(?:span|div|b|i|font|p)>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/&#(\d+);?/g, (m, dec) => String.fromCharCode(dec))
     .replace(/&#x([0-9a-f]+);?/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&amp;/gi, "&")
     .replace(/&commat;/gi, "@")
     .replace(/&period;/gi, ".")
     .replace(/%40/gi, "@")
-    // Bracketed, slashed, hyphenated, and spaced at / dot normalization
-    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_|\/\s*at\s*\/|-\s*at\s*-|\s+at\s+|\bAT\b)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\/\s*dot\s*\/|-\s*dot\s*-|\s+dot\s+|\bDOT\b|\.)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
-    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|_\s*at\s*_|\/\s*at\s*\/|-\s*at\s*-|\bAT\b)\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2")
-    .replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|_\s*dot\s*_|\/\s*dot\s*\/|-\s*dot\s*-|\bDOT\b)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
+    // Bracketed, parenthesized, slashed, hyphenated, and spaced at / dot normalization
+    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*(?:at|@|a)\s*\]|\(\s*(?:at|@|a)\s*\)|\{\s*(?:at|@|a)\s*\}|_\s*at\s*_|\/\s*at\s*\/|-\s*at\s*-|\s+at\s+|\bAT\b)\s*([a-zA-Z0-9.-]+)\s*(?:\[\s*(?:dot|\.)\s*\]|\(\s*(?:dot|\.)\s*\)|\{\s*(?:dot|\.)\s*\}|_\s*dot\s*_|\/\s*dot\s*\/|-\s*dot\s*-|\s+dot\s+|\bDOT\b|\.)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
+    .replace(/([a-zA-Z0-9._%+-]+)\s*(?:\[\s*(?:at|@|a)\s*\]|\(\s*(?:at|@|a)\s*\)|\{\s*(?:at|@|a)\s*\}|_\s*at\s*_|\/\s*at\s*\/|-\s*at\s*-|\bAT\b)\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2")
+    .replace(/([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+)\s*(?:\[\s*(?:dot|\.)\s*\]|\(\s*(?:dot|\.)\s*\)|\{\s*(?:dot|\.)\s*\}|_\s*dot\s*_|\/\s*dot\s*\/|-\s*dot\s*-|\bDOT\b)\s*([a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})*)/gi, "$1@$2.$3")
     .replace(/([a-zA-Z0-9._%+-]+)\s+@\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, "$1@$2")
     .replace(/([a-zA-Z0-9._%+-]+)@\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, "$1@$2")
     .replace(/([a-zA-Z0-9._%+-]+)\s+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, "$1@$2");
@@ -2281,7 +2385,7 @@ function parseHtmlDetails(html, baseUrl) {
     .replace(/\b(?:aria-)?placeholder\s*=\s*"[^"]*"/gi, " ")
     .replace(/\b(?:aria-)?placeholder\s*=\s*'[^']*'/gi, " ");
 
-  const contextPhoneRegex = /(?:(?:tel\b|tele(?:phone)?\b|phone\b|call\b|contact\b|mobile\b|cell\b|whatsapp\b|hotline\b|direct\b|office\b|main\b|sales\b|inquir(?:y|ies)\b|service\b|support\b|headquarters\b|hq\b|t\b|ph\b|p\b|telefon\b|tél(?:éphone)?\b|telf\b|telefoon\b|fono\b|总机|總機|电话|電話|手机|手機|座机|座機)(?:[^\w\n<]{0,25}(?:number|no\.?|line|us|now|at|our|team))?[\s.:：\/-]*|(?:bxs:phone-call|fa-phone|fa-mobile|icon-phone|feather-phone)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().#\/-]{7,32}(?:\s*(?:ext|x|#)\.?\s*\d+)?)/gi;
+  const contextPhoneRegex = /(?:(?:tel\b|tele(?:phone)?\b|phone\b|call\b|contact\b|mobile\b|cell\b|voice\b|whatsapp\b|hotline\b|direct\b|office\b|main\b|sales\b|inquir(?:y|ies)\b|service\b|support\b|headquarters\b|hq\b|t\b|ph\b|p\b|fon\b|telefon\b|telepon\b|telp\b|tél(?:éphone)?\b|telf\b|telefoon\b|fono\b|hubungi\b|llamar\b|llamada\b|anrufen\b|总机|總機|电话|電話|手机|手機|座机|座機)(?:[^\w\n<]{0,25}(?:number|no\.?|line|us|now|at|our|team))?[\s.:：\/-]*|(?:bxs:phone-call|fa-phone(?:-alt|-volume|-square)?|fa-mobile(?:-alt)?|icon-phone|feather-phone|dashicons-phone)[^>\n]{0,120}>\s*)(?:<[^>]+>\s*)*([+]?[\d\s().#\/-]{7,32}(?:\s*(?:ext|x|#)\.?\s*\d+)?)/gi;
   let pMatch;
   const contextPhones = [];
   while ((pMatch = contextPhoneRegex.exec(cleanHtmlForPhones)) !== null) {
@@ -2290,16 +2394,19 @@ function parseHtmlDetails(html, baseUrl) {
 
   // Domestic and International standard phone pattern matchers across cleanHtmlForPhones and bodyText
   const domesticPhoneRegexes = [
-    // US / Canada / North America: (503) 788-8032 or 503-788-8032 or 1-503-788-8032
-    /(?:^|[^\d])(?:\+?1[-.\s]*)?(?:\((\d{3})\)|\b(\d{3}))[-.\s]+(\d{3})[-.\s]+(\d{4})\b(?:\s*(?:ext|x|#)\.?\s*\d+)?/gi,
-    // UK: 0113 250 8082, (0113) 250 8082, +44 113 250 8082
-    /(?:^|[^\d])(?:\+?44\s*\(?0?\)?|0)\d{2,4}[-.\s]+\d{3,4}[-.\s]+\d{3,4}\b/gi,
-    // Taiwan: 04-2426-3838, (02) 2345-6789, +886-4-2426-3838
-    /(?:^|[^\d])(?:\+?886[-.\s]*)?(?:\(0?\d{1,2}\)|0?\d{1,2})[-.\s]+\d{3,4}[-.\s]+\d{4}\b(?:\s*#\s*\d+)?/gi,
-    // Australia: (03) 9562 0780 or 0412 345 678
-    /(?:^|[^\d])(?:\+?61\s*\(?0?\)?|0)\d{1,2}[-.\s]+\d{3,4}[-.\s]+\d{3,4}\b/gi,
-    // International standard format (e.g. +44 113 250 8082, +49 30 1234567, +33 1 23 45 67 89)
-    /(?:^|[^\d+])(\+(?:1|44|886|61|60|65|86|91|49|33|39|34|31|41|43|32|27|62|90|81|82|52|55)\s*\(?0?\)?[\s.-]*\d{1,5}[\s.-]*\d{3,4}[\s.-]*\d{3,4})/g
+    // US / Canada / North America: (503) 788-8032 or 503-788-8032 or 1-503-788-8032 or 5037888032
+    /(?:^|[^\d])(?:\+?1[-.\s]*)?(?:\((\d{3})\)|\b(\d{3}))[-.\s]*(\d{3})[-.\s]*(\d{4})\b(?:\s*(?:ext|x|#)\.?\s*\d+)?/gi,
+    // Domestic area-code with unspaced or spaced 6-8 digit subscriber (Taiwan, China, UK, Germany, India, Malaysia, Indonesia, Australia, South Africa, etc.)
+    // E.g. 04-7360023, (04) 7360023, 02-23456789, 021-68888888, 044-24567890, 030-12345678, 03-12345678, 021-1234567, 011-12345678, 0113 2508082, 03 95620780
+    /(?:^|[^\d])(?:\(0?\d{1,4}\)|0?\d{1,4})[-.\s]+\d{6,8}\b(?:\s*(?:ext|x|#)\.?\s*\d+)?/gi,
+    // UK, Australia, Europe, Asia standard 3-part split: 0113 250 8082, 03 9562 0780, 04-2426-3838
+    /(?:^|[^\d])(?:\+?(?:1|44|886|61|60|65|86|91|49|33|39|34|31|41|43|32|27|62|90|81|82|52|55)\s*\(?0?\)?[-.\s]*)?(?:\(0?\d{1,4}\)|0?\d{1,4})[-.\s]*\d{3,4}[-.\s]*\d{3,5}\b(?:\s*(?:ext|x|#)\.?\s*\d+)?/gi,
+    // Mobile numbers (starts with 07/08/09): e.g. 0912-345678, 0812-3456-7890, 07123 456789
+    /(?:^|[^\d])(0[789]\d{1,2}[-.\s]*\d{3,4}[-.\s]*\d{3,4}\b)/gi,
+    /(?:^|[^\d])(0[789]\d{1,2}[-.\s]*\d{6,8}\b)/gi,
+    // International standard format (e.g. +44 113 250 8082, +886-4-7360023, +86 21 68888888, +49 30 1234567)
+    /(?:^|[^\d+])(\+(?:1|44|886|61|60|65|86|91|49|33|39|34|31|41|43|32|27|62|90|81|82|52|55)\s*\(?0?\)?[\s.-]*\d{1,5}[\s.-]*\d{3,4}[\s.-]*\d{3,5}\b)/gi,
+    /(?:^|[^\d+])(\+(?:1|44|886|61|60|65|86|91|49|33|39|34|31|41|43|32|27|62|90|81|82|52|55)\s*\(?0?\)?[\s.-]*\d{1,5}[\s.-]*\d{6,8}\b)/gi
   ];
 
   const patternPhones = [];

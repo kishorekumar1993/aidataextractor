@@ -3644,6 +3644,68 @@ async function runAll() {
     );
   });
 
+  // -------------------------------------------------------------
+  // ITEM 120: Comprehensive Email Obfuscation Decoding & Cloaking Resilience
+  // -------------------------------------------------------------
+  await runAsyncTest('Item 120: Comprehensive Email Obfuscation Decoding (Joomla Cloaking, Numeric/Hex Entities, Script Concatenation, RTL, and Honeypot Spambot Traps)', async () => {
+    const { ctx } = createTestContext();
+
+    // 1. Joomla email cloaking (e.g. willjoin.com.tw)
+    const joomlaHtml = `
+      <p>E-mail :
+      <script type='text/javascript'>
+      <!--
+      var prefix = '&#109;a' + 'i&#108;' + '&#116;o';
+      var path = 'hr' + 'ef' + '=';
+      var addy74927 = 'w&#105;llj&#111;&#105;n' + '&#64;';
+      addy74927 = addy74927 + 'ms9' + '&#46;' + 'h&#105;n&#101;t' + '&#46;' + 'n&#101;t';
+      var addy_text74927 = 'w&#105;llj&#111;&#105;n' + '&#64;' + 'ms9' + '&#46;' + 'h&#105;n&#101;t' + '&#46;' + 'n&#101;t';
+      document.write('<a ' + path + '\\'' + prefix + ':' + addy74927 + '\\'>');
+      document.write(addy_text74927);
+      document.write('<\/a>');
+      //-->
+      </script>This email address is being protected from spambots. You need JavaScript enabled to view it.
+      </p>
+    `;
+    const joomlaEmails = ctx.extractEmailsFromHtml(joomlaHtml, 'http://www.willjoin.com.tw');
+    assert.ok(joomlaEmails.includes('willjoin@ms9.hinet.net'), 'Must decode Joomla spambot cloaked email (willjoin@ms9.hinet.net)');
+
+    // 2. Numeric HTML entity encoded mailto
+    const numEntityHtml = '<a href="mailto:&#105;&#110;&#102;&#111;&#64;&#97;&#99;&#109;&#101;&#46;&#99;&#111;&#109;">Mail</a>';
+    const numEmails = ctx.extractEmailsFromHtml(numEntityHtml, 'acme.com');
+    assert.ok(numEmails.includes('info@acme.com'), 'Must decode numeric HTML entity encoded mailto link');
+
+    // 3. Hex HTML entity encoded mailto
+    const hexEntityHtml = '<a href="mailto:&#x69;&#x6e;&#x66;&#x6f;&#x40;&#x61;&#x63;&#x6d;&#x65;&#x2e;&#x63;&#x6f;&#x6d;">Mail</a>';
+    const hexEmails = ctx.extractEmailsFromHtml(hexEntityHtml, 'acme.com');
+    assert.ok(hexEmails.includes('info@acme.com'), 'Must decode hex HTML entity encoded mailto link');
+
+    // 4. RTL bidirectional override
+    const bdoHtml = '<bdo dir="rtl">moc.emca@selas</bdo>';
+    const bdoEmails = ctx.extractEmailsFromHtml(bdoHtml, 'acme.com');
+    assert.ok(bdoEmails.includes('sales@acme.com'), 'Must decode RTL <bdo> email');
+
+    // 5. String.fromCharCode in script
+    const fromCharCodeHtml = '<script>var email = String.fromCharCode(115, 97, 108, 101, 115, 64, 115, 105, 116, 101, 46, 99, 111, 109);</script>';
+    const fccEmails = ctx.extractEmailsFromHtml(fromCharCodeHtml, 'site.com');
+    assert.ok(fccEmails.includes('sales@site.com'), 'Must decode String.fromCharCode in script');
+
+    // 6. Multi-part JS string concatenation in script
+    const concatHtml = '<script>var em = "contact" + "@" + "brand" + ".com";</script>';
+    const concatEmails = ctx.extractEmailsFromHtml(concatHtml, 'brand.com');
+    assert.ok(concatEmails.includes('contact@brand.com'), 'Must decode multi-part JS string concatenation');
+
+    // 7. Anti-spam honeypot span embedded inside email
+    const honeypotHtml = '<p>sales<span style="display:none">spambot-trap</span>@factory.com</p>';
+    const hpEmails = ctx.extractEmailsFromHtml(honeypotHtml, 'factory.com');
+    assert.ok(hpEmails.includes('sales@factory.com'), 'Must seamlessly rejoin emails split by honeypot display:none spans');
+
+    // 8. Text obfuscation with (a) and [.]
+    const textObfHtml = '<p>Email: office(a)enterprise[.]com</p>';
+    const textObfEmails = ctx.extractEmailsFromHtml(textObfHtml, 'enterprise.com');
+    assert.ok(textObfEmails.includes('office@enterprise.com'), 'Must decode human text obfuscation (a) and [.]');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
