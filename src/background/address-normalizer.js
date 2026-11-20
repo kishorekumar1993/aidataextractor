@@ -426,6 +426,11 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   const cLower = (country || "").toLowerCase();
   const hasIndoHint = hasIndonesiaAddressSignal(addr, country);
   let a = addr;
+  // Ensure space after period when followed by letter or number (e.g. "ROAD.TAINAN" -> "ROAD. TAINAN", "NO.2" -> "NO. 2")
+  // Do NOT add space inside dotted acronyms like "U.S.A." or "R.O.C." (where preceding segment is 1 char)
+  a = a.replace(/(?<=[A-Za-z0-9]{2,}\.)(?=[A-Za-z])/g, " ");
+  a = a.replace(/(?<=[A-Za-z]{2,}\.)(?=\d)/g, " ");
+
   a = normalizeTaiwanDivisions(a);
 
   // Deduplicate repeated premise numbers early (e.g. "No. 1013 Number 1013" -> "Number 1013")
@@ -1468,6 +1473,11 @@ function normalizeAddressCommas(str) {
 function repairBlindlySeparatedCommas(addr) {
   if (!addr) return "";
   let a = addr;
+  // Ensure space after period when followed by letter or number (e.g. "ROAD.TAINAN" -> "ROAD. TAINAN", "NO.2" -> "NO. 2")
+  // Do NOT add space inside dotted acronyms like "U.S.A." or "R.O.C." (where preceding segment is 1 char)
+  a = a.replace(/(?<=[A-Za-z0-9]{2,}\.)(?=[A-Za-z])/g, " ");
+  a = a.replace(/(?<=[A-Za-z]{2,}\.)(?=\d)/g, " ");
+
   a = normalizeTaiwanDivisions(a);
 
   // 1. Multi-word Industrial / Trade / Business / Science / Technology / Retail / Enterprise Parks & Estates
@@ -1530,6 +1540,11 @@ function repairBlindlySeparatedCommas(addr) {
 function ensureCommaBeforeState(addr) {
   if (!addr) return "";
   let a = addr;
+  // Ensure space after period when followed by letter or number (e.g. "ROAD.TAINAN" -> "ROAD. TAINAN", "NO.2" -> "NO. 2")
+  // Do NOT add space inside dotted acronyms like "U.S.A." or "R.O.C." (where preceding segment is 1 char)
+  a = a.replace(/(?<=[A-Za-z0-9]{2,}\.)(?=[A-Za-z])/g, " ");
+  a = a.replace(/(?<=[A-Za-z]{2,}\.)(?=\d)/g, " ");
+
   a = normalizeTaiwanDivisions(a);
 
   // 1. Ensure comma after premise indicators (Lot, Plot, Unit, Suite, Bldg, Building, Level, Floor, Block, Kav)
@@ -2458,7 +2473,17 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
   const normAi = norm(addr);
   const normRaw = norm(rawClean);
 
-  if (normAi === normRaw) return addr;
+  if (normAi === normRaw) {
+    // If rawClean has authentic on-site punctuation/periods (e.g. "Number 2, Alley 87, Lane 103. Section 6, Fu An Road. Tainan")
+    // but AI address altered/removed special characters (e.g. "Number 2, Alley 87, Lane 103 Section 6, Fu An Road, Tainan"),
+    // preserve the authentic on-site punctuation from rawClean per user rule:
+    // "we should not change any special character add or remove as per rule so fix these properly what website give use it same only abbreviation dont do additionally things"
+    if (/\b\d+\.\s+[A-Z]|\b(?:Road|Street|Avenue|Lane|Alley|Highway|Boulevard|Blvd|Drive|Section|Sec|Building|Bldg|Floor|Fl|Suite|Ste|Unit|Room|Rm|Block|Blk|District|Dist|Township|Twp|County|Cty)\.\s+[A-Z]/i.test(rawClean) &&
+        !/\b\d+\.\s+[A-Z]|\b(?:Road|Street|Avenue|Lane|Alley|Highway|Boulevard|Blvd|Drive|Section|Sec|Building|Bldg|Floor|Fl|Suite|Ste|Unit|Room|Rm|Block|Blk|District|Dist|Township|Twp|County|Cty)\.\s+[A-Z]/i.test(addr)) {
+      return rawClean;
+    }
+    return addr;
+  }
 
   // Case 0: Symbol preservation reconciliation - if normAi matches normRaw when omitting unwanted expanded words ("and", "plus"),
   // and rawClean contains authentic symbols ('+', '&', '#', '/'), return rawClean to restore authentic symbols!

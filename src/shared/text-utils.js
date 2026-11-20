@@ -108,7 +108,8 @@ function toTitleCase(str) {
   const upperAcronyms = new Set([
     "USA", "UK", "UAE", "3D", "CNC", "LED", "OEM", "ODM", "HVAC", "PVC", "PE", "HDPE", "PTFE", "R&D", "AKS",
     "PT", "CV", "UD", "TBK", "RT", "RW", "DKI", "DI", "BMW", "IBM", "B2B", "B2C", "IT", "TP", "QC", "AI", "FRP", "SMT", "PCB", "PCBA",
-    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC", "ECU"
+    "PEM", "FP", "HR", "CRP", "SMC", "THK", "NSK", "NTN", "IKO", "INA", "FAG", "FESTO", "CKD", "ABB", "SKF", "GE", "HP", "LG", "JVC", "TDK", "NEC", "ECU",
+    "GAR", "MLK", "FM", "MG", "DXB", "JAFZA", "LLC", "LLP", "PLC"
   ]);
   let s = str.replace(/['’`]\s*s\b/gi, "'s");
   // Every word starts with a Capital letter per QC instruction: "All words start with Capital letter"
@@ -119,9 +120,10 @@ function toTitleCase(str) {
     const upper = word.toUpperCase();
     if (upperAcronyms.has(upper)) return upper;
     if (/^GmbH$/i.test(word)) return "GmbH";
-    // Preserve 2-4 letter all-caps acronyms AND alphanumeric industrial/zone codes (e.g. MM2100)
-    if (word === upper && /[a-z]/.test(fullStr) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO|UPON|OVER|UNDER|AFTER|ABOUT)$/i.test(word)) {
-      if ((word.length >= 2 && word.length <= 4) || (/[A-Z]{2,}/.test(word) && /\d/.test(word))) {
+    // Exclude normal dictionary words, place names, and address components from all-caps retention
+    const isNormalWordOrAddressTerm = /^(?:LANE|ROAD|STREET|AVENUE|ALLEY|DRIVE|BLVD|HIGHWAY|PARKWAY|COURT|PLACE|TERRACE|SQUARE|CLOSE|WAY|CITY|TOWN|COUNTY|STATE|PROVINCE|DISTRICT|TOWNSHIP|VILLAGE|PARK|ZONE|AREA|SECTOR|BLOCK|BUILDING|FLOOR|ROOM|UNIT|SUITE|PLOT|LOT|POST|OFFICE|BOX|EAST|WEST|NORTH|SOUTH|CENTRAL|NEW|OLD|SAN|SANTA|LOS|LAS|FU|AN|AND|THE|FOR|WITH|FROM|INTO|ONTO|UPON|OVER|UNDER|AFTER|ABOUT)$/i.test(word);
+    if (!isNormalWordOrAddressTerm && word === upper && /[a-z]/.test(fullStr) && !/^(?:AND|THE|FOR|WITH|FROM|INTO|ONTO|UPON|OVER|UNDER|AFTER|ABOUT)$/i.test(word)) {
+      if ((word.length >= 2 && word.length <= 4 && !/^[A-Z][a-z]+$/.test(word)) || (/[A-Z]{2,}/.test(word) && /\d/.test(word))) {
         return upper;
       }
     }

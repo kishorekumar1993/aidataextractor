@@ -3753,6 +3753,65 @@ async function runAll() {
     );
   });
 
+  // =========================================================================
+  // Item 122: Special Character & Authentic Website Punctuation Preservation (willjoin.com.tw)
+  // Rule: Do not change any special character add or remove as per rule; what website gives, use it same; only abbreviations expand
+  // =========================================================================
+  runTest('Item 122: Special Character & Authentic Website Punctuation Preservation (willjoin.com.tw)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Raw website text from http://www.willjoin.com.tw/:
+    // "NO.2, ALLEY 87, LANE 103. SEC 6, FU AN ROAD.TAINAN, R.O.C."
+    const rawWillJoin = 'NO.2, ALLEY 87, LANE 103. SEC 6, FU AN ROAD.TAINAN, R.O.C.';
+    const cleanRaw = ctx.sanitizeRule6CompanyAddress(rawWillJoin, 'WILL JOIN ENT. CO., LTD', 'Taiwan');
+    assert.strictEqual(
+      cleanRaw,
+      'Number 2, Alley 87, Lane 103. Section 6, Fu An Road. Tainan',
+      'Must expand NO. -> Number, SEC -> Section, preserve periods after Lane 103. and Fu An Road., and TitleCase words'
+    );
+
+    // 2. Reconciliation when AI altered/dropped periods (e.g. "Lane 103 Section 6, Fu An Road, Tainan")
+    const aiDraftAddr = 'Number 2, Alley 87, Lane 103 Section 6, Fu An Road, Tainan';
+    const reconciled = ctx.reconcileAddressWithRawEvidence(aiDraftAddr, rawWillJoin, 'WILL JOIN ENT. CO., LTD', 'Taiwan', null, true);
+    assert.strictEqual(
+      reconciled,
+      'Number 2, Alley 87, Lane 103. Section 6, Fu An Road. Tainan',
+      'Reconciliation must preserve authentic on-site periods from rawClean instead of AI dropped periods / altered commas'
+    );
+
+    // 3. End-to-end QC verification with applyStrictInstructions
+    const aiResult = {
+      _isFromAi: true,
+      _extractionMode: 'ai_first',
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'WILL JOIN ENT. CO., LTD',
+      countryName: 'Taiwan',
+      companyAddress: aiDraftAddr,
+      state: 'Not Available',
+      city: 'Available',
+      emailId: 'service@willjoin.com.tw',
+      secondaryEmailId: '',
+      phoneNumber: '06-2567890',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    const crawlData = {
+      finalUrl: 'http://www.willjoin.com.tw/',
+      addressCandidates: [{ raw: rawWillJoin, source: 'footer' }]
+    };
+
+    const qcResult = ctx.applyStrictInstructions(aiResult, crawlData, {});
+    assert.strictEqual(
+      qcResult.companyAddress,
+      'Number 2, Alley 87, Lane 103. Section 6, Fu An Road. Tainan',
+      'Strict QC must output exact authentic on-site punctuation with abbreviation expansion only'
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
