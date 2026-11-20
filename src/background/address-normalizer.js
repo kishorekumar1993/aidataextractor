@@ -443,9 +443,10 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   const eaRoadSyllables = "Chung|Zhong|Hsin|Xin|Kuang|Guang|Min|San|Da|Ta|Ren|Jen|Nan|Bei|Pei|Xi|Hsi|Dong|Tung";
   a = a.replace(new RegExp(`\\b(${eaRoadSyllables})[-\\s]*,[\\s\\-]*([A-Z][a-z]+\\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Highway))\\b`, "g"), '$1 $2');
 
-  // Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
-  // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
-  a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
+  const isTaiwanAddr = /taiwan|taipei|taichung|kaohsiung|tainan|taoyuan|hsinchu|changhua|homei|yunlin|chiayi|pingtung|keelung|yilan|nantou|miaoli/i.test(a) || /taiwan/i.test(cLower);
+
+  // Preserve comma between premise number and street name per user comma rule (e.g. "24, West Mambalam Road")
+  // Do NOT blindly strip commas present in original source address
 
   // Preserve ampersand inside address (normalize spacing, do not replace with 'and')
   a = a.replace(/\s*&\s*/g, " & ");
@@ -528,17 +529,18 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])Aly\b\s*(?=\d)/gi, '$1Alley ');
 
   const toCleanFloor = (num, hasSpace = true) => {
-    const n = parseInt(num, 10);
-    const val = isNaN(n) ? num : n;
-    return hasSpace ? `${val} Floor` : `${val}Floor`;
+    return hasSpace ? `${num} Floor` : `${num}Floor`;
   };
   const toOrdinalFloor = toCleanFloor;
 
   // Floor & Level abbreviations and sub-divisions:
   // 1. Hyphenated floor sub-divisions / unit reconciliation:
   // e.g. "1st Floor, unit 1", "6 Floor, Unit 1", "Floor 6, unit 1", "6 Floor Unit 1", "6 Floor, room 1" -> "6 Floor-1"
-  a = a.replace(/(^|[,\s])(?:(\d{1,3})(?:st|nd|rd|th)?(\s*)(?:Flr?|Floor)\.?|Floor\s+(\d{1,3}))[,\s]+(?:unit|suite|ste\.?|rm\.?|room|#)\s*[-#]?\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, sp, n2, sub) => {
-    const fNum = n1 || n2;
+  a = a.replace(/(^|[,\s])(?:(\d{1,3}(?:st|nd|rd|th)?)(\s*)(?:Flr?|Floor)\.?|Floor\s+(\d{1,3}))[,\s]+(?:unit|suite|ste\.?|rm\.?|room|#)\s*[-#]?\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, sp, n2, sub) => {
+    let fNum = n1 || n2;
+    if (isTaiwanAddr && n1 && /\b(?:unit|room|rm\.?)\b/i.test(m)) {
+      fNum = parseInt(n1, 10);
+    }
     const hasSpace = n2 ? true : (sp && sp.length > 0);
     return `${p1}${toCleanFloor(fNum, hasSpace)}-${sub.toUpperCase()}`;
   });
@@ -547,20 +549,21 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s*)?F\.?\s*[-–之]\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, num, sub) => `${p1}${toCleanFloor(num, true)}-${sub.toUpperCase()}`);
 
   // 3. Hyphenated Floor words (e.g. "6th Floor - 1", "6th Floor -1", "Floor 6-1", "Floor 6 - 1" -> "6 Floor-1", "7Floor-1" -> "7Floor-1")
-  a = a.replace(/(^|[,\s])(?:(\d{1,3})(?:st|nd|rd|th)?(\s*)(?:Flr?|Floor)\.?|Floor\s+(\d{1,3}))\s*[-–]\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, sp, n2, sub) => {
+  a = a.replace(/(^|[,\s])(?:(\d{1,3}(?:st|nd|rd|th)?)(\s*)(?:Flr?|Floor)\.?|Floor\s+(\d{1,3}))\s*[-–]\s*(\d{1,4}[A-Za-z]?(?:[-–]\d{1,4}[A-Za-z]?)?|[A-Za-z])\b/gi, (m, p1, n1, sp, n2, sub) => {
     const fNum = n1 || n2;
     const hasSpace = n2 ? true : (sp && sp.length > 0);
     return `${p1}${toCleanFloor(fNum, hasSpace)}-${sub.toUpperCase()}`;
   });
 
   // 4. Standard standalone Floor & Level abbreviations
-  // User Instruction: "7Floor dont give space in address give space means u provide else dont give space"
-  // If original website text has space ("7 Floor", "1st Floor", "5/F"), provide space ("7 Floor").
-  // If original website text has NO space ("7Floor", "7floor"), do NOT provide space ("7Floor").
-  a = a.replace(/(^|[,\s])(\d{1,3})\s*(?:\/|\s+)F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toCleanFloor(num, true)}`);
-  a = a.replace(/(^|[,\s])(\d{1,3})F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toCleanFloor(num, false)}`);
-  a = a.replace(/(^|[,\s])(?:Flr?|Floor)\.?\s*(\d{1,3})(?:st|nd|rd|th)?\b/gi, (m, p1, num) => `${p1}${toCleanFloor(num, true)}`);
-  a = a.replace(/(^|[,\s])(\d{1,3})(?:st|nd|rd|th)?(\s*)(?:Flr?|Floor)\.?\b/gi, (m, p1, num, sp) => {
+  // Strict rule: Expand address-related abbreviations wherever their meaning is clear.
+  // Recognize abbreviations even when spaces or punctuation are missing (e.g. "2Fl." -> "2 Floor", "2nd Fl." -> "2nd Floor", "5/F" -> "5 Floor").
+  // If original website text already has full word without space ("7Floor"), preserve "7Floor".
+  a = a.replace(/(^|[,\s])(\d{1,3}(?:st|nd|rd|th)?)\s*(?:\/|\s+)F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toCleanFloor(num, true)}`);
+  a = a.replace(/(^|[,\s])(\d{1,3}(?:st|nd|rd|th)?)\s*(?:fl|flr)\b\.?/gi, (m, p1, num) => `${p1}${toCleanFloor(num, true)}`);
+  a = a.replace(/(^|[,\s])(\d{1,3})F\.?(?=[,\s\.\/]|$)/gi, (m, p1, num) => `${p1}${toCleanFloor(num, true)}`);
+  a = a.replace(/(^|[,\s])(?:Flr?|Floor)\.?\s*(\d{1,3}(?:st|nd|rd|th)?)\b/gi, (m, p1, num) => `${p1}${toCleanFloor(num, true)}`);
+  a = a.replace(/(^|[,\s])(\d{1,3}(?:st|nd|rd|th)?)(\s*)(?:Flr?|Floor)\.?\b/gi, (m, p1, num, sp) => {
     const hasSpace = sp && sp.length > 0;
     return `${p1}${toCleanFloor(num, hasSpace)}`;
   });
@@ -1475,7 +1478,10 @@ function repairBlindlySeparatedCommas(addr) {
   // "Argent, Trade, Park" -> "Argent Trade Park"
   a = a.replace(new RegExp(`${premisePrefixGuard}\\b([A-Za-z][A-Za-z0-9]*),\\s*(${parkQualifiers}),\\s*(${parkTypes})\\b`, "gi"), "$1 $2 $3");
   // "Argent, Trade Park" -> "Argent Trade Park"
-  a = a.replace(new RegExp(`${premisePrefixGuard}\\b([A-Za-z][A-Za-z0-9]*),\\s*(${parkQualifiers})\\s+(${parkTypes})\\b`, "gi"), "$1 $2 $3");
+  a = a.replace(new RegExp(`${premisePrefixGuard}\\b([A-Za-z][A-Za-z0-9]*),\\s*(${parkQualifiers})\\s+(${parkTypes})\\b`, "gi"), (m, p1, p2, p3) => {
+    if (/^(?:Floor|Flr|Building|Bldg|Unit|Suite|Ste|Level|Road|Street|Avenue|Lane|Drive|Way|Number|No)$/i.test(p1)) return m;
+    return `${p1} ${p2} ${p3}`;
+  });
   // "Trade, Park" -> "Trade Park"
   a = a.replace(new RegExp(`\\b(${parkQualifiers}),\\s*(${parkTypes})\\b`, "gi"), "$1 $2");
 
@@ -1502,9 +1508,9 @@ function repairBlindlySeparatedCommas(addr) {
   // 4. Premise comma fix: "Unit 2, Argent, Trade Park" -> "Unit 2, Argent Trade Park"
   a = a.replace(/(\b(?:Unit|Suite|Lot|Plot|Building|Bldg|Level|Floor|Block|Flr|Ste|Apt)\s+[A-Za-z0-9\-\/]+),\s+([A-Za-z0-9]+),\s+([A-Za-z0-9]+\s+(?:Park|Estate|Zone|Street|Road|Avenue|Lane|Drive|Way|Place|Court|Highway)\b)/gi, "$1, $2 $3");
 
-  // 5. Remove unwanted comma between bare street number and street name: "604, Progress Drive" -> "604 Progress Drive"
-  // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
-  a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
+  // 5. Remove unwanted comma between bare street number and street name in middle of string (e.g. "Units 3 + 4, Saint Martins Way" -> "Units 3 + 4 Saint Martins Way")
+  // Do NOT match at start of string so "24, West Mambalam Road" preserves on-site comma per user rule
+  a = a.replace(/([,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
 
   // Clean double commas and spaces (preserve decimal commas like "Kilometer 5,5")
   a = normalizeAddressCommas(a);
@@ -1556,9 +1562,9 @@ function ensureCommaBeforeState(addr) {
   const directionalSepRegex = new RegExp(`\\b(${streetSuffixes}\\s+(?:East|West|North|South|Northeast|Northwest|Southeast|Southwest|Extension|Ext))\\s+([A-Z][a-z0-9\\u00C0-\\u024F]+)(?!\\s+(?:Street|Road|Avenue|Lane|Drive|Place|Close|Court|Terrace|Way|Blvd|Hwy)\\b)`, "g");
   a = a.replace(directionalSepRegex, "$1, $2");
 
-  // 2b. Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
-  // Must NOT strip commas after premise indicators like "Number 53-5, Pocheng Road" or "Lot 12, Main Street"
-  a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, "$1$2 $3");
+  // 5. Remove unwanted comma between bare street number and street name in middle of string (e.g. "Units 3 + 4, Saint Martins Way" -> "Units 3 + 4 Saint Martins Way")
+  // Do NOT match at start of string so "24, West Mambalam Road" preserves on-site comma per user rule
+  a = a.replace(/([,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill)\b)/gi, "$1$2 $3");
 
   // 2c. Ensure clean comma separation across Taiwanese, East Asian, and multi-component premises:
   // Floor -> Premise Number (e.g. "6th Floor-1 Number 27" -> "6th Floor-1, Number 27")
@@ -2112,7 +2118,7 @@ function removePostalCodesCarefully(addr) {
   a = a.replace(/(,\s*)\b\d{3}\s+\d{2}\b\s*(?=,?\s+[\p{L}])/gu, "$1");
 
   // 12. Postal code directly following State name / abbreviation / province globally
-  const allStatesPostalRegex = "\\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New\\s*Hampshire|New\\s*Jersey|New\\s*Mexico|New\\s*York|North\\s*Carolina|North\\s*Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\\s*Island|South\\s*Carolina|South\\s*Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West\\s*Virginia|Wisconsin|Wyoming|District\\s*Of\\s*Columbia|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC|Ontario|Quebec|British Columbia|Alberta|Gauteng|KwaZulu-Natal|Western Cape|Eastern Cape|Northern Cape|Free State|North West|Mpumalanga|Limpopo|ON|QC|BC|Baden-Württemberg|Baden-Wurttemberg|Bayern|Bavaria|Berlin|Brandenburg|Bremen|Hamburg|Hessen|Hesse|Mecklenburg-Vorpommern|Niedersachsen|Lower Saxony|Nordrhein-Westfalen|North Rhine-Westphalia|Rheinland-Pfalz|Rhineland-Palatinate|Saarland|Sachsen|Saxony|Sachsen-Anhalt|Saxony-Anhalt|Schleswig-Holstein|Thüringen|Thuringia|Jawa Barat|Jawa Tengah|Jawa Timur|DKI Jakarta|DI Yogyakarta|Banten|Sumatera Utara|Sumatera Barat|Sumatera Selatan|Kalimantan Timur|Kalimantan Barat|Sulawesi Selatan|Bali|İstanbul|Istanbul|Ankara|İzmir|Izmir|Bursa|Antalya|Adana|Konya|Gaziantep|Kocaeli|Mersin|Diyarbakır|Diyarbakir|Kayseri|Eskişehir|Eskisehir|Samsun|Denizli|Sakarya|Muğla|Mugla|Trabzon|Île-de-France|Ile-de-France|Auvergne-Rhône-Alpes|Nouvelle-Aquitaine|Occitanie|Hauts-de-France|Provence-Alpes-Côte d'Azur|PACA|Grand Est|Pays de la Loire|Bretagne|Normandie|Bourgogne-Franche-Comté|Centre-Val de Loire|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo|Selangor|Johor|Penang|Perak|Kedah|Pahang|Negeri Sembilan|Melaka|Terengganu|Kelantan|Sarawak|Sabah|Perlis)\\b[\\s,]*";
+  const allStatesPostalRegex = "\\b(?:Victoria|New South Wales|Queensland|Western Australia|South Australia|Tasmania|Northern Territory|Australian Capital Territory|Vic|NSW|QLD|WA|SA|TAS|ACT|NT|Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New\\s*Hampshire|New\\s*Jersey|New\\s*Mexico|New\\s*York|North\\s*Carolina|North\\s*Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\\s*Island|South\\s*Carolina|South\\s*Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West\\s*Virginia|Wisconsin|Wyoming|District\\s*Of\\s*Columbia|AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC|Ontario|Quebec|British Columbia|Alberta|Gauteng|KwaZulu-Natal|Western Cape|Eastern Cape|Northern Cape|Free State|North West|Mpumalanga|Limpopo|ON|QC|BC|Baden-Württemberg|Baden-Wurttemberg|Bayern|Bavaria|Berlin|Brandenburg|Bremen|Hamburg|Hessen|Hesse|Mecklenburg-Vorpommern|Niedersachsen|Lower Saxony|Nordrhein-Westfalen|North Rhine-Westphalia|Rheinland-Pfalz|Rhineland-Palatinate|Saarland|Sachsen|Saxony|Sachsen-Anhalt|Saxony-Anhalt|Schleswig-Holstein|Thüringen|Thuringia|Jawa Barat|Jawa Tengah|Jawa Timur|DKI Jakarta|DI Yogyakarta|Banten|Sumatera Utara|Sumatera Barat|Sumatera Selatan|Kalimantan Timur|Kalimantan Barat|Sulawesi Selatan|Bali|İstanbul|Istanbul|Ankara|İzmir|Izmir|Bursa|Antalya|Adana|Konya|Gaziantep|Kocaeli|Mersin|Diyarbakır|Diyarbakir|Kayseri|Eskişehir|Eskisehir|Samsun|Denizli|Sakarya|Muğla|Mugla|Trabzon|Île-de-France|Ile-de-France|Auvergne-Rhône-Alpes|Nouvelle-Aquitaine|Occitanie|Hauts-de-France|Provence-Alpes-Côte d'Azur|PACA|Grand Est|Pays de la Loire|Bretagne|Normandie|Bourgogne-Franche-Comté|Centre-Val de Loire|Madrid|Barcelona|Valencia|Sevilla|Zaragoza|Málaga|Malaga|Murcia|Palma|Bilbao|Alicante|Córdoba|Cordoba|Valladolid|Vigo|Gijón|Gijon|Granada|Alava|Albacete|Almeria|Asturias|Avila|Badajoz|Baleares|Burgos|Caceres|Cadiz|Cantabria|Castellon|Ciudad Real|Cuenca|Girona|Guadalajara|Guipuzcoa|Huelva|Huesca|Jaen|La Coruna|La Rioja|Las Palmas|Leon|Lleida|Lugo|Navarra|Ourense|Palencia|Pontevedra|Salamanca|Santa Cruz de Tenerife|Segovia|Soria|Tarragona|Teruel|Toledo|Selangor|Johor|Penang|Perak|Kedah|Pahang|Negeri Sembilan|Melaka|Terengganu|Kelantan|Sarawak|Sabah|Perlis|Tamil\\s*Nadu|Haryana|Maharashtra|Gujarat|Karnataka|Uttar\\s*Pradesh|Rajasthan|West\\s*Bengal|Punjab|Kerala|Telangana|Andhra\\s*Pradesh|Delhi|Madhya\\s*Pradesh|Bihar|Odisha|Assam|Jharkhand|Chhattisgarh|Uttarakhand|Himachal\\s*Pradesh|Goa|Jammu\\s*(?:and|&)?\\s*Kashmir|Chandigarh|Puducherry)\\b[\\s,]*";
   a = a.replace(new RegExp(`(${allStatesPostalRegex})\\b\\d{4,6}\\b`, "gi"), "$1");
 
   // 13. Postal code before a city/town after comma (e.g. "..., 81750 Masai, Johor", "..., 75002 Paris")
@@ -2207,13 +2213,15 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   const cleanComp = (companyName || "").trim();
   if (cleanComp && cleanComp.length >= 3) {
     const compClean = cleanComp.replace(/[,;:\-_|/\\~*#@^"'“”‘’«»`]+/g, " ").trim();
-    const compRegex = new RegExp(`^${compClean.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*[,\\-–]?\\s*`, "i");
+    const compWords = compClean.split(/\s+/).filter(Boolean);
+    const compRegex = new RegExp(`^${compWords.map(w => w.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\.?').join('\\s+')}\\s*[,\\-–]?\\s*`, "i");
     a = a.replace(compRegex, "").trim();
 
     // Strip brand stem without legal suffixes (e.g. "Teflex Plastics Pty Ltd" -> stem "Teflex Plastics")
     const brandStem = compClean.replace(/\b(?:pty|ltd|limited|inc|incorporated|llc|corp|corporation|co|company|proprietary|plc|gmbh|sdn|bhd|sa|bv|nv|srl|sl|sp\s*z\s*o\.?o\.?|se)\b/gi, "").trim();
     if (brandStem && brandStem.length >= 4) {
-      const brandRegex = new RegExp(`^${brandStem.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\s*(?:(?:pty|ltd|limited|inc|llc|corp|co|se|gmbh)\\.?)?\\s*[,\\-–]?\\s*`, "i");
+      const bWords = brandStem.split(/\s+/).filter(Boolean);
+      const brandRegex = new RegExp(`^${bWords.map(w => w.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\.?').join('\\s+')}\\s*(?:(?:pty|ltd|limited|inc|llc|corp|co|se|gmbh)\\.?)?\\s*[,\\-–]?\\s*`, "i");
       a = a.replace(brandRegex, "").trim();
     }
   }
@@ -2303,6 +2311,9 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = a.replace(/[,;\s]+\b(?:CA|USA|US|UK|GB|AU|NZ|ZA|DE|FR|ES|IT|IN|CN|PRC|TW|ROC|MY|ID|SG|TR)\b\s*$/i, "").trim();
   }
 
+  // Strip trailing punctuation / commas exposed after country stripping
+  a = a.replace(/[,;\s.]+\s*$/g, "").trim();
+
   // Secondary postal code cleanup (preserving Post Office Box numbers)
   if (typeof removePostalCodesCarefully === "function") {
     a = removePostalCodesCarefully(a);
@@ -2320,13 +2331,12 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   }
 
   // 14. Final cleanup of commas, spaces, and boundary special characters
-  // Remove unwanted comma between bare street number and street name (e.g. "604, Progress Drive" -> "604 Progress Drive")
-  a = a.replace(/(^|[,\s])(?<!\b(?:number|no\.?|#|section|sec\.?|lane|ln\.?|alley|aly\.?|unit|suite|ste\.?|floor|fl\.?|flr\.?|level|lot|plot|block|blk\.?)\s+)\b(\d{1,5}),\s+([A-Z][a-z0-9\u00C0-\u024F\-]+(?:\s+[A-Z][a-z0-9\u00C0-\u024F\-]+)*\s+(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Crescent|Close|Walk|Row|Parade|Circuit|Square|Esplanade|Alley|Mews|Trail|Track|Hill|Caddesi|Bulvari|Sokak|Strasse|Calle|Avenida|Viale|Corso|Rd|St|Ave|Ln|Dr|Blvd|Hwy|Ct|Pl)\b)/gi, '$1$2 $3');
+  // Preserve commas after premise numbers (e.g. "24, West Mambalam Road") per user rule
 
-  // Remove any ordinal grammar expansions from floor numbers (e.g. "1st Floor" -> "1 Floor", "6th Floor-1" -> "6 Floor-1")
-  // User Instruction: "7Floor dont give space in address give space means u provide else dont give space"
-  a = a.replace(/\b(\d{1,3})(?:st|nd|rd|th)?(\s*)Floor\b/gi, (m, num, sp) => `${num}${sp && sp.length > 0 ? " " : ""}Floor`);
-  a = a.replace(/\b(\d{1,3})(?:st|nd|rd|th)?(\s*)Floor-(\d{1,4}[A-Za-z]?)\b/gi, (m, num, sp, sub) => `${num}${sp && sp.length > 0 ? " " : ""}Floor-${sub}`);
+  // Floor space and unit sub-division formatting
+  // Preserve ordinal when present (1st Floor, 2nd Floor, 3rd Floor) and expand 2Fl. -> 2 Floor per user rules
+  a = a.replace(/\b(\d{1,3}(?:st|nd|rd|th)?)(\s*)Floor\b/gi, (m, num, sp) => `${num}${sp && sp.length > 0 ? " " : ""}Floor`);
+  a = a.replace(/\b(\d{1,3}(?:st|nd|rd|th)?)(\s*)Floor-(\d{1,4}[A-Za-z]?)\b/gi, (m, num, sp, sub) => `${num}${sp && sp.length > 0 ? " " : ""}Floor-${sub}`);
 
   a = a.replace(/\s+,/g, ",");
   a = a.replace(/,\s*,+/g, ", ");

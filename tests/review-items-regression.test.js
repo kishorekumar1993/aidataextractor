@@ -2282,34 +2282,34 @@ async function runAll() {
     assert.strictEqual(qcOnlineShop.companyAddress, '', 'Company address must be wiped');
   });
 
-  runTest('Item 103: Removal of all ordinal grammar expansions on floor numbers (1st floor -> 1 floor, 2nd floor -> 2 floor, 6th Floor-1 -> 6 Floor-1, 5/F -> 5 Floor)', () => {
+  runTest('Item 103: Floor abbreviation expansion (2Fl. -> 2 Floor, 2nd Fl. -> 2nd Floor, 5/F -> 5 Floor per strict rules)', () => {
     const { ctx } = createTestContext();
 
-    // 1. "1st Floor" -> "1 Floor"
+    // 1. "1st Floor" preserves ordinal "1st Floor"
     const addr1 = '1st Floor, 40 High Street, Heanor, Derbyshire';
     const norm1 = ctx.sanitizeRule6CompanyAddress(addr1, '', 'United Kingdom');
-    assert.strictEqual(norm1, '1 Floor, 40 High Street, Heanor, Derbyshire', '1st Floor must normalize to 1 Floor without ordinal grammar expansion');
+    assert.strictEqual(norm1, '1st Floor, 40 High Street, Heanor, Derbyshire', '1st Floor preserves ordinal per user instruction');
 
-    // 2. Lowercase "1st floor" -> "1 Floor"
+    // 2. Lowercase "1st floor" -> "1st Floor"
     const addr2 = '1st floor, Number 159, Chien-Kuo Road, Taoyuan District, Taoyuan City';
     const norm2 = ctx.sanitizeRule6CompanyAddress(addr2, '', 'Taiwan');
-    assert.strictEqual(norm2, '1 Floor, Number 159, Chien-Kuo Road, Taoyuan District, Taoyuan City', 'Lowercase "1st floor" must normalize to "1 Floor"');
+    assert.strictEqual(norm2, '1st Floor, Number 159, Chien-Kuo Road, Taoyuan District, Taoyuan City', 'Lowercase "1st floor" preserves ordinal "1st Floor"');
 
     // 3. "2nd Floor" and "3rd Floor"
     const addr3 = '2nd Floor, 12 Commercial Road, Melbourne, Victoria';
     const norm3 = ctx.sanitizeRule6CompanyAddress(addr3, '', 'Australia');
-    assert.strictEqual(norm3, '2 Floor, 12 Commercial Road, Melbourne, Victoria', '2nd Floor must normalize to 2 Floor');
+    assert.strictEqual(norm3, '2nd Floor, 12 Commercial Road, Melbourne, Victoria', '2nd Floor preserves ordinal "2nd Floor"');
 
     const addr4 = '3rd Floor, Suite 4, 100 Main Street, Dallas, Texas';
     const norm4 = ctx.sanitizeRule6CompanyAddress(addr4, '', 'United States Of America');
-    assert.strictEqual(norm4, '3 Floor-4, 100 Main Street, Dallas, Texas', '3rd Floor, Suite 4 must normalize to 3 Floor-4');
+    assert.strictEqual(norm4, '3rd Floor-4, 100 Main Street, Dallas, Texas', '3rd Floor, Suite 4 must normalize to 3rd Floor-4');
 
-    // 4. "6th Floor-1" -> "6 Floor-1"
+    // 4. "6th Floor-1" -> "6th Floor-1"
     const addr5 = '6th Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City';
     const norm5 = ctx.sanitizeRule6CompanyAddress(addr5, '', 'Taiwan');
-    assert.strictEqual(norm5, '6 Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City', '6th Floor-1 must normalize to 6 Floor-1');
+    assert.strictEqual(norm5, '6th Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City', '6th Floor-1 preserves ordinal');
 
-    // 5. Standalone shorthand "5/F" and "Fl. 2"
+    // 5. Standalone shorthand "5/F", "Fl. 2", and "2Fl."
     const addr6 = '5/F, Tower 1, 100 Nathan Road, Kowloon';
     const norm6 = ctx.sanitizeRule6CompanyAddress(addr6, '', 'Hong Kong');
     assert.strictEqual(norm6, '5 Floor, Tower 1, 100 Nathan Road, Kowloon', '5/F must normalize to 5 Floor');
@@ -2317,6 +2317,10 @@ async function runAll() {
     const addr7 = 'Fl. 2, Building B, 20 Industrial Park, Berlin';
     const norm7 = ctx.sanitizeRule6CompanyAddress(addr7, '', 'Germany');
     assert.strictEqual(norm7, '2 Floor, Building B, 20 Industrial Park, Berlin', 'Fl. 2 must normalize to 2 Floor');
+
+    const addr8 = 'Number 25, 2Fl., Industrial Estate, Guindy, Chennai, Tamil Nadu';
+    const norm8 = ctx.sanitizeRule6CompanyAddress(addr8, '', 'India');
+    assert.strictEqual(norm8, 'Number 25, 2 Floor, Industrial Estate, Guindy, Chennai, Tamil Nadu', '2Fl. must expand to 2 Floor');
   });
 
   runTest('Item 104: Core extraction rule: What website has, take the same — Expansion only, no grammar changes or new inventions', () => {
@@ -3704,6 +3708,49 @@ async function runAll() {
     const textObfHtml = '<p>Email: office(a)enterprise[.]com</p>';
     const textObfEmails = ctx.extractEmailsFromHtml(textObfHtml, 'enterprise.com');
     assert.ok(textObfEmails.includes('office@enterprise.com'), 'Must decode human text obfuscation (a) and [.]');
+  });
+
+  // =========================================================================
+  // Item 121: Strict Company Address Extraction & 4 Official Examples
+  // =========================================================================
+  runTest('Item 121: Strict Company Address Extraction & 4 Official Examples', () => {
+    const { ctx } = createTestContext();
+
+    // Example 1 – Standard Abbreviation Expansion
+    const ex1 = 'ABC Technologies Ltd., No. 25, 2nd Fl., Ind. Est., Guindy, Chennai, Tamil Nadu 600032, India.';
+    const res1 = ctx.sanitizeRule6CompanyAddress(ex1, 'ABC Technologies Ltd.', 'India');
+    assert.strictEqual(
+      res1,
+      'Number 25, 2nd Floor, Industrial Estate, Guindy, Chennai, Tamil Nadu',
+      'Example 1 must expand No. -> Number, 2nd Fl. -> 2nd Floor, Ind. Est. -> Industrial Estate, strip company, postal code, and country'
+    );
+
+    // Example 2 – Abbreviation Without Space
+    const ex2 = 'ABC Technologies Ltd., No. 25, 2Fl., Ind. Est., Guindy, Chennai, Tamil Nadu 600032, India.';
+    const res2 = ctx.sanitizeRule6CompanyAddress(ex2, 'ABC Technologies Ltd.', 'India');
+    assert.strictEqual(
+      res2,
+      'Number 25, 2 Floor, Industrial Estate, Guindy, Chennai, Tamil Nadu',
+      'Example 2 must expand 2Fl. -> 2 Floor with space and without ordinal invention'
+    );
+
+    // Example 3 – Multiple Abbreviations
+    const ex3 = 'XYZ Industries, Bldg. No. 12, 3rd Fl., Plot No. 45, Ind. Area, Sector 18, Gurugram, Haryana 122015, India.';
+    const res3 = ctx.sanitizeRule6CompanyAddress(ex3, 'XYZ Industries', 'India');
+    assert.strictEqual(
+      res3,
+      'Building Number 12, 3rd Floor, Plot Number 45, Industrial Area, Sector 18, Gurugram, Haryana',
+      'Example 3 must expand Bldg. No. -> Building Number, 3rd Fl. -> 3rd Floor, Plot No. -> Plot Number, Ind. Area -> Industrial Area'
+    );
+
+    // Example 4 – Street Address
+    const ex4 = 'ABC Company, 24, West Mambalam Rd., 1st Fl., Chennai, Tamil Nadu 600033, India.';
+    const res4 = ctx.sanitizeRule6CompanyAddress(ex4, 'ABC Company', 'India');
+    assert.strictEqual(
+      res4,
+      '24, West Mambalam Road, 1st Floor, Chennai, Tamil Nadu',
+      'Example 4 must preserve street comma 24, expand Rd. -> Road, 1st Fl. -> 1st Floor, and strip postal code 600033'
+    );
   });
 
   console.log('\n========================================================');
