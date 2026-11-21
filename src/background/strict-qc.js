@@ -1256,19 +1256,21 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.companyName = stripBoundarySpecialChars(compName);
 
-    // 3. Country Name: Standardize the AI value, but let conflicting HQ address evidence correct it.
-    const countryEvidence = result._extractionMode === "ai_only" ? null : crawlData;
-    let country = typeof resolveCountryFromAllEvidence === "function"
-      ? resolveCountryFromAllEvidence(result.countryName, result.companyAddress, countryEvidence)
-      : toTitleCase(normalizeCountryName(result.countryName));
+    // 3. Country Name: Successful AI results must not be replaced with crawl-derived country evidence.
+    const countryEvidence = result._isFromAi ? null : crawlData;
+    let country = result._isFromAi
+      ? toTitleCase(normalizeCountryName(result.countryName))
+      : (typeof resolveCountryFromAllEvidence === "function"
+        ? resolveCountryFromAllEvidence(result.countryName, result.companyAddress, countryEvidence)
+        : toTitleCase(normalizeCountryName(result.countryName)));
     if (!country && result.companyAddress) {
       country = toTitleCase(detectCountryFromAddress(result.companyAddress));
     }
     if (/^(?:uk|united\s*kingdom|great\s*britain)$/i.test(String(result.countryName || "").trim()) &&
       !/\b(?:united\s*kingdom|great\s*britain|uk)\b/i.test(String(result.countryName || ""))) {
-      country = resolveUkCountryName(country, result.companyAddress || "", crawlData);
+      country = resolveUkCountryName(country, result.companyAddress || "", countryEvidence);
     } else if (!country) {
-      country = resolveUkCountryName(country, result.companyAddress || "", crawlData);
+      country = resolveUkCountryName(country, result.companyAddress || "", countryEvidence);
     }
     result.countryName = country;
 

@@ -409,6 +409,10 @@ function parseAiJsonPayload(rawText) {
 }
 
 function finalizeParsedAiResult(parsed, crawlData) {
+  if ((!parsed.countryName || !String(parsed.countryName).trim()) && typeof parsed.country === "string") {
+    parsed.countryName = parsed.country;
+  }
+
   if (/^(?:not\s*available|none|n\/?a|null|undefined)$/i.test((parsed.secondaryEmailId || "").trim())) {
     parsed.secondaryEmailId = "";
   }

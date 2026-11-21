@@ -113,13 +113,44 @@ runTest('On-site United Kingdom is strictly preserved', () => {
   const conflictingCountryResult = ctx.applyStrictInstructions({
     ...mockData,
     countryName: "Singapore",
+    _extractionMode: "ai_first",
     companyAddress: "500 Main Street, San Jose, California 95112"
-  }, {}, {});
+  }, {
+    addressCandidates: [{ raw: "100 Example Road, Berlin, Germany", source: "contact" }],
+    phones: ["+49 30 123456"],
+    originalUrl: "https://example.de"
+  }, {});
   assert.strictEqual(
     conflictingCountryResult.countryName,
-    "United States Of America",
-    "AI country must be corrected when the headquarters address clearly identifies another country"
+    "Singapore",
+    "Successful AI extraction must retain its country value instead of using conflicting crawl or address evidence"
   );
+});
+
+runTest('AI country alias is preserved through prefill QC', () => {
+  const parsedAi = ctx.finalizeParsedAiResult({
+    websiteStatus: "Working",
+    businessType: "Wholesaler",
+    companyName: "Siang Fatt Sdn Bhd",
+    country: "Malaysia",
+    companyAddress: "43 & 45, Jalan Waja 4, Taman Pandan, 81100 Johor Bahru, Johor",
+    state: "Available",
+    city: "Available",
+    emailId: "siangfatt@gmail.com",
+    phoneNumber: "6073543119",
+    numberOfProducts: "0",
+    productImages: "3",
+    numberOfProductDescriptions: "0"
+  }, {});
+  const prefillResult = ctx.applyStrictInstructions({
+    ...parsedAi,
+    _extractionMode: "ai_first"
+  }, {
+    originalUrl: "https://www.siangfatt.com",
+    addressCandidates: [{ raw: "Jakarta, Indonesia", source: "contact" }]
+  }, {});
+
+  assert.strictEqual(prefillResult.countryName, "Malaysia", "AI country alias must map to countryName and not be replaced during prefill QC");
 });
 
 // 5. Phone number country code and leading zero stripping
