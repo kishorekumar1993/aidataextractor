@@ -331,6 +331,11 @@ async function runAll() {
       { url: 'https://example.com/about', text: 'Device Manufacturing' }
     ]);
     assert.strictEqual(splitContext.isRestricted, false, 'Unrelated words from separate pages must not combine into a restriction');
+
+    const incidentalTerms = ctx.detectRestrictedKeywordsSingle(
+      'Navigation labels: Medical, Hospital, Aerospace, Marine, Pet, Food, Chemical, Alcohol, Military, and Ship.'
+    );
+    assert.strictEqual(incidentalTerms.isRestricted, false, 'Isolated category words must not reject a site');
   });
 
   runTest('Item 72.6b: Genuine live animal sales -> Reject (Category 10: Animals & Pets)', () => {
