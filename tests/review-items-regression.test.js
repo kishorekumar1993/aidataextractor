@@ -3103,7 +3103,11 @@ async function runAll() {
     assert.strictEqual(qcResult.websiteStatus, 'Working', 'Website status must remain Working');
     assert.strictEqual(qcResult.companyName, 'Industrial Power Engine & Tool Company, Limited');
     assert.strictEqual(qcResult.emailId, 'info@industrialpowerengine.com');
-    assert.strictEqual(qcResult.companyAddress, '50 Industrial Parkway, Detroit');
+    assert.strictEqual(
+      qcResult.companyAddress,
+      '50 Industrial Parkway, Detroit, Michigan',
+      'The matching contact candidate must restore the omitted state while stripping only the postal code'
+    );
   });
 
   // =========================================================================

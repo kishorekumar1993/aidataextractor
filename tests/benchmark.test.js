@@ -1943,6 +1943,26 @@ async function runAsyncTests() {
     const reconciled1 = ctx.reconcileAddressWithRawEvidence(truncatedAi, rawTaiwan, "Charng Guey Machinery Company, Limited", "Taiwan");
     assert.strictEqual(reconciled1, "Number 159, Yongke East Road, Yongkang District, Tainan City", "Must restore missing trailing Tainan City");
 
+    const truncatedAiOnly = "159 Yongke East Road, Yongkang District";
+    const reconciledAiOnly = ctx.reconcileAddressWithRawEvidence(
+      truncatedAiOnly,
+      rawTaiwan,
+      "Charng Guey Machinery Company, Limited",
+      "Taiwan",
+      null,
+      true
+    );
+    assert.strictEqual(
+      reconciledAiOnly,
+      "Number 159, Yongke East Road, Yongkang District, Tainan City",
+      "AI-mode reconciliation must restore omitted address components from its matching source candidate"
+    );
+    assert.strictEqual(
+      ctx.reconcileAddressWithRawEvidence("Tainan City", rawTaiwan, "Charng Guey Machinery Company, Limited", "Taiwan", null, true),
+      "Tainan City",
+      "AI-mode reconciliation must not replace a locality-only value with a potentially unrelated full address"
+    );
+
     // 2. Leading premise / unit restoration
     const rawNz = "Unit 4, 12 Industrie Road, Penrose, Auckland 1061, New Zealand";
     const truncatedNz = "12 Industrie Road, Penrose, Auckland";
@@ -1970,6 +1990,37 @@ async function runAsyncTests() {
     assert.strictEqual(strictResult.companyAddress, "Number 159, Yongke East Road, Yongkang District, Tainan City", "Strict QC must produce full address with Tainan City");
     assert.strictEqual(strictResult.city, "Available", "City must remain Available");
     assert.strictEqual(strictResult.state, "Not Available", "State must remain Not Available for Tainan City");
+
+    const strictAiOnlyResult = ctx.applyStrictInstructions({
+      _extractionMode: "ai_only",
+      websiteStatus: "Working",
+      businessType: "Manufacturer",
+      companyProfile: "Available",
+      companyName: "Charng Guey Machinery Company, Limited",
+      countryName: "Taiwan",
+      companyAddress: truncatedAiOnly,
+      state: "Not Available",
+      city: "Available",
+      emailId: "",
+      secondaryEmailId: "",
+      phoneNumber: "",
+      numberOfProducts: "0",
+      productImages: "0",
+      numberOfProductDescriptions: "0"
+    }, {
+      originalUrl: "http://www.cg-machinery.com.tw",
+      finalUrl: "http://www.cg-machinery.com.tw",
+      mainHtml: "<html><body>Industrial Machinery Manufacturer</body></html>",
+      country: "Taiwan",
+      addressCandidates: [
+        { raw: rawTaiwan, pageUrl: "https://www.cg-machinery.com.tw/contact.html", source: "contact" }
+      ]
+    });
+    assert.strictEqual(
+      strictAiOnlyResult.companyAddress,
+      "Number 159, Yongke East Road, Yongkang District, Tainan City",
+      "AI-only strict QC must retain the complete address when AI omits source components"
+    );
   });
 
   // 40. Non-Working Website Records – Normalization, Mandatory Columns, Duplicate Prevention & Multi-Session Excel Append

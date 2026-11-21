@@ -2515,9 +2515,21 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
     return rawClean;
   }
 
-  // High priority user mandate: In AI mode, TAKE AI DATA ONLY.
-  // Never replace AI's address with crawl fragments (Case 1, 2, 3 are disabled for AI data).
+  // In AI mode, restore omissions only when the AI value is a specific subset of this address candidate.
+  // Do not substitute an unrelated crawl address.
   if (isFromAi) {
+    const aiTokens = normAi.split(" ").filter(t => t.length > 1);
+    const rawTokens = new Set(normRaw.split(" ").filter(t => t.length > 1));
+    const allAiTokensMatch = aiTokens.length >= 2 && aiTokens.every(token => rawTokens.has(token));
+    const hasPremiseNumber = /\b\d+[a-z]?(?:[-/]\d+[a-z]?)?\b/i.test(normAi);
+    const hasAddressAnchor = hasPremiseNumber ||
+      /\b(?:road|street|avenue|lane|drive|way|boulevard|highway|district|township|county|village|industrial|park|estate|building|suite|unit|floor)\b/i.test(normAi);
+    if (allAiTokensMatch && hasAddressAnchor &&
+        (aiTokens.length >= 4 || hasPremiseNumber) &&
+        rawTokens.size > aiTokens.length) {
+      return rawClean;
+    }
+
     // If AI omitted "Number" before street/premise digits, but rawClean specifically had "Number" before the identical digits
     // (e.g. source website had "No. 409-6, Beitun Road" or "No. 62-6, Jhongche Road", and AI output was "409-6 Beitun Road"),
     // restore "Number " to enforce mandatory Rule 6 No. -> Number expansion!
