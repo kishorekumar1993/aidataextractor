@@ -26,7 +26,7 @@ const RESTRICTED_PATTERNS = [
     label: "Marine"
   },
   {
-    pattern: /\b(?:shipyards?\s+(?:building|constructing|repairing|repairs?|builders?)|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|boat\s*builders?|boat\s*building|boat\s*(?:dealers?|sales|brokerage|charter|rental)|naval\s*ships?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|vessels?\s*builder|commercial\s*vessels?|yachts?\s*(?:builder|charter|brokerage|sales)|motor\s*yachts?\s*builder|sailing\s*yachts?\s*builder|ferries|ferry\s*boats?|tugboats?|barges?|ship\s*charter|ferry\s*operator|tugboat\s*operator|barge\s*operator)\b/i,
+    pattern: /\b(?:shipyards?\s+(?:building|constructing|repairing|repairs?|builders?)|shipbuilding|shipbuilders?|ship\s*builders?|ship\s*repairs?|ship\s*(?:components?|parts?|equipment|systems?)|boat\s*builders?|boat\s*building|boat\s*(?:dealers?|sales|brokerage|charter|rental)|naval\s*ships?|cargo\s*ships?|cruise\s*ships?|container\s*ships?|warships?|battleships?|vessels?\s*builder|commercial\s*vessels?|yachts?\s*(?:builder|charter|brokerage|sales)|motor\s*yachts?\s*builder|sailing\s*yachts?\s*builder|ferries|ferry\s*boats?|tugboats?|barges?|ship\s*charter|ferry\s*operator|tugboat\s*operator|barge\s*operator)\b/i,
     label: "Ships & Boats"
   },
   {

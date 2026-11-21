@@ -2356,12 +2356,10 @@ async function runAsyncTests() {
       "Must expand and keep 'Number' when 'No.' was present on website"
     );
 
-    // 11. Test 44: Restricted Prohibited Categories: Marine Industry / Subpage Detection (Total Hoists & Cranes case)
+    // 11. A general crane manufacturer is not restricted for serving marine operations.
     const mockCraneIndustriesText = "Find out how we can help with your project. Marine Industry We offer overhead gantries, jib cranes for marine operations.";
-    const marineCheck = ctx.detectRestrictedKeywordsSingle(mockCraneIndustriesText, "<h4>Marine Industry</h4>");
-    assert.strictEqual(marineCheck.isRestricted, true, "Must detect 'Marine Industry' as restricted");
-    assert.strictEqual(marineCheck.category, "Marine", "Category must be Marine");
-    assert.strictEqual(marineCheck.matchedKeyword, "Marine", "Matched keyword must be Marine");
+    const marineCheck = ctx.detectRestrictedKeywordsSingle("Marine Industry", "<h4>Marine Industry</h4>");
+    assert.strictEqual(marineCheck.isRestricted, false, "A marine-industry label alone is not restricted-business evidence");
 
     // Discover contact links prioritizes industries / applications page
     const mockCraneHomeHtml = `
@@ -2379,7 +2377,7 @@ async function runAsyncTests() {
     const faqIndex = craneDiscovered.indexOf("https://www.totalhoistsandcranes.com.au/about-us/faq");
     assert.ok(indIndex < faqIndex, "Industries link must be prioritized above FAQ");
 
-    // End-to-end multi-page restricted detection
+    // End-to-end multi-page detection must not reject an unrelated manufacturer for a served-industry mention.
     const multiPageCraneCheck = ctx.detectRestrictedKeywords(
       "Total Hoists & Cranes Overhead Cranes Manufacturer",
       "<html><body>Total Hoists & Cranes</body></html>",
@@ -2388,9 +2386,7 @@ async function runAsyncTests() {
         { url: "https://www.totalhoistsandcranes.com.au/about-us/industries", text: mockCraneIndustriesText, html: "<h4>Marine Industry</h4>" }
       ]
     );
-    assert.strictEqual(multiPageCraneCheck.isRestricted, true);
-    assert.strictEqual(multiPageCraneCheck.sourceUrl, "https://www.totalhoistsandcranes.com.au/about-us/industries");
-    assert.strictEqual(multiPageCraneCheck.category, "Marine");
+    assert.strictEqual(multiPageCraneCheck.isRestricted, false);
 
     // 12. Parked Domain / GoDaddy Parking Lander Detection (e.g. negribossi.co.uk/lander)
     const godaddyLanderHtml = `<!doctype html><html lang="en"><head><script>window.LANDER_SYSTEM="PW"</script><script>window._trfd=window._trfd||[],window._trfd.push({ap:"parking"})</script><script defer="defer" src="https://img1.wsimg.com/parking-lander/static/js/main.1cc9fa89.js"></script></head><body><div id="root"></div></body></html>`;
@@ -2398,21 +2394,28 @@ async function runAsyncTests() {
     assert.strictEqual(parkedCheck.isDisallowed, true, "Must detect GoDaddy parking lander as disallowed");
     assert.ok(parkedCheck.reason.includes("Parked Domain"), "Reason must identify Parked Domain");
 
-    // QC compliance: If site is restricted, all 13 fields MUST be empty
-    const restrictedQcResult = ctx.applyStrictInstructions({
+    // QC must preserve company information when the site is not genuinely restricted.
+    const craneQcResult = ctx.applyStrictInstructions({
       websiteStatus: "Working",
+      businessType: "Manufacturer",
+      companyProfile: "Available",
       companyName: "Total Hoists and Cranes Pty Ltd",
       countryName: "Australia",
-      companyAddress: "10 Industrial Drive, Melbourne, Victoria"
+      companyAddress: "10 Industrial Drive, Melbourne, Victoria",
+      state: "Available",
+      city: "Available",
+      emailId: "info@totalhoistsandcranes.com.au",
+      phoneNumber: "61390000000",
+      numberOfProducts: "10",
+      productImages: "10",
+      numberOfProductDescriptions: "10"
     }, {
       originalUrl: "http://www.totalhoistsandcranes.com.au",
       finalUrl: "https://www.totalhoistsandcranes.com.au/"
     }, multiPageCraneCheck);
-    assert.strictEqual(restrictedQcResult.websiteStatus, "Not Working");
-    assert.strictEqual(restrictedQcResult.companyName, "");
-    assert.strictEqual(restrictedQcResult.companyAddress, "");
-    assert.strictEqual(restrictedQcResult.state, "");
-    assert.strictEqual(restrictedQcResult.city, "");
+    assert.strictEqual(craneQcResult.websiteStatus, "Working");
+    assert.ok(craneQcResult.companyName.includes("Total Hoists"));
+    assert.ok(craneQcResult.companyAddress.includes("10 Industrial Drive"));
   });
 
   runTest('Own Crawl extraction & QC robustness for Taiwan, UK, USA, China', () => {
