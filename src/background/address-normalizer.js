@@ -2389,11 +2389,24 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     a = restoreOriginalSymbolsInCompanyAddress(a, crawlData);
   }
 
-  // Restore on-site commas (put comma if available on website; remove if not available)
-  if (crawlData && typeof restoreAddressCommasFromRaw === "function") {
-    const candTexts = (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).filter(Boolean);
-    const allEv = `${(crawlData.contactPageText || "")} ${(crawlData.footerText || "")} ${(crawlData.profilePageText || "")} ${(crawlData.dedicatedContactText || "")} ${candTexts.join(" ")}`;
-    a = restoreAddressCommasFromRaw(a, allEv);
+  // Use the closest website address as punctuation evidence; broad page text can contain
+  // unrelated commas and must not control address formatting.
+  if (typeof restoreAddressCommasFromRaw === "function") {
+    let punctuationSource = rawInput;
+    const candidates = (crawlData && Array.isArray(crawlData.addressCandidates) ? crawlData.addressCandidates : [])
+      .map(c => typeof c === "object" ? c.raw : c)
+      .filter(c => typeof c === "string" && c.trim());
+    const inputTokens = new Set((rawInput.toLowerCase().match(/[a-z0-9\u00c0-\u024f]+/g) || []).filter(t => t.length > 1));
+    let bestMatchCount = 0;
+    for (const candidate of candidates) {
+      const candidateTokens = candidate.toLowerCase().match(/[a-z0-9\u00c0-\u024f]+/g) || [];
+      const matchCount = candidateTokens.filter(t => inputTokens.has(t)).length;
+      if (matchCount > bestMatchCount) {
+        bestMatchCount = matchCount;
+        punctuationSource = candidate;
+      }
+    }
+    a = restoreAddressCommasFromRaw(a, punctuationSource);
   }
 
   return a || "Not Available";
@@ -2546,10 +2559,8 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
 }
 
 /**
- * Reconciles address commas against the authentic on-site raw address evidence:
- * - If a comma was NOT present at that location on the website -> remove comma (leave without comma).
- * - If a comma WAS present at that location on the website -> add / preserve comma.
- * - If rawEvidence does not contain the tokens (e.g. synthetic test suites), preserve existing punctuation safely.
+ * Reconciles address commas against the authentic on-site raw address evidence.
+ * If the evidence does not contain an address boundary, existing punctuation is left alone.
  */
 function restoreAddressCommasFromRaw(addr, rawEvidence = "") {
   if (!addr || typeof addr !== "string") return addr;
@@ -2572,6 +2583,11 @@ function restoreAddressCommasFromRaw(addr, rawEvidence = "") {
     if (lower === "boulevard") return "(?:boulevard|blvd)\\.?";
     if (lower === "drive") return "(?:drive|dr)\\.?";
     if (lower === "lane") return "(?:lane|ln)\\.?";
+    if (lower === "parkway") return "(?:parkway|pkwy)\\.?";
+    if (lower === "highway") return "(?:highway|hwy)\\.?";
+    if (lower === "court") return "(?:court|ct)\\.?";
+    if (lower === "place") return "(?:place|pl)\\.?";
+    if (lower === "terrace") return "(?:terrace|ter)\\.?";
     if (lower === "building") return "(?:building|bldg)\\.?";
     if (lower === "suite") return "(?:suite|ste)\\.?";
     if (lower === "floor") return "(?:floor|fl|flr)\\.?";
@@ -2579,7 +2595,27 @@ function restoreAddressCommasFromRaw(addr, rawEvidence = "") {
     if (lower === "township") return "(?:township|twp)\\.?";
     if (lower === "county") return "(?:county|cty)\\.?";
     if (lower === "number") return "(?:number|no|nos|n|#)\\.?";
+    if (lower === "caddesi") return "(?:caddesi|cd)\\.?";
+    const usStateAbbreviations = {
+      alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO",
+      connecticut: "CT", delaware: "DE", florida: "FL", georgia: "GA", hawaii: "HI", idaho: "ID",
+      illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS", kentucky: "KY", louisiana: "LA",
+      maine: "ME", maryland: "MD", massachusetts: "MA", michigan: "MI", minnesota: "MN",
+      mississippi: "MS", missouri: "MO", montana: "MT", nebraska: "NE", nevada: "NV",
+      "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+      "north carolina": "NC", "north dakota": "ND", ohio: "OH", oklahoma: "OK", oregon: "OR",
+      pennsylvania: "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD",
+      tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA",
+      "west virginia": "WV", wisconsin: "WI", wyoming: "WY", "district of columbia": "DC"
+    };
+    if (usStateAbbreviations[lower]) {
+      return `(?:${escapeRegex(tok)}|${usStateAbbreviations[lower]})`;
+    }
     return escapeRegex(tok) + "\\.?";
+  };
+  const rawCommaBetween = (left, right) => {
+    const boundary = new RegExp(`\\b${buildTokenPattern(left)}\\b([\\s\\S]{0,80}?)\\b${buildTokenPattern(right)}\\b`, "i").exec(cleanRaw);
+    return boundary ? boundary[1].includes(",") : null;
   };
 
   // Step 1: Remove commas that did NOT exist on the website (preserving decimal numbers like 5,5 km)
@@ -2592,9 +2628,8 @@ function restoreAddressCommasFromRaw(addr, rawEvidence = "") {
       const leftPart = parts[i].trim();
       const rightPart = parts[i + 1].trim();
 
-      const leftTokens = leftPart.split(/\s+/).filter(Boolean);
       const rightTokens = rightPart.split(/\s+/).filter(Boolean);
-      const lastLeft = leftTokens[leftTokens.length - 1] || "";
+      const lastLeft = leftPart.split(/\s+/).filter(Boolean).pop() || "";
       const firstRight = rightTokens[0] || "";
 
       if (!lastLeft || !firstRight) {
@@ -2602,55 +2637,8 @@ function restoreAddressCommasFromRaw(addr, rawEvidence = "") {
         continue;
       }
 
-      // Mandatory Rule 6 preservation: Always place/keep comma before State/Province
-      const isRightState = (typeof hasStateInAddress === "function") && hasStateInAddress(rightPart, "");
-      if (isRightState) {
-        reconciledParts.push(", " + rightPart);
-        continue;
-      }
-
-      // Mandatory premise separator: Premise indicators (Suite, Unit, Bldg, Kavling) before street/locality always keep comma
-      const isPremise = /\b(?:lot|lots|unit|units|suite|suites|ste|bldg|bldgs|building|buildings|floor|fl|flr|level|block|blocks|blk|apartment|apt|flat|shed|warehouse|factory|kav|kavling)\s+[A-Za-z0-9]+$/i.test(leftPart);
-      if (isPremise) {
-        reconciledParts.push(", " + rightPart);
-        continue;
-      }
-
-      // Check if lastLeft is a number (e.g. '8' in 'Luzernestraat 8, Nieuw-Vennep' vs '1008' in 'Number 1008, Hou Chuang Road')
-      const isNumber = /^\d+[A-Za-z]?$/.test(lastLeft);
-      if (isNumber) {
-        const numHasComma = new RegExp('\\b' + lastLeft + '\\s*,', 'i').test(cleanRaw);
-        if (numHasComma) {
-          reconciledParts.push(', ' + rightPart);
-        } else {
-          reconciledParts.push(' ' + rightPart);
-        }
-        continue;
-      }
-
-      // Administrative divisions before thoroughfare/street (Mahallesi, Kecamatan, Desa) keep comma
-      const isAdminDiv = /\b(?:mahallesi|mah|mh|kecamatan|kec|desa|ds|kelurahan|kel|dukuh|dk)\b/i.test(lastLeft);
-      if (isAdminDiv) {
-        reconciledParts.push(", " + rightPart);
-        continue;
-      }
-
-      // If both lastLeft and firstRight are in cleanRaw on the same line without a comma:
-      const leftPat = buildTokenPattern(lastLeft);
-      const leftInRaw = new RegExp(leftPat, 'i').test(cleanRaw);
-      const rightInRaw = new RegExp('\\b' + firstRight + '\\b', 'i').test(cleanRaw);
-
-      if (leftInRaw && rightInRaw) {
-        const sameLineNoComma = new RegExp(leftPat + '[ \\t]+' + firstRight + '\\b', 'i');
-        const hasCommaBetween = new RegExp(leftPat + '\\s*,', 'i');
-        if (sameLineNoComma.test(cleanRaw) && !hasCommaBetween.test(cleanRaw)) {
-          reconciledParts.push(' ' + rightPart);
-          continue;
-        }
-      }
-
-      // Otherwise preserve existing comma
-      reconciledParts.push(', ' + rightPart);
+      const hasSourceComma = rawCommaBetween(lastLeft, firstRight);
+      reconciledParts.push((hasSourceComma === null ? ", " : hasSourceComma ? ", " : " ") + rightPart);
     }
 
     reconciled = reconciledParts.join("").replace(/\s+,/g, ",").replace(/\s+/g, " ").trim();

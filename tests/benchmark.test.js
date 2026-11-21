@@ -335,6 +335,20 @@ runTest('Phone cleaner does not strip foreign country codes from domestic number
   assert.strictEqual(ctx.cleanPhoneNumber("395620780", "Australia"), "395620780", "Must NOT strip 39 (Italy) from Australia domestic number");
 });
 
+runTest('Email and international mobile extraction handles visual breaks and global formats', () => {
+  const emails = ctx.extractEmailsFromHtml('<p>sales<wbr>@acme\u200B.com</p>', 'acme.com');
+  assert.ok(emails.includes('sales@acme.com'), 'Email split by wbr / zero-width characters should be recovered');
+
+  const details = ctx.parseHtmlDetails(`
+    <p>+65 9123 4567</p>
+    <a href = tel:+91-98401-23456>Call us</a>
+    <meta content="+61 412 345 678" property="og:phone_number">
+  `, 'https://acme.com');
+  assert.ok(details.phones.includes('+65 9123 4567'), 'Unlabeled Singapore mobile should be detected');
+  assert.ok(details.phones.some(phone => phone.replace(/\D/g, '') === '919840123456'), 'Unquoted tel link should be detected');
+  assert.ok(details.phones.includes('+61 412 345 678'), 'Phone meta value should work when content precedes property');
+});
+
 // 13. Global Malformed mailto Email Artifact Cleanup & Deduplication
 runTest('Malformed mailto prefix in href or email string is cleaned and deduplicated', () => {
   const html = `<a href="http://mailtoinfo@auliajati.com">Email</a> and info@auliajati.com`;
@@ -1014,7 +1028,7 @@ runTest('Indonesian RT/RW/Dk/province expansion, decimal KM comma, and ec-indone
   );
   assert.strictEqual(
     buildMock("MM2100 Industrial Town Jl. Sumba Kav. A3 Cibitung, Bekasi, 17520").companyAddress,
-    "MM2100 Industrial Town Jalan Sumba Kavling A3, Cibitung, Bekasi"
+    "MM2100 Industrial Town Jalan Sumba Kavling A3 Cibitung, Bekasi"
   );
 
   // Verify addAddressCandidate accepts Indonesian Jl. / RT RW addresses and footer phone/email filtering works
@@ -1853,7 +1867,7 @@ async function runAsyncTests() {
     assert.ok(extractedMulti.length > 10, "Must extract multi-line address instead of leaving address pending");
     assert.ok(extractedMulti.includes("Industrie Road"), "Must capture street from multi-line text");
     const sanitizedMulti = ctx.sanitizeRule6CompanyAddress(extractedMulti, "Teflex Plastics", "New Zealand");
-    assert.strictEqual(sanitizedMulti, "Unit 4, 12 Industrie Road, Penrose, Auckland", "Must sanitize extracted multi-line address cleanly");
+    assert.strictEqual(sanitizedMulti, "Unit 4, 12 Industrie Road Penrose, Auckland", "Must sanitize extracted multi-line address without adding punctuation");
 
     // 3. Industrial Park / Estate recognition in isFullAddressCandidate
     assert.ok(ctx.isFullAddressCandidate("Plot 45, GIDC Industrial Estate, Makarpura, Vadodara, Gujarat"), "Must recognize industrial estate as valid address structure");

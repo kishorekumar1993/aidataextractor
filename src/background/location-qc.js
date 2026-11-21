@@ -235,7 +235,7 @@ function hasCapitalInAddress(addr, country) {
 
 function extractAddressLocalitySegments(address) {
   if (!address || typeof address !== "string") return [];
-  const parts = address.split(',').map(p => p.trim()).filter(Boolean);
+  const parts = address.split(/[,\r\n]+/).map(p => p.trim()).filter(Boolean);
   if (parts.length <= 1) return parts;
 
   const localitySegments = [];

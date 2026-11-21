@@ -1293,7 +1293,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       if (typeof restoreAddressCommasFromRaw === "function") {
         const candTexts = ((crawlData && crawlData.addressCandidates) || []).map(c => typeof c === "object" ? c.raw : c).filter(Boolean);
         const allEv = `${(crawlData && crawlData.contactPageText || "")} ${(crawlData && crawlData.footerText || "")} ${(crawlData && crawlData.profilePageText || "")} ${(crawlData && crawlData.dedicatedContactText || "")} ${candTexts.join(" ")}`;
-        cleanAddr = restoreAddressCommasFromRaw(cleanAddr, allEv);
+        cleanAddr = restoreAddressCommasFromRaw(cleanAddr, bestRaw || allEv);
       }
       result.companyAddress = cleanAddr || "Not Available";
     }
@@ -1336,7 +1336,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
 
       // Rule 8: City / Town / District / Municipality check
-      const cityDetected = typeof evaluateCityQC === "function" ? evaluateCityQC(result.companyAddress, country) : "";
+      let cityDetected = typeof evaluateCityQC === "function" ? evaluateCityQC(result.companyAddress, country) : "";
+      if (cityDetected !== "Available" && bestRaw && typeof evaluateCityQC === "function") {
+        cityDetected = evaluateCityQC(bestRaw, country);
+      }
       const isSuburbOnly = typeof addressLooksLikeSuburbOnly === "function" && addressLooksLikeSuburbOnly(result.companyAddress);
 
       if (cityDetected === "Available") {

@@ -886,7 +886,7 @@ async function runAll() {
 
     // 3. Address sanitization & comma punctuation
     const sanitized = ctx.sanitizeRule6CompanyAddress(rawAddr, "Balaban Makina Sanayi", "Türkiye", { contactPageText: rawAddr, footerText: rawAddr });
-    assert.strictEqual(sanitized, "Balaban Mahallesi, Uzungol Caddesi, C Blok, Number 1-2, Silivri, Istanbul", 'Sanitized address must expand abbreviations and format components cleanly with commas');
+    assert.strictEqual(sanitized, "Balaban Mahallesi Uzungol Caddesi C Blok, Number 1-2 Silivri, Istanbul", 'Sanitization must expand abbreviations and preserve only source commas');
 
     // 4. Country detection must NOT be falsely hijacked by Blok into Indonesia
     const detectedCountry = ctx.detectCountryFromAddress(rawAddr);
@@ -916,12 +916,12 @@ async function runAll() {
 
     const extracted = ctx.heuristicExtraction(mockCrawlTurkish, { isRestricted: false });
     assert.strictEqual(extracted.countryName, "Türkiye", 'Own crawl must resolve country as Türkiye');
-    assert.strictEqual(extracted.companyAddress, "Balaban Mahallesi, Uzungol Caddesi, C Blok, Number 1-2, Silivri, Istanbul", 'Own crawl must extract fully expanded address');
+    assert.strictEqual(extracted.companyAddress, "Balaban Mahallesi Uzungol Caddesi C Blok, Number 1-2 Silivri, Istanbul", 'Own crawl must expand abbreviations without adding commas');
 
     const qcResult = ctx.applyStrictInstructions(extracted, mockCrawlTurkish, { isRestricted: false });
     assert.strictEqual(qcResult.websiteStatus, "Working", 'Website status must be Working');
     assert.strictEqual(qcResult.countryName, "Türkiye", 'Country name must be Türkiye');
-    assert.strictEqual(qcResult.companyAddress, "Balaban Mahallesi, Uzungol Caddesi, C Blok, Number 1-2, Silivri, Istanbul", 'QC must preserve fully expanded address');
+    assert.strictEqual(qcResult.companyAddress, "Balaban Mahallesi Uzungol Caddesi C Blok, Number 1-2 Silivri, Istanbul", 'QC must preserve the website punctuation');
     assert.strictEqual(qcResult.city, "Available", 'City must be Available');
     assert.strictEqual(qcResult.state, "Available", 'State must be Available');
   });
@@ -991,7 +991,7 @@ async function runAll() {
     const myPhone = ctx.cleanPhoneNumber("+60 3 8061 1234", "Malaysia");
     assert.strictEqual(myPhone, "380611234", "Malaysian country code +60 must be stripped");
     const myAddr = ctx.sanitizeRule6CompanyAddress("No. 25, Jln. Industri 3, Tmn. Perindustrian Puchong, 47100 Puchong, Selangor, Malaysia", "Apex", "Malaysia");
-    assert.strictEqual(myAddr, "Number 25, Jalan Industri 3, Taman Perindustrian, Puchong, Selangor", "Malaysian Jln/Tmn expansion, postal code stripped, deduplicated city");
+    assert.strictEqual(myAddr, "Number 25, Jalan Industri 3, Taman Perindustrian Puchong, Selangor", "Malaysian address expands terms without adding commas");
     assert.strictEqual(ctx.evaluateCityQC(myAddr, "Malaysia"), "Available", "Puchong must evaluate as City Available");
     assert.strictEqual(ctx.hasStateInAddress(myAddr, "Malaysia"), true, "Selangor must evaluate as State Available");
 
@@ -1074,8 +1074,8 @@ async function runAll() {
     const sanitizedMelrose = ctx.sanitizeRule6CompanyAddress(rawMelroseAddr, 'Melrose Packaging Limited', 'United Kingdom');
     assert.strictEqual(
       sanitizedMelrose,
-      'Units 3 + 4 Saint Martins Way, Bedford, Bedfordshire',
-      'Must preserve "+" in Units 3 + 4, expand St. to Saint, add comma before Bedfordshire, and strip postal code/UK'
+      'Units 3 + 4 Saint Martins Way Bedford Bedfordshire',
+      'Must preserve "+" in Units 3 + 4, expand St. to Saint, preserve line breaks as spaces, and strip postal code/UK'
     );
 
     // 2. Reconcile / Restore address symbol when AI output expanded "+" to "And"
@@ -1104,7 +1104,7 @@ async function runAll() {
     const evaluatedMelrose = ctx.applyStrictInstructions(aiOutputWithUnwantedExpansion, mockCrawlMelrose, {});
     assert.strictEqual(
       evaluatedMelrose.companyAddress,
-      'Units 3 + 4 Saint Martins Way, Bedford, Bedfordshire',
+      'Units 3 + 4 Saint Martins Way Bedford Bedfordshire',
       'Must restore "+" from raw evidence and avoid unwanted expansion into "And"'
     );
     assert.strictEqual(
@@ -1789,8 +1789,8 @@ async function runAll() {
     const qcResult1 = ctx.applyStrictInstructions(aiResult1, crawlData1);
     assert.strictEqual(
       qcResult1.companyAddress,
-      '106 Northpoint Parkway, Suite 400, Acworth, Georgia',
-      'Must preserve street-first sequence as on website and not invert Suite to beginning'
+      '106 Northpoint Parkway Suite 400 Acworth Georgia',
+      'Must preserve street-first sequence and avoid adding commas absent from the source'
     );
 
     // 2. Suite before Street on website (e.g. Suite 260, 2021 Guadalupe Street, Austin TX 78705)
@@ -1819,8 +1819,8 @@ async function runAll() {
     const qcResult2 = ctx.applyStrictInstructions(aiResult2, crawlData2);
     assert.strictEqual(
       qcResult2.companyAddress,
-      'Suite 260, 2021 Guadalupe Street, Austin, Texas',
-      'Must preserve suite-first sequence when website writes suite first'
+      'Suite 260, 2021 Guadalupe Street Austin Texas',
+      'Must preserve suite-first sequence and omit commas not present in the source'
     );
   });
 
@@ -2341,8 +2341,8 @@ async function runAll() {
     // 3. No grammar changes to numbers or words (e.g. "Unit 1", "Plot 5")
     const unitAddr = 'Unit 1, Plot 5, 20 Industrial Area, Heanor, Derbyshire';
     const normUnit = ctx.sanitizeRule6CompanyAddress(unitAddr, '', 'United Kingdom');
-    assert.strictEqual(normUnit, 'Unit 1, Plot 5, 20, Industrial Area, Heanor, Derbyshire',
-      'Should preserve Unit 1 and Plot 5 verbatim without grammar alterations');
+    assert.strictEqual(normUnit, 'Unit 1, Plot 5, 20 Industrial Area, Heanor, Derbyshire',
+      'Should preserve source punctuation and avoid adding a comma after the bare street number');
   });
 
   runTest('Item 105: Email & Secondary Email exhaustive website page check, obfuscation decoding & recovery', () => {
@@ -2888,6 +2888,26 @@ async function runAll() {
       'Number 1008, Hou Chuang Road, Pei Tun District, Taichung',
       'Address must preserve authentic on-site commas'
     );
+
+    // 3. Do not insert commas for premise fields or states when the source has none.
+    const rawNoCommaAddress = 'Unit 2 100 Main St Dallas TX';
+    const qcNoComma = ctx.applyStrictInstructions({
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Example Manufacturing',
+      countryName: 'United States Of America',
+      companyAddress: 'Unit 2, 100 Main Street, Dallas, Texas'
+    }, {
+      originalUrl: 'https://example.com',
+      finalUrl: 'https://example.com',
+      addressCandidates: [{ raw: rawNoCommaAddress, source: 'contact' }]
+    }, { isRestricted: false });
+    assert.strictEqual(
+      qcNoComma.companyAddress,
+      'Unit 2 100 Main Street Dallas Texas',
+      'Address cleanup must not insert premise or state commas absent from the source'
+    );
   });
 
   // =========================================================================
@@ -3075,6 +3095,14 @@ async function runAll() {
     assert.ok(
       prompt.includes('take the Google Map address') || prompt.includes('TAKE THE GOOGLE MAP ADDRESS'),
       'Prompt must instruct taking the Google Map address with additional words'
+    );
+    assert.ok(
+      prompt.includes('SOURCE-PUNCTUATION CONTRACT') && prompt.includes('A line break, space, street number, or familiar address pattern is NOT evidence for a comma'),
+      'Prompt must prohibit adding commas based on address formatting conventions or line breaks'
+    );
+    assert.ok(
+      prompt.includes('HTML/line breaks') && prompt.includes('predefined list of international calling codes'),
+      'Prompt must guide recovery of clearly split emails and globally formatted local phone numbers'
     );
 
     // 2. Verify candidate selection prefers the fuller Google Maps candidate when it has additional words for the same location

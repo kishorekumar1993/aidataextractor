@@ -2102,8 +2102,10 @@ function extractEmailsFromHtml(html, hostDomain = "") {
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
     .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, " ")
+    .replace(/<wbr\b[^>]*\/?>/gi, "")
     .replace(/<(?:span|div|b|i|font|p)[^>]*?(?:style=["'][^"']*?display:\s*none[^"']*?|class=["'][^"']*?(?:hidden|hide|d-none|invisible|antispam)[^"']*?)[^>]*>[\s\S]*?<\/(?:span|div|b|i|font|p)>/gi, "")
     .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .replace(/&#(\d+);?/g, (m, dec) => String.fromCharCode(dec))
     .replace(/&#x([0-9a-f]+);?/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&amp;/gi, "&")
@@ -2355,10 +2357,32 @@ function parseHtmlDetails(html, baseUrl) {
   const rankedEmails = extractEmailsFromHtml(html, hostDomain);
 
   // Extract Phone Numbers from telephone contexts, links, JSON-LD, meta, and standard domestic/international patterns
-  const phoneLinks = [
-    ...html.matchAll(/href=["'](?:tel:|callto:|wtai:\/\/wp\/mc;)([^"']+)["']/gi),
-    ...html.matchAll(/data-(?:phone|tel|telephone)=["']([^"']+)["']/gi)
-  ].map(m => m[1]);
+  const phoneLinks = [];
+  const readAttribute = (tag, name) => {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = tag.match(new RegExp(`\\b${escapedName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i"));
+    return match ? (match[1] || match[2] || match[3] || "") : "";
+  };
+  for (const tagMatch of html.matchAll(/<[^>]+>/g)) {
+    const tag = tagMatch[0];
+    const href = readAttribute(tag, "href");
+    if (/^(?:tel:|callto:|wtai:\/\/wp\/mc;)/i.test(href)) {
+      phoneLinks.push(href.replace(/^(?:tel:|callto:|wtai:\/\/wp\/mc;)/i, ""));
+    }
+
+    const phoneAttributeNames = ["data-phone", "data-tel", "data-telephone", "data-mobile", "data-contact-number"];
+    for (const name of phoneAttributeNames) {
+      const value = readAttribute(tag, name);
+      if (value) phoneLinks.push(value);
+    }
+  }
+
+  // Read schema/meta phone values regardless of attribute order.
+  const phoneMetaTags = [...html.matchAll(/<meta\b[^>]*(?:itemprop\s*=\s*["']?telephone["']?|property\s*=\s*["']?og:phone_number["']?|name\s*=\s*["']?telephone["']?)[^>]*>/gi)];
+  for (const tagMatch of phoneMetaTags) {
+    const value = readAttribute(tagMatch[0], "content");
+    if (value) phoneLinks.push(value);
+  }
   const waLinks = [...html.matchAll(/(?:wa\.me\/|whatsapp\.com\/send\?[^"']*phone=)(\+?\d{8,15})/gi)].map(m => "+" + m[1].replace(/^\+/, ""));
 
   // JSON-LD schema "telephone"
@@ -2380,6 +2404,9 @@ function parseHtmlDetails(html, baseUrl) {
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/?(?:strong|b\b|em|i\b|span|u\b|font|mark|small|sub|sup)[^>]*>/gi, "")
     .replace(/&nbsp;/gi, " ")
+    .replace(/&plus;/gi, "+")
+    .replace(/&lpar;/gi, "(")
+    .replace(/&rpar;/gi, ")")
     .replace(/&#(\d+);/g, (m, dec) => String.fromCharCode(dec))
     .replace(/&#x([0-9a-f]+);/gi, (m, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/\b(?:aria-)?placeholder\s*=\s*"[^"]*"/gi, " ")
@@ -2411,6 +2438,11 @@ function parseHtmlDetails(html, baseUrl) {
 
   const patternPhones = [];
   const textToScan = cleanHtmlForPhones + "\n" + stripHtml(cleanHtml);
+  // Accept international numbers for any calling code, not just the codes listed above.
+  const genericInternationalPhoneRegex = /(?:^|[^\d+])((?:\+|00)\s*\d(?:[\s().-]*\d){7,14})(?!\d)/g;
+  for (const match of textToScan.matchAll(genericInternationalPhoneRegex)) {
+    patternPhones.push(match[1].trim());
+  }
   for (const rx of domesticPhoneRegexes) {
     let m;
     while ((m = rx.exec(textToScan)) !== null) {
