@@ -179,7 +179,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     secondaryEmailId: {
       type: "STRING",
-      description: "Secondary distinct corporate email from anywhere on website or company social media (LinkedIn, Facebook). STRICTLY MUST NOT be the same as emailId. Output \"\" if websiteStatus is Not Working."
+      description: "Secondary distinct company or departmental email from anywhere on the website, linked PDFs, or official company social media. Exclude third-party website-builder, hosting, and platform technical-support addresses, even if they appear in a sitemap or footer. STRICTLY MUST NOT be the same as emailId. Output \"\" if websiteStatus is Not Working."
     },
     phoneNumber: {
       type: "STRING",

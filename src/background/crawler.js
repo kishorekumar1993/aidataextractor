@@ -1036,7 +1036,9 @@ async function crawlWebsite(targetUrl, options = {}) {
             }
           }
           return Array.from(candidates.values()).sort((a, b) => {
-            const priority = (url) => /(?:contact|kontakt|contacto|contatti|impressum|careers?|jobs?|vacanc|karriere|stellenangebote|support|service|sales|inquir|enquir|email|mail)/i.test(url) ? 0 : 1;
+            const priority = (url) => /(?:^|\/)sitemap(?:\/|$)/i.test(url)
+              ? -1
+              : (/(?:contact|kontakt|contacto|contatti|impressum|careers?|jobs?|vacanc|karriere|stellenangebote|support|service|sales|inquir|enquir|email|mail)/i.test(url) ? 0 : 1);
             return priority(a) - priority(b);
           });
         };
@@ -1058,7 +1060,7 @@ async function crawlWebsite(targetUrl, options = {}) {
       // PHASE 4: Fetch Linked PDF Documents (Company Profile, Catalog, Brochure, Contact PDFs)
       // Extracts corporate emails (primary and secondary) and contact phone numbers embedded in PDF text & streams
       if (rankEmails(Array.from(allDiscoveredEmails), finalUrl, emailSourceMap).length < 2 && discoveredDocumentUrls.size > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
-        const docCandidates = Array.from(discoveredDocumentUrls).filter(u => !fetchedUrls.has(u)).slice(0, 2);
+        const docCandidates = Array.from(discoveredDocumentUrls).filter(u => !fetchedUrls.has(u)).slice(0, 5);
         for (const docUrl of docCandidates) {
           if (isCrawlTimeExceeded() || pagesFetchedCount >= MAX_CRAWL_PAGES) break;
           fetchedUrls.add(docUrl);
@@ -1830,6 +1832,7 @@ function isUnwantedEmail(email) {
   // Known third-party platforms / analytics / CDN / web builders
   const disallowedHosts = [
     "wix.com", "wixsite.com", "wixpress.com", "shopify.com", "myshopify.com", "wordpress.com", "wordpress.org",
+    "newpages.com.my",
     "squarespace.com", "weebly.com", "sentry.io", "sentry-cdn.com", "sentry-next.wixpress.com", "sentry.wixpress.com", "static.wixpress.com",
     "cloudflare.com", "github.com", "gitlab.com", "google.com", "googleapis.com", "gstatic.com", "google-analytics.com",
     "googletagmanager.com", "facebook.com", "twitter.com", "instagram.com", "linkedin.com", "youtube.com",

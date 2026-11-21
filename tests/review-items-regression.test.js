@@ -3536,6 +3536,72 @@ async function runAll() {
       finalQc.secondaryEmailId === 'export@industrialcorp.com' || finalQc.secondaryEmailId === 'service@industrialcorp.com',
       `Secondary email must be assigned from PDF discovered emails (got: ${finalQc.secondaryEmailId})`
     );
+
+    // 4. Email scanning reaches sitemap pages and PDF links discovered there,
+    // while excluding third-party website-platform support contacts.
+    const sitemapPdfContent = 'BT /F1 12 Tf (Export enquiries: export@sitemapcorp.com) Tj ET';
+    const sitemapPdfCompressed = zlib.deflateSync(Buffer.from(sitemapPdfContent));
+    const sitemapPdfBuffer = Buffer.concat([
+      Buffer.from('%PDF-1.4\n1 0 obj\n<< /Filter /FlateDecode >>\nstream\n'),
+      sitemapPdfCompressed,
+      Buffer.from('\nendstream\nendobj\n%%EOF')
+    ]);
+    const sitemapHome = `
+      <html><head><title>Sitemap Corp Ltd</title></head><body>
+        <h1>Sitemap Corp Ltd</h1>
+        <p>100 Industrial Road, Dallas, Texas 75001</p>
+        <a href="mailto:info@sitemapcorp.com">info@sitemapcorp.com</a>
+        <a href="tel:+1-214-555-0100">Call</a>
+        <a href="/contact/">Contact Us</a>
+        <a href="/sitemap">Sitemap</a>
+      </body></html>
+    `;
+    const sitemapContact = `
+      <html><body>
+        <p>Contact Sitemap Corp Ltd at info@sitemapcorp.com</p>
+        <a href="/sitemap">Sitemap</a>
+      </body></html>
+    `;
+    const sitemapPage = `
+      <html><body>
+        <p>For technical issues for this website, contact support@newpages.com.my.</p>
+        <a href="/documents/company-brochure.pdf">Company Brochure</a>
+      </body></html>
+    `;
+    const sitemapFetch = async (url) => {
+      const urlString = String(url);
+      if (urlString.endsWith('.pdf')) {
+        return {
+          ok: true,
+          status: 200,
+          url: urlString,
+          headers: { get: () => 'application/pdf' },
+          arrayBuffer: async () => sitemapPdfBuffer
+        };
+      }
+      const html = /\/sitemap\/?$/i.test(urlString)
+        ? sitemapPage
+        : (/\/contact\/?$/i.test(urlString) ? sitemapContact : sitemapHome);
+      return {
+        ok: true,
+        status: 200,
+        url: urlString,
+        redirected: false,
+        headers: { get: () => 'text/html; charset=utf-8' },
+        arrayBuffer: async () => Buffer.from(html, 'utf8')
+      };
+    };
+    const { ctx: sitemapCtx } = createTestContext(sitemapFetch);
+    const sitemapCrawl = await sitemapCtx.crawlWebsite('https://sitemapcorp.com', { maxCrawlTimeMs: 12000 });
+    assert.ok(sitemapCrawl.crawledPages.some(page => /\/sitemap\/?$/i.test(page.url)), 'Email scan must fetch the site sitemap');
+    assert.ok(sitemapCrawl.emails.includes('export@sitemapcorp.com'), 'PDFs linked from the sitemap must be scanned for secondary emails');
+    assert.ok(!sitemapCrawl.emails.includes('support@newpages.com.my'), 'Third-party website-provider support must not be assigned to the company');
+    const sitemapFinalized = sitemapCtx.finalizeParsedAiResult({
+      websiteStatus: 'Working',
+      emailId: 'info@sitemapcorp.com',
+      secondaryEmailId: ''
+    }, sitemapCrawl);
+    assert.strictEqual(sitemapFinalized.secondaryEmailId, 'export@sitemapcorp.com', 'A distinct PDF email must populate the secondary email field');
   });
 
   await runAsyncTest('Email crawl continues through remaining internal pages for secondary contacts', async () => {
