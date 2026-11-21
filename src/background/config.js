@@ -158,7 +158,7 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     countryName: {
       type: "STRING",
-      description: "Standardized full expanded English country name based on official evidence in priority order: (1) physical HQ address, (2) corporate registration, (3) official social media, (4) domain TLD / calling code. NEVER guess without evidence. Always full form (e.g. United States Of America, United Kingdom, Canada, Australia, Singapore, Germany, France). Return \"\" if websiteStatus is not Working."
+      description: "Standardized full expanded English country name matching the verified physical headquarters address. Correct a conflicting country guess using clear headquarters-address evidence; do not let a branch address, domain suffix, or phone override headquarters evidence. Phone evidence is valid only with an explicit international prefix (+, 00, or 011), never from local-number digits. Use registration, official social media, domain TLD, or international calling code only as secondary evidence, and return \"\" if evidence is ambiguous. Always use the full form (e.g. United States Of America, United Kingdom, Canada, Australia, Singapore, Germany, France). Return \"\" if websiteStatus is not Working."
     },
     companyAddress: {
       type: "STRING",

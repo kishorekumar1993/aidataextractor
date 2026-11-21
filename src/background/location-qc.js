@@ -36,8 +36,14 @@ function resolveUkCountryName(currentCountry, addrStr, crawlData) {
  */
 function resolveCountryFromAllEvidence(currentCountry, addrStr, crawlData) {
   let country = (typeof normalizeCountryName === "function" ? normalizeCountryName(currentCountry || "") : currentCountry) || "";
-  if (!country && addrStr && typeof detectCountryFromAddress === "function") {
-    country = detectCountryFromAddress(addrStr);
+  const addressCountry = addrStr && typeof detectCountryFromAddress === "function"
+    ? detectCountryFromAddress(addrStr)
+    : "";
+  const ukCountries = new Set(["United Kingdom", "England", "Scotland", "Wales", "Northern Ireland"]);
+  const sameCountry = country === addressCountry ||
+    (ukCountries.has(country) && ukCountries.has(addressCountry));
+  if (addressCountry && (!country || !sameCountry)) {
+    country = addressCountry;
   }
   // Check all discovered address candidates
   if (!country && crawlData && Array.isArray(crawlData.addressCandidates)) {
@@ -50,7 +56,7 @@ function resolveCountryFromAllEvidence(currentCountry, addrStr, crawlData) {
       }
     }
   }
-  // Check international phone calling codes
+  // Only an explicit international dialing prefix makes the leading digits a calling code.
   if (!country && crawlData && Array.isArray(crawlData.phones)) {
     const callingCodeMap = {
       "886": "Taiwan", "852": "Hong Kong", "971": "United Arab Emirates",
@@ -65,26 +71,16 @@ function resolveCountryFromAllEvidence(currentCountry, addrStr, crawlData) {
       "45": "Denmark", "30": "Greece", "1": "United States Of America"
     };
     for (const p of crawlData.phones) {
-      const pStr = String(p || "").trim();
-      const codeMatch = pStr.match(/^\+?(\d{1,4})\b/);
-      if (codeMatch && callingCodeMap[codeMatch[1]]) {
-        country = callingCodeMap[codeMatch[1]];
+      const pStr = String(p || "").trim().replace(/^tel:/i, "");
+      const prefixMatch = pStr.match(/^(?:\+|00|011)\s*(.*)$/);
+      if (!prefixMatch) continue;
+      const digits = prefixMatch[1].replace(/\D/g, "");
+      const code = Object.keys(callingCodeMap)
+        .sort((a, b) => b.length - a.length)
+        .find(candidate => digits.startsWith(candidate) && digits.length > candidate.length + 3);
+      if (code) {
+        country = callingCodeMap[code];
         break;
-      }
-      const digits = pStr.replace(/^\+/, "").replace(/\D/g, "");
-      if (digits.length >= 7) {
-        if (callingCodeMap[digits.slice(0, 3)]) {
-          country = callingCodeMap[digits.slice(0, 3)];
-          break;
-        }
-        if (callingCodeMap[digits.slice(0, 2)]) {
-          country = callingCodeMap[digits.slice(0, 2)];
-          break;
-        }
-        if (digits.length >= 10 && callingCodeMap[digits.slice(0, 1)]) {
-          country = callingCodeMap[digits.slice(0, 1)];
-          break;
-        }
       }
     }
   }

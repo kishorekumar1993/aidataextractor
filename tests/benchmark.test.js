@@ -109,6 +109,17 @@ runTest('On-site United Kingdom is strictly preserved', () => {
   };
   const result = ctx.applyStrictInstructions(mockData, mockCrawlData, {});
   assert.strictEqual(result.countryName, "United Kingdom", "Must retain United Kingdom, never downgrade to England");
+
+  const conflictingCountryResult = ctx.applyStrictInstructions({
+    ...mockData,
+    countryName: "Singapore",
+    companyAddress: "500 Main Street, San Jose, California 95112"
+  }, {}, {});
+  assert.strictEqual(
+    conflictingCountryResult.countryName,
+    "United States Of America",
+    "AI country must be corrected when the headquarters address clearly identifies another country"
+  );
 });
 
 // 5. Phone number country code and leading zero stripping
@@ -804,6 +815,25 @@ runTest('Global 135-country QC corrections, State/City detection, and calling co
   assert.strictEqual(ctx.detectCountryFromAddress("PO Box 100, Muscat"), "Oman");
   assert.strictEqual(ctx.detectCountryFromAddress("Av. Corrientes 500, Buenos Aires"), "Argentina");
   assert.strictEqual(ctx.detectCountryFromAddress("ul. Marszalkowska 10, Warsaw"), "Poland");
+  assert.strictEqual(
+    ctx.resolveCountryFromAllEvidence("Singapore", "500 Main Street, San Jose, California 95112", {}),
+    "United States Of America",
+    "Clear headquarters-address evidence must correct a conflicting country value"
+  );
+  assert.strictEqual(
+    ctx.resolveCountryFromAllEvidence("", "", { phones: ["6505551212"], originalUrl: "https://example.com" }),
+    "",
+    "A local phone number's leading digits must not be mistaken for an international calling code"
+  );
+  assert.strictEqual(
+    ctx.resolveCountryFromAllEvidence("", "", { phones: ["+65 6535 1234"] }),
+    "Singapore",
+    "An explicit international calling prefix may support country detection"
+  );
+
+  const countryPrompt = ctx.buildExtractionPrompt({ originalUrl: "https://example.com", title: "Example", emails: [], phones: [] }, false);
+  assert.ok(/country must match the verified headquarters address/i.test(countryPrompt), "Prompt must prioritize verified headquarters country evidence");
+  assert.ok(/explicit international prefix/i.test(countryPrompt), "Prompt must not infer country from local phone digits");
 
   // Calling codes across newly added countries
   assert.strictEqual(ctx.cleanPhoneNumber("+385 1 234 5678", "Croatia"), "12345678");

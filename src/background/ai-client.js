@@ -241,6 +241,9 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 
 7. COUNTRY NAME STRICT VALIDATION:
 - Source Evidence Priority: (1) Headquarters physical address on website, (2) Official corporate legal registration / imprint, (3) Official company social media (LinkedIn, Facebook), (4) Top-level domain extension (.uk, .de, .ca, .au, .sg, .jp) or telephone calling code.
+- The country must match the verified headquarters address. If that address clearly identifies a different country from a preliminary country guess, use the address country; do not let a branch address, domain suffix, or phone signal override the headquarters.
+- A phone supports country only when written with an explicit international prefix (+, 00, or 011). Never infer a country from the leading digits of a local/national phone number. Treat ambiguous city names and two-letter region codes as insufficient evidence.
+- Use a domain suffix or calling code only as secondary evidence when stronger headquarters or registration evidence is unavailable; return "" when the evidence remains ambiguous.
 - PROHIBIT GUESSING: Never fabricate, assume, or guess a country without supporting evidence.
 - ALWAYS output the full expanded original English country name (e.g. United States Of America, United Kingdom, Canada, Australia, Singapore, Germany, France, etc.). Never return abbreviations like USA/UK/UAE/KSA/PNG/NZ/HK, a city, state, or continent.
 - Standard Full-Form Mappings:

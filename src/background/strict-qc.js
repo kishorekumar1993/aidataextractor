@@ -1256,8 +1256,11 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     }
     result.companyName = stripBoundarySpecialChars(compName);
 
-    // 3. Country Name: Take from API and standardize full English name; fall back to address detection only if empty
-    let country = toTitleCase(normalizeCountryName(result.countryName));
+    // 3. Country Name: Standardize the AI value, but let conflicting HQ address evidence correct it.
+    const countryEvidence = result._extractionMode === "ai_only" ? null : crawlData;
+    let country = typeof resolveCountryFromAllEvidence === "function"
+      ? resolveCountryFromAllEvidence(result.countryName, result.companyAddress, countryEvidence)
+      : toTitleCase(normalizeCountryName(result.countryName));
     if (!country && result.companyAddress) {
       country = toTitleCase(detectCountryFromAddress(result.companyAddress));
     }
