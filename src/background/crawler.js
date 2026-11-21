@@ -306,6 +306,7 @@ async function crawlWebsite(targetUrl, options = {}) {
   let logoText = "";
   let pdfExtractedText = "";
   const discoveredDocumentUrls = new Set();
+  const attemptedPagePaths = new Set();
 
   // Crawl budget: Complete website crawl across all discovered internal pages (Contact, About, Products, Services, Profile, Legal, etc.)
   // When options.maxPages is explicitly specified, respect it; otherwise crawl complete website (up to 50 pages).
@@ -321,6 +322,14 @@ async function crawlWebsite(targetUrl, options = {}) {
   const crawlStartTime = Date.now();
   const MAX_CRAWL_TIME_MS = Number(options.maxCrawlTimeMs) || 6000;
   const isCrawlTimeExceeded = () => (Date.now() - crawlStartTime) >= MAX_CRAWL_TIME_MS;
+  const getCrawlPathKey = (url) => {
+    try {
+      const parsed = new URL(url, finalUrl || targetUrl);
+      return `${parsed.hostname.toLowerCase()}${parsed.pathname.toLowerCase().replace(/\/+$/, "") || "/"}`;
+    } catch (e) {
+      return "";
+    }
+  };
 
   const getCrawlBudgetUsed = () => pagesFetchedCount + (isBudgetExplicit && redirectChainInfo ? 1 : 0);
 
@@ -337,6 +346,8 @@ async function crawlWebsite(targetUrl, options = {}) {
       console.log(`[Crawler] Time budget reached (${Date.now() - crawlStartTime}ms >= ${MAX_CRAWL_TIME_MS}ms). Gracefully concluding subpage crawling: ${urlToFetch}`);
       return null;
     }
+    const pagePathKey = getCrawlPathKey(urlToFetch);
+    if (pagePathKey) attemptedPagePaths.add(pagePathKey);
     pagesFetchedCount++;
     const remainingTime = Math.max(500, MAX_CRAWL_TIME_MS - (Date.now() - crawlStartTime));
     const effectiveTimeout = Math.min(fetchOpts.timeoutMs || 2500, remainingTime);
@@ -898,7 +909,8 @@ async function crawlWebsite(targetUrl, options = {}) {
           const raw = (typeof c === "object" ? c.raw : c) || "";
           return raw.length >= 8 && (/\b(?:street|road|avenue|lane|drive|way|blvd|suite|unit|floor|park|zone|box|po\s*box|no\.?|number|\d{2,})\b/i.test(raw));
         });
-        const hasEmail = allowSingleEmail ? allDiscoveredEmails.size >= 1 : allDiscoveredEmails.size >= 2;
+        const validEmailCount = rankEmails(Array.from(allDiscoveredEmails), finalUrl, emailSourceMap).length;
+        const hasEmail = allowSingleEmail ? validEmailCount >= 1 : validEmailCount >= 2;
         const hasPhone = dedicatedContactPhones.size > 0 || allDiscoveredPhones.size > 0;
         const hasProducts = detectedProductCount >= 3 || detectedImageCount >= 3;
         const hasName = allLegalCandidates.size > 0 || (copyrightText && hasCompleteLegalSuffix(copyrightText));
@@ -1007,9 +1019,45 @@ async function crawlWebsite(targetUrl, options = {}) {
         }
       }
 
+      // Continue discovering same-site pages for contact emails even when company data is already complete.
+      // Secondary addresses often appear only on less prominent support, career, or department pages.
+      if (pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded() && typeof discoverAllInternalLinks === "function") {
+        const queuedPagePaths = new Set();
+        const getEmailScanLinks = () => {
+          const candidates = new Map();
+          const crawledPagePaths = new Set(crawledPages.map(page => getCrawlPathKey(page.url)).filter(Boolean));
+          for (const page of crawledPages) {
+            if (!page || !page.html) continue;
+            for (const link of discoverAllInternalLinks(page.html, finalUrl)) {
+              const pathKey = getCrawlPathKey(link);
+              if (!pathKey || attemptedPagePaths.has(pathKey) || crawledPagePaths.has(pathKey) || queuedPagePaths.has(pathKey)) continue;
+              queuedPagePaths.add(pathKey);
+              candidates.set(pathKey, link);
+            }
+          }
+          return Array.from(candidates.values()).sort((a, b) => {
+            const priority = (url) => /(?:contact|kontakt|contacto|contatti|impressum|careers?|jobs?|vacanc|karriere|stellenangebote|support|service|sales|inquir|enquir|email|mail)/i.test(url) ? 0 : 1;
+            return priority(a) - priority(b);
+          });
+        };
+
+        let emailScanLinks = getEmailScanLinks();
+        while (emailScanLinks.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
+          const scanResults = await fetchSubpageBatch(emailScanLinks, 1800, 8);
+          if (scanResults.length === 0) break;
+          for (let i = 0; i < emailScanLinks.length; i++) {
+            const settled = scanResults[i];
+            if (settled && settled.status === "fulfilled" && settled.value && settled.value.ok && settled.value.html) {
+              recordSubpageContent(settled.value.url || emailScanLinks[i], settled.value.html, { includeAddresses: true, includeProfileText: false });
+            }
+          }
+          emailScanLinks = getEmailScanLinks();
+        }
+      }
+
       // PHASE 4: Fetch Linked PDF Documents (Company Profile, Catalog, Brochure, Contact PDFs)
       // Extracts corporate emails (primary and secondary) and contact phone numbers embedded in PDF text & streams
-      if (allDiscoveredEmails.size < 2 && discoveredDocumentUrls.size > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
+      if (rankEmails(Array.from(allDiscoveredEmails), finalUrl, emailSourceMap).length < 2 && discoveredDocumentUrls.size > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
         const docCandidates = Array.from(discoveredDocumentUrls).filter(u => !fetchedUrls.has(u)).slice(0, 2);
         for (const docUrl of docCandidates) {
           if (isCrawlTimeExceeded() || pagesFetchedCount >= MAX_CRAWL_PAGES) break;
@@ -1055,7 +1103,7 @@ async function crawlWebsite(targetUrl, options = {}) {
     // check company's official Facebook page sequentially with tight 1.5s timeout for primary or secondary email.
     // (LinkedIn blocks unauthenticated requests with authwalls/timeouts; excluded to prevent stalling crawl time budget)
     const socialCandidates = [companySocials.facebook].filter(Boolean);
-    if (allDiscoveredEmails.size === 0 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
+    if (rankEmails(Array.from(allDiscoveredEmails), finalUrl, emailSourceMap).length === 0 && socialCandidates.length > 0 && pagesFetchedCount < MAX_CRAWL_PAGES && !isCrawlTimeExceeded()) {
       for (const socialUrl of socialCandidates) {
         if (pagesFetchedCount >= MAX_CRAWL_PAGES) break;
         const normSocial = normalizeCrawlUrl(socialUrl);

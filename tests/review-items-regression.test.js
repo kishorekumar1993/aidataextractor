@@ -2597,6 +2597,7 @@ async function runAll() {
     const prompt = ctx.buildExtractionPrompt(mockCrawlData, true);
     assert.ok(prompt.includes('CAREERS & VACANCIES SUBPAGE CONTENT'), 'Prompt must include career/vacancies page content');
     assert.ok(prompt.includes('vacature@') || prompt.includes('vacancies@'), 'Prompt instructions must guide vacancy email extraction');
+    assert.ok(prompt.includes('ALL-PAGES EMAIL CHECK') && prompt.includes('Do not stop after identifying the primary email'), 'Prompt must require checking all crawled pages for a distinct secondary email');
 
     // 4. finalizeParsedAiResult: Accurately extracts distinct primary and departmental secondary emails
     const aiParsed = {
@@ -3534,6 +3535,58 @@ async function runAll() {
     assert.ok(
       finalQc.secondaryEmailId === 'export@industrialcorp.com' || finalQc.secondaryEmailId === 'service@industrialcorp.com',
       `Secondary email must be assigned from PDF discovered emails (got: ${finalQc.secondaryEmailId})`
+    );
+  });
+
+  await runAsyncTest('Email crawl continues through remaining internal pages for secondary contacts', async () => {
+    const pageLinks = Array.from({ length: 20 }, (_, i) => `<a href="/page-${i + 1}">Page ${i + 1}</a>`).join('');
+    const homepageHtml = `
+      <html>
+        <head><title>Example Manufacturing Ltd</title></head>
+        <body>
+          <h1>Example Manufacturing Ltd</h1>
+          <a href="mailto:info@acmemachinery.com">info@acmemachinery.com</a>
+          <a href="mailto:sales@acmemachinery.com">sales@acmemachinery.com</a>
+          <a href="/contact">Contact</a>
+          ${pageLinks}
+          <a href="tel:+1-214-555-0100">+1-214-555-0100</a>
+          <address>100 Factory Lane, Dallas, TX 75201</address>
+          <footer>Copyright Example Manufacturing Ltd</footer>
+        </body>
+      </html>
+    `;
+    const mockFetch = async (url) => {
+      const urlString = String(url);
+      const html = urlString.endsWith('/page-20')
+        ? '<html><body>Department contact: export@acmemachinery.com</body></html>'
+        : homepageHtml;
+      return {
+        ok: true,
+        status: 200,
+        url: urlString,
+        headers: { get: () => 'text/html; charset=utf-8' },
+        arrayBuffer: async () => Buffer.from(html, 'utf8')
+      };
+    };
+    const { ctx } = createTestContext(mockFetch);
+    const crawlResult = await ctx.crawlWebsite('https://acmemachinery.com', { maxCrawlTimeMs: 18000 });
+
+    assert.ok(crawlResult.crawledPages.some(page => page.url.endsWith('/page-20')), 'Email discovery must reach internal pages beyond the initial high-priority batch');
+    assert.ok(crawlResult.emails.includes('export@acmemachinery.com'), 'Email addresses from later internal pages must be included in crawl results');
+    const finalized = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Example Manufacturing Limited',
+      companyAddress: '100 Factory Lane, Dallas, Texas',
+      countryName: 'United States Of America',
+      emailId: 'info@acmemachinery.com',
+      secondaryEmailId: ''
+    }, crawlResult, {});
+    assert.ok(
+      finalized.secondaryEmailId &&
+      finalized.secondaryEmailId !== finalized.emailId &&
+      crawlResult.emails.includes(finalized.secondaryEmailId),
+      'A missing secondary email must be filled with a distinct address discovered anywhere on the site'
     );
   });
 
