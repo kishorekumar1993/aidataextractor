@@ -6,7 +6,7 @@ const RESTRICTED_PATTERNS = [
     label: "Adult & Porn"
   },
   {
-    pattern: /\b(?:firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*(?:shop|store|dealer|distributor|trader|sales|range|smith|smithing)|weapons?\s*(?:manufacturer|manufacturing|trading|trader|supply|supplier|export(?:er)?|repair|store|shop|dealer|distributor|sales|wholesaler)|ballistic\s*vests?|body\s*armor|body\s*armour|bulletproof\s*(?:vests?|armor|armour|plates?|helmets?|jackets?)|tactical\s*armaments|military\s*armor|knife\s*(?:shop|store|maker|manufacturer|blade|blades|dealer|distributor|crafting|sharpening|collectors?)|knives\s*(?:shop|store|dealer|distributor|manufacturer|sales|for\s*sale)|pocket\s*knives?|folding\s*knives?|hunting\s*knives?|tactical\s*knives?|combat\s*knives?|custom\s*knives?|survival\s*knives?|throwing\s*knives?|fixed\s*blade\s*knives?|handmade\s*knives?|switchblades?|bayonets?|machetes?|daggers?|swords?|bowie\s*knives?)\b/i,
+    pattern: /\b(?:products?\s*[:\-–]?\s*(?:precision\s+)?(?:knives?|blades?)|catalog(?:ue)?\s*[:\-–]?\s*(?:precision\s+)?(?:knives?|blades?)|firearms?|rifles?|handguns?|pistols?|shotguns?|assault\s*weapons?|ammunition|munitions?|gun\s*(?:shop|store|dealer|distributor|trader|sales|range|smith|smithing)|weapons?\s*(?:manufacturer|manufacturing|trading|trader|supply|supplier|export(?:er)?|repair|store|shop|dealer|distributor|sales|wholesaler)|ballistic\s*vests?|body\s*armor|body\s*armour|bulletproof\s*(?:vests?|armor|armour|plates?|helmets?|jackets?)|tactical\s*armaments|military\s*armor|knife\s*(?:shop|store|maker|manufacturer|blade|blades|dealer|distributor|crafting|sharpening|collectors?)|knives\s*(?:shop|store|dealer|distributor|manufacturer|sales|for\s*sale)|pocket\s*knives?|folding\s*knives?|hunting\s*knives?|tactical\s*knives?|combat\s*knives?|custom\s*knives?|survival\s*knives?|throwing\s*knives?|fixed\s*blade\s*knives?|handmade\s*knives?|switchblades?|bayonets?|machetes?|daggers?|swords?|bowie\s*knives?)\b/i,
     label: "Weapons, Armor & Knives"
   },
   {
@@ -22,7 +22,7 @@ const RESTRICTED_PATTERNS = [
     label: "Aerospace"
   },
   {
-    pattern: /\b(?:marine\s*industry|marine\s*operations?|marine\s*(?:transport(?:ation)?|shipping|logistics|freight|charter|vessel\s*operator|terminal|port\s*authority|salvage|dredging|aquaculture|fishery|fisheries|offshore\s*drilling|propulsion\s*systems)|maritime\s*(?:transport|logistics|shipping|security|charter|navigation)|naval\s*(?:fleet|operations|dockyard|base))\b/i,
+    pattern: /\b(?:marine\s*industry|marine\s*operations?|marine\s*(?:equipment|products?|navigation(?:\s*systems?)?|engineering|maintenance|transport(?:ation)?|shipping|logistics|freight|charter|vessel\s*operator|terminal|port\s*authority|salvage|dredging|aquaculture|fishery|fisheries|offshore\s*drilling|propulsion\s*systems)|maritime\s*(?:transport|logistics|shipping|security|charter|navigation)|naval\s*(?:fleet|operations|dockyard|base))\b/i,
     label: "Marine"
   },
   {
@@ -30,7 +30,7 @@ const RESTRICTED_PATTERNS = [
     label: "Ships & Boats"
   },
   {
-    pattern: /\b(?:chemical\s*(?:manufacturer|manufacturing|producer|production|supplier|supplies|distributor|distribution|trading|trader|wholesaler|export(?:er)?|dealer|sales|vendor|company|corporation|inc|ltd|works|plant|industry)|petrochemicals?\s*(?:refinery|manufacturer|plant|producer|supplier|distributor|trading|company)|solvents?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|industrial\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|specialty\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|bulk\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler|sales)|raw\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|fine\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|agrochemicals?\s*(?:manufacturer|producer|supplier|distributor)|pesticides?\s*(?:manufacturer|producer|supplier|distributor)|hazardous\s*chemicals?|toxic\s*chemicals?|chemical\s*synthesis)\b/i,
+    pattern: /\b(?:products?\s*[:\-–]?\s*(?:industrial\s+)?(?:chemicals?|petrochemicals?)|chemical\s*products?|petrochemical\s*products?|chemical\s*(?:manufacturer|manufacturing|producer|production|supplier|supplies|distributor|distribution|trading|trader|wholesaler|export(?:er)?|dealer|sales|vendor|company|corporation|inc|ltd|works|plant|industry)|petrochemicals?\s*(?:refinery|manufacturer|plant|producer|supplier|distributor|trading|company)|solvents?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|industrial\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|specialty\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|bulk\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler|sales)|raw\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|fine\s*chemicals?\s*(?:manufacturer|producer|supplier|distributor|trading|wholesaler)|agrochemicals?\s*(?:manufacturer|producer|supplier|distributor)|pesticides?\s*(?:manufacturer|producer|supplier|distributor)|hazardous\s*chemicals?|toxic\s*chemicals?|chemical\s*synthesis)\b/i,
     label: "Chemicals & Petrochemicals"
   },
   {
@@ -46,7 +46,7 @@ const RESTRICTED_PATTERNS = [
     label: "Food & Beverages"
   },
   {
-    pattern: /\b(?:pet\s*(?:shop|store|boutique|salon|supplies|accessories|food|care\s*services?|grooming|boarding|hotel|products\s*store)|puppy\s*(?:mill|breeder|breeding|for\s*sale)|dog\s*(?:breeder|breeding|kennel|grooming|for\s*sale)|cat\s*(?:breeder|breeding|cattery|for\s*sale)|puppies\s*for\s*sale|kittens\s*for\s*sale|animal\s*breeding|animal\s*shelter|animal\s*hospital|veterinary\s*(?:clinic|hospital|services?|care)|vet\s*clinic|veterinarian|livestock\s*(?:farming|producer|breeding|trade|market)|cattle\s*farming|poultry\s*farming|pig\s*farming|commercial\s*slaughterhouse)\b/i,
+    pattern: /\b(?:products?\s*[:\-–]?\s*(?:pets?\s*(?:and\s+animals?)?|animals?\s*(?:and\s+pets?)?)|pet\s*(?:shop|store|boutique|salon|supplies|accessories|food|care\s*services?|grooming|boarding|hotel|products\s*store)|puppy\s*(?:mill|breeder|breeding|for\s*sale)|dog\s*(?:breeder|breeding|kennel|grooming|for\s*sale)|cat\s*(?:breeder|breeding|cattery|for\s*sale)|puppies\s*for\s*sale|kittens\s*for\s*sale|animal\s*breeding|animal\s*shelter|animal\s*hospital|veterinary\s*(?:clinic|hospital|services?|care)|vet\s*clinic|veterinarian|livestock\s*(?:farming|producer|breeding|trade|market)|cattle\s*farming|poultry\s*farming|pig\s*farming|commercial\s*slaughterhouse)\b/i,
     label: "Animals & Pets"
   },
   {
@@ -78,7 +78,7 @@ const RESTRICTED_PATTERNS = [
     label: "Counterfeits & Prohibited Financial Services"
   },
   {
-    pattern: /\b(?:high\s*school|elementary\s*school|primary\s*school|secondary\s*school|middle\s*school|prep\s*school|preparatory\s*school|kindergarten|preschool|nursery\s*school|daycare\s*center|charter\s*school|public\s*school|private\s*school|boarding\s*school|grammar\s*school|international\s*school|montessori\s*school|k-12\s*school|school\s*district|community\s*college|junior\s*college|state\s*college|technical\s*college|polytechnic\s*college|sixth\s*form\s*college|degree\s*college|polytechnic(?:\s*institute|\s*university)|educational\s*institution|academic\s*institution|higher\s*education\s*institution|school\s*of\s+(?:medicine|law|business|engineering|arts|nursing|pharmacy|dentistry|education|management|science)|coaching\s*institute|tutoring\s*center|tuition\s*centre|driving\s*school|flight\s*school|language\s*school|culinary\s*school|art\s*school|music\s*school|ballet\s*school|dance\s*school|acting\s*school|(?:school|college|university|academy|vidyalaya|polytechnic)\b[\s\S]{0,80}?\b(?:admissions?\s*(?:open|process|criteria|requirements?|office|portal|for)|enrol(?:l)?ments?|academic\s*curriculum|tuition\s*fees?|academic\s*programs?|undergraduate\s*(?:admissions?|programs?|degrees?)|postgraduate\s*(?:admissions?|programs?|degrees?)|degree\s*programs?|degrees?\s*offered|campus\s*life|student\s*portal|student\s*login|courses?\s*offered))\b/i,
+    pattern: /\b(?:high\s*school|elementary\s*school|primary\s*school|secondary\s*school|middle\s*school|prep\s*school|preparatory\s*school|kindergarten|preschool|nursery\s*school|daycare\s*center|charter\s*school|public\s*school|private\s*school|boarding\s*school|grammar\s*school|international\s*school|montessori\s*school|k-12\s*school|school\s*district|community\s*college|junior\s*college|state\s*college|technical\s*college|polytechnic\s*college|sixth\s*form\s*college|degree\s*college|polytechnic(?:\s*institute|\s*university)|educational\s*institution|academic\s*institution|higher\s*education\s*institution|(?:university|college)\b[\s\S]{0,80}?\bhigher\s*education\b|school\s*of\s+(?:medicine|law|business|engineering|arts|nursing|pharmacy|dentistry|education|management|science)|coaching\s*institute|tutoring\s*center|tuition\s*centre|driving\s*school|flight\s*school|language\s*school|culinary\s*school|art\s*school|music\s*school|ballet\s*school|dance\s*school|acting\s*school|(?:school|college|university|academy|vidyalaya|polytechnic)\b[\s\S]{0,80}?\b(?:admissions?\s*(?:open|process|criteria|requirements?|office|portal|for)|enrol(?:l)?ments?|academic\s*curriculum|tuition\s*fees?|academic\s*programs?|undergraduate\s*(?:admissions?|programs?|degrees?)|postgraduate\s*(?:admissions?|programs?|degrees?)|degree\s*programs?|degrees?\s*offered|campus\s*life|student\s*portal|student\s*login|courses?\s*offered))\b/i,
     label: "School, College & Education"
   }
 ];
@@ -355,6 +355,10 @@ function sanitizeContextText(text) {
     .replace(/\b(?:worm\s*gears?|worm\s*drives?|worm\s*shafts?|worm\s*wheels?)\b/gi, " ")
     .replace(/\b(?:bull\s*gears?|bull\s*wheels?|cat\s*heads?|catheads?)\b/gi, " ")
     .replace(/\b(?:butterfly\s*valves?|spider\s*couplings?|spider\s*gears?|crow\s*bars?|crowbars?|alligator\s*shears?|alligator\s*clips?)\b/gi, " ");
+
+  // 17b. Pet-friendly policies and safety claims are not animal businesses
+  cleanText = cleanText
+    .replace(/\b(?:pet[-\s]+(?:friendly|safe)|pets?\s+(?:(?:are\s+)?(?:welcome|allowed|permitted)))\b/gi, " ");
 
   // 18. PET (Polyethylene Terephthalate) plastics, packaging, and medical PET scans false positives
   cleanText = cleanText
@@ -661,8 +665,8 @@ function safeExtractContextSnippet(text, keyword) {
 }
 
 function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
-  let imgAttributes = typeof extractImageAttributes === "function" ? extractImageAttributes(html) : "";
-  let combined = ((text || "") + " " + imgAttributes).trim();
+  const htmlText = html && typeof stripHtml === "function" ? stripHtml(html) : "";
+  let combined = ((text || "") + " " + htmlText).trim();
   if (!combined) {
     return {
       website_url: pageUrl || "",
@@ -707,9 +711,12 @@ function detectRestrictedKeywordsSingle(text, html = "", pageUrl = "") {
   let cleanText = sanitizeContextText(rawClean);
 
   // 1. STRICT OFFICIAL RESTRICTION POLICY:
-  // Reject if any restricted category word or phrase is found anywhere in the available content
+  // A broad category keyword is only a candidate; require matching business/product evidence.
   for (const item of STRICT_OFFICIAL_CATEGORIES) {
-    if (item.regex.test(cleanText)) {
+    const categoryEvidence = RESTRICTED_PATTERNS.find(pattern =>
+      pattern.label === item.category && (pattern.pattern || pattern).test(cleanText)
+    );
+    if (item.regex.test(cleanText) && categoryEvidence) {
       const m = cleanText.match(item.regex);
       let matchedKw = m ? m[0] : "";
       if (item.label === "Marine" && /^marine/i.test(matchedKw)) {
@@ -847,12 +854,15 @@ function detectRestrictedKeywords(text, html = "", crawledPages = []) {
     }
   }
 
-  // Fallback check on combined text and html
+  // Without page records, check only the supplied corpus. Combining already-scanned pages
+  // can join unrelated phrases and turn incidental keywords into a false restriction.
   const fallbackUrl = (crawledPages && crawledPages[0] && crawledPages[0].url) || "";
-  const combinedFallbackText = ((text || "") + " " + (html ? stripHtml(html) : "")).trim();
-  const fallback = detectRestrictedKeywordsSingle(combinedFallbackText, html, fallbackUrl);
-  if (fallback.isRestricted) {
-    return fallback;
+  if (!Array.isArray(crawledPages) || crawledPages.length === 0) {
+    const combinedFallbackText = ((text || "") + " " + (html ? stripHtml(html) : "")).trim();
+    const fallback = detectRestrictedKeywordsSingle(combinedFallbackText, html, fallbackUrl);
+    if (fallback.isRestricted) {
+      return fallback;
+    }
   }
 
   return {

@@ -2831,8 +2831,8 @@ function findExactEvidenceLink(html, keyword, regex, baseUrl) {
 }
 
 /**
- * Checks website text and images against prohibited categories per Note 2.
- * Rule: "Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals. Even if these images or words appear anywhere on the site, do not work on that site. make these rule strictly if any word appear make it notwroking"
+ * Finds supporting business-type evidence in crawled pages. Category keywords alone do not
+ * confirm a restricted business; the restricted-category detector checks for qualifying context.
  */
 
 function findBusinessTypeEvidence(businessType, crawledPages = [], fallbackText = "") {

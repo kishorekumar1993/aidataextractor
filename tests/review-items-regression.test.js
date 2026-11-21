@@ -318,6 +318,21 @@ async function runAll() {
     assert.strictEqual(check.isRestricted, false, 'Fencing enclosure safety mention is permitted');
   });
 
+  runTest('Item 72.6a: Shipping/category and pet-friendly mentions -> Permitted (Working)', () => {
+    const { ctx } = createTestContext();
+    const text = 'Our pet-friendly industrial enclosures ship worldwide. Pets are welcome at our showroom; browse product categories. Medical, Aerospace, Marine, and PET category labels are also shown in navigation.';
+    const check = ctx.detectRestrictedKeywords('Industrial Enclosures', '', [
+      { url: 'https://example.com', text }
+    ]);
+    assert.strictEqual(check.isRestricted, false, 'Ordinary shipping, category, and pet-accommodation mentions are permitted');
+
+    const splitContext = ctx.detectRestrictedKeywords('Medical Device Manufacturing', '', [
+      { url: 'https://example.com/', text: 'Medical' },
+      { url: 'https://example.com/about', text: 'Device Manufacturing' }
+    ]);
+    assert.strictEqual(splitContext.isRestricted, false, 'Unrelated words from separate pages must not combine into a restriction');
+  });
+
   runTest('Item 72.6b: Genuine live animal sales -> Reject (Category 10: Animals & Pets)', () => {
     const { ctx } = createTestContext();
     const check = ctx.detectRestrictedKeywords('Pet Kingdom', '', [
@@ -362,11 +377,18 @@ async function runAll() {
     assert.strictEqual(check.category, 'Food & Beverages');
   });
 
-  runTest('Item 72.9: Restricted word in image alt/title/src -> Reject (Category 4: Weapons/Knives & 2: Hospital)', () => {
+  runTest('Item 72.9: Image filenames and ALT text alone do not confirm a restricted business', () => {
     const { ctx } = createTestContext();
     const html = '<html><body><h1>Machining Capabilities</h1><img src="/images/medical-drill.jpg" alt="surgical knife" title="hospital equipment" /></body></html>';
     const check = ctx.detectRestrictedKeywordsSingle('Machining Capabilities', html, 'https://example.com/gallery');
-    assert.strictEqual(check.isRestricted, true);
+    assert.strictEqual(check.isRestricted, false);
+
+    const confirmed = ctx.detectRestrictedKeywordsSingle(
+      'We manufacture surgical instruments and medical equipment for hospitals.',
+      html,
+      'https://example.com/products'
+    );
+    assert.strictEqual(confirmed.isRestricted, true, 'Explicit restricted products in page text must still be detected');
   });
 
   runTest('Item 72.10: Contextual mention in crawled page (gantry for ship maintenance) -> Permitted (Working)', () => {
@@ -2431,10 +2453,10 @@ async function runAll() {
     const normHyphenSpace = ctx.sanitizeRule6CompanyAddress(addrHyphenSpace, '', 'Taiwan');
     assert.strictEqual(normHyphenSpace, '7 Floor-1, Number 27, Lane 61, Section 1, Guangfu Road, Sanchong District, New Taipei City');
 
-    // 4. Prohibited categories: All 15 official categories detected in words, menus, image attributes, backgrounds
+    // 4. Restricted categories require business/product evidence, not isolated navigation keywords.
     const prohibitedKeywords = [
-      { text: 'Industries: Aerospace', expectedCat: 'Aerospace' },
-      { text: 'Industries: Medical', expectedCat: 'Medicine, Medical & Hospital' },
+      { text: 'Aerospace manufacturer producing satellite components', expectedCat: 'Aerospace' },
+      { text: 'Medical device manufacturer and medical equipment supplier', expectedCat: 'Medicine, Medical & Hospital' },
       { text: 'Company Profile: ITAR Registration', expectedCat: 'Defence & Military' },
       { text: 'Catalog: Defence Equipment', expectedCat: 'Defence & Military' },
       { text: 'Products: Precision Knife and Blades', expectedCat: 'Weapons, Armor & Knives' },
@@ -2444,7 +2466,7 @@ async function runAll() {
       { text: 'Products: Craft Brewery and Alcohol', expectedCat: 'Alcohol & Breweries' },
       { text: 'Products: Pets and Animals', expectedCat: 'Animals & Pets' },
       { text: 'Menu: Restaurant and Food', expectedCat: 'Food & Beverages' },
-      { text: 'About: University and Higher Education', expectedCat: 'School, College & Education' }
+      { text: 'University offering higher education programs and degree courses', expectedCat: 'School, College & Education' }
     ];
 
     for (const item of prohibitedKeywords) {
@@ -2452,14 +2474,21 @@ async function runAll() {
       assert.strictEqual(check.isRestricted, true, `Should detect restricted category for "${item.text}"`);
     }
 
-    // 5. Image attribute detection: <source srcset="..."> and CSS background-image
+    // 5. Image paths are candidates only; they do not prove the image depicts a restricted product.
     const htmlWithPicture = '<html><body><picture><source srcset="/images/aerospace-wing.webp"><img src="/images/blank.png" alt="wing"></picture></body></html>';
     const checkPicture = ctx.detectRestrictedKeywords('Precision Engineering', htmlWithPicture, [{ url: 'https://example.com', html: htmlWithPicture, text: 'Precision Engineering' }]);
-    assert.strictEqual(checkPicture.isRestricted, true, 'Should detect restricted keyword in <source srcset>');
+    assert.strictEqual(checkPicture.isRestricted, false, 'A restricted keyword in <source srcset> alone must not reject');
 
     const htmlWithBg = '<html><body><div style="background-image: url(\'/products/medical-device.jpg\')">Precision Parts</div></body></html>';
     const checkBg = ctx.detectRestrictedKeywords('Precision Parts', htmlWithBg, [{ url: 'https://example.com', html: htmlWithBg, text: 'Precision Parts' }]);
-    assert.strictEqual(checkBg.isRestricted, true, 'Should detect restricted keyword in inline style background-image URL');
+    assert.strictEqual(checkBg.isRestricted, false, 'A restricted keyword in a background-image filename alone must not reject');
+
+    const confirmedImagePage = ctx.detectRestrictedKeywords(
+      'Aerospace manufacturer producing satellite components.',
+      htmlWithPicture,
+      [{ url: 'https://example.com/products', html: htmlWithPicture, text: 'Aerospace manufacturer producing satellite components.' }]
+    );
+    assert.strictEqual(confirmedImagePage.isRestricted, true, 'Explicit restricted business text remains sufficient');
 
     // 6. Business Type "Other" must strictly set websiteStatus to "Not Working" and clear other 12 fields
     const dataWithOther = {

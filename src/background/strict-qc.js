@@ -345,10 +345,8 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "", optio
   const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + stripHtml(crawlResult.contactHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
   const restrictedCheck = detectRestrictedKeywords(siteContent, (crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.crawledPages || []);
 
-  // PRE-AI CHECK 1: If Prohibited Category Detected:
-  // Rule Note 2 & Official Strict Restriction Policy:
-  // A website must be rejected if any restricted category word, meaningful phrase, or relevant image is found anywhere.
-  // Incidental mentions and low-priority pages are NOT exempt.
+  // PRE-AI CHECK 1: Reject only when a restricted business/product pattern is confirmed.
+  // Isolated words and image filenames/ALT text are not sufficient evidence.
   if (restrictedCheck.isRestricted) {
     const errorUrl = restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl;
     return finishAndRecord({
