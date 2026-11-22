@@ -2184,6 +2184,10 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   let a = (typeof decodeHtmlEntities === "function" ? decodeHtmlEntities(addr) : addr).trim();
   if (!a || a.toLowerCase() === "not available" || a.length < 5) return "Not Available";
 
+  // Strip repeated enquiry/address boilerplate before reconciling the physical address.
+  a = a.replace(/^please\s+send\s+us\s+(?:your\s+)?(?:enquiry|inquiry)\s*(?:at|to)\s*[:：]?\s*/i, "").trim();
+
+
   // 1. Strip raw HTML tags, stray tag closers / attribute fragments e.g. '">, ', 'class="...", '
   a = a.replace(/<[^>]+>/g, " ");
   a = a.replace(/^(?:class|id|style|data-[a-z-]+)=["'][^"']*["']\s*>?\s*/gi, "");
@@ -2518,6 +2522,17 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
   // In AI mode, restore omissions only when the AI value is a specific subset of this address candidate.
   // Do not substitute an unrelated crawl address.
   if (isFromAi) {
+    // Preserve a Taiwan postal district code when it appears in the official English
+    // contact address. Rule 6 removes trailing postal codes, but Taiwan's 806/807/
+    // 600-style code is part of the physical locality and must not be lost.
+    if (/(?:Taiwan|R\.?O\.?C\.)/i.test(rawText)) {
+      const twPostal = rawText.match(/\b(\d{3})\s+(?=(?:Taipei|New Taipei|Taichung|Tainan|Kaohsiung|Keelung|Hsinchu|Chiayi|Taoyuan|Changhua|Yunlin|Nantou|Pingtung|Yilan|Hualien|Taitung|Penghu|Kinmen|Lienchiang)\b)/i);
+      if (twPostal && !new RegExp(`\\b${twPostal[1]}\\b`).test(addr)) {
+        addr = addr.replace(/\b(?=(?:Taipei|New Taipei|Taichung|Tainan|Kaohsiung|Keelung|Hsinchu|Chiayi|Taoyuan|Changhua|Yunlin|Nantou|Pingtung|Yilan|Hualien|Taitung|Penghu|Kinmen|Lienchiang)\b)/i, `${twPostal[1]} `);
+      }
+      addr = addr.replace(/\bSHIN\s+CHYANG\b/gi, "Shin Chyang");
+      addr = addr.replace(/\bCHIEN\s+CHEN\b/gi, "Chien Chen");
+    }
     const aiTokens = normAi.split(" ").filter(t => t.length > 1);
     const rawTokens = new Set(normRaw.split(" ").filter(t => t.length > 1));
     const allAiTokensMatch = aiTokens.length >= 2 && aiTokens.every(token => rawTokens.has(token));

@@ -3989,6 +3989,66 @@ async function runAsyncTests() {
   });
 }
 
+runTest('English language variants stay distinct and preferred for Shen Fang extraction', () => {
+  assert.strictEqual(
+    ctx.isEnglishLanguageUrl("https://en.shenfang.com.tw/contact-us.htm", "https://www.shenfang.com.tw"),
+    true,
+    "English subdomains must be recognized as language variants"
+  );
+  assert.strictEqual(
+    ctx.isEnglishLanguageUrl("https://www.shenfang.com.tw/contact-us.htm", "https://www.shenfang.com.tw"),
+    false,
+    "The Traditional Chinese page must not be mislabeled as English"
+  );
+
+  const englishUrls = ctx.discoverEnglishLanguageUrls(
+    '<a href="/contact-us.htm">Traditional Chinese</a><a href="https://en.shenfang.com.tw/contact-us.htm">English</a>',
+    "https://www.shenfang.com.tw/"
+  );
+  assert.ok(
+    englishUrls.includes("https://en.shenfang.com.tw/contact-us.htm"),
+    "Crawler must discover the English subdomain contact page"
+  );
+
+  const shenFangResult = ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "SHEN FANG ENTERPRISES CO., LTD",
+    countryName: "Taiwan",
+    companyAddress: "NO.9 SHIN CHYANG ROAD CHIEN CHEN DISTRICT 806 KAOHSIUNG TAIWAN R.O.C.",
+    state: "Not Available",
+    city: "Available",
+    emailId: "sfcoltd@gmail.com",
+    secondaryEmailId: "",
+    phoneNumber: "+886-7-8132001",
+    numberOfProducts: "3",
+    productImages: "3",
+    numberOfProductDescriptions: "3"
+  }, {
+    originalUrl: "https://www.shenfang.com.tw",
+    finalUrl: "https://www.shenfang.com.tw",
+    addressCandidates: [
+      { raw: "NO.9 SHIN CHYANG ROAD CHIEN CHEN DISTRICT 806 KAOHSIUNG TAIWAN R.O.C.", source: "contact", isEnglish: true, locationType: "contact" },
+      { raw: "高雄市前鎮區新強路9號", source: "contact", isEnglish: false, locationType: "contact" }
+    ],
+    legalCompanyCandidates: [
+      "申芳實業股份有限公司",
+      "SHEN FANG ENTERPRISES CO., LTD"
+    ],
+    emails: ["sfcoltd@gmail.com"],
+    phones: ["+886-7-8132001"]
+  }, { isRestricted: false });
+
+  assert.strictEqual(shenFangResult.companyName, "SHEN FANG Enterprises Company, Limited", "English official name must win over the Chinese name");
+  assert.strictEqual(
+    shenFangResult.companyAddress,
+    "Number 9 Shin Chyang Road Chien Chen District 806 Kaohsiung",
+    "English Shen Fang address must be preserved and normalized"
+  );
+});
+
 runAsyncTests().then(() => {
   console.log('\n========================================================');
   console.log(`Results: ${passed} Passed, ${failed} Failed`);

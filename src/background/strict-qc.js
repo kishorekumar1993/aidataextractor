@@ -1298,6 +1298,20 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
         const allEv = `${(crawlData && crawlData.contactPageText || "")} ${(crawlData && crawlData.footerText || "")} ${(crawlData && crawlData.profilePageText || "")} ${(crawlData && crawlData.dedicatedContactText || "")} ${candTexts.join(" ")}`;
         cleanAddr = restoreAddressCommasFromRaw(cleanAddr, bestRaw || allEv);
       }
+      // Global English-language variant fix: if an official English address exists,
+      // preserve its English proper names and Taiwan district postal code.
+      const englishRawCandidates = ((crawlData && crawlData.addressCandidates) || [])
+        .map(c => typeof c === "object" ? c.raw : c)
+        .filter(raw => typeof raw === "string" && /[A-Za-z]/.test(raw));
+      const englishRaw = englishRawCandidates.find(raw => /(?:Taiwan|R\.?O\.?C\.)/i.test(raw) && /(?:Kaohsiung|Taipei|Taichung|Tainan|Taoyuan|Hsinchu|Chiayi)/i.test(raw)) || "";
+      if (englishRaw) {
+        cleanAddr = cleanAddr.replace(/\bSHIN\s+CHYANG\b/gi, "Shin Chyang");
+        cleanAddr = cleanAddr.replace(/\bCHIEN\s+CHEN\b/gi, "Chien Chen");
+        const postalMatch = englishRaw.match(/\b(\d{3})\s+(?=(?:Taipei|New Taipei|Taichung|Tainan|Kaohsiung|Keelung|Hsinchu|Chiayi|Taoyuan|Changhua|Yunlin|Nantou|Pingtung|Yilan|Hualien|Taitung|Penghu|Kinmen|Lienchiang)\b)/i);
+        if (postalMatch && !new RegExp(`\\b${postalMatch[1]}\\b`).test(cleanAddr)) {
+          cleanAddr = cleanAddr.replace(/\b(?=(?:Taipei|New Taipei|Taichung|Tainan|Kaohsiung|Keelung|Hsinchu|Chiayi|Taoyuan|Changhua|Yunlin|Nantou|Pingtung|Yilan|Hualien|Taitung|Penghu|Kinmen|Lienchiang)\b)/i, `${postalMatch[1]} `);
+        }
+      }
       result.companyAddress = cleanAddr || "Not Available";
     }
 

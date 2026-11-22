@@ -99,6 +99,54 @@ function normalizeCrawlUrl(rawUrl, baseUrl = "") {
 }
 
 /**
+ * Identifies URLs that point to an English-language variant of the same company.
+ * This covers both /en-style paths and separate hosts such as en.example.com.
+ */
+function isEnglishLanguageUrl(rawUrl, baseUrl = "") {
+  if (!rawUrl || typeof rawUrl !== "string") return false;
+  try {
+    const u = new URL(rawUrl, baseUrl || undefined);
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname.toLowerCase();
+    const search = u.search.toLowerCase();
+    return /(^|\.)en(?:glish)?\./.test(host) ||
+      /(^|\.)eng(?:lish)?\./.test(host) ||
+      /(?:^|[/_-])(en|eng|english)(?:[/_.?-]|$)/.test(path) ||
+      /(?:[?&]lang|[?&]locale)=(?:en|en[-_]?[a-z]{2})\b/i.test(search);
+  } catch (e) {
+    return /(?:^|[/_-])(?:en|eng|english)(?:[/_.?-]|$)/i.test(String(rawUrl));
+  }
+}
+
+/**
+ * Discovers English-language variant links with a same-company host check.
+ * Used as a fallback when a language switcher is not fully crawled.
+ */
+function discoverEnglishLanguageUrls(html, baseUrl) {
+  if (!html || typeof html !== "string" || !baseUrl) return [];
+  const found = [];
+  const seen = new Set();
+  const baseHost = new URL(baseUrl).hostname.replace(/^www\./i, "").toLowerCase();
+  const linkRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = linkRegex.exec(html)) !== null) {
+    try {
+      const u = new URL(match[1].trim(), baseUrl);
+      const host = u.hostname.replace(/^www\./i, "").toLowerCase();
+      if (host !== baseHost && !host.endsWith("." + baseHost) && baseHost !== host && !baseHost.endsWith("." + host)) continue;
+      const label = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (!isEnglishLanguageUrl(u.href, baseUrl) && !/^english$/i.test(label) && !/^en(?:glish)?$/i.test(label) && !/\bhreflang=["']en\b/i.test(match[0])) continue;
+      u.hash = "";
+      if (!seen.has(u.href)) {
+        seen.add(u.href);
+        found.push(u.href);
+      }
+    } catch (e) { }
+  }
+  return found;
+}
+
+/**
  * Identifies irrelevant URLs that waste crawl quota (Item 12).
  */
 function isIrrelevantUrl(urlStr) {
@@ -671,6 +719,9 @@ async function crawlWebsite(targetUrl, options = {}) {
 
     // Discover Contact, About, Terms & Legal Pages
     contactLinks = discoverContactLinks(mainHtml, finalUrl);
+    for (const englishUrl of discoverEnglishLanguageUrls(mainHtml, finalUrl)) {
+      if (!contactLinks.includes(englishUrl)) contactLinks.push(englishUrl);
+    }
     // Discover Product, Catalog, Category, Services & Prohibited Category Candidate Pages
     const productCandidates = discoverProductAndCatalogLinks(mainHtml, finalUrl);
     // Discover Linked PDF Documents (Company Profile, Catalog, Brochure, Contact Sheets, Datasheets)
@@ -697,10 +748,16 @@ async function crawlWebsite(targetUrl, options = {}) {
       const seenPaths = new Set();
 
       // (1) Dedicated Contact Us URLs first (All discovered, no artificial limit)
-      for (const link of contactLinks) {
+      const prioritizedContactLinks = [...contactLinks].sort((a, b) => {
+        const ea = isEnglishLanguageUrl(a, finalUrl);
+        const eb = isEnglishLanguageUrl(b, finalUrl);
+        return (eb ? 1 : 0) - (ea ? 1 : 0);
+      });
+      for (const link of prioritizedContactLinks) {
         if (fetchedUrls.has(link) || !isDedicatedContactUrl(link)) continue;
         try {
-          const uPath = new URL(link).pathname.toLowerCase().replace(/\/$/, "");
+          const u = new URL(link);
+          const uPath = `${u.hostname.toLowerCase()}${u.pathname.toLowerCase().replace(/\/$/, "")}`;
           if (seenPaths.has(uPath)) continue;
           seenPaths.add(uPath);
           contactPriorityLinks.push(link);
@@ -711,7 +768,8 @@ async function crawlWebsite(targetUrl, options = {}) {
       // (2) Restricted Category Hint URLs (Prioritized in Phase 1 to verify prohibited status immediately)
       for (const item of productCandidates.filter(c => c.isRestrictedHint)) {
         try {
-          const uPath = new URL(item.url).pathname.toLowerCase().replace(/\/$/, "");
+          const u = new URL(item.url);
+          const uPath = `${u.hostname.toLowerCase()}${u.pathname.toLowerCase().replace(/\/$/, "")}`;
           if (!seenPaths.has(uPath) && !fetchedUrls.has(item.url)) {
             seenPaths.add(uPath);
             contactPriorityLinks.push(item.url);
@@ -725,7 +783,8 @@ async function crawlWebsite(targetUrl, options = {}) {
         if (fetchedUrls.has(link)) continue;
         if (/(?:industr|market|application|sector)/i.test(link)) {
           try {
-            const uPath = new URL(link).pathname.toLowerCase().replace(/\/$/, "");
+            const u = new URL(link);
+            const uPath = `${u.hostname.toLowerCase()}${u.pathname.toLowerCase().replace(/\/$/, "")}`;
             if (!seenPaths.has(uPath)) {
               seenPaths.add(uPath);
               otherTopLinks.push(link);
@@ -739,7 +798,8 @@ async function crawlWebsite(targetUrl, options = {}) {
       for (const link of contactLinks) {
         if (fetchedUrls.has(link)) continue;
         try {
-          const uPath = new URL(link).pathname.toLowerCase().replace(/\/$/, "");
+          const u = new URL(link);
+          const uPath = `${u.hostname.toLowerCase()}${u.pathname.toLowerCase().replace(/\/$/, "")}`;
           if (seenPaths.has(uPath)) continue;
           seenPaths.add(uPath);
           otherTopLinks.push(link);
@@ -751,7 +811,8 @@ async function crawlWebsite(targetUrl, options = {}) {
       for (const item of productCandidates.filter(c => !c.isRestrictedHint)) {
         if (fetchedUrls.has(item.url)) continue;
         try {
-          const uPath = new URL(item.url).pathname.toLowerCase().replace(/\/$/, "");
+          const u = new URL(item.url);
+          const uPath = `${u.hostname.toLowerCase()}${u.pathname.toLowerCase().replace(/\/$/, "")}`;
           if (seenPaths.has(uPath)) continue;
           seenPaths.add(uPath);
           otherTopLinks.push(item.url);
@@ -764,7 +825,8 @@ async function crawlWebsite(targetUrl, options = {}) {
         for (const link of discoverAllInternalLinks(mainHtml, finalUrl)) {
           if (fetchedUrls.has(link)) continue;
           try {
-            const uPath = new URL(link).pathname.toLowerCase().replace(/\/$/, "");
+            const u = new URL(link);
+            const uPath = `${u.hostname.toLowerCase()}${u.pathname.toLowerCase().replace(/\/$/, "")}`;
             if (seenPaths.has(uPath)) continue;
             seenPaths.add(uPath);
             otherTopLinks.push(link);
@@ -969,7 +1031,8 @@ async function crawlWebsite(targetUrl, options = {}) {
           for (const sUrl of subLinks) {
             if (fetchedUrls.has(sUrl)) continue;
             try {
-              const uPath = new URL(sUrl).pathname.toLowerCase().replace(/\/$/, "");
+              const u = new URL(sUrl);
+              const uPath = `${u.hostname.toLowerCase()}${u.pathname.toLowerCase().replace(/\/$/, "")}`;
               if (seenPaths.has(uPath)) continue;
               seenPaths.add(uPath);
               fetchedUrls.add(sUrl);
