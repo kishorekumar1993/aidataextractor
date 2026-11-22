@@ -2236,6 +2236,27 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     const compRegex = new RegExp(`^${compWords.map(w => w.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\.?').join('\\s+')}\\s*[,\\-–]?\\s*`, "i");
     a = a.replace(compRegex, "").trim();
 
+    // Strip the company name even when the address uses a native suffix abbreviation
+    // that differs from the normalized/extracted company-name suffix.
+    // e.g. "Sunrise Doors International Private Limited, 10 Anson Road" and
+    // "Sunrise Doors International Pte Ltd 10 Anson Road".
+    const companyCore = compClean
+      .replace(/\s+(?:(?:pte|pvt|pty)\.?[\s,]*ltd\.?|ltd\.?|limited|private[\s,]+limited|proprietary[\s,]+limited|inc(?:orporated)?\.?|llc|llp|pllc|corp(?:oration)?\.?|co(?:mpany)?\.?|gmbh|plc|sdn[\s,]*bhd\.?|sendirian[\s,]+berhad|sa|bv|nv|srl|sl|sp[\s,]*z[\s,]*o[\s,]*o\.?|se)\s*$/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (companyCore && companyCore.length >= 4) {
+      const coreWords = companyCore.split(/\s+/).filter(Boolean);
+      const coreRegex = new RegExp(
+        `^${coreWords.map(w => w.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\.?').join('\\s+')}\\s*(?:(?:pte|pvt|pty|sdn|bhd|sendirian|berhad|private|proprietary|limited|ltd|inc(?:orporated)?|llc|llp|pllc|corp(?:oration)?|co(?:mpany)?|gmbh|plc|sa|bv|nv|srl|sl|se)\\.?\\s*){0,4}[,\\-–]?\\s*`,
+        "i"
+      );
+      a = a.replace(coreRegex, "").trim();
+    }
+
+    // If the address has no separator between an abbreviated suffix and the street
+    // number, remove the missing separator only after the company prefix is gone.
+    a = a.replace(/^(\d+)\s+([A-Z])/g, "$1 $2").trim();
+
     // Strip brand stem without legal suffixes (e.g. "Teflex Plastics Pty Ltd" -> stem "Teflex Plastics")
     const brandStem = compClean.replace(/\b(?:pty|ltd|limited|inc|incorporated|llc|corp|corporation|co|company|proprietary|plc|gmbh|sdn|bhd|sa|bv|nv|srl|sl|sp\s*z\s*o\.?o\.?|se)\b/gi, "").trim();
     if (brandStem && brandStem.length >= 4) {

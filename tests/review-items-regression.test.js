@@ -1008,14 +1008,24 @@ async function runAll() {
     const sgAddr = ctx.sanitizeRule6CompanyAddress("10 Anson Road #08-01 International Plaza, Singapore 079903", "Pacific", "Singapore");
     assert.strictEqual(sgAddr, "10 Anson Road #08-01 International Plaza", "Singapore 6-digit postal code & country stripped, # preserved");
     const sgUnitAddr = ctx.sanitizeRule6CompanyAddress(
-      "Please Send Us Your Enquiry At: Sunrise Doors International Pte Ltd, 10 Anson Road, #22-09, International Plaza, Singapore 079903",
-      "Sunrise Doors International Pte Ltd",
+      "Please Send Us Your Enquiry At: Example Industrial Pte Ltd, 10 Anson Road, #22-09, International Plaza, Singapore 079903",
+      "Example Industrial Pte Ltd",
       "Singapore"
     );
     assert.strictEqual(
       sgUnitAddr,
       "10 Anson Road, #22-09, International Plaza",
       "Singapore enquiry boilerplate and company prefix must be stripped while # unit and building name remain"
+    );
+    const sgPrivateLimitedAddr = ctx.sanitizeRule6CompanyAddress(
+      "Sunrise Doors International Pte Ltd10 Anson Road, #22-09, International Plaza, Singapore 079903",
+      "Sunrise Doors International Private Limited",
+      "Singapore"
+    );
+    assert.strictEqual(
+      sgPrivateLimitedAddr,
+      "10 Anson Road, #22-09, International Plaza",
+      "Company name prefix must be removed across Pte Ltd/Private Limited suffix variants"
     );
     assert.strictEqual(ctx.evaluateCityQC(sgAddr, "Singapore"), "Available", "Singapore City-State evaluates as City Available");
     assert.strictEqual(ctx.hasStateInAddress(sgAddr, "Singapore"), true, "Singapore City-State evaluates as State Available");
