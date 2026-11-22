@@ -830,9 +830,11 @@
         state.autoSubmitNotWorkingEnabled = false;
         const toggleEl = document.getElementById("ai-auto-submit-notworking-toggle");
         if (toggleEl) toggleEl.checked = false;
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-          chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: false });
-        }
+        try {
+          if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id && chrome.storage && chrome.storage.sync) {
+            chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: false });
+          }
+        } catch (e) {}
         AIExt.stopAutoQueuePipeline("User stopped auto-submit for study");
         AIExt.stopBatchNotWorking("User stopped auto-submit for study");
         updateStatus("🛑 Auto-Submit STOPPED! You can now review and study the Not Working site.", "warning");
@@ -844,9 +846,11 @@
       autoSubmitNotWorkingToggle.checked = state.autoSubmitNotWorkingEnabled;
       autoSubmitNotWorkingToggle.addEventListener("change", () => {
         state.autoSubmitNotWorkingEnabled = autoSubmitNotWorkingToggle.checked;
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-          chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: autoSubmitNotWorkingToggle.checked });
-        }
+        try {
+          if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id && chrome.storage && chrome.storage.sync) {
+            chrome.storage.sync.set({ autoSubmitNotWorkingEnabled: autoSubmitNotWorkingToggle.checked });
+          }
+        } catch (e) {}
         if (!state.autoSubmitNotWorkingEnabled) {
           if (state.pendingAutoSubmitTimer) {
             clearTimeout(state.pendingAutoSubmitTimer);
@@ -918,9 +922,11 @@
       widgetModeSelect.addEventListener("change", (e) => {
         const newMode = e.target.value;
         state.extractionMode = newMode;
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-          chrome.storage.sync.set({ extractionMode: newMode });
-        }
+        try {
+          if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id && chrome.storage && chrome.storage.sync) {
+            chrome.storage.sync.set({ extractionMode: newMode });
+          }
+        } catch (e) {}
         const modeLabels = {
           ai_first: "AI First (Fallback to Own Crawl on AI failure)",
           ai_only: "AI Only (Strict - No Own Crawl)",
@@ -935,9 +941,11 @@
       widgetAutoToggle.checked = state.autoQueueEnabled;
       widgetAutoToggle.addEventListener("change", () => {
         state.autoQueueEnabled = widgetAutoToggle.checked;
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-          chrome.storage.sync.set({ autoQueueEnabled: widgetAutoToggle.checked });
-        }
+        try {
+          if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id && chrome.storage && chrome.storage.sync) {
+            chrome.storage.sync.set({ autoQueueEnabled: widgetAutoToggle.checked });
+          }
+        } catch (e) {}
         if (!state.autoQueueEnabled) {
           if (state.pendingAutoSubmitTimer) {
             clearTimeout(state.pendingAutoSubmitTimer);

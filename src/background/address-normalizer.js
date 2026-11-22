@@ -298,7 +298,12 @@ function stripExtraWordsFromAddress(addr, rawSource = "") {
 
   // 1. "Number": If addr has "Number <digits>" but rawSource does NOT have "no", "number", "#", "號"
   a = a.replace(/\bNumber\s+(\d+(?:[-/]\d+)?)\b/gi, (match, digits) => {
-    const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|n|nu|nr|nº|n°|numero|num|number|lot\\s*no|plot\\s*no)[.:]?|#)\\s*' + digits.replace('-', '[-/]') + '(?:\\b|(?=[A-Za-z]))|' + digits.replace('-', '[-/]') + '\\s*[号號])', 'i');
+    const digitsPat = digits.replace('-', '[-/]');
+    const rawHasDigits = new RegExp('\\b' + digitsPat + '\\b|[号號]', 'i');
+    if (!rawHasDigits.test(rawSource)) {
+      return match;
+    }
+    const rawHasNo = new RegExp('(?:(?:\\b(?:no|nos|n|nu|nr|nº|n°|numero|num|number|lot\\s*no|plot\\s*no)[.:]?|#)\\s*' + digitsPat + '(?:\\b|(?=[A-Za-z]))|' + digitsPat + '\\s*[号號])', 'i');
     if (rawHasNo.test(rawSource)) {
       return match;
     }
@@ -2479,7 +2484,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   }
 
   // Ensure hallucinated extra division words (Village, Province, District, Township, Municipality) not in source are stripped
-  if (crawlData && typeof stripExtraWordsFromAddress === "function") {
+  if (!preserveAiAddress && crawlData && typeof stripExtraWordsFromAddress === "function") {
     const candTexts = (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).filter(Boolean);
     const allEv = `${(crawlData.contactPageText || "")} ${(crawlData.footerText || "")} ${(crawlData.profilePageText || "")} ${(crawlData.dedicatedContactText || "")} ${candTexts.join(" ")}`;
     if (allEv.trim()) {
@@ -2510,7 +2515,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
 
   // Use the closest website address as punctuation evidence; broad page text can contain
   // unrelated commas and must not control address formatting.
-  if (!preserveAiAddress && typeof restoreAddressCommasFromRaw === "function") {
+  if (typeof restoreAddressCommasFromRaw === "function") {
     let punctuationSource = rawInput;
     const candidates = (crawlData && Array.isArray(crawlData.addressCandidates) ? crawlData.addressCandidates : [])
       .map(c => typeof c === "object" ? c.raw : c)

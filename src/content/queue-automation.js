@@ -3,6 +3,14 @@
 (function (AIExt) {
   const state = (AIExt.state = AIExt.state || {});
 
+  function isExtensionContextValid() {
+    try {
+      return Boolean(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      return false;
+    }
+  }
+
   // =========================================================================
   // SUBMIT & CONFIRMATION HELPERS
   // =========================================================================
@@ -204,16 +212,18 @@
       state.pendingAutoSubmitTimer = null;
     }
 
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({
-        batchNotWorking: {
-          active: true,
-          remaining: count,
-          total: count,
-          lastSubmittedUrl: "",
-          updatedAt: Date.now()
-        }
-      });
+    if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+      try {
+        chrome.storage.local.set({
+          batchNotWorking: {
+            active: true,
+            remaining: count,
+            total: count,
+            lastSubmittedUrl: "",
+            updatedAt: Date.now()
+          }
+        });
+      } catch (e) {}
     }
 
     const label = count === -1 ? "ALL" : count;
@@ -228,8 +238,10 @@
     state.isBatchNotWorkingActive = false;
     state.batchNotWorkingRemaining = 0;
     state.lastSubmittedUrl = "";
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.remove(["batchNotWorking"]);
+    if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+      try {
+        chrome.storage.local.remove(["batchNotWorking"]);
+      } catch (e) {}
     }
     updateBatchButtonsState();
     AIExt.updateStatus(msg || "Batch Not Working stopped.", "idle");
@@ -385,20 +397,24 @@
     updateBatchButtonsState();
 
     if (nextRemaining === 0) {
-      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.remove(["batchNotWorking"]);
+      if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+        try {
+          chrome.storage.local.remove(["batchNotWorking"]);
+        } catch (e) {}
       }
     } else {
-      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({
-          batchNotWorking: {
-            active: true,
-            remaining: nextRemaining,
-            total: state.batchNotWorkingTotal || 10,
-            lastSubmittedUrl: currentUrl,
-            updatedAt: Date.now()
-          }
-        });
+      if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+        try {
+          chrome.storage.local.set({
+            batchNotWorking: {
+              active: true,
+              remaining: nextRemaining,
+              total: state.batchNotWorkingTotal || 10,
+              lastSubmittedUrl: currentUrl,
+              updatedAt: Date.now()
+            }
+          });
+        } catch (e) {}
       }
     }
 
@@ -511,8 +527,10 @@
       clearInterval(state.autoQueuePollTimer);
       state.autoQueuePollTimer = null;
     }
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.remove(["autoQueuePipeline"]);
+    if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+      try {
+        chrome.storage.local.remove(["autoQueuePipeline"]).catch(() => {});
+      } catch (e) {}
     }
     const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
     if (pauseBtn) pauseBtn.style.display = "none";
@@ -539,13 +557,15 @@
       state.pendingAutoSubmitTimer = null;
     }
 
-    if (typeof chrome !== "undefined" && chrome.storage) {
-      if (chrome.storage.local) {
-        chrome.storage.local.remove(["autoQueuePipeline", "batchNotWorking"]).catch(() => {});
-      }
-      if (chrome.storage.sync) {
-        chrome.storage.sync.set({ autoQueueEnabled: false }).catch(() => {});
-      }
+    if (isExtensionContextValid() && chrome.storage) {
+      try {
+        if (chrome.storage.local) {
+          chrome.storage.local.remove(["autoQueuePipeline", "batchNotWorking"]).catch(() => {});
+        }
+        if (chrome.storage.sync) {
+          chrome.storage.sync.set({ autoQueueEnabled: false }).catch(() => {});
+        }
+      } catch (e) {}
     }
 
     const widgetToggle = document.getElementById("ai-widget-auto-queue-toggle");
@@ -631,14 +651,16 @@
       state.lastProcessedUrl = submittedUrl;
     }
 
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({
-        autoQueuePipeline: {
-          active: true,
-          lastSubmittedUrl: submittedUrl || "",
-          updatedAt: Date.now()
-        }
-      });
+    if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+      try {
+        chrome.storage.local.set({
+          autoQueuePipeline: {
+            active: true,
+            lastSubmittedUrl: submittedUrl || "",
+            updatedAt: Date.now()
+          }
+        });
+      } catch (e) {}
     }
     const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
     if (pauseBtn) pauseBtn.style.display = "inline-flex";
@@ -780,14 +802,16 @@
     // Ensure pipeline state is preserved across form submission reload!
     if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
       state.isAutoQueuePipelineActive = true;
-      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({
-          autoQueuePipeline: {
-            active: true,
-            lastSubmittedUrl: submittedUrl || "",
-            updatedAt: Date.now()
-          }
-        });
+      if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+        try {
+          chrome.storage.local.set({
+            autoQueuePipeline: {
+              active: true,
+              lastSubmittedUrl: submittedUrl || "",
+              updatedAt: Date.now()
+            }
+          });
+        } catch (e) {}
       }
     }
 
@@ -925,14 +949,16 @@
       if (curUrl) state.lastProcessedUrl = curUrl;
       if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
         state.isAutoQueuePipelineActive = true;
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-          chrome.storage.local.set({
-            autoQueuePipeline: {
-              active: true,
-              lastSubmittedUrl: curUrl || "",
-              updatedAt: Date.now()
-            }
-          });
+        if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+          try {
+            chrome.storage.local.set({
+              autoQueuePipeline: {
+                active: true,
+                lastSubmittedUrl: curUrl || "",
+                updatedAt: Date.now()
+              }
+            });
+          } catch (e) {}
         }
         setTimeout(() => {
           if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
@@ -961,7 +987,7 @@
 
   // Item 50: Validate persisted state before resuming
   function initPersistedBatchState() {
-    if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return;
+    if (!isExtensionContextValid() || !chrome.storage || !chrome.storage.local) return;
     try {
       if (typeof chrome.storage.local.remove === "function") {
         chrome.storage.local.remove(["submissionLedger"], () => {});
@@ -969,7 +995,8 @@
     } catch (e) {}
     state.submissionLedger = state.submissionLedger || new Set();
 
-    chrome.storage.local.get(["batchNotWorking"], (res) => {
+    try {
+      chrome.storage.local.get(["batchNotWorking"], (res) => {
       if (res && res.batchNotWorking) {
         const bn = res.batchNotWorking;
         const now = Date.now();
@@ -995,6 +1022,7 @@
         }
       }
     });
+    } catch (e) {}
   }
 
   // Initialize on load

@@ -20,7 +20,7 @@
     debounceTimer: null
   });
 
-  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id && chrome.storage && chrome.storage.sync) {
     chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: false, autoQueueEnabled: false, crawlMode: "manual", autoSubmitNotWorkingEnabled: false, extractionMode: "ai_only" }, (res) => {
       if (res) {
         state.showFloatingWidget = res.showFloatingWidget !== false;
