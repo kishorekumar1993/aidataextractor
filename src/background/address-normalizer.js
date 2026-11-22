@@ -2257,7 +2257,7 @@ function selectPrimaryAddressFromCombined(addr) {
  * - Automatically strips country names and postal/ZIP codes without dropping street numbers.
  * - Normalizes punctuation, commas, and strips boundary special characters.
  */
-function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", crawlData = null) {
+function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", crawlData = null, preserveAiAddress = false) {
   if (!addr || typeof addr !== "string") return "Not Available";
   const rawInput = addr;
   let a = (typeof decodeHtmlEntities === "function" ? decodeHtmlEntities(addr) : addr).trim();
@@ -2407,10 +2407,12 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
 
   // Strip postal codes per Rule 6
   // MUST NEVER strip Post Office Box numbers (e.g. "Post Office Box 261619" must be retained)!
-  if (typeof removePostalCodesCarefully === "function") {
-    a = removePostalCodesCarefully(a);
+  if (!preserveAiAddress) {
+    if (typeof removePostalCodesCarefully === "function") {
+      a = removePostalCodesCarefully(a);
+    }
+    a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
   }
-  a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
   // Strip loose trailing telephone numbers exposed after country stripping
   a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
 
@@ -2440,19 +2442,23 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/[,;\s.]+\s*$/g, "").trim();
 
   // Secondary postal code cleanup (preserving Post Office Box numbers)
-  if (typeof removePostalCodesCarefully === "function") {
-    a = removePostalCodesCarefully(a);
+  if (!preserveAiAddress) {
+    if (typeof removePostalCodesCarefully === "function") {
+      a = removePostalCodesCarefully(a);
+    }
+    a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
   }
-  a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
   // Strip loose trailing telephone numbers exposed after country stripping
   a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
 
   // 13. Ensure comma before state and format
-  if (typeof ensureCommaBeforeState === "function") {
-    a = ensureCommaBeforeState(a);
-  }
-  if (typeof toTitleCase === "function") {
-    a = toTitleCase(a);
+  if (!preserveAiAddress) {
+    if (typeof ensureCommaBeforeState === "function") {
+      a = ensureCommaBeforeState(a);
+    }
+    if (typeof toTitleCase === "function") {
+      a = toTitleCase(a);
+    }
   }
 
   // 14. Final cleanup of commas, spaces, and boundary special characters
@@ -2472,7 +2478,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/\s+/g, " ");
 
   // Ensure "Number" is ONLY present if "No." / "No" / "#" / "Nº" / "號" was in the original raw address evidence
-  if (crawlData && typeof stripBlindlyAddedNumber === "function") {
+  if (!preserveAiAddress && crawlData && typeof stripBlindlyAddedNumber === "function") {
     const candTexts = (crawlData.addressCandidates || []).map(c => typeof c === "object" ? c.raw : c).filter(Boolean);
     const allEv = `${(crawlData.contactPageText || "")} ${(crawlData.footerText || "")} ${(crawlData.profilePageText || "")} ${candTexts.join(" ")}`;
     a = stripBlindlyAddedNumber(a, allEv, "");
@@ -2510,7 +2516,7 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
 
   // Use the closest website address as punctuation evidence; broad page text can contain
   // unrelated commas and must not control address formatting.
-  if (typeof restoreAddressCommasFromRaw === "function") {
+  if (!preserveAiAddress && typeof restoreAddressCommasFromRaw === "function") {
     let punctuationSource = rawInput;
     const candidates = (crawlData && Array.isArray(crawlData.addressCandidates) ? crawlData.addressCandidates : [])
       .map(c => typeof c === "object" ? c.raw : c)
@@ -2604,6 +2610,26 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, " ").replace(/\s+/g, " ").trim();
   const normAi = norm(addr);
   const normRaw = norm(rawClean);
+
+  // In AI mode, a different street/premise number identifies a different address.
+  // Do not merge or replace the AI address with that crawl candidate.
+  if (isFromAi) {
+    const aiPremise = String(addr).match(/\b\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?\b/g) || [];
+    const rawPremise = String(rawText).match(/\b\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?\b/g) || [];
+    const aiStreetNumber = aiPremise.find(n => !/^(?:\d{3,6})$/.test(n));
+    const rawStreetNumber = rawPremise.find(n => !/^(?:\d{3,6})$/.test(n));
+    if (aiStreetNumber && rawStreetNumber &&
+        aiStreetNumber.replace(/^0+/, "").toLowerCase() !== rawStreetNumber.replace(/^0+/, "").toLowerCase()) {
+      return sanitizeRule6CompanyAddress(addr, companyName, country, crawlData, true);
+    }
+  }
+
+  // Explicit AI address takes precedence. Only sanitize it; never substitute an
+  // unrelated or noisier crawl candidate when a valid AI address was supplied.
+  if (isFromAi) {
+    const aiClean = sanitizeRule6CompanyAddress(addr, companyName, country, crawlData, true);
+    return aiClean && aiClean !== "Not Available" ? aiClean : addr;
+  }
 
   if (normAi === normRaw) {
     // If rawClean has authentic on-site punctuation/periods (e.g. "Number 2, Alley 87, Lane 103. Section 6, Fu An Road. Tainan")

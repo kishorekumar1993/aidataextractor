@@ -3989,6 +3989,47 @@ async function runAsyncTests() {
   });
 }
 
+runTest('AI address remains authoritative over polluted Taiwan crawl evidence', () => {
+  const aiAddress = "Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City";
+  const result = ctx.applyStrictInstructions({
+    _isFromAi: true,
+    websiteStatus: "Working",
+    businessType: "Manufacturer",
+    companyProfile: "Available",
+    companyName: "Yihsuan Enterprise Company, Limited",
+    countryName: "Taiwan",
+    companyAddress: aiAddress,
+    state: "Available",
+    city: "Available",
+    emailId: "joanne.huang@yihsuan.com.tw",
+    phoneNumber: "425818799",
+    numberOfProducts: "1",
+    productImages: "3",
+    numberOfProductDescriptions: "0"
+  }, {
+    originalUrl: "http://www.yihsuan.com.tw",
+    finalUrl: "http://www.yihsuan.com.tw",
+    addressCandidates: [
+      {
+        raw: "Number 28, Meizi Lane, Fengshi Road, Shigang District, Taichung City",
+        pageUrl: "http://www.yihsuan.com.tw/contact",
+        source: "contact",
+        isEnglish: true,
+        locationType: "contact"
+      }
+    ],
+    crawledPages: [
+      {
+        url: "http://www.yihsuan.com.tw/contact",
+        text: "Number 28, Meizi Lane, Fengshi Road, Shigang District, Taichung City"
+      }
+    ]
+  }, { isRestricted: false });
+
+  assert.strictEqual(result.companyAddress, aiAddress, "Correct AI address must not be replaced or merged with crawl address");
+  assert.ok(!result.companyAddress.includes("Meizi Lane"), "Unrelated crawl address must not contaminate AI address");
+});
+
 runTest('English language variants stay distinct and preferred for Shen Fang extraction', () => {
   assert.strictEqual(
     ctx.isEnglishLanguageUrl("https://en.shenfang.com.tw/contact-us.htm", "https://www.shenfang.com.tw"),
