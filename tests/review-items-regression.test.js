@@ -4087,6 +4087,77 @@ async function runAll() {
     );
   });
 
+  // Item 124: Single Headquarters Address Selection & Combined Multiple Address Splitting (yihsuan.com.tw test case)
+  runTest('Item 124: Single Headquarters Address Selection & Combined Multiple Address Splitting', () => {
+    const { ctx } = createTestContext();
+
+    // 1. yihsuan.com.tw exact failure case:
+    // Input has unwanted "Information" prefix and two addresses combined with ", . "
+    const combinedAddr = 'Information Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City, . Number 28, Meizi Lane, Fengshi Road, Shigang District, Taichung City, Taiwan';
+    const cleanAddr = ctx.sanitizeRule6CompanyAddress(combinedAddr, 'Yihsuan Enterprise Company, Limited', 'Taiwan');
+    assert.strictEqual(
+      cleanAddr,
+      'Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City',
+      'Must strip "Information" prefix and discard secondary combined address per Rule 6'
+    );
+
+    // 2. Headquarters vs Branch combined address:
+    const hqVsBranch = 'Branch: 50 Science Park, Hsinchu City ; Headquarters: 10 Industrial Park, Taichung City, Taiwan';
+    const cleanHq = ctx.sanitizeRule6CompanyAddress(hqVsBranch, 'Test Tech Ltd', 'Taiwan');
+    assert.strictEqual(
+      cleanHq,
+      '10 Industrial Park, Taichung City',
+      'Must select Headquarters over Branch address when multiple are present'
+    );
+
+    // 3. Various information/facility label prefix cleanups:
+    const infoAddr1 = 'Contact Information: No. 100 Main Street, Suite 200, Dallas, Texas 75001, USA';
+    assert.strictEqual(
+      ctx.sanitizeRule6CompanyAddress(infoAddr1, 'Acme Corp', 'United States'),
+      'Number 100 Main Street, Suite 200, Dallas, Texas',
+      'Must strip "Contact Information:" prefix and expand No. to Number'
+    );
+
+    const infoAddr2 = 'Factory Information: No. 50 Guangfu Road, Sanchong District, New Taipei City, Taiwan';
+    assert.strictEqual(
+      ctx.sanitizeRule6CompanyAddress(infoAddr2, 'Acme Corp', 'Taiwan'),
+      'Number 50 Guangfu Road, Sanchong District, New Taipei City',
+      'Must strip "Factory Information:" prefix and expand No. to Number'
+    );
+
+    // 4. End-to-end QC verification with applyStrictInstructions:
+    const aiResult = {
+      _isFromAi: true,
+      _extractionMode: 'ai_first',
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Yihsuan Enterprise Company, Limited',
+      countryName: 'Taiwan',
+      companyAddress: combinedAddr,
+      state: 'Not Available',
+      city: 'Available',
+      emailId: 'joanne.huang@yihsuan.com.tw',
+      secondaryEmailId: '',
+      phoneNumber: '425818799',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    const crawlData = {
+      finalUrl: 'http://www.yihsuan.com.tw/',
+      addressCandidates: [{ raw: combinedAddr, source: 'contact' }]
+    };
+
+    const qcResult = ctx.applyStrictInstructions(aiResult, crawlData, {});
+    assert.strictEqual(
+      qcResult.companyAddress,
+      'Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City',
+      'Strict QC must output single primary Headquarters address without extra labels or secondary addresses'
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

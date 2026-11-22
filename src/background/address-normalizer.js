@@ -2199,10 +2199,51 @@ function stripAddressPrefixLabels(s) {
 
       a = a.replace(/^(?:(?:physical|postal|mailing|street|corporate|registered|business|office|factory|plant|showroom|warehouse|workshop|main|head)\s+)?(?:address|add|addr|location|alamat|direcci[oó]n|ubicaci[oó]n|sede|anschrift|adresse|standort|indirizzo|地址|廠址|公司地址)\s*[:：\-–,\|\s]+/i, "").trim();
       a = a.replace(/^(?:where\s+we\s+are|where\s+to\s+find\s+us|find\s+us|visit\s+us|contact\s+us|contact|ubicaci[oó]n|direcci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|cont[aá]ctenos|encu[eé]ntranos|alamat\s*kami|hubungi\s*kami|dove\s*siamo|standort|kontak|聯絡我們|联系我们)\s*[:：\-–,\|\s]+/i, "").trim();
+
+      // Strip information and facility prefix labels (e.g. "Information:", "Contact Information:", "Company Information:", "Factory Information:")
+      a = a.replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "").trim();
+      a = a.replace(/^(?:factory\s+\d+|plant\s+\d+|facility\s+\d+|branch\s+\d+|location\s+\d+|office\s+\d+)\s*[:：\-–,\|\s]*/i, "").trim();
+      a = a.replace(/^(?:一廠|二廠|三廠|工廠\s*\d?|廠址|總公司|總部|辦事處|聯絡資訊|聯絡資料|公司資訊|聯絡方式)\s*[:：\-–,\|\s]*/i, "").trim();
     }
     changed = (a !== before);
   }
   return a;
+}
+
+/**
+ * Rule 6: If multiple addresses are combined or concatenated into one address string,
+ * splits them and selects ONLY the single Headquarters / primary physical address.
+ * Never combine multiple addresses into one.
+ */
+function selectPrimaryAddressFromCombined(addr) {
+  if (!addr || typeof addr !== "string") return addr;
+  let a = addr.trim();
+
+  // Strip leading label / information prefixes
+  a = a.replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "").trim();
+
+  // Pattern to split multiple distinct address blocks
+  const sepRegex = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\b)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)/i;
+  if (!sepRegex.test(a)) return a;
+
+  const parts = a.split(sepRegex).map(p => p.trim()).filter(p => p.length >= 10);
+  if (parts.length <= 1) return a;
+
+  // Rule 6 Priority:
+  // 1. Headquarters / Head Office
+  const hqPart = parts.find(p => /\b(?:headquarters|head\s*office|main\s*office|corporate\s*office|hq|總公司|總部|本部)\b/i.test(p));
+  if (hqPart) return hqPart;
+
+  // 2. Registered Office
+  const regPart = parts.find(p => /\b(?:registered\s*office|domicilio\s*social)\b/i.test(p));
+  if (regPart) return regPart;
+
+  // 3. Filter out explicit secondary/branch/factory 2 addresses if an unlabelled primary exists
+  const nonBranch = parts.filter(p => !/\b(?:branch|plant\s*[2-9]|factory\s*[2-9]|facility\s*[2-9]|warehouse|showroom|二廠|三廠|分公司|營業所)\b/i.test(p));
+  if (nonBranch.length > 0) return nonBranch[0];
+
+  // 4. Fall back to first listed address
+  return parts[0];
 }
 
 /**
@@ -2221,6 +2262,11 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   const rawInput = addr;
   let a = (typeof decodeHtmlEntities === "function" ? decodeHtmlEntities(addr) : addr).trim();
   if (!a || a.toLowerCase() === "not available" || a.length < 5) return "Not Available";
+
+  // Rule 6: If multiple addresses are concatenated/combined into one string, split and select ONLY the single Headquarters/primary address!
+  if (typeof selectPrimaryAddressFromCombined === "function") {
+    a = selectPrimaryAddressFromCombined(a);
+  }
 
   // Strip repeated enquiry/address boilerplate before reconciling the physical address.
   // Keep this generic: the text varies by website, but the physical address starts

@@ -279,7 +279,11 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
     - Never add commentary, marketing slogans, or extra words not in the source address!
   * Capitalization Rules: Capitalize the first letter of every word. Apply Title Case throughout the final address. Preserve proper nouns and official place names.
   * Space Rules: Do not leave spaces at the beginning or end of any field. Remove unnecessary leading and trailing spaces.
-  * Headquarters Address Priority: Select in order: (1) Headquarters (HQ) address, (2) Registered office address (if HQ unavailable), (3) Corporate office address (if above unavailable), (4) Branch or regional office only if no higher-priority address available. Never combine multiple addresses into one.
+  * Headquarters Address Priority: Select in order: (1) Headquarters (HQ) address, (2) Registered office address (if HQ unavailable), (3) Corporate office address (if above unavailable), (4) Branch or regional office only if no higher-priority address available.
+  * CRITICAL - NEVER COMBINE MULTIPLE ADDRESSES:
+    - Never combine or concatenate multiple addresses together with commas, periods, or slashes (e.g. NEVER output "Number 23-1, Heshun Lane... . Number 28, Meizi Lane...").
+    - If the website lists multiple addresses, factories, plants, branches, or locations, select ONLY ONE (the single Headquarters address) and completely discard all other addresses.
+    - Never include section headers like "Information", "Contact Information", "Factory Information", or "Company Information" as part of the address.
   * Official Examples:
     - Example 1 (Standard Abbreviation): "ABC Technologies Ltd., No. 25, 2nd Fl., Ind. Est., Guindy, Chennai, Tamil Nadu 600032, India." -> "Number 25, 2nd Floor, Industrial Estate, Guindy, Chennai, Tamil Nadu"
     - Example 2 (Abbreviation Without Space): "ABC Technologies Ltd., No. 25, 2Fl., Ind. Est., Guindy, Chennai, Tamil Nadu 600032, India." -> "Number 25, 2 Floor, Industrial Estate, Guindy, Chennai, Tamil Nadu"

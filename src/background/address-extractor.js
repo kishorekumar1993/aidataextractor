@@ -50,8 +50,25 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     .replace(/^(?:[A-Za-z\u00C0-\u024F\s]+?\s+)?(?:corporate\s+)?(?:head\s*office|headquarters|corporate\s*office|registered\s*office|main\s*office|principal\s*office|branch\s*office|regional\s*office|sales\s*office|plant\s*location|office|plant|factory|warehouse|workshop|facility|showroom|hq|sede\s*central|domicilio\s*social|sede\s*principal|address|add|addr|location|廠址|地址|view|learn\s*more|read\s*more|see\s*more|click\s*here|find\s*out\s*more|get\s*directions|directions)\s*[:：\-–,\s]+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|post\s*office\s*box|unit|suite|building|floor)\b)/i, "")
     .replace(/^(?:(?:physical|postal|mailing|street|corporate|registered|business|office|factory|plant|showroom|warehouse|workshop|main|head)\s+)?(?:address|add|addr|location|headquarters|head\s*office|registered\s*office|corporate\s*office|廠址|地址|view|learn\s*more|read\s*more|see\s*more|click\s*here|find\s*out\s*more|get\s*directions|directions|domicilio\s*social|domicilio|anschrift|standort|sede|ubicaci[oó]n|direcci[oó]n)\s*[:：\-–|,]?\s*/i, "")
     .replace(/^(?:we(?:'re|\s+are)\s+(?:at|located\s+at)|visit\s+us(?:\s+at)?|find\s+us(?:\s+at)?|where\s+to\s+find\s+us|where\s+we\s+are|our\s+locations?|office\s+locations?|our\s+location\s+is|come\s+(?:in\s+and\s+)?visit\s+us(?:\s+at)?|get\s+in\s+touch|contact\s+us(?:\s+at)?|contact|contacto|cont[aá]ctenos|alamat\s*kami|hubungi\s*kami|dove\s*siamo|standort|kontak|聯絡我們|联系我们)\s*[:：\-–|,]?\s*/i, "")
+    .replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "")
+    .replace(/^(?:factory\s+\d+|plant\s+\d+|facility\s+\d+|branch\s+\d+|location\s+\d+|office\s+\d+)\s*[:：\-–,\|\s]*/i, "")
+    .replace(/^(?:一廠|二廠|三廠|工廠\s*\d?|廠址|總公司|總部|辦事處|聯絡資訊|聯絡資料|公司資訊|聯絡方式)\s*[:：\-–,\|\s]*/i, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  // If candidate text contains multiple distinct addresses, split them so they are added as separate candidates rather than combined
+  const multiAddrSep = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\b)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)/i;
+  if (multiAddrSep.test(cleaned)) {
+    const parts = cleaned.split(multiAddrSep).map(p => p.trim()).filter(p => p.length >= 10);
+    if (parts.length > 1) {
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const partIsHq = isHq && i === 0;
+        addAddressCandidate(targetList, part, source, partIsHq, locationType, pageUrl, contextText);
+      }
+      return;
+    }
+  }
 
   // Strip leading promotional/intro sentence ending in ! or ? (e.g. "Come in and browse around! 14200 Washington Avenue...")
   if (/^[^!?]{3,80}[!?]\s+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|lot|plot)\b)/i.test(cleaned)) {
