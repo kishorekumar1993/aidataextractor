@@ -292,7 +292,8 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 - CONTACT ADDRESS vs. GOOGLE MAPS ADDRESS RULE (TAKE WHICHEVER ONE HAS FULL ADDRESS):
   * "In contact address need to take, if available Map means compare both and take which one is the full address."
   * When both static contact text (from Contact Us page, footer, or body) and an embedded Map / Google Map link are present for the same company location, check both and TAKE THE FULL ADDRESS:
-    - If the Google Map address contains additional words or more complete administrative/geographic components (e.g. Village, Sub-District, District, Industrial Park, Building Name, Road Section, Municipality, or County) that the static contact text omitted or shortened, you must take the Google Map address containing those additional words.
+    - If the Google Map address contains additional words or more complete administrative/geographic components (e.g. Village, Sub-District, District, Industrial Park, Building Name, Road Section, Municipality, County, or additional Road/Way Name) that the static contact text omitted or shortened, you must take the Google Map address containing those additional words.
+    - Example (UK): Contact text gives "Plus Group House, 12 Hurn Road, Dereham", but Google Map provides "Plus Group House, 12, Royson Way Hurn Rd, Dereham" -> Google Map has the additional words "Royson Way" -> You must take the Google Map address and expand abbreviations: "Plus Group House, 12, Royson Way Hurn Road, Dereham".
     - If the static contact text has more complete physical details (e.g. Building Name, Unit, Suite, Floor, or specific Street Number) that the map omitted or shortened, take the Contact address.
 - MANDATORY COMMA RULE IN ADDRESS:
   * "If comma is available on the website, put comma. If NOT available on the website, do NOT add comma (leave without comma)."

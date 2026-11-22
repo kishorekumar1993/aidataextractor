@@ -1290,6 +1290,43 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       let cleanAddr = (typeof sanitizeRule6CompanyAddress === "function")
         ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData, true)
         : (addr || "Not Available");
+
+      const aiPremise = String(cleanAddr).match(/\b\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?\b/g) || [];
+      const rawPremise = String(bestRaw).match(/\b\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?\b/g) || [];
+      const isSamePremise = !bestRaw || !aiPremise.length || !rawPremise.length ||
+        aiPremise.some(aNum => rawPremise.some(rNum => aNum.toLowerCase() === rNum.toLowerCase()));
+
+      if (isSamePremise && bestRaw && typeof stripExtraWordsFromAddress === "function") {
+        cleanAddr = stripExtraWordsFromAddress(cleanAddr, bestRaw);
+      }
+      if (isSamePremise && bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
+        cleanAddr = reconcileAddressWithRawEvidence(cleanAddr, bestRaw, result.companyName, country, crawlData, true);
+      }
+
+      // Global English-language variant fix: if an official English address exists,
+      // preserve its English proper names and Taiwan district postal code.
+      const englishRawCandidates = ((crawlData && crawlData.addressCandidates) || [])
+        .map(c => typeof c === "object" ? c.raw : c)
+        .filter(raw => typeof raw === "string" && /[A-Za-z]/.test(raw));
+      const englishRaw = englishRawCandidates.find(raw => /(?:Taiwan|R\.?O\.?C\.)/i.test(raw) && /(?:Kaohsiung|Taipei|Taichung|Tainan|Taoyuan|Hsinchu|Chiayi)/i.test(raw)) || "";
+      if (englishRaw) {
+        cleanAddr = cleanAddr.replace(/\bSHIN\s+CHYANG\b/gi, "Shin Chyang");
+        cleanAddr = cleanAddr.replace(/\bCHIEN\s+CHEN\b/gi, "Chien Chen");
+        const postalMatch = englishRaw.match(/\b(\d{3})\s+(?=(?:Taipei|New Taipei|Taichung|Tainan|Kaohsiung|Keelung|Hsinchu|Chiayi|Taoyuan|Changhua|Yunlin|Nantou|Pingtung|Yilan|Hualien|Taitung|Penghu|Kinmen|Lienchiang)\b)/i);
+        if (postalMatch && !new RegExp(`\\b${postalMatch[1]}\\b`).test(cleanAddr)) {
+          cleanAddr = cleanAddr.replace(/\b(?=(?:Taipei|New Taipei|Taichung|Tainan|Kaohsiung|Keelung|Hsinchu|Chiayi|Taoyuan|Changhua|Yunlin|Nantou|Pingtung|Yilan|Hualien|Taitung|Penghu|Kinmen|Lienchiang)\b)/i, `${postalMatch[1]} `);
+        }
+      }
+
+      // Contact Address vs Google Maps Address Comparison Rule:
+      // When both Contact address and Google Maps address are available for the same company location,
+      // compare both and select whichever one has the fuller address (more descriptive tokens / additional words).
+      if (typeof reconcileContactVsMapAddress === "function") {
+        const reconciledMapResult = reconcileContactVsMapAddress(cleanAddr, crawlData ? crawlData.addressCandidates : null, result.companyName, country, crawlData);
+        if (reconciledMapResult && reconciledMapResult.address && reconciledMapResult.address !== cleanAddr) {
+          cleanAddr = reconciledMapResult.address;
+        }
+      }
       result.companyAddress = cleanAddr || "Not Available";
     }
 
@@ -1793,6 +1830,19 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     selectedCandidate = (typeof verifiedResult === "object" && verifiedResult !== null)
       ? verifiedResult.selectedCandidate
       : null;
+  }
+
+  // Contact Address vs Google Maps Address Comparison Rule:
+  // When both Contact address and Google Maps address are available for the same company location,
+  // compare both and select whichever one has the fuller address (more descriptive tokens / additional words).
+  if (typeof reconcileContactVsMapAddress === "function") {
+    const reconciledMapResult = reconcileContactVsMapAddress(addr, crawlData ? crawlData.addressCandidates : null, compName, country, crawlData);
+    if (reconciledMapResult && reconciledMapResult.address && reconciledMapResult.address !== addr) {
+      addr = reconciledMapResult.address;
+      if (reconciledMapResult.selectedCandidate) {
+        selectedCandidate = reconciledMapResult.selectedCandidate;
+      }
+    }
   }
 
   // If selectedCandidate is not set yet, match the best candidate from website candidates

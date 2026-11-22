@@ -698,10 +698,56 @@ async function crawlWebsite(targetUrl, options = {}) {
       }
     }
 
+/**
+ * Extracts and resolves physical addresses from Google Maps embed iframes (e.g. output=embed, /maps/embed, !1s, ?q=).
+ * Used when a website provides an embedded map that contains additional or more complete address details.
+ */
+async function extractGoogleMapsEmbedAsync(html, addressCandidates, pageUrl = "") {
+  if (!html || typeof fetchWithBudget !== "function") return;
+  const embedRegex = /(?:src|data-src|data-src-cmplz|data-lazy-src)=["']([^"']*(?:google\.[a-z.]+\/maps|maps\.google(?:\.[a-z.]+)?)\/(?:embed|maps)[^"']*(?:output=embed|\/embed|\?q=|\?pb=)[^"']*)["']/gi;
+  let match;
+  const urlsToFetch = [];
+  while ((match = embedRegex.exec(html)) !== null) {
+    let url = (typeof safeDecodeMapUri === "function" ? safeDecodeMapUri(match[1]) : match[1]).replace(/&#0*38;|&amp;/gi, "&");
+    if (!url.startsWith("http")) {
+      url = url.startsWith("//") ? "https:" + url : "";
+    }
+    if (url && !urlsToFetch.includes(url) && urlsToFetch.length < 2) {
+      urlsToFetch.push(url);
+    }
+  }
+
+  for (const mapUrl of urlsToFetch) {
+    try {
+      const res = await fetchWithBudget(mapUrl, { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } }, 3000);
+      if (res && res.html) {
+        const jsonArrRegex = /\["([^"]+?(?:Road|Rd|Street|St|Lane|Ln|Avenue|Ave|Way|Drive|Dr|Boulevard|Blvd|Highway|Hwy|Court|Ct|Place|Pl|District|City|Town|County)[^"]*?)","([^"]+?)","([^"]+?)"\]/i;
+        const jm = res.html.match(jsonArrRegex);
+        if (jm) {
+          const p1 = jm[1].trim();
+          const p2 = jm[2].trim();
+          const p3 = jm[3].trim();
+          const isBuilding = /\b(?:House|Building|Bldg|Tower|Centre|Center|Plaza|Unit|Suite)\b/i.test(p2);
+          const fullMapAddr = isBuilding ? `${p2}, ${p1}, ${p3}` : `${p1}, ${p2}, ${p3}`;
+          if (typeof addAddressCandidate === "function") {
+            addAddressCandidate(addressCandidates, fullMapAddr, "map", false, "map", pageUrl, "Google Maps");
+          }
+        } else {
+          const longMatch = res.html.match(/"((?:Number|\d{1,5})[^"]*?(?:Road|Rd|Street|St|Lane|Ln|Avenue|Ave|Way)[^"]*?(?:City|Town|District|County|State|\d{5}|[A-Z]{1,2}\d)[^"]*?)"/i);
+          if (longMatch && longMatch[1].length > 10 && typeof addAddressCandidate === "function") {
+            addAddressCandidate(addressCandidates, longMatch[1], "map", false, "map", pageUrl, "Google Maps");
+          }
+        }
+      }
+    } catch (e) { }
+  }
+}
+
     // Extract from Homepage body (tagged as "homepage" so dedicated Contact Us page takes #1 priority)
     extractEmbeddedScriptAddresses(mainHtml, addressCandidates, finalUrl);
     extractJsonLdAddresses(mainHtml, addressCandidates, finalUrl);
     extractMapAddresses(mainHtml, addressCandidates, finalUrl);
+    await extractGoogleMapsEmbedAsync(mainHtml, addressCandidates, finalUrl);
     extractMetaAddresses(mainHtml, addressCandidates, finalUrl);
     extractHtmlAddresses(mainHtml, addressCandidates, "homepage", finalUrl);
     if (typeof extractLikelyAddress === "function") {
@@ -869,6 +915,9 @@ async function crawlWebsite(targetUrl, options = {}) {
         if (includeAddresses && !isExcludedAddressSubpage) {
           extractEmbeddedScriptAddresses(cText, addressCandidates, cUrl);
           extractMapAddresses(cText, addressCandidates, cUrl);
+          if (typeof extractGoogleMapsEmbedAsync === "function") {
+            extractGoogleMapsEmbedAsync(cText, addressCandidates, cUrl).catch(() => {});
+          }
           extractMetaAddresses(cText, addressCandidates, cUrl);
           extractHtmlAddresses(cText, addressCandidates, pageSource, cUrl);
           if (typeof extractLikelyAddress === "function") {

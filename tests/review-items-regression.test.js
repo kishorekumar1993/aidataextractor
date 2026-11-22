@@ -4158,6 +4158,58 @@ async function runAll() {
     );
   });
 
+  // Item 125: Contact Address vs Google Maps Address Comparison (doorsplusltd.co.uk test case)
+  runTest('Item 125: Contact Address vs Google Maps Address Comparison (doorsplusltd.co.uk test case)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Verify HTML address candidate extraction keeps full <p> block containing child <span> elements intact
+    const doorsHtml = '<p><span style="color: #666666;">Plus Group House, 12</span><span style="color: #666666;"> Hurn Road, Dereham NR19 1WD </span></p>';
+    const htmlCands = [];
+    ctx.extractHtmlAddresses(doorsHtml, htmlCands, 'contact', 'https://www.doorsplusltd.co.uk/contact-us-doors-plus/');
+    assert.ok(htmlCands.length > 0, 'Must extract address candidate from HTML');
+    assert.ok(
+      htmlCands.some(c => c.raw.includes('Plus Group House, 12') && c.raw.includes('Hurn Road')),
+      'Extracted HTML address candidate must keep premise/building name and street intact'
+    );
+
+    // 2. Verify candidate comparison selects fuller Google Map address when it has additional words (Royson Way)
+    const contactCand = 'Plus Group House, 12 Hurn Road, Dereham NR19 1WD';
+    const mapCand = 'Plus Group House, 12, Royson Way Hurn Rd, Dereham NR19 1WD, United Kingdom';
+    const candidates = [
+      { raw: contactCand, source: 'contact', isEnglish: true, priority: 0.8 },
+      { raw: mapCand, source: 'map', isEnglish: true, priority: 5.0, contextText: 'Google Maps' }
+    ];
+    const mockCrawlData = {
+      originalUrl: 'https://www.doorsplusltd.co.uk',
+      finalUrl: 'https://www.doorsplusltd.co.uk/contact-us-doors-plus/',
+      addressCandidates: candidates
+    };
+
+    const selection = ctx.verifyAndSelectAddress(null, candidates, mockCrawlData);
+    assert.ok(selection.selectedCandidate, 'A candidate must be selected');
+    assert.ok(
+      selection.selectedCandidate.raw.includes('Royson Way'),
+      'Selected candidate must be the Google Maps address containing additional words (Royson Way)'
+    );
+
+    // 3. Verify end-to-end QC reconciles AI contact address with fuller Map address containing additional words
+    const aiData = {
+      _isFromAi: true,
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'Doors Plus Group',
+      countryName: 'United Kingdom',
+      companyAddress: 'Plus Group House, 12 Hurn Road, Dereham'
+    };
+
+    const qcResult = ctx.applyStrictInstructions(aiData, mockCrawlData, {});
+    assert.strictEqual(
+      qcResult.companyAddress,
+      'Plus Group House, 12, Royson Way Hurn Road, Dereham',
+      'QC must output the fuller address containing the additional words from Google Map (Royson Way) with Rd expanded to Road'
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

@@ -2407,12 +2407,10 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
 
   // Strip postal codes per Rule 6
   // MUST NEVER strip Post Office Box numbers (e.g. "Post Office Box 261619" must be retained)!
-  if (!preserveAiAddress) {
-    if (typeof removePostalCodesCarefully === "function") {
-      a = removePostalCodesCarefully(a);
-    }
-    a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
+  if (typeof removePostalCodesCarefully === "function") {
+    a = removePostalCodesCarefully(a);
   }
+  a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
   // Strip loose trailing telephone numbers exposed after country stripping
   a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
 
@@ -2442,23 +2440,19 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/[,;\s.]+\s*$/g, "").trim();
 
   // Secondary postal code cleanup (preserving Post Office Box numbers)
-  if (!preserveAiAddress) {
-    if (typeof removePostalCodesCarefully === "function") {
-      a = removePostalCodesCarefully(a);
-    }
-    a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
+  if (typeof removePostalCodesCarefully === "function") {
+    a = removePostalCodesCarefully(a);
   }
+  a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
   // Strip loose trailing telephone numbers exposed after country stripping
   a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
 
   // 13. Ensure comma before state and format
-  if (!preserveAiAddress) {
-    if (typeof ensureCommaBeforeState === "function") {
-      a = ensureCommaBeforeState(a);
-    }
-    if (typeof toTitleCase === "function") {
-      a = toTitleCase(a);
-    }
+  if (typeof ensureCommaBeforeState === "function") {
+    a = ensureCommaBeforeState(a);
+  }
+  if (typeof toTitleCase === "function") {
+    a = toTitleCase(a);
   }
 
   // 14. Final cleanup of commas, spaces, and boundary special characters
@@ -2622,13 +2616,6 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
         aiStreetNumber.replace(/^0+/, "").toLowerCase() !== rawStreetNumber.replace(/^0+/, "").toLowerCase()) {
       return sanitizeRule6CompanyAddress(addr, companyName, country, crawlData, true);
     }
-  }
-
-  // Explicit AI address takes precedence. Only sanitize it; never substitute an
-  // unrelated or noisier crawl candidate when a valid AI address was supplied.
-  if (isFromAi) {
-    const aiClean = sanitizeRule6CompanyAddress(addr, companyName, country, crawlData, true);
-    return aiClean && aiClean !== "Not Available" ? aiClean : addr;
   }
 
   if (normAi === normRaw) {
@@ -2844,4 +2831,75 @@ function restoreAddressCommasFromRaw(addr, rawEvidence = "") {
   let finalAddr = reconstructed.replace(/\s+,/g, ",").replace(/\s+/g, " ").trim();
   finalAddr = finalAddr.replace(/^[,;\s]+|[,;\s]+$/g, "").trim();
   return finalAddr;
+}
+
+/**
+ * Contact Address vs Google Maps Address Reconciliation:
+ * "In contact address need to take, if available Map means compare both and take which one is the full address."
+ * Compares static contact address candidates with Google Maps address candidates for the same location:
+ * - If Map address has additional words (e.g. Royson Way, additional District or Road Section) -> take Map address.
+ * - If Contact address has more physical details (e.g. Unit, Suite, Floor, Building Name) -> take Contact address.
+ */
+function reconcileContactVsMapAddress(currentAddr, addressCandidates, companyName = "", country = "", crawlData = null) {
+  if (!addressCandidates || !Array.isArray(addressCandidates) || addressCandidates.length === 0) {
+    return { address: currentAddr, selectedCandidate: null };
+  }
+
+  const getRaw = c => (typeof c === "object" ? (c.raw || "") : String(c || "")).trim();
+  const getSource = c => (typeof c === "object" ? (c.source || c.contextText || "") : "").toLowerCase();
+
+  const mapCands = addressCandidates.filter(c => /map/i.test(getSource(c)));
+  const contactCands = addressCandidates.filter(c => !/map/i.test(getSource(c)));
+
+  if (mapCands.length === 0) {
+    return { address: currentAddr, selectedCandidate: null };
+  }
+
+  const normTokens = s => (s || "").toLowerCase().replace(/[^a-z0-9]/g, " ").split(/\s+/).filter(t => t.length > 2 && !/^(?:united|kingdom|states|taiwan|china|india|germany|road|street|avenue|lane|drive|way)$/i.test(t));
+
+  const currTokens = normTokens(currentAddr);
+
+  for (const mapCand of mapCands) {
+    const mapRaw = getRaw(mapCand);
+    const mapClean = sanitizeRule6CompanyAddress(mapRaw, companyName, country, crawlData);
+    if (!mapClean || mapClean === "Not Available" || mapClean.length < 8) continue;
+    const mapTokens = normTokens(mapClean);
+
+    // 1. Compare with currentAddr
+    if (currTokens.length >= 2 && mapTokens.length >= 2) {
+      const matchInMap = currTokens.filter(t => mapTokens.includes(t)).length;
+      const overlapRatio = matchInMap / currTokens.length;
+      if (overlapRatio >= 0.6 && mapTokens.length > currTokens.length) {
+        return { address: mapClean, selectedCandidate: mapCand };
+      }
+    }
+
+    // 2. Compare with contact candidates for the same location
+    for (const contactCand of contactCands) {
+      const contactRaw = getRaw(contactCand);
+      const contactClean = sanitizeRule6CompanyAddress(contactRaw, companyName, country, crawlData);
+      if (!contactClean || contactClean === "Not Available" || contactClean.length < 8) continue;
+      const contactTokens = normTokens(contactClean);
+
+      if (contactTokens.length >= 2 && mapTokens.length >= 2) {
+        const matchCount = contactTokens.filter(t => mapTokens.includes(t)).length;
+        const overlap = matchCount / contactTokens.length;
+        if (overlap >= 0.6) {
+          if (mapTokens.length > contactTokens.length) {
+            const currMatchesContact = currTokens.length > 0 && (currTokens.filter(t => contactTokens.includes(t)).length / Math.min(currTokens.length, contactTokens.length)) >= 0.6;
+            if (currMatchesContact || !currentAddr || currentAddr === "Not Available") {
+              return { address: mapClean, selectedCandidate: mapCand };
+            }
+          } else if (contactTokens.length > mapTokens.length) {
+            const currMatchesMap = currTokens.length > 0 && (currTokens.filter(t => mapTokens.includes(t)).length / Math.min(currTokens.length, mapTokens.length)) >= 0.6;
+            if (currMatchesMap || !currentAddr || currentAddr === "Not Available") {
+              return { address: contactClean, selectedCandidate: contactCand };
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return { address: currentAddr, selectedCandidate: null };
 }

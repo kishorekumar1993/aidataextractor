@@ -691,10 +691,10 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
   }
 
   // 7. Paragraphs, list items, table cells, or text containers containing physical address patterns (Fast execution)
-  const pAddrRegex = /<(?:p|li|td|th|div|span|dd|article|section)[^>]*>([\s\S]*?)<\/(?:p|li|td|th|div|span|dd|article|section)>/gi;
+  const pAddrRegex = /<(p|li|td|th|dd|article|section)[^>]*>([\s\S]*?)<\/\1>/gi;
   let pm;
   while ((pm = pAddrRegex.exec(processedHtml)) !== null) {
-    const raw = stripHtml(pm[1]);
+    const raw = stripHtml(pm[2]);
     if (raw.length >= 12 && raw.length <= 400 &&
       (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|marg|nagar|estate|colony|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|piazza|strasse|straße|str\b|gasse|weg|platz|rue|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|zona\s*industriale|gewerbegebiet|zone\s*industrielle|parc\s*d['’]activit[eé]s|kawasan\s*industri|taman\s*perindustrian|jalan|jl\b|lorong|solok|mukim|daerah|amphoe|tambon|barangay|ulica|ul\b|n[aá]m[eě]st[ií]|t[rř][ií]da|alej|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
         /(?:大道|路|街|巷|弄|号|號|工业区|工业园|产业园|高新区)/.test(raw) ||
@@ -707,7 +707,32 @@ function extractHtmlAddresses(html, targetList, defaultSource = "contact", pageU
         /\b\d{4,6}\b/.test(raw) ||
         /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
       const beforeText = processedHtml.slice(Math.max(0, pm.index - 500), pm.index);
-      const ctx = getContext(beforeText, defaultSource, pm[1]);
+      const ctx = getContext(beforeText, defaultSource, pm[2]);
+      addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
+      const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length >= 10);
+      for (const line of lines) {
+        addAddressCandidate(targetList, line, ctx.source, ctx.isHq, ctx.locType, pageUrl);
+      }
+    }
+  }
+
+  // 7b. Span and Div containers containing physical address patterns
+  const spanAddrRegex = /<(span|div)[^>]*>([\s\S]*?)<\/\1>/gi;
+  let sm;
+  while ((sm = spanAddrRegex.exec(processedHtml)) !== null) {
+    const raw = stripHtml(sm[2]);
+    if (raw.length >= 12 && raw.length <= 400 &&
+      (/\b(road|street|avenue|lane|drive|way|boulevard|highway|parade|circuit|crescent|close|court|place|terrace|esplanade|track|trail|township|district|city|county|hsien|country|marg|nagar|estate|colony|rd\b|st\b|ln\b|ave\b|dr\b|blvd\b|hwy\b|pde\b|cct\b|cres\b|cl\b|ct\b|pl\b|tce\b|via|corso|viale|piazza|strasse|straße|str\b|gasse|weg|platz|rue|calle|c\/|avenida|avda|paseo|plaza|rambla|carretera|pol[ií]gono\s*industrial|pol\.?\s*ind\.?|zona\s*industriale|gewerbegebiet|zone\s*industrielle|parc\s*d['’]activit[eé]s|kawasan\s*industri|taman\s*perindustrian|jalan|jl\b|lorong|solok|mukim|daerah|amphoe|tambon|barangay|ulica|ul\b|n[aá]m[eě]st[ií]|t[rř][ií]da|alej|camino|pasaje|traves[ií]a|ronda|apartado\s*de\s*correos)\b/i.test(raw) ||
+        /(?:大道|路|街|巷|弄|号|號|工业区|工业园|产业园|高新区)/.test(raw)) &&
+      (/\b(?:\d{1,5}|no\.?\s*\d+|n[ºo]\.?\s*\d+|s\/n\b|sin\s*n[uú]mero\b|#\s*\d+|unit\s*\d+|lot\s*\d+|plot\s*\d+|factory\s*\d+|level\s*\d+|floor\s*\d+|ist\s*floor|1st\s*floor|2nd\s*floor|3rd\s*floor|gpo\s*box)\b/i.test(raw) ||
+        /\d+\s*[号號]/.test(raw) ||
+        /\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b/i.test(raw) ||
+        /\b\d{3}\s*\d{2}\b/.test(raw) ||
+        /\b\d{2}-\d{3}\b/.test(raw) ||
+        /\b\d{4,6}\b/.test(raw) ||
+        /\bindustrial\s*(?:estate|park|area|zone|district)\b/i.test(raw))) {
+      const beforeText = processedHtml.slice(Math.max(0, sm.index - 500), sm.index);
+      const ctx = getContext(beforeText, defaultSource, sm[2]);
       addAddressCandidate(targetList, raw, ctx.source, ctx.isHq, ctx.locType, pageUrl);
       const lines = raw.split(/\n+/).map(l => l.trim()).filter(l => l.length >= 10);
       for (const line of lines) {
