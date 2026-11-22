@@ -1290,6 +1290,9 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       let cleanAddr = (typeof sanitizeRule6CompanyAddress === "function")
         ? sanitizeRule6CompanyAddress(addr, result.companyName, country, crawlData)
         : (addr || "Not Available");
+      if (bestRaw && typeof stripExtraWordsFromAddress === "function") {
+        cleanAddr = stripExtraWordsFromAddress(cleanAddr, bestRaw);
+      }
       if (bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
         cleanAddr = reconcileAddressWithRawEvidence(cleanAddr, bestRaw, result.companyName, country, crawlData, true);
       }

@@ -1027,6 +1027,18 @@ async function runAll() {
       "10 Anson Road, #22-09, International Plaza",
       "Company name prefix must be removed across Pte Ltd/Private Limited suffix variants"
     );
+    assert.strictEqual(
+      ctx.reconcileAddressWithRawEvidence(
+        "10 Anson Road, #22-09, International Plaza",
+        "Sunrise Doors International Pte Ltd10 Anson Road, #22-09, International Plaza",
+        "Sunrise Doors International Private Limited",
+        "Singapore",
+        {},
+        true
+      ),
+      "10 Anson Road, #22-09, International Plaza",
+      "AI address must remain authoritative and must not be replaced by polluted crawl evidence"
+    );
     assert.strictEqual(ctx.evaluateCityQC(sgAddr, "Singapore"), "Available", "Singapore City-State evaluates as City Available");
     assert.strictEqual(ctx.hasStateInAddress(sgAddr, "Singapore"), true, "Singapore City-State evaluates as State Available");
 
@@ -4014,6 +4026,64 @@ async function runAll() {
       qcResult.companyAddress,
       'Number 2, Alley 87, Lane 103. Section 6, Fu An Road. Tainan',
       'Strict QC must output exact authentic on-site punctuation with abbreviation expansion only'
+    );
+  });
+
+  // Item 123: Elimination of Extra Content / Words from Address & Enterprise Spirit False Positive Bulletproofing
+  runTest('Item 123: Elimination of Extra Content/Words from Address & Enterprise Spirit Protection', () => {
+    const { ctx } = createTestContext();
+    // 1. Enterprise spirit with curly quotes and Unicode apostrophes
+    const dinkleText1 = '\u201c...Through Connections\u201d is Dinkle\u2019s enterprise spirit, which means to works with customers for mutual benefit.';
+    const res1 = ctx.detectRestrictedKeywordsSingle(dinkleText1, '', 'https://www.dinkle.com/en/home');
+    assert.strictEqual(res1.restricted, false, 'Dinkle enterprise spirit with Unicode apostrophe must NOT be restricted');
+
+    const ethosText = 'Our company spirit is rooted in craftsmanship. We uphold a pioneering spirit of innovation and dedication.';
+    const res2 = ctx.detectRestrictedKeywordsSingle(ethosText, '', 'https://www.example.com/about');
+    assert.strictEqual(res2.restricted, false, 'General company spirit / spirit of innovation must NOT be restricted');
+
+    // 2. Taiwanese/Chinese road names with "Xing" must NOT be corrupted to "Crossing"
+    const xingAddr = 'No. 120, Chung Xing Road, Section 2, Dali District, Taichung City, Taiwan';
+    const cleanXing = ctx.sanitizeRule6CompanyAddress(xingAddr, 'Test Co., Ltd.', 'Taiwan');
+    assert.strictEqual(
+      cleanXing,
+      'Number 120, Chung Xing Road, Section 2, Dali District, Taichung City',
+      'Chung Xing Road must NOT be corrupted to Chung Crossing Road'
+    );
+
+    // 3. Hallucinated divisions (Province, Municipality, Village) stripped when absent from raw evidence
+    const hallucinatedAddr = '100 Main Street, Austin, Texas Province';
+    const strippedExtra = ctx.stripExtraWordsFromAddress(hallucinatedAddr, '100 Main Street, Austin, Texas');
+    assert.strictEqual(
+      strippedExtra,
+      '100 Main Street, Austin, Texas',
+      'Hallucinated "Province" must be stripped when absent from raw evidence'
+    );
+
+    // 4. Trailing company name stripping from address
+    const trailingCompAddr = '100 Industrial Parkway, Suite 500, Cleveland, Ohio, Apex Industrial Solutions LLC';
+    const cleanTrailing = ctx.sanitizeRule6CompanyAddress(trailingCompAddr, 'Apex Industrial Solutions LLC', 'United States');
+    assert.strictEqual(
+      cleanTrailing,
+      '100 Industrial Parkway, Suite 500, Cleveland, Ohio',
+      'Trailing company name must be stripped cleanly from address'
+    );
+
+    // 5. Embedded contact and Asian tax IDs stripping
+    const contactAndTaxAddr = 'No. 88, Gongye Road, T: +886-4-7360023, F: +886-4-7360025, 統一編號: 12345678, Changhua County, Taiwan';
+    const cleanContactAndTax = ctx.sanitizeRule6CompanyAddress(contactAndTaxAddr, 'Gongye Co.', 'Taiwan');
+    assert.strictEqual(
+      cleanContactAndTax,
+      'Number 88, Gongye Road, Changhua County',
+      'Embedded T:/F: phone numbers and 統一編號 tax IDs must be stripped from address'
+    );
+
+    // 6. Address label prefixes stripping (e.g. "Where to find us: Address: ...")
+    const labelAddr = 'Where to find us: Address: 250 Commerce Drive, Floor 3, Atlanta, Georgia 30303, USA';
+    const cleanLabel = ctx.sanitizeRule6CompanyAddress(labelAddr, 'Acme Corp', 'United States');
+    assert.strictEqual(
+      cleanLabel,
+      '250 Commerce Drive, 3 Floor, Atlanta, Georgia',
+      'Address prefix labels ("Where to find us: Address:") and postal code/country must be stripped'
     );
   });
 

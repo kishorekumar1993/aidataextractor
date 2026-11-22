@@ -381,10 +381,11 @@ function sanitizeContextText(text) {
   // 20. Spirit levels (carpentry tool), cotton gin, alcohol-free products, corporate/enterprise spirit, and industrial solvents false positives
   cleanText = cleanText
     .replace(/\b(?:spirit\s*levels?|magnetic\s*spirit\s*levels?|torpedo\s*spirit\s*levels?|bubble\s*levels?)\b/gi, " ")
-    .replace(/\b(?:enterprise|corporate|company|business|team|school|high|good|human|entrepreneurial|pioneering|artisan|craftsman|working|creative|innovative|innovation|guiding|founder|core|fighting|true|community|public|brand|service)\s*spirits?\b/gi, " ")
-    .replace(/\b[a-z0-9_-]*(?:'s)?\s*spirits?\b/gi, " ")
-    .replace(/\bspirits?\s+of\s+[a-z]+\b/gi, " ")
-    .replace(/\b(?:in\s+the\s+spirit\s+of|spirit\s+and\s+mission|spirit\s+and\s+culture|values\s+and\s+spirit|ethos\s+and\s+spirit)\b/gi, " ")
+    .replace(/\b(?:enterprise|corporate|company|business|team|school|high|good|human|entrepreneurial|pioneering|artisan|craftsman|working|creative|innovative|innovation|guiding|founder|core|fighting|true|community|public|brand|service|our|their|its|cultural|national|sportsmanship|partnership)\s+(?:[a-z]+\s+)?spirits?\b/gi, " ")
+    .replace(/\b[a-z0-9_\u00C0-\u024F-]+(?:['’]s)?\s+(?:enterprise|corporate|company|business|team|creative|innovative|pioneering|guiding|founder)?\s*spirits?\b/gi, " ")
+    .replace(/\bspirits?\s+of\s+[a-z0-9_\u00C0-\u024F-]+\b/gi, " ")
+    .replace(/\b(?:in\s+the\s+spirit\s+of|spirit\s+and\s+mission|spirit\s+and\s+culture|values\s+and\s+spirit|ethos\s+and\s+spirit|spirit\s+and\s+values)\b/gi, " ")
+    .replace(/(?<!\b(?:distilled|alcoholic|neutral|methylated)\s+)spirit\b(?!\s*(?:distiller|distillery|maker|producer|manufacturer|beverage|drink))/gi, " ")
     .replace(/\bcotton\s*gins?(?:\s*(?:stands?|machinery|parts?|motors?|feeders?|cleaners?))?\b/gi, " ")
     .replace(/\b(?:isopropyl|rubbing|denatured|polyvinyl|cetyl|stearyl|cetearyl|benzyl)\s*alcohols?\b/gi, " ")
     .replace(/\balcohol[-–\s]*(?:free|wipes?|prep\s*pads?|cleaners?|degreasers?)\b/gi, " ")

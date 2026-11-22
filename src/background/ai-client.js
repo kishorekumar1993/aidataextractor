@@ -269,9 +269,14 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * Mandatory Removal Rules (Remove ONLY these):
     - Postal code / ZIP code
     - Country name
-    - Company name
+    - Company name (from start or end of address)
+    - Office and address label prefixes (e.g. "Address:", "Head Office:", "Registered Office:", "Where to find us:", "Contact Us:")
+    - Contact channels (Phone, Tel, Mobile, Fax, Email, Website URLs, WhatsApp)
+    - Business / Tax registration numbers (e.g. VAT, GST, CIN, 統一編號, 統編, SIRET)
+    - Working / opening hours
     - Brackets and their contents
     - Special characters at the beginning or end of the final address
+    - Never add commentary, marketing slogans, or extra words not in the source address!
   * Capitalization Rules: Capitalize the first letter of every word. Apply Title Case throughout the final address. Preserve proper nouns and official place names.
   * Space Rules: Do not leave spaces at the beginning or end of any field. Remove unnecessary leading and trailing spaces.
   * Headquarters Address Priority: Select in order: (1) Headquarters (HQ) address, (2) Registered office address (if HQ unavailable), (3) Corporate office address (if above unavailable), (4) Branch or regional office only if no higher-priority address available. Never combine multiple addresses into one.
