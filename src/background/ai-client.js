@@ -100,7 +100,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
 {
   "websiteStatus": "Working" | "Not Working" | "Domain Expired" | "Non English" | "Under Construction" | "Flash" | "Redirect Site" | "Manual Review",
   "notWorkingReason": "string (mandatory explanation if not Working, else empty string \"\")",
-  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other" | "",
+  "businessType": "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributer" | "Distributor" | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Other" | "",
   "companyProfile": "Available" | "Not Available" | "",
   "companyName": "string (expand ONLY abbreviations present on site; standalone 'Co.' -> 'Company', NEVER add 'Limited' unless 'Ltd.'/'Limited' is on site)",
   "countryName": "string",
@@ -154,7 +154,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * If "Working" or "Redirect Site": Extract all 14 fields normally, and set "notWorkingReason": "".
 
 3. BUSINESS TYPE & ELIGIBILITY VALIDATION:
-- Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributor" (portal select: "Distributer") | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Restricted Site" | "Other".
+- Options: "Manufacturer" | "Industrial Services" | "Exporter" | "Trader" | "Distributor" (portal select: "Distributer") | "Supplier" | "Wholesaler" | "Service Provider" | "Online Shopping" | "Other".
   (STRICTLY output "Distributor" as the standard businessType name - never output duplicate or misspelled "Distributer").
 - Permitted Working Classifications (Only these qualify for "Working" websiteStatus):
   * "Manufacturer": Company manufactures physical products in own facility/factory (OEM/ODM, machining, molding, fabrication, assembly).
@@ -168,18 +168,19 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * "Other": Any business that does not fit into the 7 physical goods/industrial classifications above.
   * "Service Provider": General commercial services, IT, consulting, agencies, or non-industrial services.
   * "Online Shopping": Ordinary online retail shopping without manufacturing or wholesale supply evidence.
-  * "Restricted Site": Company business involves a prohibited category.
-- MANDATORY RULE FOR "Other", "Service Provider", "Online Shopping", & "Restricted Site": When the business type is classified as "Other", "Service Provider", "Online Shopping", or "Restricted Site", you MUST set "websiteStatus": "Not Working", "notWorkingReason": "Business Type [Type] outside allowed scope (Manufacturer to Wholesaler only)", AND leave all other 12 fields empty "".
+- MANDATORY RULE FOR "Other", "Service Provider", & "Online Shopping": When the business type is classified as "Other", "Service Provider", or "Online Shopping", you MUST set "websiteStatus": "Not Working", "notWorkingReason": "Business Type [Type] outside allowed scope (Manufacturer to Wholesaler only)", AND leave all other 12 fields empty "".
+  (NOTE: Do NOT use "Restricted Site" as a business type. Words in text are NOT restricted. Always classify legitimate manufacturing/supply businesses according to their physical operations and extract all fields normally).
 
 4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES - IMAGE ONLY RESTRICTION POLICY):
-- Mandatory Directive: Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals, or School, College & Education IF a restricted-category image appears on the website.
+- Mandatory Directive: Restriction is strictly for confirmed restricted IMAGES only, words NOT!
   * CRITICAL RESTRICTION POLICY: RESTRICTION IS STRICTLY FOR IMAGES ONLY, WORDS NOT!
-  * Words, text, page titles, metatags, filenames, or contextual mentions alone do NOT reject a website. If restricted words appear on the site but NO confirmed restricted image appears, the website MUST REMAIN "Working".
+  * Words, text, page titles, metatags, filenames, product descriptions, or contextual mentions alone do NOT reject a website. If restricted words appear on the site but NO confirmed restricted image appears, the website MUST REMAIN "Working", and ALL 14 fields MUST be extracted normally!
+  * Do NOT clear, wipe, or remove any extracted fields (Company Name, Address, City, State, Email, Phone, Products) because of restricted words!
   * CRITICAL IMAGE RULE: If a confirmed image related to any of these restricted categories appears anywhere on the website (products, gallery, hero banner, CSS background, internal pages), note that the image alone changes the complete scenario to Not Working. Mark "websiteStatus": "Not Working", "businessType": "", and leave all other 13 fields empty "".
   * Decision Rules:
     - IF at least one confirmed restricted-category image appears on the website -> Website Status = "Not Working" (image only changes complete scenario).
     - IF image classification is uncertain and no other confirmed restriction -> Website Status = "Manual Review".
-    - IF restricted words appear in text but NO restricted image is found -> Website Status = "Working" (words do NOT reject).
+    - IF restricted words appear in text but NO restricted image is found -> Website Status = "Working" (words do NOT reject; extract all fields normally).
     - IF no restricted business and no restricted image -> Website Status = "Working".
 - FALSE-POSITIVE EXEMPTIONS:
   * General industrial machinery, bandsaw, cutting tool, fastener, valve, or component manufacturers that merely list workpiece cutting materials or served industries in an applications menu (e.g. "Applications: Car Parts | Metallic Materials | Aeronautical Parts", "Food packaging machinery", "Marine hardware") are PERMITTED ("Working") if their actual manufactured products are general industrial machines/tools (e.g. bandsaws, CNC machine tools) and NOT aircraft/spacecraft/weapons itself.
@@ -477,10 +478,18 @@ function finalizeParsedAiResult(parsed, crawlData) {
     parsed.companyAddress = parsed.companyAddress.replace(/\b(\d{1,3}(?:st|nd|rd|th)?)(\s*)Floor-(\d{1,4}[A-Za-z]?)\b/gi, (m, num, sp, sub) => `${num}${sp && sp.length > 0 ? " " : ""}Floor-${sub}`);
   }
 
-  // Disallowed Business Type Check: If "Other", "Service Provider", "Online Shopping", or "Restricted Site" -> Mark Not Working!
   const btLower = String(parsed.businessType || "").trim().toLowerCase();
-  const disallowedAiTypes = new Set(["other", "service provider", "online shopping", "restricted site"]);
-  if (disallowedAiTypes.has(btLower) && parsed.websiteStatus !== "Redirect Site") {
+  // If AI returned "Restricted Site", convert to Manufacturer since words are not restricted (image-only policy)
+  if (btLower === "restricted site") {
+    parsed.businessType = "Manufacturer";
+    if (parsed.websiteStatus === "Not Working") {
+      parsed.websiteStatus = "Working";
+    }
+  }
+
+  // Disallowed Business Type Check: If "Other", "Service Provider", or "Online Shopping" -> Mark Not Working!
+  const disallowedAiTypes = new Set(["other", "service provider", "online shopping"]);
+  if (disallowedAiTypes.has(String(parsed.businessType || "").trim().toLowerCase()) && parsed.websiteStatus !== "Redirect Site") {
     parsed.websiteStatus = "Not Working";
     parsed.notWorkingReason = `Business Type "${parsed.businessType || "Other"}" outside allowed scope (Manufacturer to Wholesaler only)`;
     parsed.businessType = "";

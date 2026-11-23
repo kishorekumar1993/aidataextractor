@@ -10,7 +10,7 @@ function isValidNonWorkingReasonQC(str) {
 }
 
 function determineValidNotWorkingReasonQC(data, crawlResult, targetUrl, restrictedCheck) {
-  if (restrictedCheck && restrictedCheck.isRestricted && restrictedCheck.reason) {
+  if (restrictedCheck && restrictedCheck.isRestricted && restrictedCheck.hasRestrictedImage && restrictedCheck.reason) {
     return restrictedCheck.reason;
   }
   if (crawlResult && crawlResult.fetchError) {
@@ -429,10 +429,7 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "", optio
   }
 
   // 3. Words in text/titles/URLs alone do NOT trigger rejection (restriction is for image only, words not!)
-  const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + stripHtml(crawlResult.contactHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
-  const restrictedCheck = typeof detectRestrictedKeywords === "function"
-    ? detectRestrictedKeywords(siteContent, (crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.crawledPages || [])
-    : { isRestricted: false };
+  const restrictedCheck = { isRestricted: false, hasRestrictedImage: false };
 
   // PRE-AI CHECK 2: Rule 9 (Free platforms) & Rule 10 (Subdomains / Streaming platforms) & Rule 8 (Personal blogs)
   const platformCheck = detectDisallowedWebsitePlatformOrDomain(targetUrl, crawlResult.mainHtml || "", crawlResult.bodyText || "");
@@ -1156,9 +1153,10 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.isRestricted = false;
     result.hasRestrictedImage = false;
     result.isProhibitedSite = false;
-    if (String(result.businessType).toLowerCase() === "restricted site") {
-      result.businessType = "Manufacturer";
-    }
+    result.businessType = "Manufacturer";
+  }
+  if (String(result.businessType || "").toLowerCase() === "restricted site") {
+    result.businessType = "Manufacturer";
   }
 
   // 1. Authoritative API Ground Truth: When AI API succeeded, take ALL 14 fields from the API response.
