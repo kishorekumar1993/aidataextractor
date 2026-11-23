@@ -549,6 +549,331 @@ const STRICT_OFFICIAL_CATEGORIES = [
   }
 ];
 
+const OFFICIAL_RESTRICTED_CATEGORIES = [
+  "Porn & Adult",
+  "Medicine & Medical",
+  "Hospital & Healthcare",
+  "Food",
+  "Weapons & Knives",
+  "Defence",
+  "Aircraft & Aviation",
+  "Aerospace",
+  "Marine",
+  "Ship & Shipbuilding",
+  "Chemical",
+  "Alcohol",
+  "Animals"
+];
+
+function normalizeToOfficialRestrictedCategory(cat = "") {
+  if (!cat) return null;
+  const c = String(cat).toLowerCase().trim();
+  if (/(?:porn|adult|sex|erotic)/i.test(c)) return "Porn & Adult";
+  if (/(?:medicine|pharmaceutical|drug)/i.test(c)) return "Medicine & Medical";
+  if (/(?:hospital|clinic|healthcare|health\s*care|doctor)/i.test(c)) return "Hospital & Healthcare";
+  if (/(?:food|bakery|restaurant|catering|beverage|edible|dairy|meat)/i.test(c)) return "Food";
+  if (/(?:weapon|knife|knives|sword|gun|firearm|ammunition|blade)/i.test(c)) return "Weapons & Knives";
+  if (/(?:defence|defense|military|armaments|missile|itar)/i.test(c)) return "Defence";
+  if (/(?:aircraft|aviation|airplane|airline|helicopter)/i.test(c)) return "Aircraft & Aviation";
+  if (/(?:aerospace|spacecraft|satellite|rocket)/i.test(c)) return "Aerospace";
+  if (/(?:marine|maritime|naval)/i.test(c)) return "Marine";
+  if (/(?:ship|shipbuilding|shipbuilder|boat|vessel|yacht)/i.test(c)) return "Ship & Shipbuilding";
+  if (/(?:chemical|petrochemical|solvent|agrochemical|pesticide)/i.test(c)) return "Chemical";
+  if (/(?:alcohol|brewery|distillery|wine|beer|liquor|spirit)/i.test(c)) return "Alcohol";
+  if (/(?:animal|pet|puppy|dog|cat|livestock|cattle|horse|equine)/i.test(c)) return "Animals";
+  return null;
+}
+
+/**
+ * Extracts all images across HTML (img, data-src, srcset, CSS background-image, and iframe).
+ * Deduplicates images by normalized URL.
+ */
+function extractAllWebsiteImages(html = "", pageUrl = "") {
+  if (!html || typeof html !== "string") return [];
+  const images = [];
+  const seenUrls = new Set();
+
+  const addImg = (rawUrl, type, contextText = "") => {
+    if (!rawUrl || typeof rawUrl !== "string") return;
+    const cleanRaw = rawUrl.trim();
+    if (!cleanRaw || cleanRaw.startsWith("data:image/svg+xml")) return;
+    let absoluteUrl = cleanRaw;
+    try {
+      if (pageUrl && !cleanRaw.startsWith("http://") && !cleanRaw.startsWith("https://") && !cleanRaw.startsWith("data:")) {
+        absoluteUrl = new URL(cleanRaw, pageUrl).href;
+      }
+    } catch (e) {
+      absoluteUrl = cleanRaw;
+    }
+    const dedupeKey = absoluteUrl.split("#")[0].split("?")[0].toLowerCase();
+    if (seenUrls.has(dedupeKey)) return;
+    seenUrls.add(dedupeKey);
+
+    images.push({
+      url: absoluteUrl,
+      sourcePageUrl: pageUrl || "",
+      sourceType: type,
+      contextText: (contextText || "").slice(0, 300)
+    });
+  };
+
+  // 1. Standard <img> and lazy-loaded attributes
+  const imgMatches = [...html.matchAll(/<img\b([^>]*)>/gi)];
+  for (const m of imgMatches) {
+    const attrs = m[1] || "";
+    const srcMatch = attrs.match(/\b(?:src|data-src|data-lazy-src|data-original|data-url)=["']([^"']+)["']/i);
+    const altMatch = attrs.match(/\b(?:alt|title|aria-label)=["']([^"']+)["']/i);
+    const context = (altMatch ? altMatch[1] : "") + " " + attrs;
+    if (srcMatch && srcMatch[1]) {
+      addImg(srcMatch[1], "img", context);
+    }
+    const srcsetMatch = attrs.match(/\bsrcset=["']([^"']+)["']/i);
+    if (srcsetMatch && srcsetMatch[1]) {
+      const candidates = srcsetMatch[1].split(/,\s*/);
+      for (const cand of candidates) {
+        const u = cand.trim().split(/\s+/)[0];
+        if (u) addImg(u, "srcset", context);
+      }
+    }
+  }
+
+  // 2. <source> in <picture>
+  const sourceMatches = [...html.matchAll(/<source\b([^>]*)>/gi)];
+  for (const m of sourceMatches) {
+    const attrs = m[1] || "";
+    const srcsetMatch = attrs.match(/\bsrcset=["']([^"']+)["']/i);
+    if (srcsetMatch && srcsetMatch[1]) {
+      const candidates = srcsetMatch[1].split(/,\s*/);
+      for (const cand of candidates) {
+        const u = cand.trim().split(/\s+/)[0];
+        if (u) addImg(u, "srcset", attrs);
+      }
+    }
+  }
+
+  // 3. CSS background-image: url(...) in style attributes or inline styles
+  const bgMatches = [...html.matchAll(/(?:style=["'][^"']*?)?url\(["']?([^"')]+)["']?\)/gi)];
+  for (const m of bgMatches) {
+    const raw = (m[1] || "").trim();
+    if (raw && !/^(?:data:font|data:application)/i.test(raw)) {
+      addImg(raw, "css-background", m[0] || "");
+    }
+  }
+
+  // 4. Accessible iframes
+  const iframeMatches = [...html.matchAll(/<iframe\b[^>]+src=["']([^"']+)["']/gi)];
+  for (const m of iframeMatches) {
+    const raw = (m[1] || "").trim();
+    if (/\.(?:jpg|jpeg|png|webp|gif|avif)$/i.test(raw)) {
+      addImg(raw, "iframe", m[0] || "");
+    }
+  }
+
+  return images;
+}
+
+/**
+ * Classifies an image based on visual analysis.
+ * Text in filenames or alt text alone does NOT trigger restricted rejection.
+ */
+function classifyImageVisualContent(imgObj, options = {}) {
+  if (!imgObj) return { status: "WORKING" };
+  const obj = typeof imgObj === "object" ? imgObj : { url: String(imgObj) };
+
+  // Explicit flag: image is unrelated
+  if (obj.isUnrelated === true || obj.unrelated === true) {
+    return { status: "WORKING" };
+  }
+
+  // Explicit flag: image classification is uncertain
+  if (obj.uncertain === true || obj.isUncertain === true || obj.classification === "UNCERTAIN" || obj.classification === "MANUAL_REVIEW" || String(obj.visualClassification || "").toLowerCase() === "uncertain" || (obj.visualCategory && typeof obj.confidence === "number" && obj.confidence < 0.7)) {
+    const rawCat = obj.visualCategory || obj.restrictedCategory || obj.category || "Uncertain";
+    const officialCat = normalizeToOfficialRestrictedCategory(rawCat) || rawCat;
+    return {
+      status: "UNCERTAIN",
+      category: officialCat,
+      confidence: typeof obj.confidence === "number" ? obj.confidence : 0.5,
+      reason: `Visual image classification uncertain for ${obj.url || "image"}`
+    };
+  }
+
+  // Visual Category explicitly provided (from visual model, AI vision API, or data attributes)
+  const visualCat = obj.visualCategory || obj.visualClassifiedAs || obj.visualContent || obj.restrictedCategory || (obj.isRestricted && (obj.category || obj.restrictedCategory)) || obj.category || "";
+  if (visualCat) {
+    const officialCat = normalizeToOfficialRestrictedCategory(visualCat);
+    if (officialCat) {
+      const conf = typeof obj.confidence === "number" ? obj.confidence : 0.95;
+      if (conf >= 0.7) {
+        return {
+          status: "CONFIRMED_RESTRICTED",
+          category: officialCat,
+          officialCategory: officialCat,
+          confidence: conf,
+          reason: `Confirmed restricted image in official category: ${officialCat}`
+        };
+      } else {
+        return {
+          status: "UNCERTAIN",
+          category: officialCat,
+          officialCategory: officialCat,
+          confidence: conf,
+          reason: `Low confidence visual detection for category: ${officialCat}`
+        };
+      }
+    }
+  }
+
+  // Check data attributes on HTML image element (e.g. data-visual-category, data-restricted, data-uncertain)
+  const contextHtml = obj.contextText || "";
+  const catAttrMatch = contextHtml.match(/data-visual-category=["']([^"']+)["']/i);
+  if (catAttrMatch) {
+    const officialCat = normalizeToOfficialRestrictedCategory(catAttrMatch[1]);
+    if (officialCat) {
+      const uncertainAttr = /data-uncertain=["']true["']/i.test(contextHtml);
+      if (uncertainAttr) {
+        return {
+          status: "UNCERTAIN",
+          category: officialCat,
+          officialCategory: officialCat,
+          confidence: 0.5,
+          reason: `Uncertain image classification from data-uncertain attribute for ${obj.url}`
+        };
+      }
+      return {
+        status: "CONFIRMED_RESTRICTED",
+        category: officialCat,
+        officialCategory: officialCat,
+        confidence: 0.95,
+        reason: `Confirmed restricted image from visual attribute in category: ${officialCat}`
+      };
+    }
+  }
+
+  if (/data-uncertain=["']true["']/i.test(contextHtml)) {
+    return {
+      status: "UNCERTAIN",
+      category: "Uncertain",
+      confidence: 0.5,
+      reason: `Uncertain image classification from data-uncertain attribute for ${obj.url}`
+    };
+  }
+
+  // Fallback: If no visual classification metadata, do not reject based on keywords in URL/filename/alt alone!
+  return { status: "WORKING" };
+}
+
+/**
+ * Evaluates images across all accessible pages using Image-Only Rejection Decision Logic:
+ * IF at least one confirmed restricted image is found -> Website Status = Rejected
+ * IF image classification is uncertain -> Website Status = Manual Review
+ * IF no restricted image is found -> Website Status = Working
+ */
+function evaluateWebsiteImageRestrictions(images = [], crawledPages = [], options = {}) {
+  const allImages = [...(images || [])];
+  const seenUrls = new Set(allImages.map(img => (typeof img === "object" ? (img.url || "") : String(img)).split("#")[0].split("?")[0].toLowerCase()));
+
+  if (Array.isArray(crawledPages)) {
+    for (const page of crawledPages) {
+      if (!page) continue;
+      if (Array.isArray(page.images)) {
+        for (const pImg of page.images) {
+          const u = typeof pImg === "object" ? pImg.url : pImg;
+          const key = String(u || "").split("#")[0].split("?")[0].toLowerCase();
+          if (key && !seenUrls.has(key)) {
+            seenUrls.add(key);
+            allImages.push(typeof pImg === "object" ? { ...pImg, sourcePageUrl: pImg.sourcePageUrl || page.url || "" } : { url: u, sourcePageUrl: page.url || "", sourceType: "img" });
+          }
+        }
+      }
+      if (page.html) {
+        const extracted = extractAllWebsiteImages(page.html, page.url || "");
+        for (const eImg of extracted) {
+          const key = (eImg.url || "").split("#")[0].split("?")[0].toLowerCase();
+          if (key && !seenUrls.has(key)) {
+            seenUrls.add(key);
+            allImages.push(eImg);
+          }
+        }
+      }
+    }
+  }
+
+  let confirmedRestrictedImage = null;
+  let uncertainImage = null;
+
+  for (const img of allImages) {
+    if (!img) continue;
+    const imgObj = typeof img === "object" ? img : { url: String(img) };
+    const classification = classifyImageVisualContent(imgObj, options);
+
+    if (classification.status === "CONFIRMED_RESTRICTED") {
+      confirmedRestrictedImage = {
+        ...imgObj,
+        category: classification.category,
+        officialCategory: classification.officialCategory,
+        confidence: classification.confidence,
+        reason: classification.reason
+      };
+      break;
+    } else if (classification.status === "UNCERTAIN" && !uncertainImage) {
+      uncertainImage = {
+        ...imgObj,
+        category: classification.category,
+        confidence: classification.confidence,
+        reason: classification.reason
+      };
+    }
+  }
+
+  // Official Decision Logic:
+  if (confirmedRestrictedImage) {
+    return {
+      status: "Rejected",
+      websiteStatus: "Not Working",
+      isRestricted: true,
+      hasRestrictedImage: true,
+      classification: "GENUINE_RESTRICTED",
+      restrictedCategory: confirmedRestrictedImage.officialCategory || confirmedRestrictedImage.category,
+      category: confirmedRestrictedImage.category,
+      imageUrl: confirmedRestrictedImage.url,
+      sourcePageUrl: confirmedRestrictedImage.sourcePageUrl,
+      confidence: confirmedRestrictedImage.confidence,
+      reason: `Confirmed restricted image detected in category: ${confirmedRestrictedImage.officialCategory || confirmedRestrictedImage.category}`,
+      evidenceType: "Image",
+      requiresManualReview: false
+    };
+  }
+
+  if (uncertainImage) {
+    return {
+      status: "Manual Review",
+      websiteStatus: "Manual Review",
+      isRestricted: false,
+      hasRestrictedImage: false,
+      isUncertain: true,
+      classification: "MANUAL_REVIEW",
+      category: uncertainImage.category || "",
+      imageUrl: uncertainImage.url,
+      sourcePageUrl: uncertainImage.sourcePageUrl,
+      confidence: uncertainImage.confidence || 0.5,
+      reason: `Uncertain image classification for image: ${uncertainImage.url}. Manual Review required.`,
+      evidenceType: "Image",
+      requiresManualReview: true
+    };
+  }
+
+  return {
+    status: "Working",
+    websiteStatus: "Working",
+    isRestricted: false,
+    hasRestrictedImage: false,
+    classification: "NO_RESTRICTED_CATEGORY",
+    reason: "No confirmed restricted-category image found",
+    evidenceType: "Website Content",
+    requiresManualReview: false
+  };
+}
+
 function extractEvidenceTypeAndImage(html = "", matchedKw = "", pageUrl = "") {
   let evidenceType = "Website Content";
   let imageUrl = null;

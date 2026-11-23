@@ -777,10 +777,9 @@ async function extractGoogleMapsEmbedAsync(html, addressCandidates, pageUrl = ""
     const fetchedUrls = new Set([finalUrl]);
 
     // PRE-AI CRAWL SHORT-CIRCUIT:
-    // Only skip crawling subpages if a prohibited restricted category is detected.
-    // For sites with online carts, NEVER skip subpages so we can verify if the company is a Manufacturer!
-    const earlyRestricted = detectRestrictedKeywords(stripHtml(mainHtml) + " " + targetUrl, mainHtml, crawledPages);
-    const shouldSkipSubpages = !!(earlyRestricted.isRestricted && earlyRestricted.classification === "GENUINE_RESTRICTED");
+    // Text-based early abort is REMOVED per technical team rule:
+    // A website cannot be rejected on text alone. Subpages and internal pages MUST be crawled to inspect images!
+    const shouldSkipSubpages = false;
 
     if (!shouldSkipSubpages) {
       // STRICT PRIORITY ORDER:
@@ -1359,6 +1358,27 @@ async function extractGoogleMapsEmbedAsync(html, addressCandidates, pageUrl = ""
   // Note: Manufacturer exception (Rules 11 & 16) is applied in strict QC, so do not blanket reject here!
   const shopCartCheck = detectPurchaseOrShoppingCart(mainHtml + "\n" + contactHtml, (extracted && extracted.bodyText) || "");
 
+  // Extract and aggregate all website images across main HTML and all crawled subpages
+  const allImages = [];
+  const seenImageKeys = new Set();
+  const collectImgs = (h, pUrl) => {
+    if (!h) return;
+    const extractedList = typeof extractAllWebsiteImages === "function" ? extractAllWebsiteImages(h, pUrl) : [];
+    for (const img of extractedList) {
+      const key = (img.url || "").split("#")[0].split("?")[0].toLowerCase();
+      if (key && !seenImageKeys.has(key)) {
+        seenImageKeys.add(key);
+        allImages.push(img);
+      }
+    }
+  };
+  collectImgs(mainHtml, finalUrl);
+  if (Array.isArray(crawledPages)) {
+    for (const cp of crawledPages) {
+      if (cp && cp.html) collectImgs(cp.html, cp.url);
+    }
+  }
+
   return {
     originalUrl: targetUrl,
     finalUrl,
@@ -1373,6 +1393,7 @@ async function extractGoogleMapsEmbedAsync(html, addressCandidates, pageUrl = ""
     totalNetworkRequests: pagesFetchedCount + (redirectChainInfo ? redirectChainInfo.hops : 0),
     logoText,
     ogSiteName,
+    images: allImages,
     addressCandidates,
     detectedAddresses: addressCandidates.map(c => (typeof c === "object" ? c.raw : c)),
     isDynamicSpa,

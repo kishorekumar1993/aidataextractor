@@ -892,9 +892,19 @@
       let addrVal = (data.companyAddress && data.companyAddress !== "Not Available")
         ? String(data.companyAddress).trim()
         : "";
-      if (addrVal && typeof stripBlindlyAddedNumber === "function") {
-        const rawCand = data.selectedAddressCandidateRaw || "";
-        addrVal = stripBlindlyAddedNumber(addrVal, rawCand, rawCand);
+      if (addrVal) {
+        // Defensively strip leading information/label prefixes
+        addrVal = addrVal.replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "").trim();
+        // Defensively split and discard secondary combined addresses
+        const multiAddrSep = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)/i;
+        if (multiAddrSep.test(addrVal)) {
+          const parts = addrVal.split(multiAddrSep).map(p => p.trim()).filter(Boolean);
+          if (parts.length > 0) addrVal = parts[0];
+        }
+        if (typeof stripBlindlyAddedNumber === "function") {
+          const rawCand = data.selectedAddressCandidateRaw || "";
+          addrVal = stripBlindlyAddedNumber(addrVal, rawCand, rawCand);
+        }
       }
       if (elements.companyAddress && addrVal) {
         if (setInputValue(elements.companyAddress, addrVal)) {

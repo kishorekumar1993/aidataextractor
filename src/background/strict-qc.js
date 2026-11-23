@@ -340,15 +340,16 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "", optio
     });
   }
 
-  // Step 2: PRE-AI STRICT CHECKS (Prohibited Categories, Free Platforms, Subdomains, Flash & Non-English)
-  // Check across target URL, final URL, page text, metadata, image tags, product pages, and stripped body content
-  const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + stripHtml(crawlResult.contactHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
-  const restrictedCheck = detectRestrictedKeywords(siteContent, (crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.crawledPages || []);
+  // Step 2: PRE-AI STRICT CHECKS (Image-Only Restriction Policy, Free Platforms, Subdomains, Flash & Non-English)
+  // Rejection must be based on confirmed restricted IMAGES only, not merely on the presence of restricted words.
+  // Words in text, keywords, page titles, URLs, filenames, HTML content, product descriptions, or OCR text alone do NOT trigger rejection.
+  const imageRestrictionCheck = typeof evaluateWebsiteImageRestrictions === "function"
+    ? evaluateWebsiteImageRestrictions(crawlResult.images || [], crawlResult.crawledPages || [])
+    : { hasRestrictedImage: false, isUncertain: false };
 
-  // PRE-AI CHECK 1: Reject only when a restricted business/product pattern is confirmed.
-  // Isolated words and image filenames/ALT text are not sufficient evidence.
-  if (restrictedCheck.isRestricted) {
-    const errorUrl = restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl;
+  // 1. Confirmed Restricted Image Found -> Reject Entire Website (Website Status = Rejected / Not Working)
+  if (imageRestrictionCheck.hasRestrictedImage) {
+    const errorUrl = imageRestrictionCheck.imageUrl || imageRestrictionCheck.sourcePageUrl || crawlResult.finalUrl || targetUrl;
     return finishAndRecord({
       websiteStatus: "Not Working",
       businessType: "",
@@ -365,35 +366,34 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "", optio
       productImages: "",
       numberOfProductDescriptions: "",
       isRestricted: true,
+      hasRestrictedImage: true,
       isProhibitedSite: true,
-      notWorkingReason: restrictedCheck.reason,
-      restrictedReason: restrictedCheck.reason,
-      restrictedKeyword: restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword,
-      restrictedCategory: restrictedCheck.category || restrictedCheck.restricted_category,
+      notWorkingReason: imageRestrictionCheck.reason,
+      restrictedReason: imageRestrictionCheck.reason,
+      restrictedCategory: imageRestrictionCheck.restrictedCategory || imageRestrictionCheck.category,
       restrictedSourceUrl: errorUrl,
-      restrictedSnippet: restrictedCheck.snippet || restrictedCheck.matched_context || "",
-      errorCategory: "Prohibited Category",
-      errorKeyword: restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword,
+      errorCategory: "Prohibited Category Image",
+      errorKeyword: imageRestrictionCheck.restrictedCategory || imageRestrictionCheck.category,
       errorSourceUrl: errorUrl,
-      errorSnippet: restrictedCheck.snippet || restrictedCheck.matched_context || "",
-      restricted_category: restrictedCheck.restricted_category || restrictedCheck.category || "",
-      matched_keyword: restrictedCheck.matched_keyword || restrictedCheck.matchedKeyword || "",
+      errorSnippet: `Restricted category image confirmed: ${imageRestrictionCheck.imageUrl}`,
+      restricted_category: imageRestrictionCheck.restrictedCategory || imageRestrictionCheck.category || "",
+      matched_keyword: imageRestrictionCheck.restrictedCategory || imageRestrictionCheck.category || "",
       matched_page: errorUrl,
-      matched_context: restrictedCheck.matched_context || restrictedCheck.snippet || "",
-      business_activity: restrictedCheck.business_activity || "Genuine restricted business operations",
+      matched_context: `Restricted category image confirmed: ${imageRestrictionCheck.imageUrl}`,
+      business_activity: "Confirmed restricted category image",
       classification: "GENUINE_RESTRICTED",
       is_restricted: true,
-      confidence: restrictedCheck.confidence || 0.98,
-      reason: restrictedCheck.reason,
+      confidence: imageRestrictionCheck.confidence || 0.98,
+      reason: imageRestrictionCheck.reason,
       _finalUrl: crawlResult.finalUrl || targetUrl,
       _originalUrl: targetUrl,
-      _note: `Prohibited Category / Word Detected (${restrictedCheck.reason}) - Marked as Not Working`
+      _note: `Prohibited Category Image Detected (${imageRestrictionCheck.reason}) - Marked as Not Working`
     });
   }
 
-  // Section 7: If evidence is ambiguous or insufficient, send for Manual Review instead of automatic rejection
-  if (restrictedCheck.classification === "MANUAL_REVIEW") {
-    const errorUrl = restrictedCheck.sourceUrl || crawlResult.finalUrl || targetUrl;
+  // 2. Image Classification is Uncertain -> Manual Review (Never reject on uncertain image)
+  if (imageRestrictionCheck.isUncertain || imageRestrictionCheck.classification === "MANUAL_REVIEW") {
+    const errorUrl = imageRestrictionCheck.imageUrl || imageRestrictionCheck.sourcePageUrl || crawlResult.finalUrl || targetUrl;
     return finishAndRecord({
       websiteStatus: "Manual Review",
       businessType: "",
@@ -410,22 +410,29 @@ async function handleCrawlAndExtract(rawUrl, requestedExtractionMode = "", optio
       productImages: "",
       numberOfProductDescriptions: "",
       isRestricted: false,
+      hasRestrictedImage: false,
       requiresManualReview: true,
-      notWorkingReason: `Manual Review: ${restrictedCheck.reason || "Ambiguous restricted category indicator requires human verification"}`,
-      restricted_category: restrictedCheck.restricted_category || restrictedCheck.category || "",
-      matched_keyword: restrictedCheck.matched_keyword || restrictedCheck.matchedKeyword || "",
+      notWorkingReason: imageRestrictionCheck.reason || "Image classification uncertain - Marked for Manual Review",
+      restricted_category: imageRestrictionCheck.category || "",
+      matched_keyword: imageRestrictionCheck.category || "Uncertain Image",
       matched_page: errorUrl,
-      matched_context: restrictedCheck.matched_context || restrictedCheck.snippet || "",
-      business_activity: restrictedCheck.business_activity || "Ambiguous / Unconfirmed",
+      matched_context: imageRestrictionCheck.reason || "Image classification uncertain - Marked for Manual Review",
+      business_activity: "Image Classification Uncertain",
       classification: "MANUAL_REVIEW",
-      is_restricted: false,
-      confidence: restrictedCheck.confidence || 0.50,
-      reason: restrictedCheck.reason,
+      errorCategory: "Image Classification Uncertain",
+      errorKeyword: imageRestrictionCheck.category || "Uncertain Image",
+      errorSourceUrl: errorUrl,
+      errorSnippet: imageRestrictionCheck.reason || "Image classification uncertain - Marked for Manual Review",
       _finalUrl: crawlResult.finalUrl || targetUrl,
       _originalUrl: targetUrl,
-      _note: `Manual Review Required: ${restrictedCheck.reason}`
+      _note: "Image classification uncertain - Marked for Manual Review"
     });
   }
+
+  // 3. IF restricted words are found in text/titles/URLs AND no restricted image is found:
+  // Website Status = Working (DO NOT REJECT!)
+  const siteContent = (crawlResult.combinedText || "") + " " + stripHtml(crawlResult.mainHtml || "") + " " + stripHtml(crawlResult.contactHtml || "") + " " + targetUrl + " " + (crawlResult.finalUrl || "");
+  const restrictedCheck = detectRestrictedKeywords(siteContent, (crawlResult.mainHtml || "") + "\n" + (crawlResult.contactHtml || ""), crawlResult.crawledPages || []);
 
   // PRE-AI CHECK 2: Rule 9 (Free platforms) & Rule 10 (Subdomains / Streaming platforms) & Rule 8 (Personal blogs)
   const platformCheck = detectDisallowedWebsitePlatformOrDomain(targetUrl, crawlResult.mainHtml || "", crawlResult.bodyText || "");
@@ -1042,16 +1049,32 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
   result.URL = (crawlData && (crawlData.originalUrl || crawlData.finalUrl || crawlData.errorUrl || crawlData.targetUrl)) || result.URL || result.url || "";
   result.url = result.URL;
 
-  // 0. Prohibited Category / Word Check (Highest Priority Rule Note 2 & Official Strict Restriction Policy)
-  // Any restricted category word, meaningful phrase, or relevant image found anywhere triggers rejection.
-  // Incidental mentions and low-priority pages are NOT exempt. AI extraction CANNOT override this result.
-  const isProhibited = !!(restrictedCheck && restrictedCheck.isRestricted) ||
-    !!data.isRestricted ||
-    !!data.isProhibitedSite ||
-    String(data.businessType || "").toLowerCase() === "restricted site";
+  // 0. Restricted Category Rule: Image-Only Rejection Policy
+  // Official Technical Rule: Rejection must be based on confirmed restricted IMAGES only, not merely on the presence of restricted words.
+  // Words in text, page titles, URLs, filenames, HTML content, product descriptions, or OCR text alone do NOT trigger rejection.
+  // IF at least one confirmed restricted image is found -> Website Status = Rejected (Not Working).
+  // IF image classification is uncertain -> Website Status = Manual Review.
+  // IF restricted words are found AND no restricted image is found -> Website Status = Working.
+  const imageDecision = (typeof evaluateWebsiteImageRestrictions === "function")
+    ? evaluateWebsiteImageRestrictions(crawlData ? (crawlData.images || []) : [], crawlData ? (crawlData.crawledPages || []) : [])
+    : { hasRestrictedImage: false, isUncertain: false };
 
-  if (isProhibited) {
-    const errorUrl = (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || result.restrictedSourceUrl || crawlData.finalUrl || crawlData.originalUrl || "";
+  const hasConfirmedRestrictedImage = !!(
+    imageDecision.hasRestrictedImage ||
+    (restrictedCheck && (restrictedCheck.hasRestrictedImage || (restrictedCheck.isRestricted && (restrictedCheck.evidenceType === "Image" || restrictedCheck.hasConfirmedRestrictedImage)))) ||
+    (data && (data.hasRestrictedImage || (data.isRestricted && (data.evidenceType === "Image" || data.hasConfirmedRestrictedImage)))) ||
+    (crawlData && crawlData.hasRestrictedImage)
+  );
+
+  const isUncertainImage = !!(
+    imageDecision.isUncertain ||
+    (restrictedCheck && (restrictedCheck.isUncertain || (restrictedCheck.classification === "MANUAL_REVIEW" && restrictedCheck.evidenceType === "Image"))) ||
+    (data && (data.isUncertain || (data.classification === "MANUAL_REVIEW" && data.evidenceType === "Image"))) ||
+    (crawlData && crawlData.isUncertainImage)
+  );
+
+  if (hasConfirmedRestrictedImage) {
+    const errorUrl = imageDecision.imageUrl || (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || result.restrictedSourceUrl || (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "";
     result.websiteStatus = "Not Working";
     result.businessType = "";
     result.companyProfile = "";
@@ -1067,29 +1090,72 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
     result.productImages = "";
     result.numberOfProductDescriptions = "";
     result.isRestricted = true;
+    result.hasRestrictedImage = true;
     result.isProhibitedSite = true;
-    result.restrictedReason = (restrictedCheck && restrictedCheck.reason) || result.restrictedReason || data.notWorkingReason || data.reason || "Prohibited Category Detected";
-    result.restrictedKeyword = (restrictedCheck && (restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword)) || result.restrictedKeyword || "";
-    result.restrictedCategory = (restrictedCheck && (restrictedCheck.category || restrictedCheck.restricted_category)) || result.restrictedCategory || "";
+    const resolvedCat = (imageDecision.hasRestrictedImage ? (imageDecision.restrictedCategory || imageDecision.category) : "") ||
+      (restrictedCheck && (restrictedCheck.restrictedCategory || restrictedCheck.category || restrictedCheck.restricted_category)) ||
+      (data && (data.restrictedCategory || data.category || data.restricted_category)) || "";
+    result.restrictedCategory = resolvedCat;
+    result.restrictedKeyword = resolvedCat || (restrictedCheck && (restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword)) || "";
+    result.restrictedReason = (imageDecision.hasRestrictedImage ? imageDecision.reason : "") ||
+      (restrictedCheck && restrictedCheck.reason) ||
+      (resolvedCat ? `Prohibited Category: ${resolvedCat}` : "") ||
+      result.restrictedReason || "Confirmed restricted-category image found";
     result.restrictedSourceUrl = errorUrl;
-    result.restrictedSnippet = (restrictedCheck && (restrictedCheck.snippet || restrictedCheck.matched_context)) || result.restrictedSnippet || "";
+    result.restrictedSnippet = `Restricted image confirmed: ${imageDecision.imageUrl || errorUrl}`;
     result.errorKeyword = result.restrictedKeyword;
     result.errorSourceUrl = errorUrl;
     result.errorSnippet = result.restrictedSnippet;
-    result.restricted_category = result.restrictedCategory;
-    result.matched_keyword = result.restrictedKeyword;
-    result.matched_page = errorUrl;
-    result.matched_context = result.restrictedSnippet;
-    result.business_activity = (restrictedCheck && restrictedCheck.business_activity) || "Genuine restricted business operations";
+    result.errorCategory = "Prohibited Category Image";
     result.classification = "GENUINE_RESTRICTED";
     result.is_restricted = true;
-    result.confidence = (restrictedCheck && restrictedCheck.confidence) || 0.98;
     result.reason = result.restrictedReason;
     result.notWorkingReason = result.restrictedReason;
-    result.errorCategory = "Prohibited Category";
-    result._finalUrl = crawlData.finalUrl || crawlData.originalUrl || "";
-    result._originalUrl = crawlData.originalUrl || "";
+    result._finalUrl = (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "";
+    result._originalUrl = (crawlData && crawlData.originalUrl) || "";
     return result;
+  }
+
+  if (isUncertainImage) {
+    const errorUrl = imageDecision.imageUrl || (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || result.restrictedSourceUrl || (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "";
+    result.websiteStatus = "Manual Review";
+    result.requiresManualReview = true;
+    result.businessType = "";
+    result.companyProfile = "";
+    result.companyName = "";
+    result.countryName = "";
+    result.companyAddress = "";
+    result.state = "";
+    result.city = "";
+    result.emailId = "";
+    result.secondaryEmailId = "";
+    result.phoneNumber = "";
+    result.numberOfProducts = "";
+    result.productImages = "";
+    result.numberOfProductDescriptions = "";
+    result.isRestricted = false;
+    result.hasRestrictedImage = false;
+    result.isUncertain = true;
+    result.classification = "MANUAL_REVIEW";
+    result.errorCategory = "Image Classification Uncertain";
+    result.notWorkingReason = imageDecision.reason || "Image classification uncertain - Marked for Manual Review";
+    result.errorKeyword = imageDecision.category || "Uncertain Image";
+    result.errorSourceUrl = errorUrl;
+    result._finalUrl = (crawlData && (crawlData.finalUrl || crawlData.originalUrl)) || "";
+    result._originalUrl = (crawlData && crawlData.originalUrl) || "";
+    return result;
+  }
+
+  // IF restricted words are found in text/titles/URLs AND no restricted image is found:
+  // Website Status = Working (Never reject on words alone!)
+  if (result.websiteStatus === "Not Working" && (result.isRestricted || String(result.businessType).toLowerCase() === "restricted site") && !hasConfirmedRestrictedImage) {
+    result.websiteStatus = "Working";
+    result.isRestricted = false;
+    result.hasRestrictedImage = false;
+    result.isProhibitedSite = false;
+    if (String(result.businessType).toLowerCase() === "restricted site") {
+      result.businessType = "Manufacturer";
+    }
   }
 
   // 1. Authoritative API Ground Truth: When AI API succeeded, take ALL 14 fields from the API response.

@@ -715,7 +715,8 @@
 
   // Immediate capture listener: user clicking submit or "click here" unblocks review state
   document.addEventListener("click", (e) => {
-    const btn = e.target.closest("button, input[type=submit], input[type=button], a");
+    if (!isExtensionContextValid()) return;
+    const btn = e.target && e.target.closest ? e.target.closest("button, input[type=submit], input[type=button], a") : null;
     if (!btn) return;
     const txt = (btn.textContent || btn.value || "").trim().toLowerCase();
     if (txt === "submit" || txt.includes("submit") || txt === "click here" || txt.includes("click here")) {
@@ -724,7 +725,11 @@
   }, true);
 
   // Continuous Auto-Watcher: guarantees user NEVER has to manually click crawl when auto-queue is enabled!
-  setInterval(() => {
+  const continuousWatcher = setInterval(() => {
+    if (!isExtensionContextValid()) {
+      try { clearInterval(continuousWatcher); } catch (e) {}
+      return;
+    }
     try {
       if (state.autoQueueEnabled && !state.isCrawlingInProgress) {
         // Check if portal has "Website data saved successfully" banner (as shown in user portal screenshot)
@@ -740,6 +745,10 @@
   // DOM MutationObserver for immediate reaction when AJAX injects new URL
   try {
     const queueDomObserver = new MutationObserver(() => {
+      if (!isExtensionContextValid()) {
+        try { queueDomObserver.disconnect(); } catch (e) {}
+        return;
+      }
       if (state.autoQueueEnabled && !state.isCrawlingInProgress) {
         checkAndAutoTriggerQueueCrawl();
       }
@@ -939,6 +948,7 @@
 
   // Global capturing submit listener for auto-queue progression across all portal workflows
   document.addEventListener("click", (e) => {
+    if (!isExtensionContextValid()) return;
     const btn = e.target && e.target.closest ? e.target.closest("button, input[type=submit], input[type=button], .btn-submit") : null;
     if (!btn || btn.closest("#ai-prefill-widget")) return;
     const txt = (btn.textContent || btn.value || "").trim().toLowerCase();
@@ -961,6 +971,7 @@
           } catch (e) {}
         }
         setTimeout(() => {
+          if (!isExtensionContextValid()) return;
           if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
             scheduleNextQueueAutoCrawl(curUrl);
           }
@@ -971,6 +982,7 @@
 
   // Form submit listener for keyboard / programmatic form submits
   document.addEventListener("submit", (e) => {
+    if (!isExtensionContextValid()) return;
     if (e.target && e.target.closest && e.target.closest("#ai-prefill-widget")) return;
     state.isWaitingForUserWorkingReview = false;
     const curUrl = typeof AIExt.getTargetUrl === "function" ? AIExt.getTargetUrl() : "";
@@ -978,6 +990,7 @@
     if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
       state.isAutoQueuePipelineActive = true;
       setTimeout(() => {
+        if (!isExtensionContextValid()) return;
         if (state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
           scheduleNextQueueAutoCrawl(curUrl);
         }

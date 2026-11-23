@@ -2129,12 +2129,28 @@ async function runAll() {
     assert.strictEqual(aeroCheck.isRestricted, true, 'Aerospace CNC Machines must be restricted');
     assert.strictEqual(aeroCheck.category, 'Aerospace');
 
-    // 5. Full strict QC evaluation marks site as Not Working and clears all fields
-    const restrictedEvaluation = ctx.applyStrictInstructions({
+    // 5. Full strict QC evaluation:
+    // Under Image-Only Rejection rule, restricted words in text without restricted image must NOT reject
+    const textOnlyEvaluation = ctx.applyStrictInstructions({
       websiteStatus: 'Working',
+      businessType: 'Manufacturer',
       companyName: 'United Grinding',
       companyAddress: '2100 United Grinding Boulevard, Miamisburg, Ohio'
     }, {}, itarCheck);
+    assert.strictEqual(textOnlyEvaluation.websiteStatus, 'Working', 'Text-only restricted keywords must NOT reject website');
+
+    // With confirmed restricted image -> Website is Rejected (Not Working)
+    const itarCheckWithImage = {
+      ...itarCheck,
+      hasRestrictedImage: true,
+      evidenceType: 'Image'
+    };
+    const restrictedEvaluation = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: 'United Grinding',
+      companyAddress: '2100 United Grinding Boulevard, Miamisburg, Ohio'
+    }, { hasRestrictedImage: true }, itarCheckWithImage);
 
     assert.strictEqual(restrictedEvaluation.websiteStatus, 'Not Working');
     assert.strictEqual(restrictedEvaluation.companyName, '');
@@ -2172,20 +2188,34 @@ async function runAll() {
     assert.strictEqual(collegeCheck.isRestricted, true, 'Community college must be restricted');
     assert.strictEqual(collegeCheck.category, 'School, College & Education');
 
-    // 4. Full QC evaluation marks School as Not Working and clears all 13 fields
+    // 4. Full QC evaluation:
+    // Under Image-Only Rejection rule, restricted words in text without restricted image must NOT reject
     const schoolQc = ctx.applyStrictInstructions({
       websiteStatus: 'Working',
+      businessType: 'Manufacturer',
       companyName: "St. Mary's High School",
       companyAddress: '100 School Lane, Springfield, Ohio',
       phoneNumber: '5551234567'
     }, {}, schoolCheck);
 
-    assert.strictEqual(schoolQc.websiteStatus, 'Not Working', 'School status must be Not Working');
-    assert.strictEqual(schoolQc.companyName, '', 'Company name must be cleared');
-    assert.strictEqual(schoolQc.companyAddress, '', 'Company address must be cleared');
-    assert.strictEqual(schoolQc.phoneNumber, '', 'Phone must be cleared');
-    assert.strictEqual(schoolQc.isRestricted, true, 'isRestricted must be true');
-    assert.ok(schoolQc.notWorkingReason.includes('School, College & Education') || schoolQc.notWorkingReason.includes('Prohibited Category'));
+    assert.strictEqual(schoolQc.websiteStatus, 'Working', 'School words in text without restricted image must remain Working');
+
+    // With confirmed restricted image -> Rejected
+    const schoolImageCheck = { ...schoolCheck, hasRestrictedImage: true, evidenceType: 'Image' };
+    const schoolImageQc = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyName: "St. Mary's High School",
+      companyAddress: '100 School Lane, Springfield, Ohio',
+      phoneNumber: '5551234567'
+    }, { hasRestrictedImage: true }, schoolImageCheck);
+
+    assert.strictEqual(schoolImageQc.websiteStatus, 'Not Working', 'School with confirmed restricted image must be Not Working');
+    assert.strictEqual(schoolImageQc.companyName, '', 'Company name must be cleared');
+    assert.strictEqual(schoolImageQc.companyAddress, '', 'Company address must be cleared');
+    assert.strictEqual(schoolImageQc.phoneNumber, '', 'Phone must be cleared');
+    assert.strictEqual(schoolImageQc.isRestricted, true, 'isRestricted must be true');
+    assert.ok(schoolImageQc.notWorkingReason.includes('School, College & Education') || schoolImageQc.notWorkingReason.includes('Prohibited Category'));
 
     // 5. False positive protection: School Uniform and School Furniture Manufacturers are NOT restricted
     const uniformText = "Elite Garment Factory: We manufacture custom school uniforms, sports jerseys, and corporate workwear.";
@@ -2229,12 +2259,22 @@ async function runAll() {
       numberOfProductDescriptions: '6'
     };
 
-    const finalStrictQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
+    // 2. Under Image-Only rule: text keywords without restricted image keeps Working
+    const textOnlyQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
       finalUrl: 'https://www.action-wetori.com',
       originalUrl: 'https://www.action-wetori.com'
     }, actionCheck);
+    assert.strictEqual(textOnlyQc.websiteStatus, 'Working', 'Restricted words in text without restricted image must remain Working');
 
-    assert.strictEqual(finalStrictQc.websiteStatus, 'Not Working', 'Restricted site MUST be Not Working even if AI returned Working');
+    // 3. Critical: When confirmed restricted image is found, applyStrictInstructions MUST override AI to Not Working
+    const actionCheckWithImage = { ...actionCheck, hasRestrictedImage: true, evidenceType: 'Image' };
+    const finalStrictQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
+      finalUrl: 'https://www.action-wetori.com',
+      originalUrl: 'https://www.action-wetori.com',
+      hasRestrictedImage: true
+    }, actionCheckWithImage);
+
+    assert.strictEqual(finalStrictQc.websiteStatus, 'Not Working', 'Restricted site with confirmed image MUST be Not Working even if AI returned Working');
     assert.strictEqual(finalStrictQc.businessType, '', 'Business type must be wiped');
     assert.strictEqual(finalStrictQc.companyName, '', 'Company name must be wiped');
     assert.strictEqual(finalStrictQc.companyAddress, '', 'Address must be wiped');
@@ -4359,6 +4399,180 @@ async function runAll() {
       'Available',
       'Melbourne is a recognized Australian city -> City: Available'
     );
+  });
+
+  // =========================================================================
+  // Item 128: 10 Official Website Restriction Scenarios (Image-Only Rejection)
+  // Section 8 Test Scenarios:
+  // 1. Restricted word in normal text only -> Working
+  // 2. Restricted word in page title only -> Working
+  // 3. Restricted word in URL only -> Working
+  // 4. Restricted word in product description only -> Working
+  // 5. Restricted word in image filename only, but image is unrelated -> Working
+  // 6. Actual restricted-category image appears -> Rejected (Not Working)
+  // 7. Restricted word appears with unrelated images -> Working
+  // 8. Restricted image appears on an internal page -> Rejected (Not Working)
+  // 9. Restricted image appears as a CSS background -> Rejected (Not Working)
+  // 10. Image classification is uncertain -> Manual Review
+  // =========================================================================
+  runTest('Item 128: Official 10 Restriction Scenarios (Image-Only Rejection Policy)', () => {
+    const { ctx } = createTestContext();
+
+    const baseData = {
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Precision Engineering Ltd',
+      countryName: 'United Kingdom',
+      companyAddress: '10 High Street, Birmingham, West Midlands',
+      state: 'Available',
+      city: 'Available',
+      emailId: 'info@precisioneng.co.uk',
+      phoneNumber: '1214960000',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    };
+
+    // Scenario 1: Restricted word appears in normal text only -> Working
+    const s1Crawl = {
+      finalUrl: 'https://www.precisioneng.co.uk',
+      bodyText: 'We produce metal components for various industries including defence and medical applications.',
+      crawledPages: [{ url: 'https://www.precisioneng.co.uk', text: 'We produce metal components for defence and medical applications.' }],
+      images: []
+    };
+    const s1Res = ctx.applyStrictInstructions(baseData, s1Crawl);
+    assert.strictEqual(s1Res.websiteStatus, 'Working', 'Scenario 1: Word in normal text only must remain Working');
+    assert.strictEqual(s1Res.companyName, 'Precision Engineering Limited');
+
+    // Scenario 2: Restricted word appears in page title only -> Working
+    const s2Crawl = {
+      finalUrl: 'https://www.precisioneng.co.uk',
+      title: 'Precision Engineering - Aerospace & Marine Grade Fasteners',
+      bodyText: 'High quality industrial fasteners and stainless steel components.',
+      images: []
+    };
+    const s2Res = ctx.applyStrictInstructions(baseData, s2Crawl);
+    assert.strictEqual(s2Res.websiteStatus, 'Working', 'Scenario 2: Word in page title only must remain Working');
+
+    // Scenario 3: Restricted word appears in URL only -> Working
+    const s3Crawl = {
+      finalUrl: 'https://www.precisioneng.co.uk/industries/aircraft-parts/',
+      bodyText: 'Precision CNC machining for commercial hardware.',
+      images: []
+    };
+    const s3Res = ctx.applyStrictInstructions(baseData, s3Crawl);
+    assert.strictEqual(s3Res.websiteStatus, 'Working', 'Scenario 3: Word in URL only must remain Working');
+
+    // Scenario 4: Restricted word appears in product description only -> Working
+    const s4Crawl = {
+      finalUrl: 'https://www.precisioneng.co.uk/products',
+      bodyText: 'Product 1: Titanium Bolt suitable for chemical plant pumps and food processing machines.',
+      images: []
+    };
+    const s4Res = ctx.applyStrictInstructions(baseData, s4Crawl);
+    assert.strictEqual(s4Res.websiteStatus, 'Working', 'Scenario 4: Word in product description only must remain Working');
+
+    // Scenario 5: Restricted word appears in image filename only, but image is unrelated -> Working
+    const s5Crawl = {
+      finalUrl: 'https://www.precisioneng.co.uk',
+      images: [{
+        url: 'https://www.precisioneng.co.uk/images/hospital-building-renovation-sponsor.jpg',
+        sourcePageUrl: 'https://www.precisioneng.co.uk/about',
+        visualClassification: 'unrelated',
+        isRestricted: false
+      }]
+    };
+    const s5Eval = ctx.evaluateWebsiteImageRestrictions(s5Crawl.images, []);
+    assert.strictEqual(s5Eval.hasRestrictedImage, false, 'Filename alone does not trigger restricted image classification');
+    const s5Res = ctx.applyStrictInstructions(baseData, s5Crawl);
+    assert.strictEqual(s5Res.websiteStatus, 'Working', 'Scenario 5: Restricted word in filename only must remain Working');
+
+    // Scenario 6: Actual restricted-category image appears -> Rejected (Not Working)
+    const s6Crawl = {
+      finalUrl: 'https://www.precisioneng.co.uk',
+      images: [{
+        url: 'https://www.precisioneng.co.uk/uploads/knife-weapon-blade.png',
+        sourcePageUrl: 'https://www.precisioneng.co.uk/products',
+        visualClassification: 'confirmed_restricted',
+        restrictedCategory: 'Weapons & Knives',
+        confidence: 0.98,
+        isRestricted: true
+      }]
+    };
+    const s6Eval = ctx.evaluateWebsiteImageRestrictions(s6Crawl.images, []);
+    assert.strictEqual(s6Eval.hasRestrictedImage, true);
+    assert.strictEqual(s6Eval.category, 'Weapons & Knives');
+    const s6Res = ctx.applyStrictInstructions(baseData, { ...s6Crawl, hasRestrictedImage: true });
+    assert.strictEqual(s6Res.websiteStatus, 'Not Working', 'Scenario 6: Confirmed restricted image must reject website');
+    assert.strictEqual(s6Res.companyName, '', 'Fields must be wiped when rejected');
+
+    // Scenario 7: Restricted word appears with unrelated images -> Working
+    const s7Crawl = {
+      finalUrl: 'https://www.precisioneng.co.uk',
+      bodyText: 'We supply components to the aircraft and naval ship sector.',
+      images: [{
+        url: 'https://www.precisioneng.co.uk/img/factory-lathe-machine.jpg',
+        sourcePageUrl: 'https://www.precisioneng.co.uk',
+        visualClassification: 'unrelated',
+        isRestricted: false
+      }]
+    };
+    const s7Eval = ctx.evaluateWebsiteImageRestrictions(s7Crawl.images, []);
+    assert.strictEqual(s7Eval.hasRestrictedImage, false);
+    const s7Res = ctx.applyStrictInstructions(baseData, s7Crawl);
+    assert.strictEqual(s7Res.websiteStatus, 'Working', 'Scenario 7: Restricted words with unrelated images must remain Working');
+
+    // Scenario 8: Restricted image appears on an internal page -> Rejected (Not Working)
+    const s8Crawl = {
+      finalUrl: 'https://www.precisioneng.co.uk',
+      images: [{
+        url: 'https://www.precisioneng.co.uk/gallery/military-tank-armored-vehicle.jpg',
+        sourcePageUrl: 'https://www.precisioneng.co.uk/projects/defence',
+        visualClassification: 'confirmed_restricted',
+        restrictedCategory: 'Defence',
+        confidence: 0.97,
+        isRestricted: true
+      }]
+    };
+    const s8Eval = ctx.evaluateWebsiteImageRestrictions(s8Crawl.images, []);
+    assert.strictEqual(s8Eval.hasRestrictedImage, true);
+    assert.strictEqual(s8Eval.category, 'Defence');
+    const s8Res = ctx.applyStrictInstructions(baseData, { ...s8Crawl, hasRestrictedImage: true });
+    assert.strictEqual(s8Res.websiteStatus, 'Not Working', 'Scenario 8: Restricted image on internal page must reject website');
+
+    // Scenario 9: Restricted image appears as a CSS background -> Rejected (Not Working)
+    const cssHtml = '<html><head><style>.hero { background-image: url("https://www.precisioneng.co.uk/bg/pharmaceutical-medicine-bottles.jpg"); }</style></head><body><div class="hero">Content</div></body></html>';
+    const extractedImages = ctx.extractAllWebsiteImages(cssHtml, 'https://www.precisioneng.co.uk');
+    assert.ok(extractedImages.some(img => img.sourceType === 'css-background' && img.url.includes('pharmaceutical-medicine-bottles.jpg')));
+    const s9Images = extractedImages.map(img => ({
+      ...img,
+      visualClassification: 'confirmed_restricted',
+      restrictedCategory: 'Medicine & Medical',
+      confidence: 0.96,
+      isRestricted: true
+    }));
+    const s9Eval = ctx.evaluateWebsiteImageRestrictions(s9Images, []);
+    assert.strictEqual(s9Eval.hasRestrictedImage, true);
+    const s9Res = ctx.applyStrictInstructions(baseData, { finalUrl: 'https://www.precisioneng.co.uk', hasRestrictedImage: true });
+    assert.strictEqual(s9Res.websiteStatus, 'Not Working', 'Scenario 9: CSS background restricted image must reject website');
+
+    // Scenario 10: Image classification is uncertain -> Manual Review
+    const s10Crawl = {
+      finalUrl: 'https://www.precisioneng.co.uk',
+      images: [{
+        url: 'https://www.precisioneng.co.uk/media/unclear-item.jpg',
+        sourcePageUrl: 'https://www.precisioneng.co.uk',
+        visualClassification: 'uncertain',
+        confidence: 0.55,
+        isRestricted: false
+      }]
+    };
+    const s10Eval = ctx.evaluateWebsiteImageRestrictions(s10Crawl.images, []);
+    assert.strictEqual(s10Eval.isUncertain, true);
+    assert.strictEqual(s10Eval.classification, 'MANUAL_REVIEW');
+    const s10Res = ctx.applyStrictInstructions(baseData, { ...s10Crawl, requiresManualReview: true, status: 'Manual Review' });
+    assert.strictEqual(s10Res.websiteStatus, 'Manual Review', 'Scenario 10: Uncertain image classification must be Manual Review');
   });
 
   console.log('\n========================================================');
