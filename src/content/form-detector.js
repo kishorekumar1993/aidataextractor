@@ -933,7 +933,18 @@
         // Defensively strip leading information/label prefixes
         addrVal = addrVal.replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "").trim();
         // Defensively split and discard secondary combined addresses
-        const multiAddrSep = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant|Location|Showroom|Warehouse|一廠|二廠|三廠|分公司)\b)|(?<!\b(?:Bldg|Building|Unit|Suite|Ste|Floor|Fl|Flr|Level|Plot|Room|Rm|Block|Blk|No|Number)\.?\s*)[,;]\s*\.\s*(?=\b(?:Number|No\.?|\d+)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)|(?<=\b(?:City|District|Dist|County|Township|Twp|State|Province|Country|Taiwan|China|India|USA|United\s+States|UK|United\s+Kingdom|Germany|France|Australia|Japan|Singapore|Malaysia|Indonesia|Canada|\d{4,6})\b|R\.?O\.?C\.?)[,;\s.]+\s*(?=(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant|Location|Showroom|Warehouse|一廠|二廠|三廠|分公司)\b)/i;
+        const thoroughfare = "(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Boulevard|Blvd|Highway|Hwy|Way|Court|Ct|Circle|Cir|Place|Pl|Terrace|Ter|Parkway|Pkwy|Expressway|Expy|Alley|Walk|Row|Caddesi|Cad|Sokak|Sok|Strasse|Str|Calle|Rue|Via|Jalan|Jl)";
+        const streetPattern = `(?:\\d{1,5}[A-Za-z]?\\s+[A-Za-z]+(?:\\s+[A-Za-z]+)*\\s+${thoroughfare}\\b)`;
+        const multiAddrSep = new RegExp(
+          `[,;]\\s*\\.\\s*(?=\\b(?:Number|No\\.?|Plot|Building|Unit|Suite|Floor|Block|Headquarters|Head\\s*Office|Branch|Factory|Plant|Location|Showroom|Warehouse|一廠|二廠|三廠|分公司)\\b|${streetPattern})|` +
+          `(?<!\\b(?:Bldg|Building|Unit|Suite|Ste|Floor|Fl|Flr|Level|Plot|Room|Rm|Block|Blk|No|Number)\\.?\\s*)[,;]\\s*\\.\\s*(?=\\b(?:Number|No\\.?|\\d+)\\b)|` +
+          `;\\s*(?=\\b(?:Number|No\\.?|Plot|Building|Unit|Suite|Floor|Block|Headquarters|Head\\s*Office|Branch|Factory|Plant)\\b|${streetPattern})|` +
+          `\\s*\\|\\s*(?=\\b(?:Number|No\\.?|Plot|Building|Unit|Suite|Floor|Block|Headquarters|Head\\s*Office|Branch|Factory|Plant)\\b|${streetPattern})|` +
+          `\\s*[\\r\\n]+\\s*(?=\\b(?:Number|No\\.?|Plot|Building|Unit|Suite|Floor|Block|Headquarters|Head\\s*Office|Branch|Factory|Plant)\\b|${streetPattern})|` +
+          `[,;.\\s]+\\s*(?=\\b(?:Plant\\s*[2-9]|Factory\\s*[2-9]|Facility\\s*[2-9]|Branch(?:\\s*Office)?|Location\\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\\s*[:：\\-–]\\s*(?:Number|No\\.?|\\d+)\\b)|` +
+          `(?<=\\b(?:City|District|Dist|County|Township|Twp|State|Province|Country|Taiwan|China|India|USA|United\\s+States|UK|United\\s+Kingdom|Germany|France|Australia|Japan|Singapore|Malaysia|Indonesia|Canada)\\b|R\\.?O\\.?C\\.?)[,;\\s.]+(?=(?:Number|No\\.?|Plot|Building|Unit|Suite|Floor|Block|Headquarters|Head\\s*Office|Branch|Factory|Plant|Location|Showroom|Warehouse|一廠|二廠|三廠|分公司)\\b|${streetPattern})`,
+          "i"
+        );
         if (multiAddrSep.test(addrVal)) {
           const parts = addrVal.split(multiAddrSep).map(p => p.trim()).filter(Boolean);
           if (parts.length > 0) addrVal = parts[0];
