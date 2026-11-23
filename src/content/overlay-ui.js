@@ -29,6 +29,18 @@
   }
 
   function ensureAiCrawlButtonsVisible() {
+    if (typeof AIExt.isAllowedPortalPage === "function" && !AIExt.isAllowedPortalPage()) {
+      const w = document.getElementById("ai-prefill-widget");
+      if (w) w.style.display = "none";
+      const b = document.getElementById("ai-quick-btn");
+      if (b) { try { b.remove(); } catch (e) { } }
+      const c = document.getElementById("ai-inline-btn-container");
+      if (c) { try { c.remove(); } catch (e) { } }
+      const toast = document.getElementById("ai-floating-toast");
+      if (toast) { try { toast.remove(); } catch (e) { } }
+      return;
+    }
+
     if (state.showFloatingWidget !== false) {
       createFloatingWidget();
       const w = document.getElementById("ai-prefill-widget");
@@ -72,6 +84,9 @@
    * even if the sidebar is closed or scrolled out of view.
    */
   function showFloatingToast(message, type = "info", duration = 3000) {
+    if (typeof AIExt.isAllowedPortalPage === "function" && !AIExt.isAllowedPortalPage()) {
+      return;
+    }
     if (typeof document === "undefined" || !document.body) return;
     let toast = document.getElementById("ai-floating-toast");
     if (!toast) {
@@ -661,6 +676,9 @@
 
 
   function createFloatingWidget() {
+    if (typeof AIExt.isAllowedPortalPage === "function" && !AIExt.isAllowedPortalPage()) {
+      return;
+    }
     const existing = document.getElementById("ai-prefill-widget");
     if (existing && document.body && document.body.contains(existing)) {
       return;

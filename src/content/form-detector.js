@@ -3,7 +3,44 @@
 (function (AIExt) {
   const state = (AIExt.state = AIExt.state || {});
 
+  /**
+   * Checks if the current page is on an allowed data entry portal domain.
+   * Restricts the extension to ONLY:
+   * 1. cpworkportal.online (and its subdomains)
+   * 2. kishorekumar1993 (e.g. kishorekumar1993.github.io or any kishorekumar1993 path)
+   * (Allows local offline replica test_portal / dataextraction in testing environments).
+   */
+  function isAllowedPortalPage() {
+    try {
+      if (typeof window === "undefined" || !window.location) return false;
+      const hostname = (window.location.hostname || "").toLowerCase();
+      const href = (window.location.href || "").toLowerCase();
+
+      // 1. cpworkportal.online and any subdomains
+      if (hostname === "cpworkportal.online" || hostname.endsWith(".cpworkportal.online") || href.includes("cpworkportal.online")) {
+        return true;
+      }
+
+      // 2. kishorekumar1993 (e.g. kishorekumar1993.github.io)
+      if (hostname.includes("kishorekumar1993") || href.includes("kishorekumar1993")) {
+        return true;
+      }
+
+      // 3. Local offline replica / test suite compatibility (only if test_portal or dataextraction is in URL)
+      if (href.includes("test_portal") || href.includes("testportal") || href.includes("dataextraction")) {
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function isDataEntryPage() {
+    if (!isAllowedPortalPage()) {
+      return false;
+    }
     return !!(
       document.getElementById("inputWebsiteName") ||
       document.getElementById("website-name") ||
@@ -1072,6 +1109,7 @@
   }
 
   Object.assign(AIExt, {
+    isAllowedPortalPage,
     isDataEntryPage,
     findWebsiteNameInput,
     getTargetUrl,

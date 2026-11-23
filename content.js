@@ -14,6 +14,9 @@
   }
 
   function initAssistant() {
+    if (typeof AIExt.isAllowedPortalPage === "function" && !AIExt.isAllowedPortalPage()) {
+      return;
+    }
     if (!AIExt.isDataEntryPage()) {
       return;
     }

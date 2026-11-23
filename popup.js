@@ -303,9 +303,41 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.tabs.create({ url: chrome.runtime.getURL("test_portal.html") });
   });
 
+  /**
+   * Validates if target URL belongs to allowed data entry portals.
+   */
+  function isAllowedPortalUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== "string") return false;
+    try {
+      const u = new URL(rawUrl);
+      const host = u.hostname.toLowerCase();
+      const href = u.href.toLowerCase();
+      if (host === "cpworkportal.online" || host.endsWith(".cpworkportal.online") || href.includes("cpworkportal.online")) {
+        return true;
+      }
+      if (host.includes("kishorekumar1993") || href.includes("kishorekumar1993")) {
+        return true;
+      }
+      if (href.includes("test_portal") || href.includes("testportal") || href.includes("dataextraction")) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // Direct AI Crawl & Fill on Active Tab
   const btnPopupCrawl = document.getElementById("btn-popup-crawl");
   const popupCrawlStatus = document.getElementById("popup-crawl-status");
+
+  // Check active tab portal status on load
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const activeTab = tabs && tabs[0];
+    if (activeTab && activeTab.url && !isAllowedPortalUrl(activeTab.url)) {
+      showPopupCrawlStatus("ℹ️ Extension active only on cpworkportal.online & kishorekumar1993 (disabled on this site)", "info");
+    }
+  });
 
   if (btnPopupCrawl) {
     btnPopupCrawl.addEventListener("click", () => {
@@ -320,6 +352,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const activeTab = tabs[0];
+        if (!isAllowedPortalUrl(activeTab.url)) {
+          btnPopupCrawl.disabled = false;
+          showPopupCrawlStatus("⚠️ Extension is restricted to cpworkportal.online and kishorekumar1993. It is disabled on this site to prevent disturbance.", "warning");
+          return;
+        }
         chrome.tabs.sendMessage(activeTab.id, { action: "TRIGGER_CRAWL" }, (res) => {
           btnPopupCrawl.disabled = false;
           if (chrome.runtime.lastError) {
@@ -341,9 +378,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnPopupBatch10 = document.getElementById("btn-popup-batch-10");
   if (btnPopupBatch10) {
     btnPopupBatch10.addEventListener("click", () => {
-      showPopupCrawlStatus("⚡ Triggering Auto Submit 10 Sites as Not Working...", "loading");
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (!tabs || tabs.length === 0) return;
+        if (!isAllowedPortalUrl(tabs[0].url)) {
+          showPopupCrawlStatus("⚠️ Action disabled. Active only on cpworkportal.online and kishorekumar1993.", "warning");
+          return;
+        }
+        showPopupCrawlStatus("⚡ Triggering Auto Submit 10 Sites as Not Working...", "loading");
         chrome.tabs.sendMessage(tabs[0].id, { action: "START_BATCH_10_NOTWORKING" }, () => {
           showPopupCrawlStatus("🚀 Started Auto-Submitting 10 as Not Working!", "success");
         });
@@ -354,9 +395,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnPopupSubmitNotWorking = document.getElementById("btn-popup-submit-notworking");
   if (btnPopupSubmitNotWorking) {
     btnPopupSubmitNotWorking.addEventListener("click", () => {
-      showPopupCrawlStatus("🚫 Submitting current site as Not Working...", "loading");
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (!tabs || tabs.length === 0) return;
+        if (!isAllowedPortalUrl(tabs[0].url)) {
+          showPopupCrawlStatus("⚠️ Action disabled. Active only on cpworkportal.online and kishorekumar1993.", "warning");
+          return;
+        }
+        showPopupCrawlStatus("🚫 Submitting current site as Not Working...", "loading");
         chrome.tabs.sendMessage(tabs[0].id, { action: "SUBMIT_1_NOTWORKING" }, () => {
           showPopupCrawlStatus("✓ Submitted as Not Working and advancing!", "success");
         });
@@ -367,9 +412,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnPopupBatchAll = document.getElementById("btn-popup-batch-all");
   if (btnPopupBatchAll) {
     btnPopupBatchAll.addEventListener("click", () => {
-      showPopupCrawlStatus("⚡ Starting continuous auto-submit ALL as Not Working...", "loading");
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (!tabs || tabs.length === 0) return;
+        if (!isAllowedPortalUrl(tabs[0].url)) {
+          showPopupCrawlStatus("⚠️ Action disabled. Active only on cpworkportal.online and kishorekumar1993.", "warning");
+          return;
+        }
+        showPopupCrawlStatus("⚡ Starting continuous auto-submit ALL as Not Working...", "loading");
         chrome.tabs.sendMessage(tabs[0].id, { action: "START_BATCH_ALL_NOTWORKING" }, () => {
           showPopupCrawlStatus("🚀 Started Auto-Submitting ALL as Not Working!", "success");
         });

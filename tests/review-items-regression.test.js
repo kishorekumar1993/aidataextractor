@@ -4569,6 +4569,92 @@ async function runAll() {
     assert.strictEqual(s10Res.websiteStatus, 'Manual Review', 'Scenario 10: Uncertain image classification must be Manual Review');
   });
 
+  // Item 129: Domain restriction - Extension visible & active only on cpworkportal.online and kishorekumar1993
+  runTest('Item 129: Extension restricted to cpworkportal.online and kishorekumar1993 (disabled on all other sites)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const manifestPath = path.join(__dirname, '..', 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+    // 1. Verify manifest.json content_scripts.matches does NOT contain <all_urls>
+    const matches = manifest.content_scripts[0].matches;
+    assert.ok(!matches.includes('<all_urls>'), 'content_scripts.matches must NOT match <all_urls>');
+
+    // 2. Verify manifest.json matches cpworkportal.online and kishorekumar1993
+    const hasCpWorkPortal = matches.some(m => m.includes('cpworkportal.online'));
+    const hasKishoreKumar = matches.some(m => m.includes('kishorekumar1993.github.io'));
+    assert.ok(hasCpWorkPortal, 'content_scripts.matches must include cpworkportal.online');
+    assert.ok(hasKishoreKumar, 'content_scripts.matches must include kishorekumar1993.github.io');
+
+    // 3. Verify host_permissions preserves <all_urls> for background crawler network fetches
+    assert.ok(manifest.host_permissions.includes('<all_urls>'), 'host_permissions must preserve <all_urls> for crawler fetches');
+
+    // 4. Test runtime form-detector isAllowedPortalPage & isDataEntryPage logic
+    const { ctx } = createTestContext();
+    const testCases = [
+      { url: 'https://cpworkportal.online/', expected: true },
+      { url: 'https://cpworkportal.online/portal/data-entry', expected: true },
+      { url: 'https://app.cpworkportal.online/work', expected: true },
+      { url: 'http://cpworkportal.online', expected: true },
+      { url: 'https://kishorekumar1993.github.io/dataextraction/', expected: true },
+      { url: 'https://kishorekumar1993.github.io/', expected: true },
+      { url: 'http://localhost/test_portal.html', expected: true },
+      { url: 'https://www.google.com/', expected: false },
+      { url: 'https://www.youtube.com/watch?v=123', expected: false },
+      { url: 'https://facebook.com/', expected: false },
+      { url: 'https://amazon.com/products', expected: false },
+      { url: 'https://wikipedia.org/wiki/Portal', expected: false },
+      { url: 'https://otherworksite.com/portal', expected: false }
+    ];
+
+    const formDetectorCode = fs.readFileSync(path.join(__dirname, '..', 'src', 'content', 'form-detector.js'), 'utf8');
+
+    testCases.forEach(tc => {
+      const mockWin = {
+        location: {
+          href: tc.url,
+          hostname: new URL(tc.url).hostname,
+          protocol: new URL(tc.url).protocol
+        }
+      };
+      const mockDoc = {
+        getElementById: (id) => (id === 'inputWebsiteName' ? { id: 'inputWebsiteName', value: 'https://example.com' } : null),
+        querySelector: () => null,
+        querySelectorAll: () => []
+      };
+      const testAIExt = {};
+      const evalCtx = require('vm').createContext({
+        window: mockWin,
+        document: mockDoc,
+        globalThis: { __AI_EXTENSION__: testAIExt },
+        console: { log: () => {}, warn: () => {}, error: () => {} }
+      });
+      require('vm').runInContext(formDetectorCode, evalCtx);
+
+      const isAllowed = testAIExt.isAllowedPortalPage();
+      assert.strictEqual(
+        isAllowed,
+        tc.expected,
+        `isAllowedPortalPage for ${tc.url} should be ${tc.expected}, got ${isAllowed}`
+      );
+
+      const isDataEntry = testAIExt.isDataEntryPage();
+      if (!tc.expected) {
+        assert.strictEqual(
+          isDataEntry,
+          false,
+          `isDataEntryPage MUST be false on disallowed domain ${tc.url} even if inputWebsiteName exists`
+        );
+      } else {
+        assert.strictEqual(
+          isDataEntry,
+          true,
+          `isDataEntryPage should be true on allowed domain ${tc.url} when inputWebsiteName exists`
+        );
+      }
+    });
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
