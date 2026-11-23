@@ -4655,6 +4655,72 @@ async function runAll() {
     });
   });
 
+  // =========================================================================
+  // ITEM 130: Address Sanitization Robustness (yihsuan.com.tw, Information prefix, Multi-Address splitting, Ordinal Street Preservation)
+  // =========================================================================
+  runTest('Item 130: Address Sanitization Robustness (Information prefix removal, Multi-Address splitting to single HQ, and Ordinal preservation)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. yihsuan.com.tw scenario: Information prefix and concatenated secondary address
+    const yihsuanCombined = 'Information Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City, . Number 28, Meizi Lane, Fengshi Road, Shigang District, Taichung City 42242, Taiwan R.O.C.';
+    const sanitizedYihsuan = ctx.sanitizeRule6CompanyAddress(yihsuanCombined, 'Yihsuan Enterprise Company, Limited', 'Taiwan');
+    assert.strictEqual(
+      sanitizedYihsuan,
+      'Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City',
+      `yihsuan address should strip Information prefix, discard secondary address, and expand abbreviations properly. Got: ${sanitizedYihsuan}`
+    );
+
+    // 2. applyStrictInstructions in AI mode must strictly preserve clean AI address and not let crawl fragments strip City/District
+    const aiData = {
+      websiteStatus: 'Working',
+      companyName: 'Yihsuan Enterprise Company, Limited',
+      countryName: 'Taiwan',
+      companyAddress: 'Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City',
+      businessType: 'Manufacturer',
+      _isFromAi: true
+    };
+    const mockCrawl = {
+      finalUrl: 'http://www.yihsuan.com.tw/',
+      addressCandidates: [
+        { raw: 'No. 23-1, Heshun Lane, Fengshi Road, Shigang Dist, Taichung City 42274, Taiwan R.O.C. No. 28, Meizi Ln., Fengshi Rd., Shigang Dist., Taichung City 42242, Taiwan R.O.C. 886-4-25818799' }
+      ]
+    };
+    const strictResult = ctx.applyStrictInstructions(aiData, mockCrawl);
+    assert.strictEqual(
+      strictResult.companyAddress,
+      'Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City',
+      `AI companyAddress must not be replaced with multi-address candidate or stripped of District/City. Got: ${strictResult.companyAddress}`
+    );
+
+    // 3. Ordinal street names preservation (1st Street, 2nd Avenue, 3rd Floor)
+    const ord1 = ctx.sanitizeRule6CompanyAddress('100 1st Street, San Francisco, California 94105, USA', '', 'United States');
+    assert.ok(
+      /\b1st Street\b/.test(ord1),
+      `1st Street must be preserved and never mangled into 1 St Street or 1 Street Street. Got: ${ord1}`
+    );
+    assert.ok(
+      !/\b1\s+St\s+Street\b/i.test(ord1) && !/\b1\s+Street\s+Street\b/i.test(ord1),
+      `Must not contain 1 St Street or 1 Street Street: ${ord1}`
+    );
+
+    // 4. Contact vs Map address comparison must not substitute when premise numbers differ
+    const contactCands = [
+      { raw: 'No. 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City', source: 'contact' },
+      { raw: 'No. 28, Meizi Lane, Fengshi Road, Shigang District, Taichung City', source: 'map' }
+    ];
+    const reconciledMap = ctx.reconcileContactVsMapAddress(
+      'Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City',
+      contactCands,
+      'Yihsuan Enterprise Company, Limited',
+      'Taiwan'
+    );
+    assert.strictEqual(
+      reconciledMap.address,
+      'Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City',
+      `Map address with different premise number (28 vs 23-1) must NOT substitute primary address. Got: ${reconciledMap.address}`
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

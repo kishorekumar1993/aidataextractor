@@ -17,8 +17,8 @@ importScripts(
   "src/background/restricted-rules.js",
   "src/background/company-normalizer.js",
   "src/background/address-extractor.js",
-  "src/background/address-normalizer.js",
   "src/background/location-qc.js",
+  "src/background/address-normalizer.js",
   "src/background/crawler.js",
   "src/background/ai-client.js",
   "src/background/strict-qc.js"

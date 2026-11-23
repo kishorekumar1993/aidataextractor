@@ -474,8 +474,16 @@ function finalizeParsedAiResult(parsed, crawlData) {
   // DO NOT alter or strip words from AI address using crawl fragments.
   // Address Floor spacing rule: "7Floor dont give space in address give space means u provide else dont give space"
   if (parsed.companyAddress && typeof parsed.companyAddress === "string") {
-    parsed.companyAddress = parsed.companyAddress.replace(/\b(\d{1,3}(?:st|nd|rd|th)?)(\s*)Floor\b/gi, (m, num, sp) => `${num}${sp && sp.length > 0 ? " " : ""}Floor`);
-    parsed.companyAddress = parsed.companyAddress.replace(/\b(\d{1,3}(?:st|nd|rd|th)?)(\s*)Floor-(\d{1,4}[A-Za-z]?)\b/gi, (m, num, sp, sub) => `${num}${sp && sp.length > 0 ? " " : ""}Floor-${sub}`);
+    let addr = parsed.companyAddress;
+    if (typeof stripAddressPrefixLabels === "function") {
+      addr = stripAddressPrefixLabels(addr);
+    }
+    if (typeof selectPrimaryAddressFromCombined === "function") {
+      addr = selectPrimaryAddressFromCombined(addr);
+    }
+    addr = addr.replace(/\b(\d{1,3}(?:st|nd|rd|th)?)(\s*)Floor\b/gi, (m, num, sp) => `${num}${sp && sp.length > 0 ? " " : ""}Floor`);
+    addr = addr.replace(/\b(\d{1,3}(?:st|nd|rd|th)?)(\s*)Floor-(\d{1,4}[A-Za-z]?)\b/gi, (m, num, sp, sub) => `${num}${sp && sp.length > 0 ? " " : ""}Floor-${sub}`);
+    parsed.companyAddress = addr;
   }
 
   const btLower = String(parsed.businessType || "").trim().toLowerCase();

@@ -933,14 +933,17 @@
         // Defensively strip leading information/label prefixes
         addrVal = addrVal.replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "").trim();
         // Defensively split and discard secondary combined addresses
-        const multiAddrSep = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)/i;
+        const multiAddrSep = /[,;.\s]*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant|Location|Showroom|Warehouse|一廠|二廠|三廠|分公司)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)|(?<=\b(?:Taiwan\s+R\.?O\.?C\.?|Taiwan|R\.?O\.?C\.?|China|India|USA|United\s+States|UK|United\s+Kingdom|Germany|France|Australia|Japan|Singapore|Malaysia|Indonesia|Canada)\b)[,;\s.]+\s*(?=(?:Number|No\.?|\d{1,5}\b|Factory|Plant|Branch|Location|二廠|三廠)\b)/i;
         if (multiAddrSep.test(addrVal)) {
           const parts = addrVal.split(multiAddrSep).map(p => p.trim()).filter(Boolean);
           if (parts.length > 0) addrVal = parts[0];
         }
+        addrVal = addrVal.replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "").trim();
         if (typeof stripBlindlyAddedNumber === "function") {
           const rawCand = data.selectedAddressCandidateRaw || "";
-          addrVal = stripBlindlyAddedNumber(addrVal, rawCand, rawCand);
+          if (rawCand) {
+            addrVal = stripBlindlyAddedNumber(addrVal, rawCand, rawCand);
+          }
         }
       }
       if (elements.companyAddress && addrVal) {

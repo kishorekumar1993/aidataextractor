@@ -290,7 +290,7 @@ function stripBlindlyAddedNumber(addr, rawEvidence = "", rawSource = "") {
  * Strips words (like "Number", "City", "District", "Township", "County") that were NOT
  * in the source address candidate, and aligns spelling back to the source candidate.
  */
-function stripExtraWordsFromAddress(addr, rawSource = "") {
+function stripExtraWordsFromAddress(addr, rawSource = "", isFromAi = false) {
   if (!addr || typeof addr !== "string") return addr;
   if (!rawSource || typeof rawSource !== "string") return addr;
 
@@ -309,6 +309,10 @@ function stripExtraWordsFromAddress(addr, rawSource = "") {
     }
     return digits; // strip "Number "
   });
+
+  if (isFromAi) {
+    return a;
+  }
 
   // 2. "City": If addr has "<CityName> City" but rawSource has "<CityName>" without "City"
   a = a.replace(/\b((?:(?:New|North|South|East|West|Old|San|Santa|Los|Las|Fort|Port|Saint|St\.)\s+)?[A-Z][a-z0-9\u00C0-\u024F\-]+)\s+City\b/g, (match, cityName) => {
@@ -432,7 +436,7 @@ function normalizeTaiwanDivisions(addr) {
 function expandAddressAndStateAbbreviations(addr, country = "") {
   if (!addr) return "";
   const cLower = (country || "").toLowerCase();
-  const hasIndoHint = hasIndonesiaAddressSignal(addr, country);
+  const hasIndoHint = typeof hasIndonesiaAddressSignal === "function" ? hasIndonesiaAddressSignal(addr, country) : false;
   let a = addr;
   // Ensure space after period when followed by letter or number (e.g. "ROAD.TAINAN" -> "ROAD. TAINAN", "NO.2" -> "NO. 2")
   // Do NOT add space inside dotted acronyms like "U.S.A." or "R.O.C." (where preceding segment is 1 char)
@@ -704,7 +708,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
     a = a.replace(/\bpl\b\.?/gi, "Place");
   }
   a = a.replace(/\b(?:sqr|sq)\b\.?/gi, "Square");
-  a = a.replace(/\bst\b\.?(?!\s+(?:[A-Z][a-z']+\s+)*(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Rd|Ave|Dr|Ln|Blvd)\b)/gi, "Street");
+  a = a.replace(/(?<!\d\s*)\bst\b\.?(?!\s+(?:[A-Z][a-z']+\s+)*(?:Street|Road|Avenue|Lane|Drive|Way|Place|Court|Terrace|Boulevard|Highway|Parkway|Rd|Ave|Dr|Ln|Blvd)\b)/gi, "Street");
   a = a.replace(/\brd\b\.?/gi, "Road");
   a = a.replace(/\bdr\b\.?(?!\s+[A-Z][a-z']+\b)/gi, "Drive");
   a = a.replace(/\bln\b\.?/gi, "Lane");
@@ -1083,7 +1087,7 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   // ==========================================
   // 10. Indonesia Abbreviations & Honorific Street Prefixes
   // ==========================================
-  const hasIndoSignal = hasIndoHint || hasIndonesiaAddressSignal(a, country);
+  const hasIndoSignal = hasIndoHint || (typeof hasIndonesiaAddressSignal === "function" ? hasIndonesiaAddressSignal(a, country) : false);
 
   a = a.replace(/(^|[,\s])jln?\b\.?\s*(?=[A-Za-z0-9])/gi, '$1Jalan ');
   // Honorific street titles (e.g. "Jl. RA. Kardinah", "Jl. Jend. A. Yani" -> "Jalan Jenderal Ahmad Yani")
@@ -2217,7 +2221,7 @@ function stripAddressPrefixLabels(s) {
       a = a.replace(/^(?:(?:physical|postal|mailing|street|corporate|registered|business|office|factory|plant|showroom|warehouse|workshop|main|head)\s+)?(?:address|add|addr|location|alamat|direcci[oó]n|ubicaci[oó]n|sede|anschrift|adresse|standort|indirizzo|地址|廠址|公司地址)\s*[:：\-–,\|\s]+/i, "").trim();
       a = a.replace(/^(?:where\s+we\s+are|where\s+to\s+find\s+us|find\s+us|visit\s+us|contact\s+us|contact|ubicaci[oó]n|direcci[oó]n|d[oó]nde\s*estamos|donde\s*estamos|contacto|cont[aá]ctenos|encu[eé]ntranos|alamat\s*kami|hubungi\s*kami|dove\s*siamo|standort|kontak|聯絡我們|联系我们)\s*[:：\-–,\|\s]+/i, "").trim();
 
-      // Strip information and facility prefix labels (e.g. "Information:", "Contact Information:", "Company Information:", "Factory Information:")
+      // Strip information and facility prefix labels (e.g. "Information", "Information:", "Contact Information:", "Company Information:", "Factory Information:")
       a = a.replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "").trim();
       a = a.replace(/^(?:factory\s+\d+|plant\s+\d+|facility\s+\d+|branch\s+\d+|location\s+\d+|office\s+\d+)\s*[:：\-–,\|\s]*/i, "").trim();
       a = a.replace(/^(?:一廠|二廠|三廠|工廠\s*\d?|廠址|總公司|總部|辦事處|聯絡資訊|聯絡資料|公司資訊|聯絡方式)\s*[:：\-–,\|\s]*/i, "").trim();
@@ -2236,31 +2240,31 @@ function selectPrimaryAddressFromCombined(addr) {
   if (!addr || typeof addr !== "string") return addr;
   let a = addr.trim();
 
-  // Strip leading label / information prefixes
-  a = a.replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "").trim();
+  // Strip leading label / information prefixes first
+  a = stripAddressPrefixLabels(a);
 
-  // Pattern to split multiple distinct address blocks
-  const sepRegex = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)/i;
+  // Pattern to split multiple distinct address blocks (NEVER split on abbreviation dots like Bldg. No. or Fl. No.)
+  const sepRegex = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant|Location|Showroom|Warehouse|一廠|二廠|三廠|分公司)\b)|(?<!\b(?:Bldg|Building|Unit|Suite|Ste|Floor|Fl|Flr|Level|Plot|Room|Rm|Block|Blk|No|Number)\.?\s*)[,;]\s*\.\s*(?=\b(?:Number|No\.?|\d+)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)|(?<=\b(?:Taiwan\s+R\.?O\.?C\.?|Taiwan|R\.?O\.?C\.?|China|India|USA|United\s+States|UK|United\s+Kingdom|Germany|France|Australia|Japan|Singapore|Malaysia|Indonesia|Canada)\b)[,;\s.]+\s*(?=(?:Number|No\.?|\d{1,5}\b|Factory|Plant|Branch|Location|二廠|三廠)\b)/i;
   if (!sepRegex.test(a)) return a;
 
-  const parts = a.split(sepRegex).map(p => p.trim()).filter(p => p.length >= 10);
+  const parts = a.split(sepRegex).map(p => stripAddressPrefixLabels(p.trim())).filter(p => p.length >= 10);
   if (parts.length <= 1) return a;
 
   // Rule 6 Priority:
   // 1. Headquarters / Head Office
   const hqPart = parts.find(p => /\b(?:headquarters|head\s*office|main\s*office|corporate\s*office|hq|總公司|總部|本部)\b/i.test(p));
-  if (hqPart) return hqPart;
+  if (hqPart) return stripAddressPrefixLabels(hqPart);
 
   // 2. Registered Office
   const regPart = parts.find(p => /\b(?:registered\s*office|domicilio\s*social)\b/i.test(p));
-  if (regPart) return regPart;
+  if (regPart) return stripAddressPrefixLabels(regPart);
 
   // 3. Filter out explicit secondary/branch/factory 2 addresses if an unlabelled primary exists
   const nonBranch = parts.filter(p => !/\b(?:branch|plant\s*[2-9]|factory\s*[2-9]|facility\s*[2-9]|warehouse|showroom|二廠|三廠|分公司|營業所)\b/i.test(p));
-  if (nonBranch.length > 0) return nonBranch[0];
+  if (nonBranch.length > 0) return stripAddressPrefixLabels(nonBranch[0]);
 
   // 4. Fall back to first listed address
-  return parts[0];
+  return stripAddressPrefixLabels(parts[0]);
 }
 
 /**
@@ -2549,6 +2553,15 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
     }
     a = restoreAddressCommasFromRaw(a, punctuationSource);
   }
+
+  if (typeof stripAddressPrefixLabels === "function") {
+    a = stripAddressPrefixLabels(a);
+  }
+  if (typeof selectPrimaryAddressFromCombined === "function") {
+    a = selectPrimaryAddressFromCombined(a);
+  }
+  a = a.replace(/^[^\p{L}\p{N}]+/gu, "").trim();
+  a = a.replace(/[^\p{L}\p{N})]+$/gu, "").trim();
 
   return a || "Not Available";
 }
@@ -2885,14 +2898,22 @@ function reconcileContactVsMapAddress(currentAddr, addressCandidates, companyNam
   }
 
   const normTokens = s => (s || "").toLowerCase().replace(/[^a-z0-9]/g, " ").split(/\s+/).filter(t => t.length > 2 && !/^(?:united|kingdom|states|taiwan|china|india|germany|road|street|avenue|lane|drive|way)$/i.test(t));
+  const extractPremiseDigits = s => (String(s || "").match(/\b\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?\b/g) || []).find(n => !/^\d{4,6}$/.test(n)) || "";
 
   const currTokens = normTokens(currentAddr);
+  const currPremise = extractPremiseDigits(currentAddr);
 
   for (const mapCand of mapCands) {
     const mapRaw = getRaw(mapCand);
     const mapClean = sanitizeRule6CompanyAddress(mapRaw, companyName, country, crawlData);
     if (!mapClean || mapClean === "Not Available" || mapClean.length < 8) continue;
     const mapTokens = normTokens(mapClean);
+    const mapPremise = extractPremiseDigits(mapClean);
+
+    // If premise digits differ, they represent different company branches/facilities -> do not cross-substitute!
+    if (mapPremise && currPremise && mapPremise.toLowerCase() !== currPremise.toLowerCase()) {
+      continue;
+    }
 
     // 1. Compare with currentAddr
     if (currTokens.length >= 2 && mapTokens.length >= 2) {
@@ -2909,6 +2930,11 @@ function reconcileContactVsMapAddress(currentAddr, addressCandidates, companyNam
       const contactClean = sanitizeRule6CompanyAddress(contactRaw, companyName, country, crawlData);
       if (!contactClean || contactClean === "Not Available" || contactClean.length < 8) continue;
       const contactTokens = normTokens(contactClean);
+      const contactPremise = extractPremiseDigits(contactClean);
+
+      if (contactPremise && mapPremise && contactPremise.toLowerCase() !== mapPremise.toLowerCase()) {
+        continue;
+      }
 
       if (contactTokens.length >= 2 && mapTokens.length >= 2) {
         const matchCount = contactTokens.filter(t => mapTokens.includes(t)).length;

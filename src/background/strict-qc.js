@@ -1363,11 +1363,12 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       const isSamePremise = !bestRaw || !aiPremise.length || !rawPremise.length ||
         aiPremise.some(aNum => rawPremise.some(rNum => aNum.toLowerCase() === rNum.toLowerCase()));
 
+      // In AI mode, do not let crawl fragments strip valid City, District, or State words from AI address
       if (isSamePremise && bestRaw && typeof stripExtraWordsFromAddress === "function") {
-        cleanAddr = stripExtraWordsFromAddress(cleanAddr, bestRaw);
+        cleanAddr = stripExtraWordsFromAddress(cleanAddr, bestRaw, result._isFromAi);
       }
       if (isSamePremise && bestRaw && typeof reconcileAddressWithRawEvidence === "function") {
-        cleanAddr = reconcileAddressWithRawEvidence(cleanAddr, bestRaw, result.companyName, country, crawlData, true);
+        cleanAddr = reconcileAddressWithRawEvidence(cleanAddr, bestRaw, result.companyName, country, crawlData, result._isFromAi);
       }
 
       // Global English-language variant fix: if an official English address exists,
