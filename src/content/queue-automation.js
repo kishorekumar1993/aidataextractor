@@ -1018,7 +1018,9 @@
           }, 1000);
         } else {
           console.log("[AI Assistant] Discarding stale or invalid batch state from storage.");
-          chrome.storage.local.remove(["batchNotWorking"]);
+          if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+            try { chrome.storage.local.remove(["batchNotWorking"]); } catch (e) {}
+          }
         }
       }
     });

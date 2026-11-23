@@ -1368,20 +1368,22 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       }
 
       // Rule 8: City / Town / District / Municipality check
+      const isSuburbOnly = (typeof addressLooksLikeSuburbOnly === "function" && addressLooksLikeSuburbOnly(result.companyAddress)) ||
+        (!result.companyAddress && bestRaw && typeof addressLooksLikeSuburbOnly === "function" && addressLooksLikeSuburbOnly(bestRaw));
+
       let cityDetected = typeof evaluateCityQC === "function" ? evaluateCityQC(result.companyAddress, country) : "";
       if (cityDetected !== "Available" && bestRaw && typeof evaluateCityQC === "function") {
         cityDetected = evaluateCityQC(bestRaw, country);
       }
-      const isSuburbOnly = typeof addressLooksLikeSuburbOnly === "function" && addressLooksLikeSuburbOnly(result.companyAddress);
 
-      if (cityDetected === "Available") {
-        result.city = "Available";
-      } else if (isSuburbOnly || (cityDetected === "Not Available" && !apiCity)) {
+      if (isSuburbOnly) {
         result.city = "Not Available";
-      } else if (apiCity === "Available") {
-        result.city = isSuburbOnly ? "Not Available" : "Available";
+      } else if (cityDetected === "Available") {
+        result.city = "Available";
+      } else if (apiCity === "Available" && !isSuburbOnly) {
+        result.city = "Available";
       } else {
-        result.city = cityDetected === "Available" ? "Available" : (apiCity || "Not Available");
+        result.city = "Not Available";
       }
     }
 

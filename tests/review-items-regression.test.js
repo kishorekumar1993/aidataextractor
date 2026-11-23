@@ -4244,6 +4244,123 @@ async function runAll() {
     assert.strictEqual(clean9, '100 Main Street, 1st Floor, Boston, Massachusetts', '1st Floor must preserve ordinal form');
   });
 
+  // =========================================================================
+  // Item 127: Suburbs alone MUST NOT be considered as City (City: Not Available)
+  // =========================================================================
+  runTest('Item 127: Suburbs alone evaluate to City: Not Available', () => {
+    const { ctx } = createTestContext();
+
+    // 1. Australian Suburbs without recognized city/town
+    assert.strictEqual(
+      ctx.evaluateCityQC('12 Smith Road, Campbellfield, Victoria', 'Australia'),
+      'Not Available',
+      'Campbellfield is a suburb, not a city -> City: Not Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('45 Centre Road, Oakleigh South, Victoria', 'Australia'),
+      'Not Available',
+      'Oakleigh South is a suburb, not a city -> City: Not Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('88 High Street, Prahran, Victoria', 'Australia'),
+      'Not Available',
+      'Prahran is a suburb, not a city -> City: Not Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('10 King Street, Welshpool, Western Australia', 'Australia'),
+      'Not Available',
+      'Welshpool is a suburb, not a city -> City: Not Available'
+    );
+
+    // 2. New Zealand Suburbs without recognized city/town
+    assert.strictEqual(
+      ctx.evaluateCityQC('10 Industry Road, Penrose', 'New Zealand'),
+      'Not Available',
+      'Penrose is a suburb, not a city -> City: Not Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('5 Commerce Street, Albany', 'New Zealand'),
+      'Not Available',
+      'Albany is a suburb, not a city -> City: Not Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('12 Triton Drive, Rosedale', 'New Zealand'),
+      'Not Available',
+      'Rosedale is a suburb, not a city -> City: Not Available'
+    );
+
+    // 3. Taiwan Suburbs without city/district/township
+    assert.strictEqual(
+      ctx.evaluateCityQC('Number 12, Guishan, Taoyuan', 'Taiwan'),
+      'Not Available',
+      'Guishan without District/City -> City: Not Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('Number 5, Keishan', 'Taiwan'),
+      'Not Available',
+      'Keishan without District/City -> City: Not Available'
+    );
+
+    // 4. End-to-end QC verification with applyStrictInstructions:
+    // When address contains only a suburb, result.city must evaluate to "Not Available"
+    const suburbResult = ctx.applyStrictInstructions({
+      websiteStatus: 'Working',
+      businessType: 'Manufacturer',
+      companyProfile: 'Available',
+      companyName: 'Test Melbourne Fabrications Pty Ltd',
+      countryName: 'Australia',
+      companyAddress: '45 Centre Road, Oakleigh South, Victoria',
+      state: 'Available',
+      city: 'Available', // AI erroneously marked city as Available
+      emailId: 'info@testfab.com.au',
+      phoneNumber: '395620780',
+      numberOfProducts: '3',
+      productImages: '3',
+      numberOfProductDescriptions: '3'
+    }, {
+      finalUrl: 'http://www.testfab.com.au/',
+      addressCandidates: [{ raw: '45 Centre Road, Oakleigh South, Victoria', source: 'contact' }]
+    }, {});
+
+    assert.strictEqual(
+      suburbResult.city,
+      'Not Available',
+      'applyStrictInstructions must correct suburb address to City: Not Available'
+    );
+    assert.strictEqual(
+      suburbResult.state,
+      'Available',
+      'Victoria is an Australian state -> State: Available'
+    );
+
+    // 5. Recognized cities/towns/districts/capitals MUST remain Available
+    assert.strictEqual(
+      ctx.evaluateCityQC('Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City', 'Taiwan'),
+      'Available',
+      'Shigang District / Taichung City -> City: Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('Number 25, 2nd Floor, Industrial Estate, Guindy, Chennai, Tamil Nadu', 'India'),
+      'Available',
+      'Chennai is an official recognized city -> City: Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('100 Main Street, Austin, Texas', 'United States'),
+      'Available',
+      'Austin is a recognized city -> City: Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('10 Downing Street, London', 'United Kingdom'),
+      'Available',
+      'London is capital -> City: Available'
+    );
+    assert.strictEqual(
+      ctx.evaluateCityQC('Level 5, 120 Collins Street, Melbourne, Victoria', 'Australia'),
+      'Available',
+      'Melbourne is a recognized Australian city -> City: Available'
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

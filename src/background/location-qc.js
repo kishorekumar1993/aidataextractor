@@ -816,19 +816,43 @@ function hasCityDesignation(addr) {
 
 function addressLooksLikeSuburbOnly(cleanAddr) {
   if (!cleanAddr) return false;
-  if (/\b(?:suburb|unknown\s*suburb|neighborhood|neighbourhood)\b/i.test(cleanAddr) &&
-      !/\b(?:city|municipality|township|borough)\b/i.test(cleanAddr) &&
-      !hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES) &&
-      !hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS)) {
+  // If address explicitly contains national capital, Capital Rule overrides suburb-only check
+  if (typeof hasCapitalInAddress === "function" && hasCapitalInAddress(cleanAddr)) return false;
+
+  // If address explicitly contains a recognized city or town, it is NOT suburb-only!
+  if (hasRecognizedPlaceName(cleanAddr, RECOGNIZED_TOWNS) ||
+      hasRecognizedPlaceName(cleanAddr, AUSTRALIAN_CITIES) ||
+      hasRecognizedPlaceName(cleanAddr, UK_CITIES_AND_TOWNS) ||
+      hasRecognizedPlaceName(cleanAddr, NEW_ZEALAND_CITIES_AND_TOWNS) ||
+      hasRecognizedPlaceName(cleanAddr, SPANISH_CITIES_AND_TOWNS) ||
+      hasRecognizedPlaceName(cleanAddr, MALAYSIAN_CITIES_AND_TOWNS) ||
+      hasRecognizedPlaceName(cleanAddr, INDONESIAN_CITIES_AND_TOWNS)) {
+    return false;
+  }
+
+  if (/\b(?:suburb|unknown\s*suburb|neighborhood|neighbourhood|locality|hamlet)\b/i.test(cleanAddr) &&
+      !/\b(?:city|municipality|township|borough|town\b|district\b)\b/i.test(cleanAddr)) {
     return true;
   }
   let withoutDesignation = cleanAddr.replace(/\b(township|town|district|municipality|metropolitan\s*municipality|borough|city)\b/gi, " ");
-  withoutDesignation = withoutDesignation.replace(/\b(victoria|western\s*australia|south\s*australia|new\s*south\s*wales|queensland|tasmania)\b/gi, " ");
+  withoutDesignation = withoutDesignation.replace(/\b(victoria|western\s*australia|south\s*australia|new\s*south\s*wales|queensland|tasmania|act|nt|vic|nsw|qld|wa|sa|tas)\b/gi, " ");
+  withoutDesignation = withoutDesignation.replace(/\b(california|texas|new\s*york|florida|illinois|ohio|pennsylvania|georgia|michigan|north\s*carolina|new\s*jersey|virginia|washington|massachusetts|indiana|tennessee|arizona|missouri|maryland|wisconsin|minnesota|colorado|alabama|south\s*carolina|louisiana|kentucky|oregon|oklahoma|connecticut|iowa|mississippi|arkansas|utah|kansas|nevada|new\s*mexico|nebraska|west\s*virginia|idaho|hawaii|maine|new\s*hampshire|rhode\s*island|montana|delaware|south\s*dakota|north\s*dakota|alaska|vermont|wyoming)\b/gi, " ");
+  withoutDesignation = withoutDesignation.replace(/\b(ontario|quebec|british\s*columbia|alberta|manitoba|saskatchewan|nova\s*scotia|new\s*brunswick|newfoundland|prince\s*edward\s*island)\b/gi, " ");
+  withoutDesignation = withoutDesignation.replace(/\b(canterbury|waikato|bay\s*of\s*plenty|otago|hawke's\s*bay|hawkes\s*bay|taranaki|southland|northland|marlborough|tasman|west\s*coast|manawatu|auckland\s*region)\b/gi, " ");
+  withoutDesignation = withoutDesignation.replace(/\b(essex|kent|surrey|lancashire|yorkshire|cheshire|hampshire|berkshire|hertfordshire|middlesex|gloucestershire|warwickshire|devon|dorset|somerset|oxfordshire|cambridgeshire|buckinghamshire|staffordshire|derbyshire|nottinghamshire|lincolnshire|northamptonshire|norfolk|suffolk|wiltshire|worcestershire|cornwall|cumbria|northumberland|bedfordshire|greater\s*manchester|greater\s*london|west\s*midlands|west\s*yorkshire|south\s*yorkshire|tyne\s*and\s*wear|merseyside|east\s*sussex|west\s*sussex|county\s*durham|durham|herefordshire|rutland|isle\s*of\s*wight|shropshire)\b/gi, " ");
+
   for (const suburb of NON_CITY_SUBURBS) {
     const escaped = suburb.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
     if (new RegExp(`\\b${escaped}\\b`, "i").test(withoutDesignation)) {
       const rest = withoutDesignation.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ");
-      if (!hasRecognizedPlaceName(rest, RECOGNIZED_TOWNS) && !hasRecognizedPlaceName(rest, AUSTRALIAN_CITIES) && !hasRecognizedPlaceName(rest, UK_CITIES_AND_TOWNS) && !hasRecognizedPlaceName(rest, NEW_ZEALAND_CITIES_AND_TOWNS) && !hasCityDesignation(rest)) {
+      if (!hasRecognizedPlaceName(rest, RECOGNIZED_TOWNS) &&
+          !hasRecognizedPlaceName(rest, AUSTRALIAN_CITIES) &&
+          !hasRecognizedPlaceName(rest, UK_CITIES_AND_TOWNS) &&
+          !hasRecognizedPlaceName(rest, NEW_ZEALAND_CITIES_AND_TOWNS) &&
+          !hasRecognizedPlaceName(rest, SPANISH_CITIES_AND_TOWNS) &&
+          !hasRecognizedPlaceName(rest, MALAYSIAN_CITIES_AND_TOWNS) &&
+          !hasRecognizedPlaceName(rest, INDONESIAN_CITIES_AND_TOWNS) &&
+          !hasCityDesignation(rest)) {
         return true;
       }
     }
@@ -845,6 +869,11 @@ function isNotCitySegment(segment) {
   if (!segment) return true;
   const s = segment.trim().toLowerCase();
   if (s.length < 2) return true;
+
+  // Suburb-only segments are NOT city segments
+  if (typeof addressLooksLikeSuburbOnly === "function" && addressLooksLikeSuburbOnly(s)) {
+    return true;
+  }
 
   // Suburbs are NOT cities (Strict QC Rule)
   for (const sub of NON_CITY_SUBURBS) {
@@ -873,7 +902,7 @@ function isNotCitySegment(segment) {
   }
 
   // Industrial / commercial parks / zones / estates & suburb markers
-  if (/\b(?:industrial\s*(?:estate|park|area|zone|district|town)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park|suburb|neighborhood|neighbourhood|subdivision|sub-division|subdiv\.?|hamlet|chinatown|downtown)\b/i.test(s)) {
+  if (/\b(?:industrial\s*(?:estate|park|area|zone|district|town)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park|suburb|neighborhood|neighbourhood|subdivision|sub-division|subdiv\.?|hamlet|locality|chinatown|downtown)\b/i.test(s)) {
     return true;
   }
 
@@ -923,11 +952,11 @@ function detectCityFromStructure(addr, country = "") {
   if (stateIdx > 0) {
     for (let j = stateIdx - 1; j >= 0; j--) {
       const candidate = parts[j];
-      if (!isNotCitySegment(candidate)) {
+      if (!isNotCitySegment(candidate) && !addressLooksLikeSuburbOnly(candidate)) {
         return candidate;
       }
       const cleanCand = candidate.replace(/\b(?:industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park)\b/gi, "").trim();
-      if (cleanCand.length >= 3 && !isNotCitySegment(cleanCand)) {
+      if (cleanCand.length >= 3 && !isNotCitySegment(cleanCand) && !addressLooksLikeSuburbOnly(cleanCand)) {
         return cleanCand;
       }
     }
@@ -935,11 +964,11 @@ function detectCityFromStructure(addr, country = "") {
 
   if (parts.length >= 2 && stateIdx === -1) {
     const last = parts[parts.length - 1];
-    if (!isNotCitySegment(last)) {
+    if (!isNotCitySegment(last) && !addressLooksLikeSuburbOnly(last)) {
       return last;
     }
     const cleanLast = last.replace(/\b(?:industrial\s*(?:estate|park|area|zone|district)|business\s*park|trading\s*estate|technology\s*park|science\s*park|enterprise\s*park|tech\s*park|ind\s*est|ind\s*park)\b/gi, "").trim();
-    if (cleanLast.length >= 3 && !isNotCitySegment(cleanLast)) {
+    if (cleanLast.length >= 3 && !isNotCitySegment(cleanLast) && !addressLooksLikeSuburbOnly(cleanLast)) {
       return cleanLast;
     }
   }
@@ -959,6 +988,11 @@ function evaluateCityQC(address, country) {
   // Capital City Rule: (If a country's capital is mentioned in the address, then both City and State are considered available.)
   if (hasCapitalInAddress(cleanAddr, country)) {
     return "Available";
+  }
+
+  // Suburb-only addresses: Suburbs alone without recognized city/town/district/municipality MUST evaluate as Not Available!
+  if (addressLooksLikeSuburbOnly(cleanAddr)) {
+    return "Not Available";
   }
 
   // Taiwan City Evaluation (Strict QC Rule):
@@ -1102,7 +1136,7 @@ function evaluateCityQC(address, country) {
     }
     // 5. Structural detection: Locality preceding State/ZIP
     const structCity = detectCityFromStructure(cleanAddr, country);
-    if (structCity && !isNotCitySegment(structCity)) {
+    if (structCity && !isNotCitySegment(structCity) && !addressLooksLikeSuburbOnly(structCity)) {
       return "Available";
     }
     return "Not Available";
@@ -1114,7 +1148,7 @@ function evaluateCityQC(address, country) {
       return "Available";
     }
     const structCity = detectCityFromStructure(cleanAddr, country);
-    if (structCity && !isNotCitySegment(structCity)) {
+    if (structCity && !isNotCitySegment(structCity) && !addressLooksLikeSuburbOnly(structCity)) {
       return "Available";
     }
     return "Not Available";
@@ -1161,7 +1195,7 @@ function evaluateCityQC(address, country) {
       }
     }
     const structCityIT = detectCityFromStructure(cleanAddr, country);
-    if (structCityIT && !isNotCitySegment(structCityIT) && !hasNamedStateOrProvince(structCityIT, "Italy")) {
+    if (structCityIT && !isNotCitySegment(structCityIT) && !addressLooksLikeSuburbOnly(structCityIT) && !hasNamedStateOrProvince(structCityIT, "Italy")) {
       return "Available";
     }
   }
@@ -1181,7 +1215,7 @@ function evaluateCityQC(address, country) {
       return "Available";
     }
     const structCity = detectCityFromStructure(cleanAddr, country);
-    if (structCity && !isNotCitySegment(structCity)) {
+    if (structCity && !isNotCitySegment(structCity) && !addressLooksLikeSuburbOnly(structCity)) {
       return "Available";
     }
   }
@@ -1207,12 +1241,12 @@ function evaluateCityQC(address, country) {
     const plzMatch = cleanAddr.match(/\b\d{5}\s+([a-zäöüß\s-]+)/i);
     if (plzMatch && plzMatch[1]) {
       const cand = plzMatch[1].split(/[,;\n]/)[0].trim();
-      if (cand.length >= 2 && !isNotCitySegment(cand) && !hasNamedStateOrProvince(cand, "Germany")) {
+      if (cand.length >= 2 && !isNotCitySegment(cand) && !addressLooksLikeSuburbOnly(cand) && !hasNamedStateOrProvince(cand, "Germany")) {
         return "Available";
       }
     }
     const structCity = detectCityFromStructure(cleanAddr, country);
-    if (structCity && !isNotCitySegment(structCity) && !hasNamedStateOrProvince(structCity, "Germany")) {
+    if (structCity && !isNotCitySegment(structCity) && !addressLooksLikeSuburbOnly(structCity) && !hasNamedStateOrProvince(structCity, "Germany")) {
       return "Available";
     }
   }
@@ -1233,12 +1267,12 @@ function evaluateCityQC(address, country) {
     const cpMatch = cleanAddr.match(/\b\d{5}\s+([a-zàâäéèêëîïôöùûüÿçœæ\s-]+)/i);
     if (cpMatch && cpMatch[1]) {
       const cand = cpMatch[1].split(/[,;\n]/)[0].trim();
-      if (cand.length >= 2 && !isNotCitySegment(cand) && !hasNamedStateOrProvince(cand, "France")) {
+      if (cand.length >= 2 && !isNotCitySegment(cand) && !addressLooksLikeSuburbOnly(cand) && !hasNamedStateOrProvince(cand, "France")) {
         return "Available";
       }
     }
     const structCity = detectCityFromStructure(cleanAddr, country);
-    if (structCity && !isNotCitySegment(structCity) && !hasNamedStateOrProvince(structCity, "France")) {
+    if (structCity && !isNotCitySegment(structCity) && !addressLooksLikeSuburbOnly(structCity) && !hasNamedStateOrProvince(structCity, "France")) {
       return "Available";
     }
   }
