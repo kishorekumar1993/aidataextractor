@@ -2130,33 +2130,37 @@ async function runAll() {
     assert.strictEqual(aeroCheck.category, 'Aerospace');
 
     // 5. Full strict QC evaluation:
-    // Under Image-Only Rejection rule, restricted words in text without restricted image must NOT reject
-    const textOnlyEvaluation = ctx.applyStrictInstructions({
+    // Web sites related to Defence/Military/ITAR are strictly prohibited -> Marked Not Working
+    const restrictedEvaluation = ctx.applyStrictInstructions({
       websiteStatus: 'Working',
       businessType: 'Manufacturer',
       companyName: 'United Grinding',
       companyAddress: '2100 United Grinding Boulevard, Miamisburg, Ohio'
     }, {}, itarCheck);
-    assert.strictEqual(textOnlyEvaluation.websiteStatus, 'Working', 'Text-only restricted keywords must NOT reject website');
 
-    // With confirmed restricted image -> Website is Rejected (Not Working)
+    assert.strictEqual(restrictedEvaluation.websiteStatus, 'Not Working', 'ITAR defence armaments must be Not Working');
+    assert.strictEqual(restrictedEvaluation.companyName, '');
+    assert.strictEqual(restrictedEvaluation.companyAddress, '');
+    assert.strictEqual(restrictedEvaluation.isRestricted, true);
+    assert.ok(restrictedEvaluation.notWorkingReason.includes('Defence & Military') || restrictedEvaluation.notWorkingReason.includes('Prohibited Category'));
+
+    // Image appearance alone also triggers the complete rejection scenario
     const itarCheckWithImage = {
       ...itarCheck,
       hasRestrictedImage: true,
       evidenceType: 'Image'
     };
-    const restrictedEvaluation = ctx.applyStrictInstructions({
+    const imageEvaluation = ctx.applyStrictInstructions({
       websiteStatus: 'Working',
       businessType: 'Manufacturer',
       companyName: 'United Grinding',
       companyAddress: '2100 United Grinding Boulevard, Miamisburg, Ohio'
     }, { hasRestrictedImage: true }, itarCheckWithImage);
 
-    assert.strictEqual(restrictedEvaluation.websiteStatus, 'Not Working');
-    assert.strictEqual(restrictedEvaluation.companyName, '');
-    assert.strictEqual(restrictedEvaluation.companyAddress, '');
-    assert.strictEqual(restrictedEvaluation.isRestricted, true);
-    assert.ok(restrictedEvaluation.notWorkingReason.includes('Defence & Military') || restrictedEvaluation.notWorkingReason.includes('Prohibited Category'));
+    assert.strictEqual(imageEvaluation.websiteStatus, 'Not Working');
+    assert.strictEqual(imageEvaluation.companyName, '');
+    assert.strictEqual(imageEvaluation.companyAddress, '');
+    assert.strictEqual(imageEvaluation.isRestricted, true);
   });
 
   // =========================================================================
@@ -2189,7 +2193,7 @@ async function runAll() {
     assert.strictEqual(collegeCheck.category, 'School, College & Education');
 
     // 4. Full QC evaluation:
-    // Under Image-Only Rejection rule, restricted words in text without restricted image must NOT reject
+    // Web sites related to School/College/Education must NOT be worked on -> Marked Not Working
     const schoolQc = ctx.applyStrictInstructions({
       websiteStatus: 'Working',
       businessType: 'Manufacturer',
@@ -2198,9 +2202,14 @@ async function runAll() {
       phoneNumber: '5551234567'
     }, {}, schoolCheck);
 
-    assert.strictEqual(schoolQc.websiteStatus, 'Working', 'School words in text without restricted image must remain Working');
+    assert.strictEqual(schoolQc.websiteStatus, 'Not Working', 'School status must be Not Working');
+    assert.strictEqual(schoolQc.companyName, '', 'Company name must be cleared');
+    assert.strictEqual(schoolQc.companyAddress, '', 'Company address must be cleared');
+    assert.strictEqual(schoolQc.phoneNumber, '', 'Phone must be cleared');
+    assert.strictEqual(schoolQc.isRestricted, true, 'isRestricted must be true');
+    assert.ok(schoolQc.notWorkingReason.includes('School, College & Education') || schoolQc.notWorkingReason.includes('Prohibited Category'));
 
-    // With confirmed restricted image -> Rejected
+    // Image appearance alone also triggers the complete rejection scenario
     const schoolImageCheck = { ...schoolCheck, hasRestrictedImage: true, evidenceType: 'Image' };
     const schoolImageQc = ctx.applyStrictInstructions({
       websiteStatus: 'Working',
@@ -2259,22 +2268,13 @@ async function runAll() {
       numberOfProductDescriptions: '6'
     };
 
-    // 2. Under Image-Only rule: text keywords without restricted image keeps Working
-    const textOnlyQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
+    // 2. Critical: Even if AI returns Working with _isFromAi: true, applyStrictInstructions MUST override to Not Working
+    const finalStrictQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
       finalUrl: 'https://www.action-wetori.com',
       originalUrl: 'https://www.action-wetori.com'
     }, actionCheck);
-    assert.strictEqual(textOnlyQc.websiteStatus, 'Working', 'Restricted words in text without restricted image must remain Working');
 
-    // 3. Critical: When confirmed restricted image is found, applyStrictInstructions MUST override AI to Not Working
-    const actionCheckWithImage = { ...actionCheck, hasRestrictedImage: true, evidenceType: 'Image' };
-    const finalStrictQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
-      finalUrl: 'https://www.action-wetori.com',
-      originalUrl: 'https://www.action-wetori.com',
-      hasRestrictedImage: true
-    }, actionCheckWithImage);
-
-    assert.strictEqual(finalStrictQc.websiteStatus, 'Not Working', 'Restricted site with confirmed image MUST be Not Working even if AI returned Working');
+    assert.strictEqual(finalStrictQc.websiteStatus, 'Not Working', 'Restricted site MUST be Not Working even if AI returned Working');
     assert.strictEqual(finalStrictQc.businessType, '', 'Business type must be wiped');
     assert.strictEqual(finalStrictQc.companyName, '', 'Company name must be wiped');
     assert.strictEqual(finalStrictQc.companyAddress, '', 'Address must be wiped');
@@ -2284,6 +2284,17 @@ async function runAll() {
     assert.strictEqual(finalStrictQc.isRestricted, true, 'isRestricted must be true');
     assert.strictEqual(finalStrictQc.isProhibitedSite, true, 'isProhibitedSite must be true');
     assert.ok(finalStrictQc.notWorkingReason.includes('Aircraft & Aviation') || finalStrictQc.notWorkingReason.includes('Aerospace') || finalStrictQc.notWorkingReason.includes('Prohibited Category'));
+
+    // 3. Image appearance alone also triggers complete restriction scenario
+    const actionCheckWithImage = { ...actionCheck, hasRestrictedImage: true, evidenceType: 'Image' };
+    const imageStrictQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
+      finalUrl: 'https://www.action-wetori.com',
+      originalUrl: 'https://www.action-wetori.com',
+      hasRestrictedImage: true
+    }, actionCheckWithImage);
+
+    assert.strictEqual(imageStrictQc.websiteStatus, 'Not Working', 'Restricted site with confirmed image MUST be Not Working');
+    assert.strictEqual(imageStrictQc.companyName, '');
   });
 
   // =========================================================================

@@ -171,15 +171,15 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * "Restricted Site": Company business involves a prohibited category.
 - MANDATORY RULE FOR "Other", "Service Provider", "Online Shopping", & "Restricted Site": When the business type is classified as "Other", "Service Provider", "Online Shopping", or "Restricted Site", you MUST set "websiteStatus": "Not Working", "notWorkingReason": "Business Type [Type] outside allowed scope (Manufacturer to Wholesaler only)", AND leave all other 12 fields empty "".
 
-4. RESTRICTED CATEGORIES (13 OFFICIAL PROHIBITED CATEGORIES - IMAGE-ONLY REJECTION):
-- Mandatory Directive: Website rejection must be based on restricted IMAGES only, not merely on the presence of restricted words.
-  * Words/Text: The mere presence of restricted-category-related words anywhere on the website (keywords, page titles, URLs, filenames, HTML content, product descriptions, or OCR text) does NOT mean the website should be rejected. Do NOT reject based on words alone.
-  * Images: Reject the entire website ONLY if an actual confirmed visual image related to one of the 13 restricted categories appears anywhere on the accessible website (Porn & Adult, Medicine & Medical, Hospital & Healthcare, Food, Weapons & Knives, Defence, Aircraft & Aviation, Aerospace, Marine, Ship & Shipbuilding, Chemical, Alcohol, Animals).
+4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES):
+- Mandatory Directive: Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals, or School, College & Education.
+  * If the website operations, products, services, or business activities are related to any of these prohibited categories, DO NOT WORK ON THAT WEBSITE. Mark "websiteStatus": "Not Working", "businessType": "Restricted Site", and leave all other 12 fields empty "".
+  * CRITICAL IMAGE RULE: If an image related to any of these restricted categories appears anywhere on the website (products, gallery, hero banner, CSS background, internal pages), note that the image alone changes the complete scenario to Not Working. Mark "websiteStatus": "Not Working", "businessType": "Restricted Site", and leave all other 12 fields empty "".
   * Decision Rules:
-    - IF restricted words are found AND no restricted image is found -> Website Status = "Working".
-    - IF no restricted words are found AND no restricted image is found -> Website Status = "Working".
-    - IF at least one confirmed restricted image is found -> Website Status = "Not Working", "businessType": "Restricted Site", and leave all other 12 fields empty "".
-    - IF image classification is uncertain -> Website Status = "Manual Review".
+    - IF website business/products/services are related to any restricted category -> Website Status = "Not Working".
+    - IF at least one restricted-category image is found -> Website Status = "Not Working" (image only change complete scenario).
+    - IF image classification is uncertain and no other restriction -> Website Status = "Manual Review".
+    - IF no restricted business and no restricted image -> Website Status = "Working".
 - FALSE-POSITIVE EXEMPTIONS:
   * General industrial machinery, bandsaw, cutting tool, fastener, valve, or component manufacturers that merely list workpiece cutting materials or served industries in an applications menu (e.g. "Applications: Car Parts | Metallic Materials | Aeronautical Parts", "Food packaging machinery", "Marine hardware") are PERMITTED ("Working") if their actual manufactured products are general industrial machines/tools (e.g. bandsaws, CNC machine tools) and NOT aircraft/spacecraft/weapons itself.
   * Mechanical power metrics (e.g. "Horse Power Engine", "Horsepower", "HP", "BHP", "Horse Power Motor") are engineering measurements of engine/motor power output and are NOT live animals or pets. Sites manufacturing, selling, or specifying horsepower engines, electric motors, pumps, or industrial power equipment are PERMITTED ("Working").
@@ -1780,16 +1780,17 @@ function buildRestrictedCategoryPrompt(crawlData, siteUrl = "") {
 
   return `# Strict Website Restricted Category Detection & QC Validation Prompt
 
-## 1. Role & Official Rejection Directive
+## 1. Role & Official Directive
 You are a strict website eligibility and restricted-category validation engine.
-Official Technical Directive: Website rejection must be based on restricted IMAGES only, not merely on the presence of restricted words.
-- Words/Text: The mere presence of restricted-category-related words anywhere on the website (keywords, page titles, URLs, filenames, HTML content, product descriptions, or OCR text) does NOT mean the website should be rejected. Do NOT reject based on words alone.
-- Images: Reject the entire website ONLY if an actual confirmed visual image related to one of the 13 restricted categories appears anywhere on the accessible website.
+Official Technical Directive:
+- Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals, or School, College & Education.
+- If a website is related to any of these prohibited categories, reject it immediately: Website Status = Not Working, Business Type = Restricted Site, all other fields empty "".
+- CRITICAL IMAGE DIRECTIVE: If an image related to any of these prohibited categories appears anywhere on the website (products, gallery, hero banner, CSS background, internal pages), note that the image alone changes the complete scenario to Not Working.
 - Required Decision Logic:
-  * IF restricted words are found AND no restricted image is found -> Website Status = Working
-  * IF no restricted words are found AND no restricted image is found -> Website Status = Working
-  * IF at least one confirmed restricted image is found -> Website Status = Rejected
-  * IF image classification is uncertain -> Website Status = Manual Review
+  * IF website is related to a prohibited category -> Website Status = Rejected (Not Working)
+  * IF at least one restricted-category image is found -> Website Status = Rejected (Not Working)
+  * IF image classification is uncertain and no other restriction confirmed -> Website Status = Manual Review
+  * IF no restricted business and no restricted image -> Website Status = Working
 
 ## 2. Restricted Categories
 The following 13 categories are strictly prohibited:
@@ -1921,14 +1922,14 @@ Important distinction:
 - An incidental word, metaphor, unrelated sentence, served-industry mention, or material resistance claim is NOT sufficient by itself.
 - Evaluate images in context. Do not reject an unrelated image merely because its filename or ALT text contains a matching keyword.
 
-## 6. Decision Rules (Image-Only Rejection)
-Use these exact decisions:
-1. Restricted – Reject: At least one confirmed restricted-category visual image appears anywhere on the accessible website.
-2. False Positive – Do Not Reject: Restricted words appear in text, title, URL, description, or image filename, but NO confirmed restricted image is found -> Website Status = Working.
-3. Manual Review: Image classification is uncertain, or an image cannot be verified.
-4. Not Working: Use only when the website is genuinely dead/inaccessible. Never use this status merely because a restricted keyword was found.
+## 6. Decision Rules
+Use these decisions:
+1. Restricted – Reject: The website is related to a prohibited category, OR at least one restricted-category visual image appears anywhere on the accessible website (image only changes complete scenario).
+2. False Positive – Do Not Reject: A prohibited keyword appears only in an unrelated context (e.g. incidental served-industry mention like "bolts used in aircraft", "conveyors for food plants", "safe near pets", "we ship worldwide", "18+ adult disclaimer") and no restricted business activity or restricted image is confirmed -> Website Status = Working.
+3. Manual Review: Image classification is uncertain, or evidence cannot be verified.
+4. Not Working: Use only when the website is genuinely dead/inaccessible.
 
-If a confirmed restricted-category image is detected, reject the website immediately.
+If a restricted category or restricted image is detected, reject the website immediately.
 
 ## 7. Evidence Requirements
 For every restricted rejection, return:
@@ -2034,7 +2035,7 @@ async function validateRestrictedCategoryWithAi(crawlData, aiConfig = {}, crawlS
           hasRestrictedImage: true,
           isProhibitedSite: true,
           category: imgEval.category,
-          reason: imgEval.reason,
+          reason: `${imgEval.reason} (Image only change complete scenario to Not Working)`,
           classification: "GENUINE_RESTRICTED",
           confidence: imgEval.confidence || 0.95
         };
@@ -2047,14 +2048,6 @@ async function validateRestrictedCategoryWithAi(crawlData, aiConfig = {}, crawlS
           reason: imgEval.reason,
           classification: "MANUAL_REVIEW",
           confidence: imgEval.confidence || 0.5
-        };
-      } else {
-        return {
-          isRestricted: false,
-          hasRestrictedImage: false,
-          category: "",
-          reason: "No restricted images found",
-          classification: "NOT_RESTRICTED"
         };
       }
     }
@@ -2096,7 +2089,7 @@ async function validateRestrictedCategoryWithAi(crawlData, aiConfig = {}, crawlS
     console.warn("[AI Assistant] AI restricted category validation error:", err.message);
   }
 
-  // Fallback to image-only validation
+  // Fallback: check images and text
   if (typeof evaluateWebsiteImageRestrictions === "function") {
     const imgEval = evaluateWebsiteImageRestrictions(crawlData ? (crawlData.images || []) : [], crawlData ? (crawlData.crawledPages || []) : []);
     if (imgEval.hasRestrictedImage) {
@@ -2105,7 +2098,7 @@ async function validateRestrictedCategoryWithAi(crawlData, aiConfig = {}, crawlS
         hasRestrictedImage: true,
         isProhibitedSite: true,
         category: imgEval.category,
-        reason: imgEval.reason,
+        reason: `${imgEval.reason} (Image only change complete scenario to Not Working)`,
         classification: "GENUINE_RESTRICTED",
         confidence: imgEval.confidence || 0.95
       };
@@ -2118,14 +2111,6 @@ async function validateRestrictedCategoryWithAi(crawlData, aiConfig = {}, crawlS
         reason: imgEval.reason,
         classification: "MANUAL_REVIEW",
         confidence: imgEval.confidence || 0.5
-      };
-    } else {
-      return {
-        isRestricted: false,
-        hasRestrictedImage: false,
-        category: "",
-        reason: "No restricted images found",
-        classification: "NOT_RESTRICTED"
       };
     }
   }
