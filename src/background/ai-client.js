@@ -171,14 +171,15 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   * "Restricted Site": Company business involves a prohibited category.
 - MANDATORY RULE FOR "Other", "Service Provider", "Online Shopping", & "Restricted Site": When the business type is classified as "Other", "Service Provider", "Online Shopping", or "Restricted Site", you MUST set "websiteStatus": "Not Working", "notWorkingReason": "Business Type [Type] outside allowed scope (Manufacturer to Wholesaler only)", AND leave all other 12 fields empty "".
 
-4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES):
-- Mandatory Directive: Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals, or School, College & Education.
-  * If the website operations, products, services, or business activities are related to any of these prohibited categories, DO NOT WORK ON THAT WEBSITE. Mark "websiteStatus": "Not Working", "businessType": "Restricted Site", and leave all other 12 fields empty "".
-  * CRITICAL IMAGE RULE: If an image related to any of these restricted categories appears anywhere on the website (products, gallery, hero banner, CSS background, internal pages), note that the image alone changes the complete scenario to Not Working. Mark "websiteStatus": "Not Working", "businessType": "Restricted Site", and leave all other 12 fields empty "".
+4. RESTRICTED CATEGORIES (14 PROHIBITED CATEGORIES - IMAGE ONLY RESTRICTION POLICY):
+- Mandatory Directive: Do not work on websites related to Porn, Adult, Medicine, Medical, Hospital, Food, Weapons (Knife), Defence, Aircraft, Aerospace, Marine, Ship, Chemical, Alcohol, Animals, or School, College & Education IF a restricted-category image appears on the website.
+  * CRITICAL RESTRICTION POLICY: RESTRICTION IS STRICTLY FOR IMAGES ONLY, WORDS NOT!
+  * Words, text, page titles, metatags, filenames, or contextual mentions alone do NOT reject a website. If restricted words appear on the site but NO confirmed restricted image appears, the website MUST REMAIN "Working".
+  * CRITICAL IMAGE RULE: If a confirmed image related to any of these restricted categories appears anywhere on the website (products, gallery, hero banner, CSS background, internal pages), note that the image alone changes the complete scenario to Not Working. Mark "websiteStatus": "Not Working", "businessType": "", and leave all other 13 fields empty "".
   * Decision Rules:
-    - IF website business/products/services are related to any restricted category -> Website Status = "Not Working".
-    - IF at least one restricted-category image is found -> Website Status = "Not Working" (image only change complete scenario).
-    - IF image classification is uncertain and no other restriction -> Website Status = "Manual Review".
+    - IF at least one confirmed restricted-category image appears on the website -> Website Status = "Not Working" (image only changes complete scenario).
+    - IF image classification is uncertain and no other confirmed restriction -> Website Status = "Manual Review".
+    - IF restricted words appear in text but NO restricted image is found -> Website Status = "Working" (words do NOT reject).
     - IF no restricted business and no restricted image -> Website Status = "Working".
 - FALSE-POSITIVE EXEMPTIONS:
   * General industrial machinery, bandsaw, cutting tool, fastener, valve, or component manufacturers that merely list workpiece cutting materials or served industries in an applications menu (e.g. "Applications: Car Parts | Metallic Materials | Aeronautical Parts", "Food packaging machinery", "Marine hardware") are PERMITTED ("Working") if their actual manufactured products are general industrial machines/tools (e.g. bandsaws, CNC machine tools) and NOT aircraft/spacecraft/weapons itself.
@@ -211,7 +212,7 @@ Return ONLY a single valid JSON object (no markdown fences or commentary) contai
   12. Alcohol (Alcohol manufacturers/suppliers, beer, wine, liquor businesses, alcoholic beverage distributors/production)
   13. Animals (Animal trading/supply, live animal sales, animal breeding, animal product manufacturers/suppliers, wildlife trading)
   14. School, College & Education (Schools, colleges, universities, academies, polytechnics, educational institutes, coaching centres, tutoring/tuition classes, and academic institutions are strictly out of scope. Mark "Not Working" with all other 13 fields empty).
-- Output when Restricted: When a restricted category business/product/word is detected anywhere on the site, set "websiteStatus": "Not Working", "businessType": "Restricted Site", and "notWorkingReason": "Prohibited Category Detected: [Category] ([Keyword])", AND leave all other 12 fields empty "".
+- Output when Restricted: Rejection is strictly for confirmed restricted IMAGES only (words not). When a confirmed restricted-category image is detected on the site, set "websiteStatus": "Not Working", "businessType": "", and "notWorkingReason": "Prohibited Category Image Detected: [Category] (Image only changes complete scenario to Not Working)", AND leave all other 13 fields empty "". If restricted words appear without a confirmed restricted image, mark "websiteStatus": "Working".
 
 5. COMPANY PROFILE VALIDATION:
 - Options: "Available" | "Not Available".
@@ -1493,8 +1494,11 @@ function heuristicExtraction(crawlData, restrictedCheck) {
   let hasState = address && hasStateInAddress(address, country);
   let hasCity = address && hasCityInAddress(address, country);
 
-  const isGenuineRestricted = !!(restrictedCheck && restrictedCheck.isRestricted);
-  if (isGenuineRestricted) {
+  const hasRestrictedImage = !!(
+    (restrictedCheck && (restrictedCheck.hasRestrictedImage || (restrictedCheck.isRestricted && (restrictedCheck.evidenceType === "Image" || restrictedCheck.hasConfirmedRestrictedImage)))) ||
+    (crawlData && crawlData.hasRestrictedImage)
+  );
+  if (hasRestrictedImage) {
     const errorUrl = (restrictedCheck && (restrictedCheck.sourceUrl || restrictedCheck.matched_page)) || crawlData.finalUrl || crawlData.originalUrl || "";
     return {
       websiteStatus: "Not Working",
@@ -1511,24 +1515,23 @@ function heuristicExtraction(crawlData, restrictedCheck) {
       numberOfProducts: "",
       productImages: "",
       numberOfProductDescriptions: "",
-      errorCategory: "Prohibited Category",
+      errorCategory: "Prohibited Category Image",
       errorKeyword: (restrictedCheck && (restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword)) || "",
       errorSourceUrl: errorUrl,
       errorSnippet: (restrictedCheck && (restrictedCheck.snippet || restrictedCheck.matched_context)) || "",
-      notWorkingReason: (restrictedCheck && restrictedCheck.reason) || "Prohibited Category Detected",
-      restrictedReason: (restrictedCheck && restrictedCheck.reason) || "Prohibited Category Detected",
+      notWorkingReason: (restrictedCheck && restrictedCheck.reason) || "Prohibited Category Image Detected",
+      restrictedReason: (restrictedCheck && restrictedCheck.reason) || "Prohibited Category Image Detected",
       restrictedKeyword: (restrictedCheck && (restrictedCheck.matchedKeyword || restrictedCheck.matched_keyword)) || "",
       restrictedCategory: (restrictedCheck && (restrictedCheck.category || restrictedCheck.restricted_category)) || "",
       restrictedSourceUrl: errorUrl,
       restrictedSnippet: (restrictedCheck && (restrictedCheck.snippet || restrictedCheck.matched_context)) || "",
       isRestricted: true,
+      hasRestrictedImage: true,
       isProhibitedSite: true
     };
   }
-  let inferredBusiness = isGenuineRestricted
-    ? "Restricted Site"
-    : inferBusinessTypeFromEvidence(text, crawlData.mainHtml || "");
-  if (!inferredBusiness && !isGenuineRestricted) {
+  let inferredBusiness = inferBusinessTypeFromEvidence(text, crawlData.mainHtml || "");
+  if (!inferredBusiness) {
     if (typeof checkPhysicalProductSupplier === "function" && checkPhysicalProductSupplier(crawlData, { companyAddress: address })) {
       inferredBusiness = "Supplier";
     } else if (prodCount !== "0" || (address && (emailId || phoneNumber))) {

@@ -2130,7 +2130,8 @@ async function runAll() {
     assert.strictEqual(aeroCheck.category, 'Aerospace');
 
     // 5. Full strict QC evaluation:
-    // Web sites related to Defence/Military/ITAR are strictly prohibited -> Marked Not Working
+    // User instruction: restriction is for image only, words not.
+    // If only text is present without a confirmed restricted image, website remains Working.
     const restrictedEvaluation = ctx.applyStrictInstructions({
       websiteStatus: 'Working',
       businessType: 'Manufacturer',
@@ -2138,13 +2139,9 @@ async function runAll() {
       companyAddress: '2100 United Grinding Boulevard, Miamisburg, Ohio'
     }, {}, itarCheck);
 
-    assert.strictEqual(restrictedEvaluation.websiteStatus, 'Not Working', 'ITAR defence armaments must be Not Working');
-    assert.strictEqual(restrictedEvaluation.companyName, '');
-    assert.strictEqual(restrictedEvaluation.companyAddress, '');
-    assert.strictEqual(restrictedEvaluation.isRestricted, true);
-    assert.ok(restrictedEvaluation.notWorkingReason.includes('Defence & Military') || restrictedEvaluation.notWorkingReason.includes('Prohibited Category'));
+    assert.strictEqual(restrictedEvaluation.websiteStatus, 'Working', 'Words alone do not reject; website remains Working');
 
-    // Image appearance alone also triggers the complete rejection scenario
+    // Image appearance alone triggers the complete rejection scenario
     const itarCheckWithImage = {
       ...itarCheck,
       hasRestrictedImage: true,
@@ -2193,7 +2190,7 @@ async function runAll() {
     assert.strictEqual(collegeCheck.category, 'School, College & Education');
 
     // 4. Full QC evaluation:
-    // Web sites related to School/College/Education must NOT be worked on -> Marked Not Working
+    // Without confirmed restricted image: words alone do NOT reject -> Working
     const schoolQc = ctx.applyStrictInstructions({
       websiteStatus: 'Working',
       businessType: 'Manufacturer',
@@ -2202,14 +2199,9 @@ async function runAll() {
       phoneNumber: '5551234567'
     }, {}, schoolCheck);
 
-    assert.strictEqual(schoolQc.websiteStatus, 'Not Working', 'School status must be Not Working');
-    assert.strictEqual(schoolQc.companyName, '', 'Company name must be cleared');
-    assert.strictEqual(schoolQc.companyAddress, '', 'Company address must be cleared');
-    assert.strictEqual(schoolQc.phoneNumber, '', 'Phone must be cleared');
-    assert.strictEqual(schoolQc.isRestricted, true, 'isRestricted must be true');
-    assert.ok(schoolQc.notWorkingReason.includes('School, College & Education') || schoolQc.notWorkingReason.includes('Prohibited Category'));
+    assert.strictEqual(schoolQc.websiteStatus, 'Working', 'Without confirmed restricted image, words alone do not reject');
 
-    // Image appearance alone also triggers the complete rejection scenario
+    // Image appearance alone triggers the complete rejection scenario
     const schoolImageCheck = { ...schoolCheck, hasRestrictedImage: true, evidenceType: 'Image' };
     const schoolImageQc = ctx.applyStrictInstructions({
       websiteStatus: 'Working',
@@ -2268,24 +2260,15 @@ async function runAll() {
       numberOfProductDescriptions: '6'
     };
 
-    // 2. Critical: Even if AI returns Working with _isFromAi: true, applyStrictInstructions MUST override to Not Working
+    // 2. Critical: Words alone do NOT reject -> websiteStatus remains Working
     const finalStrictQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
       finalUrl: 'https://www.action-wetori.com',
       originalUrl: 'https://www.action-wetori.com'
     }, actionCheck);
 
-    assert.strictEqual(finalStrictQc.websiteStatus, 'Not Working', 'Restricted site MUST be Not Working even if AI returned Working');
-    assert.strictEqual(finalStrictQc.businessType, '', 'Business type must be wiped');
-    assert.strictEqual(finalStrictQc.companyName, '', 'Company name must be wiped');
-    assert.strictEqual(finalStrictQc.companyAddress, '', 'Address must be wiped');
-    assert.strictEqual(finalStrictQc.emailId, '', 'Email must be wiped');
-    assert.strictEqual(finalStrictQc.phoneNumber, '', 'Phone must be wiped');
-    assert.strictEqual(finalStrictQc.numberOfProducts, '', 'Products must be wiped');
-    assert.strictEqual(finalStrictQc.isRestricted, true, 'isRestricted must be true');
-    assert.strictEqual(finalStrictQc.isProhibitedSite, true, 'isProhibitedSite must be true');
-    assert.ok(finalStrictQc.notWorkingReason.includes('Aircraft & Aviation') || finalStrictQc.notWorkingReason.includes('Aerospace') || finalStrictQc.notWorkingReason.includes('Prohibited Category'));
+    assert.strictEqual(finalStrictQc.websiteStatus, 'Working', 'Restricted words without image must remain Working');
 
-    // 3. Image appearance alone also triggers complete restriction scenario
+    // 3. Image appearance alone triggers complete restriction scenario
     const actionCheckWithImage = { ...actionCheck, hasRestrictedImage: true, evidenceType: 'Image' };
     const imageStrictQc = ctx.applyStrictInstructions(mockAiReturnedWorking, {
       finalUrl: 'https://www.action-wetori.com',
