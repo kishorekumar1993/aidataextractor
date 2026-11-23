@@ -5,6 +5,14 @@
   console.log("AI Web Crawler & Pre-Fill Assistant active on:", window.location.href);
   const state = (AIExt.state = AIExt.state || {});
 
+  function isExtensionContextValid() {
+    try {
+      return Boolean(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function initAssistant() {
     if (!AIExt.isDataEntryPage()) {
       return;
@@ -22,70 +30,77 @@
     setInterval(AIExt.ensureAiCrawlButtonsVisible, 1500);
 
     // Check if auto-queue or batch Not Working pipeline was active across page reloads/navigations
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.get(["batchNotWorking", "autoQueuePipeline"], (res) => {
-        const batch = res?.batchNotWorking;
-        // Resume if batch was active within the last 5 minutes
-        if (batch && batch.active && (batch.remaining > 0 || batch.remaining === -1) && (Date.now() - (batch.updatedAt || 0) < 300000)) {
-          state.isBatchNotWorkingActive = true;
-          state.batchNotWorkingRemaining = batch.remaining;
-          state.batchNotWorkingTotal = batch.total || 10;
-          state.lastSubmittedUrl = batch.lastSubmittedUrl || "";
-          state.isAutoQueuePipelineActive = false;
-          if (typeof AIExt.updateBatchButtonsState === "function") {
-            AIExt.updateBatchButtonsState();
-          }
-          console.log(`[AI Assistant] Resumed Batch Not Working from storage: ${state.batchNotWorkingRemaining} items left. Last submitted: "${state.lastSubmittedUrl}"`);
-          AIExt.updateStatus(`⚡ Resuming Batch Not Working (${state.batchNotWorkingRemaining === -1 ? "ALL" : state.batchNotWorkingRemaining + " left"})...`, "loading");
-
-          // Give dynamic fields a moment to settle before processing next item
-          setTimeout(() => {
-            if (state.isBatchNotWorkingActive && typeof AIExt.processNextBatchNotWorkingItem === "function") {
-              AIExt.processNextBatchNotWorkingItem();
+    if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+      try {
+        chrome.storage.local.get(["batchNotWorking", "autoQueuePipeline"], (res) => {
+          if (!isExtensionContextValid()) return;
+          const batch = res?.batchNotWorking;
+          // Resume if batch was active within the last 5 minutes
+          if (batch && batch.active && (batch.remaining > 0 || batch.remaining === -1) && (Date.now() - (batch.updatedAt || 0) < 300000)) {
+            state.isBatchNotWorkingActive = true;
+            state.batchNotWorkingRemaining = batch.remaining;
+            state.batchNotWorkingTotal = batch.total || 10;
+            state.lastSubmittedUrl = batch.lastSubmittedUrl || "";
+            state.isAutoQueuePipelineActive = false;
+            if (typeof AIExt.updateBatchButtonsState === "function") {
+              AIExt.updateBatchButtonsState();
             }
-          }, 600);
-          return;
-        } else if (batch) {
-          chrome.storage.local.remove(["batchNotWorking"]);
-        }
+            console.log(`[AI Assistant] Resumed Batch Not Working from storage: ${state.batchNotWorkingRemaining} items left. Last submitted: "${state.lastSubmittedUrl}"`);
+            AIExt.updateStatus(`⚡ Resuming Batch Not Working (${state.batchNotWorkingRemaining === -1 ? "ALL" : state.batchNotWorkingRemaining + " left"})...`, "loading");
 
-        // Resume "Auto-crawl till Working site" pipeline across page reloads (sync autoQueueEnabled first)
-        const autoPipeline = res?.autoQueuePipeline;
-        if (autoPipeline && autoPipeline.active && (Date.now() - (autoPipeline.updatedAt || 0) < 180000)) {
-          const resumePipeline = (enabled) => {
-            if (!enabled) {
-              chrome.storage.local.remove(["autoQueuePipeline"]);
-              return;
-            }
-            state.isAutoQueuePipelineActive = true;
-            const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
-            if (pauseBtn) pauseBtn.style.display = "inline-flex";
-            console.log(`[AI Assistant] Resumed Auto-Queue Pipeline from storage. Last submitted: "${autoPipeline.lastSubmittedUrl}"`);
-            AIExt.updateStatus("⚡ Auto-Queue: Advancing to next site...", "loading");
-
+            // Give dynamic fields a moment to settle before processing next item
             setTimeout(() => {
-              if (state.isAutoQueuePipelineActive && state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
-                AIExt.scheduleNextQueueAutoCrawl(autoPipeline.lastSubmittedUrl);
+              if (state.isBatchNotWorkingActive && typeof AIExt.processNextBatchNotWorkingItem === "function") {
+                AIExt.processNextBatchNotWorkingItem();
               }
-            }, 450);
-          };
-
-          if (chrome.storage.sync) {
-            chrome.storage.sync.get({ autoQueueEnabled: false, crawlMode: "manual" }, (syncRes) => {
-              if (syncRes && syncRes.crawlMode) {
-                state.autoQueueEnabled = syncRes.crawlMode === "auto" || syncRes.crawlMode === "continuous";
-              } else if (syncRes) {
-                state.autoQueueEnabled = !!syncRes.autoQueueEnabled;
-              }
-              resumePipeline(state.autoQueueEnabled);
-            });
-          } else {
-            resumePipeline(state.autoQueueEnabled);
+            }, 600);
+            return;
+          } else if (batch) {
+            try { chrome.storage.local.remove(["batchNotWorking"]); } catch (e) {}
           }
-        } else if (autoPipeline) {
-          chrome.storage.local.remove(["autoQueuePipeline"]);
-        }
-      });
+
+          // Resume "Auto-crawl till Working site" pipeline across page reloads (sync autoQueueEnabled first)
+          const autoPipeline = res?.autoQueuePipeline;
+          if (autoPipeline && autoPipeline.active && (Date.now() - (autoPipeline.updatedAt || 0) < 180000)) {
+            const resumePipeline = (enabled) => {
+              if (!enabled) {
+                try { if (isExtensionContextValid() && chrome.storage && chrome.storage.local) chrome.storage.local.remove(["autoQueuePipeline"]); } catch (e) {}
+                return;
+              }
+              state.isAutoQueuePipelineActive = true;
+              const pauseBtn = document.getElementById("ai-pause-pipeline-btn");
+              if (pauseBtn) pauseBtn.style.display = "inline-flex";
+              console.log(`[AI Assistant] Resumed Auto-Queue Pipeline from storage. Last submitted: "${autoPipeline.lastSubmittedUrl}"`);
+              AIExt.updateStatus("⚡ Auto-Queue: Advancing to next site...", "loading");
+
+              setTimeout(() => {
+                if (state.isAutoQueuePipelineActive && state.autoQueueEnabled && !state.isBatchNotWorkingActive) {
+                  AIExt.scheduleNextQueueAutoCrawl(autoPipeline.lastSubmittedUrl);
+                }
+              }, 450);
+            };
+
+            if (isExtensionContextValid() && chrome.storage && chrome.storage.sync) {
+              try {
+                chrome.storage.sync.get({ autoQueueEnabled: false, crawlMode: "manual" }, (syncRes) => {
+                  if (syncRes && syncRes.crawlMode) {
+                    state.autoQueueEnabled = syncRes.crawlMode === "auto" || syncRes.crawlMode === "continuous";
+                  } else if (syncRes) {
+                    state.autoQueueEnabled = !!syncRes.autoQueueEnabled;
+                  }
+                  resumePipeline(state.autoQueueEnabled);
+                });
+              } catch (e) {
+                resumePipeline(state.autoQueueEnabled);
+              }
+            } else {
+              resumePipeline(state.autoQueueEnabled);
+            }
+          } else if (autoPipeline) {
+            try { chrome.storage.local.remove(["autoQueuePipeline"]); } catch (e) {}
+          }
+        });
+      } catch (e) {}
     }
 
     setTimeout(() => {
@@ -461,14 +476,16 @@
             state.lastProcessedUrl = currentSubmitted;
             if (state.autoQueueEnabled) {
               state.isAutoQueuePipelineActive = true;
-              if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-                chrome.storage.local.set({
-                  autoQueuePipeline: {
-                    active: true,
-                    lastSubmittedUrl: currentSubmitted || "",
-                    updatedAt: Date.now()
-                  }
-                });
+              if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
+                try {
+                  chrome.storage.local.set({
+                    autoQueuePipeline: {
+                      active: true,
+                      lastSubmittedUrl: currentSubmitted || "",
+                      updatedAt: Date.now()
+                    }
+                  });
+                } catch (e) {}
               }
               AIExt.updateStatus("⏳ Website saved! Loading next URL...", "loading");
               setTimeout(() => {

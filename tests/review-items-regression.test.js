@@ -4210,6 +4210,40 @@ async function runAll() {
     );
   });
 
+  runTest('Item 126: Ordinal street names preservation (1st Street must never become 1 St Street)', () => {
+    const { ctx } = createTestContext();
+
+    // Direct verification of 1st Street
+    const clean1 = ctx.sanitizeRule6CompanyAddress('1st Street', 'Test Corp', 'United States');
+    assert.strictEqual(clean1, '1st Street', '1st Street must remain 1st Street and never become 1 St Street');
+
+    const clean2 = ctx.sanitizeRule6CompanyAddress('100 1st Street, Austin, TX 78701', 'Test Corp', 'United States');
+    assert.strictEqual(clean2, '100 1st Street, Austin, Texas', '1st Street must be preserved in full address');
+
+    // Erroneously separated ordinal repair
+    const clean3 = ctx.sanitizeRule6CompanyAddress('100 1 St Street, Austin, Texas', 'Test Corp', 'United States');
+    assert.strictEqual(clean3, '100 1st Street, Austin, Texas', '1 St Street must be repaired to 1st Street');
+
+    const clean4 = ctx.sanitizeRule6CompanyAddress('100 1 st Street, Austin, Texas', 'Test Corp', 'United States');
+    assert.strictEqual(clean4, '100 1st Street, Austin, Texas', '1 st Street must be repaired to 1st Street');
+
+    // Other ordinals (2nd, 3rd, 4th, 21st, 1st Floor)
+    const clean5 = ctx.sanitizeRule6CompanyAddress('200 2nd Avenue, New York, NY', 'Test Corp', 'United States');
+    assert.strictEqual(clean5, '200 2nd Avenue, New York', '2nd Avenue must remain 2nd Avenue');
+
+    const clean6 = ctx.sanitizeRule6CompanyAddress('300 3rd Boulevard, Chicago, IL', 'Test Corp', 'United States');
+    assert.strictEqual(clean6, '300 3rd Boulevard, Chicago, Illinois', '3rd Boulevard must remain 3rd Boulevard');
+
+    const clean7 = ctx.sanitizeRule6CompanyAddress('400 4th Road, Seattle, WA', 'Test Corp', 'United States');
+    assert.strictEqual(clean7, '400 4th Road, Seattle, Washington', '4th Road must remain 4th Road');
+
+    const clean8 = ctx.sanitizeRule6CompanyAddress('500 21st Street, Miami, FL', 'Test Corp', 'United States');
+    assert.strictEqual(clean8, '500 21st Street, Miami, Florida', '21st Street must remain 21st Street');
+
+    const clean9 = ctx.sanitizeRule6CompanyAddress('100 Main Street, 1st Fl., Boston, MA', 'Test Corp', 'United States');
+    assert.strictEqual(clean9, '100 Main Street, 1st Floor, Boston, Massachusetts', '1st Floor must preserve ordinal form');
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');

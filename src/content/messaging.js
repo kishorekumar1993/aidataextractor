@@ -97,6 +97,15 @@
         AIExt.showReloadBanner();
       }
     });
+    window.addEventListener("error", (event) => {
+      if (event && (String(event.message || "").includes("Extension context invalidated") || String(event.error?.message || "").includes("Extension context invalidated"))) {
+        try {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        } catch (e) { }
+        AIExt.showReloadBanner();
+      }
+    }, true);
   }
 
   Object.assign(AIExt, {

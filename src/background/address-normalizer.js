@@ -531,8 +531,20 @@ function expandAddressAndStateAbbreviations(addr, country = "") {
   a = a.replace(/\blot\s+(?:no|nos)[.:]?\s*(?=\d)/gi, 'Lot Number ');
   a = a.replace(/\bplot\s+(?:no|nos)[.:]?\s*(?=\d)/gi, 'Plot Number ');
 
+  // Repair erroneously separated ordinal numbers (e.g. "1 St Street" -> "1st Street", "1 st Street" -> "1st Street", "2 Nd Avenue" -> "2nd Avenue", "3 Rd Floor" -> "3rd Floor")
+  a = a.replace(/\b(\d+)\s+St\.?\s+Street\b/gi, "$1st Street");
+  a = a.replace(/\b(\d+)\s*(?:[-–]\s*)?(st|nd|rd|th)\b\.?(?=\s+(?:Street|Road|Avenue|Lane|Alley|Boulevard|Drive|Way|Highway|Place|Court|Close|Square|Terrace|Park|Path|Walk|Plaza|Floor|Fl|Level)\b|[,\s]|$)/gi, (m, num, ord) => {
+    const n = parseInt(num, 10);
+    const mod100 = n % 100;
+    const mod10 = n % 10;
+    const o = ord.toLowerCase();
+    const isOrd = (mod100 >= 11 && mod100 <= 13) ? o === "th" : (mod10 === 1 ? o === "st" : (mod10 === 2 ? o === "nd" : (mod10 === 3 ? o === "rd" : o === "th")));
+    return isOrd ? `${num}${o}` : m;
+  });
+
   // Separate premise numbers that are run together with street names without a space (e.g. "62-6JHONGCHE ROAD" -> "62-6 Jhongche Road")
-  a = a.replace(/(\b\d+(?:[-/]\d+)?)([A-Za-z]+(?:\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Highway|Place|Court|Close|Square|Terrace|Park|Path|Walk|Plaza)\b))/gi, "$1 $2");
+  // MUST NEVER separate ordinal suffixes (1st, 2nd, 3rd, 4th, etc.) from numbers!
+  a = a.replace(/(\b\d+(?:[-/]\d+)?)(?!(?:st|nd|rd|th)\b)([A-Za-z]+(?:\s+(?:Road|Street|Avenue|Lane|Alley|Boulevard|Drive|Way|Highway|Place|Court|Close|Square|Terrace|Park|Path|Walk|Plaza)\b))/gi, "$1 $2");
   a = a.replace(/(^|[,\s])Sec\.\s*(?=[A-Za-z0-9])/gi, '$1Section ');
   a = a.replace(/(^|[,\s])Sec\b\s*(?=[A-Za-z0-9])/gi, '$1Section ');
   a = a.replace(/\b(Hsinchu|Changhua|Miaoli|Yunlin|Chiayi|Pingtung|Taitung|Hualien|Yilan|Nantou|Kinmen|Penghu|Lienchiang|Matsu)\s+Country\b/gi, "$1 County");
@@ -2228,7 +2240,7 @@ function selectPrimaryAddressFromCombined(addr) {
   a = a.replace(/^(?:(?:contact|company|corporate|factory|plant|office|location|branch|inquiry|general)\s+)?(?:information|info|details|detail)\b\s*[:：\-–,\|\s]*/i, "").trim();
 
   // Pattern to split multiple distinct address blocks
-  const sepRegex = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\b)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)/i;
+  const sepRegex = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)/i;
   if (!sepRegex.test(a)) return a;
 
   const parts = a.split(sepRegex).map(p => p.trim()).filter(p => p.length >= 10);
@@ -2451,6 +2463,11 @@ function sanitizeRule6CompanyAddress(addr, companyName = "", countryName = "", c
   a = a.replace(/(?<!\b(?:post\s*office\s*box|p\.?o\.?\s*box|gpo\s*box|box)\s*)[\s,\-]+\b\d{3,6}\b\s*$/gi, "").trim();
   // Strip loose trailing telephone numbers exposed after country stripping
   a = a.replace(/[,;\s]+(?:\+\d{1,4}[-\s.]*(?:\(?\d{1,5}\)?[-.\s]*){1,3}\d{4,9}|(?:\(?\d{2,5}\)?[-.\s]+){2,3}\d{3,6})\s*$/g, "").trim();
+
+  // Re-run primary address selection if country removal exposed multiple combined addresses (e.g. "... Taichung City, . Number 28...")
+  if (typeof selectPrimaryAddressFromCombined === "function") {
+    a = selectPrimaryAddressFromCombined(a);
+  }
 
   // 13. Ensure comma before state and format
   if (typeof ensureCommaBeforeState === "function") {
@@ -2675,7 +2692,14 @@ function reconcileAddressWithRawEvidence(addr, rawCand, companyName = "", countr
     if (allAiTokensMatch && hasAddressAnchor &&
         (aiTokens.length >= 4 || hasPremiseNumber) &&
         rawTokens.size > aiTokens.length) {
-      return rawClean;
+      // Must NEVER return rawClean if it contains multiple addresses or concatenated premises not in AI address
+      const candClean = typeof selectPrimaryAddressFromCombined === "function" ? selectPrimaryAddressFromCombined(rawClean) : rawClean;
+      const rawPremises = String(candClean).match(/\b\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?\b/g) || [];
+      const aiPremises = String(addr).match(/\b\d+[A-Za-z]?(?:[-/]\d+[A-Za-z]?)?\b/g) || [];
+      const hasExtraPremise = rawPremises.some(rp => !aiPremises.some(ap => ap.toLowerCase() === rp.toLowerCase()) && !/^(?:0[1-9]|[1-9]\d{1,4})$/.test(rp));
+      if (!hasExtraPremise) {
+        return candClean;
+      }
     }
 
     // If AI omitted "Number" before street/premise digits, but rawClean specifically had "Number" before the identical digits
