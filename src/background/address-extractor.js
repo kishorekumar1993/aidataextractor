@@ -57,7 +57,7 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
     .trim();
 
   // If candidate text contains multiple distinct addresses, split them so they are added as separate candidates rather than combined
-  const multiAddrSep = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\b)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)/i;
+  const multiAddrSep = /[,;]\s*\.\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant|Location|Showroom|Warehouse|一廠|二廠|三廠|分公司)\b)|(?<!\b(?:Bldg|Building|Unit|Suite|Ste|Floor|Fl|Flr|Level|Plot|Room|Rm|Block|Blk|No|Number)\.?\s*)[,;]\s*\.\s*(?=\b(?:Number|No\.?|\d+)\b)|;\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*\|\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|\s*[\r\n]+\s*(?=\b(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant)\b)|[,;.\s]+\s*(?=\b(?:Plant\s*[2-9]|Factory\s*[2-9]|Facility\s*[2-9]|Branch(?:\s*Office)?|Location\s*[2-9]|Showroom|Warehouse|二廠|三廠|分公司)\s*[:：\-–]\s*(?:Number|No\.?|\d+)\b)|(?<=\b(?:City|District|Dist|County|Township|Twp|State|Province|Country|Taiwan|China|India|USA|United\s+States|UK|United\s+Kingdom|Germany|France|Australia|Japan|Singapore|Malaysia|Indonesia|Canada|\d{4,6})\b|R\.?O\.?C\.?)[,;\s.]+\s*(?=(?:Number|No\.?|Plot|Building|Unit|Suite|Floor|Block|\d{1,5}\s+[A-Za-z]+|Headquarters|Head\s*Office|Branch|Factory|Plant|Location|Showroom|Warehouse|一廠|二廠|三廠|分公司)\b)/i;
   if (multiAddrSep.test(cleaned)) {
     const parts = cleaned.split(multiAddrSep).map(p => p.trim()).filter(p => p.length >= 10);
     if (parts.length > 1) {
@@ -69,6 +69,9 @@ function addAddressCandidate(targetList, rawText, source, isHq = false, location
       return;
     }
   }
+
+  // Strip trailing contact phone / fax numbers that got appended to address line
+  cleaned = cleaned.replace(/[,;\s]+(?:\+?\d[\d\s\-().]{6,}\d|\(?\d{2,4}\)?[\s\-.]?\d{3,}[\s\-.]?\d{3,})$/i, "").trim();
 
   // Strip leading promotional/intro sentence ending in ! or ? (e.g. "Come in and browse around! 14200 Washington Avenue...")
   if (/^[^!?]{3,80}[!?]\s+(?=\b(?:\d{1,5}|no\.?\s*\d+|po\s*box|unit|suite|building|lot|plot)\b)/i.test(cleaned)) {
@@ -1029,7 +1032,8 @@ function verifyAndSelectAddress(geminiAddr, candidates, crawlData = null) {
       bestCandidate = c;
       bestRaw = cRaw;
     } else if (isFullAddressCandidate(cRaw) && isFullAddressCandidate(bestRaw)) {
-      if (cRaw.toLowerCase().includes(bestRaw.toLowerCase()) && cRaw.length > bestRaw.length) {
+      const cIsMulti = typeof selectPrimaryAddressFromCombined === "function" && selectPrimaryAddressFromCombined(cRaw) !== cRaw;
+      if (!cIsMulti && cRaw.toLowerCase().includes(bestRaw.toLowerCase()) && cRaw.length > bestRaw.length) {
         bestCandidate = c;
         bestRaw = cRaw;
       } else {
@@ -1101,28 +1105,35 @@ function extractLikelyAddress(text) {
   if (!text) return "";
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length >= 3 && l.length <= 250);
 
-  const isJunk = l => /[?!]/.test(l) || /\b(?:welcome|committed|leading|innovative|we\s+provide|we\s+offer|our\s+(?:products|services|mission|team|facility|story|history)|years\s+of|experience|feel\s+free|call\s+us|contact\s+us|email\s+us|inquiry|click\s+here|read\s+more|cookies?|privacy\s*policy|terms\s*of|copyright|all\s*rights)\b/i.test(l) || /@|mailto:|data-cfemail/i.test(l);
+  const isJunk = l => /[?!]/.test(l) ||
+    /\b(?:welcome|committed|leading|innovative|we\s+provide|we\s+offer|our\s+(?:products|services|mission|team|facility|story|history)|years\s+of|experience|feel\s+free|call\s+us|contact\s+us|email\s+us|inquiry|click\s+here|read\s+more|cookies?|privacy\s*policy|terms\s*of|copyright|all\s*rights)\b/i.test(l) ||
+    /@|mailto:|data-cfemail/i.test(l) ||
+    /^(?:[tf]\.?|tel\.?|telephone|fax|phone|mob|mobile)\s*[:：\-–]?\s*[\d\s\-().+]{6,}/i.test(l) ||
+    /^\+?[\d\s\-().]{8,}$/.test(l) ||
+    /^(?:contact|company|corporate|factory|plant|office|location|inquiry)?\s*(?:information|info|details|detail)\b\s*[:：\-–|,]?$/i.test(l);
 
-  // 1. First pass: look for a complete multi-line address window (2-4 lines) where lines form a full address with premise + street + locality/postcode
-  for (let windowSize = 4; windowSize >= 2; windowSize--) {
+  // 1. Single lines that are full addresses - HIGHEST PRIORITY (avoids concatenating adjacent separate items or addresses!)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.length < 10 || isJunk(line)) continue;
+    if (typeof isFullAddressCandidate === "function" && isFullAddressCandidate(line)) {
+      return line;
+    }
+  }
+
+  // 2. Multi-line window (2-3 lines) where NO single line is already a full address, but together they form one
+  for (let windowSize = 3; windowSize >= 2; windowSize--) {
     for (let i = 0; i <= lines.length - windowSize; i++) {
       const slice = lines.slice(i, i + windowSize);
       if (slice.some(isJunk)) continue;
+      // If any individual line in the slice is already a full address, do not combine
+      if (slice.some(l => isFullAddressCandidate(l))) continue;
       const combined = slice.join(" ").replace(/\s*,\s*,\s*/g, ", ").trim();
       if (combined.length >= 15 && combined.length <= 250) {
         if (typeof isFullAddressCandidate === "function" && isFullAddressCandidate(combined)) {
           return combined;
         }
       }
-    }
-  }
-
-  // 2. Second pass: single lines that are full addresses
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.length < 10 || isJunk(line)) continue;
-    if (typeof isFullAddressCandidate === "function" && isFullAddressCandidate(line)) {
-      return line;
     }
   }
 

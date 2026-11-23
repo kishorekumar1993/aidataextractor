@@ -2041,7 +2041,7 @@ function applyStrictInstructions(data, crawlData, restrictedCheck) {
       // (trailing city/district/state, leading premise/unit/estate, or intermediate village/section)
       if (rawSource) {
         if (typeof reconcileAddressWithRawEvidence === "function") {
-          addr = reconcileAddressWithRawEvidence(addr, rawSource, compName, country, crawlData);
+          addr = reconcileAddressWithRawEvidence(addr, rawSource, compName, country, crawlData, result._isFromAi);
         }
         addr = restoreStreetNumberIfOmitted(addr, rawSource, crawlData);
         addr = restoreTaiwanVillageIfOmitted(addr, rawSource, crawlData);

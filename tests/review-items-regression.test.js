@@ -4721,6 +4721,61 @@ async function runAll() {
     );
   });
 
+  // =========================================================================
+  // ITEM 131: Address Candidate Extraction Robustness & Multi-Address Prevention
+  // =========================================================================
+  runTest('Item 131: Address Candidate Extraction Robustness (extractLikelyAddress, addAddressCandidate, verifyAndSelectAddress)', () => {
+    const { ctx } = createTestContext();
+
+    // 1. extractLikelyAddress extracts single clean address without concatenating adjacent separate address or phone lines
+    const multiLineBlock = [
+      'Contact Information',
+      'No. 23-1, Heshun Lane, Fengshi Road, Shigang Dist, Taichung City 42274, Taiwan R.O.C.',
+      'No. 28, Meizi Ln., Fengshi Rd., Shigang Dist., Taichung City 42242, Taiwan R.O.C.',
+      '886-4-25818799'
+    ].join('\n');
+
+    const likely = ctx.extractLikelyAddress(multiLineBlock);
+    assert.strictEqual(
+      likely,
+      'No. 23-1, Heshun Lane, Fengshi Road, Shigang Dist, Taichung City 42274, Taiwan R.O.C.',
+      `extractLikelyAddress must pick single primary address line instead of combining 4 lines. Got: ${likely}`
+    );
+
+    // 2. addAddressCandidate splits multi-address string and strips trailing phone numbers
+    const targetCands = [];
+    const rawMultiWithPhone = 'No. 23-1, Heshun Lane, Fengshi Road, Shigang Dist, Taichung City 42274, Taiwan R.O.C. No. 28, Meizi Ln., Fengshi Rd., Shigang Dist., Taichung City 42242, Taiwan R.O.C. 886-4-25818799';
+    ctx.addAddressCandidate(targetCands, rawMultiWithPhone, 'homepage', false, 'homepage', 'http://www.yihsuan.com.tw/');
+    assert.ok(targetCands.length >= 2, `addAddressCandidate must split multi-address candidate into separate entries. Got: ${targetCands.length}`);
+    assert.ok(
+      !targetCands[0].raw.includes('886-4-25818799'),
+      `Candidate 0 must not include trailing phone number: ${targetCands[0].raw}`
+    );
+    assert.ok(
+      !targetCands[0].raw.includes('No. 28'),
+      `Candidate 0 must not include second address: ${targetCands[0].raw}`
+    );
+
+    // 3. verifyAndSelectAddress must not allow a concatenated multi-address candidate to overwrite a clean single address
+    const cleanCand = { raw: 'No. 23-1, Heshun Lane, Fengshi Road, Shigang Dist, Taichung City 42274, Taiwan R.O.C.', source: 'contact' };
+    const multiCand = { raw: 'No. 23-1, Heshun Lane, Fengshi Road, Shigang Dist, Taichung City 42274, Taiwan R.O.C. No. 28, Meizi Ln., Fengshi Rd., Shigang Dist., Taichung City 42242, Taiwan R.O.C.', source: 'homepage' };
+    const selected = ctx.verifyAndSelectAddress(null, [cleanCand, multiCand], { finalUrl: 'http://www.yihsuan.com.tw/' });
+    assert.strictEqual(
+      selected.selectedCandidate.raw,
+      cleanCand.raw,
+      `verifyAndSelectAddress must choose the clean single address, not the multi-address candidate. Got: ${selected.selectedCandidate.raw}`
+    );
+
+    // 4. selectPrimaryAddressFromCombined splits cleanly on comma between distinct addresses after city
+    const combinedAfterCity = 'Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City, Number 28, Meizi Lane, Fengshi Road, Shigang District, Taichung City 42242';
+    const splitResult = ctx.selectPrimaryAddressFromCombined(combinedAfterCity);
+    assert.strictEqual(
+      splitResult,
+      'Number 23-1, Heshun Lane, Fengshi Road, Shigang District, Taichung City',
+      `selectPrimaryAddressFromCombined must split on comma between Taichung City and Number 28. Got: ${splitResult}`
+    );
+  });
+
   console.log('\n========================================================');
   console.log(`Review Items Results: ${passedTests} Passed, ${failedTests} Failed (Total: ${totalTests})`);
   console.log('========================================================\n');
