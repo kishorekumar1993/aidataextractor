@@ -131,25 +131,10 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     businessType: {
       type: "STRING",
-      enum: [
-        "Manufacturer",
-        "Industrial Services",
-        "Exporter",
-        "Trader",
-        "Distributor",
-        "Supplier",
-        "Wholesaler",
-        "Service Provider",
-        "Online Shopping",
-        "Restricted Site",
-        "Other",
-        ""
-      ],
-      description: "Business scope classification. Allowed working types: Manufacturer (manufactures physical goods in own facility/factory), Industrial Services (machining, fabrication, industrial maintenance), Exporter, Trader, Distributor (authorized physical distributor/network), Supplier (B2B goods supplier), Wholesaler (wholesale goods), Service Provider (eligible B2B services). Ordinary online retail shopping without manufacturing/supply evidence is Online Shopping. Output \"\" if websiteStatus is Not Working."
+      description: "Business scope classification. Options: Manufacturer (manufactures physical goods in own facility/factory), Industrial Services (machining, custom fabrication, tooling, surface treatment, industrial maintenance), Exporter, Trader, Distributor (authorized physical distributor/network), Supplier (B2B goods supplier), Wholesaler (wholesale goods), Service Provider (eligible B2B services), Online Shopping, Other. Output \"\" if websiteStatus is Not Working."
     },
     companyProfile: {
       type: "STRING",
-      enum: ["Available", "Not Available", ""],
       description: "Available if dedicated company overview, history, story, mission, or factory profile text exists describing background or operations; Not Available if only brief slogans, taglines, or bare product listings. Output \"\" if websiteStatus is Not Working."
     },
     companyName: {
@@ -166,14 +151,13 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     state: {
       type: "STRING",
-      enum: ["Available", "Not Available", ""],
-      description: "This is a drop-down option. If the state name is given in the address, select Available; if not, select Not Available. Note: (County, Province, Prefecture) should be considered as State. (If a country's capital is mentioned in the address, then both City and State are considered available). Standalone cities or districts without a state/county/province (e.g. 'Taichung', 'Beitun District', 'Shengang District') are Not Available. Output \"\" if websiteStatus is Not Working."
+      description: "This is a drop-down option: 'Available' or 'Not Available'. If the state name is given in the address, select Available; if not, select Not Available. Note: (County, Province, Prefecture) should be considered as State. (If a country's capital is mentioned in the address, then both City and State are considered available). Standalone cities or districts without a state/county/province (e.g. 'Taichung', 'Beitun District', 'Shengang District') are Not Available. Output \"\" if websiteStatus is Not Working."
     },
     city: {
       type: "STRING",
-      enum: ["Available", "Not Available", ""],
-      description: "This is a drop-down option. If the city name is given in the address, select Available; if not, select Not Available. Note: (Town, District, Municipality) should be considered as City. (If a country's capital is mentioned in the address, then both City and State are considered available). Suburbs alone without city/town are Not Available. Output \"\" if websiteStatus is Not Working."
-    }, emailId: {
+      description: "This is a drop-down option: 'Available' or 'Not Available'. If the city name is given in the address, select Available; if not, select Not Available. Note: (Town, District, Municipality) should be considered as City. (If a country's capital is mentioned in the address, then both City and State are considered available). Suburbs alone without city/town are Not Available. Output \"\" if websiteStatus is Not Working."
+    },
+    emailId: {
       type: "STRING",
       description: "Primary corporate contact email from supplied website evidence or company social media. Check discovered emails and contact/career pages; recognize clearly obfuscated or visually split emails (for example, name [at] domain [dot] com or HTML/line-break splits) only when the intended address is unambiguous. Do not guess missing characters or use placeholder/decoy addresses. Output \"\" if websiteStatus is Not Working."
     },
@@ -187,17 +171,14 @@ const GEMINI_RESPONSE_SCHEMA = {
     },
     numberOfProducts: {
       type: "STRING",
-      enum: ["0", "1", "2", "3", ""],
       description: "Count of distinct physical products offered (not repeated images of the same product): '0', '1', '2', or '3' (for 3 or more). Evaluated independently. Output \"\" if websiteStatus is Not Working."
     },
     productImages: {
       type: "STRING",
-      enum: ["0", "1", "2", "3", ""],
       description: "Count of genuine physical product photographs (excluding banners, logos, icons, and decorative graphics): '0', '1', '2', or '3' (for 3 or more). Evaluated independently. Output \"\" if websiteStatus is Not Working."
     },
     numberOfProductDescriptions: {
       type: "STRING",
-      enum: ["0", "1", "2", "3", ""],
       description: "Count of distinct physical products with actual descriptive text: '0', '1', '2', or '3' (for 3 or more). Evaluated independently. Output \"\" if websiteStatus is Not Working."
     }
   },

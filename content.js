@@ -30,7 +30,13 @@
     });
 
     // Continuous heartbeat every 1500ms to guarantee floating widget and buttons are always visible
-    setInterval(AIExt.ensureAiCrawlButtonsVisible, 1500);
+    const heartbeatTimer = setInterval(() => {
+      if (!isExtensionContextValid()) {
+        clearInterval(heartbeatTimer);
+        return;
+      }
+      AIExt.ensureAiCrawlButtonsVisible();
+    }, 1500);
 
     // Check if auto-queue or batch Not Working pipeline was active across page reloads/navigations
     if (isExtensionContextValid() && chrome.storage && chrome.storage.local) {
@@ -609,8 +615,9 @@
   }
 
   // Listen for actions from popup or background (e.g. user clicked "AI Crawl" in popup)
-  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (isExtensionContextValid() && chrome.runtime && chrome.runtime.onMessage) {
+    try {
+      chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message && message.action === "TRIGGER_CRAWL") {
         AIExt.resetCrawlButtons();
         try { sendResponse({ success: true, started: true }); } catch (e) { }
@@ -671,6 +678,7 @@
         return true;
       }
     });
+    } catch (e) {}
   }
 
   if (document.readyState === "loading") {

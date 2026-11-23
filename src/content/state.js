@@ -20,10 +20,19 @@
     debounceTimer: null
   });
 
-  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id && chrome.storage && chrome.storage.sync) {
+  function isExtensionAlive() {
+    try {
+      return Boolean(typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  if (isExtensionAlive() && chrome.storage && chrome.storage.sync) {
     try {
       chrome.storage.sync.get({ showFloatingWidget: true, showInlineBtn: false, autoQueueEnabled: false, crawlMode: "manual", autoSubmitNotWorkingEnabled: false, extractionMode: "ai_only" }, (res) => {
         try {
+          if (!isExtensionAlive()) return;
           if (res) {
             state.showFloatingWidget = res.showFloatingWidget !== false;
             state.showInlineBtn = res.showInlineBtn === true;
@@ -53,6 +62,7 @@
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
         try {
+          if (!isExtensionAlive()) return;
           if (area === "sync") {
             if (changes.extractionMode) {
               state.extractionMode = (changes.extractionMode.newValue === "own_crawl") ? "own_crawl" : "ai_only";
